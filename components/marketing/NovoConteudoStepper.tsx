@@ -5,6 +5,7 @@ import { TwoFactorModal } from '../TwoFactorModal';
 import { ModernSelect } from '../common/ModernSelect';
 import { Loader2, Plus, Trash2, UploadCloud, File, Image as ImageIcon, Camera, Mic, Video, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { Sector } from '../../types';
+import { MarketingAlertModal, MarketingAlertModalProps } from './MarketingAlertModal';
 
 interface NovoConteudoStepperProps {
     onNavigate: (view: string) => void;
@@ -36,15 +37,43 @@ export const NovoConteudoStepper: React.FC<NovoConteudoStepperProps> = ({
 
     // Form State
     const [requesterSector, setRequesterSector] = useState('');
+    const [contentTitle, setContentTitle] = useState('');
     const [description, setDescription] = useState('');
-    const [contents, setContents] = useState<ContentItem[]>([{ id: Date.now().toString(), type: '', sector: '', date: '', time: '', location: '' }]);
+    const [contents, setContents] = useState<ContentItem[]>([]);
     const [files, setFiles] = useState<File[]>([]);
+
+    // Content Add Modal State
+    const [isContentModalOpen, setIsContentModalOpen] = useState(false);
+    const [editingContent, setEditingContent] = useState<ContentItem | null>(null);
 
     // Auth & Submit State
     const [userSecret, setUserSecret] = useState<string | null>(null);
     const [userSecret2, setUserSecret2] = useState<string | null>(null);
     const [is2FAOpen, setIs2FAOpen] = useState(false);
     const [submitting, setSubmitting] = useState(false);
+
+    // Custom Alert State
+    const [alertConfig, setAlertConfig] = useState<MarketingAlertModalProps>({
+        isOpen: false,
+        type: 'info',
+        title: '',
+        message: '',
+        onClose: () => setAlertConfig(prev => ({ ...prev, isOpen: false }))
+    });
+
+    const showAlert = (type: MarketingAlertModalProps['type'], title: string, message: string, onConfirm?: () => void, showCancel?: boolean, confirmText?: string, cancelText?: string) => {
+        setAlertConfig({
+            isOpen: true,
+            type,
+            title,
+            message,
+            onConfirm,
+            showCancel,
+            confirmText: confirmText || 'OK',
+            cancelText: cancelText || 'Cancelar',
+            onClose: () => setAlertConfig(prev => ({ ...prev, isOpen: false }))
+        });
+    };
 
     // Load user sector and 2FA secrets
     useEffect(() => {
@@ -66,11 +95,14 @@ export const NovoConteudoStepper: React.FC<NovoConteudoStepperProps> = ({
 
     const handleNext = () => {
         // Validation per step
-        if (currentStep === 0 && !requesterSector) return alert('Setor do solicitante não definido.');
-        if (currentStep === 1 && description.trim().length < 10) return alert('A descrição deve ter ao menos 10 caracteres.');
+        if (currentStep === 0 && !requesterSector) return showAlert('error', 'Atenção', 'Setor do solicitante não definido.');
+        if (currentStep === 0 && !contentTitle.trim()) return showAlert('error', 'Campo Obrigatório', 'O Título do Conteúdo é obrigatório.');
+        if (currentStep === 1 && description.trim().length < 10) return showAlert('error', 'Descrição Curta', 'A descrição da demanda deve ter ao menos 10 caracteres para que possamos entender sua necessidade.');
         if (currentStep === 2) {
             const hasInvalidContent = contents.some(c => !c.type || !c.sector || !c.date);
-            if (hasInvalidContent) return alert('Preencha os campos obrigatórios de todos os itens de conteúdo (Tipo, Setor e Data).');
+            if (hasInvalidContent) {
+                return showAlert('warning', 'Campos Pendentes', 'Preencha os campos obrigatórios de todos os itens de conteúdo (Tipo, Setor e Data) antes de prosseguir.');
+            }
         }
 
         if (currentStep > maxCompletedStep) {
@@ -83,18 +115,45 @@ export const NovoConteudoStepper: React.FC<NovoConteudoStepperProps> = ({
         setCurrentStep(prev => Math.max(prev - 1, 0));
     };
 
-    const addContent = () => {
-        setContents([...contents, { id: Date.now().toString(), type: '', sector: '', date: '', time: '', location: '' }]);
-    };
-
     const removeContent = (id: string) => {
-        if (contents.length > 1) {
-            setContents(contents.filter(c => c.id !== id));
-        }
+        showAlert(
+            'warning',
+            'Remover Item?',
+            'Tem certeza que deseja remover este item de conteúdo da sua lista? Esta ação não pode ser desfeita.',
+            () => {
+                setContents(contents.filter(c => c.id !== id));
+                setAlertConfig(prev => ({ ...prev, isOpen: false }));
+            },
+            true,
+            'Sim, Remover',
+            'Cancelar'
+        );
     };
 
-    const updateContent = (id: string, field: keyof ContentItem, value: string) => {
-        setContents(contents.map(c => c.id === id ? { ...c, [field]: value } : c));
+    const handleOpenModal = (item?: ContentItem) => {
+        if (item) {
+            setEditingContent(item);
+        } else {
+            setEditingContent({ id: Date.now().toString(), type: '', sector: '', date: '', time: '', location: '' });
+        }
+        setIsContentModalOpen(true);
+    };
+
+    const handleSaveContent = () => {
+        if (!editingContent) return;
+        if (!editingContent.type || !editingContent.sector || !editingContent.date) {
+            showAlert('error', 'Preencha os Dados', 'Para salvar, é necessário preencher todos os campos obrigatórios: Tipo de Conteúdo, Setor Alvo e Data.');
+            return;
+        }
+
+        const isEditing = contents.some(c => c.id === editingContent.id);
+        if (isEditing) {
+            setContents(contents.map(c => c.id === editingContent.id ? editingContent : c));
+        } else {
+            setContents([...contents, editingContent]);
+        }
+        setIsContentModalOpen(false);
+        setEditingContent(null);
     };
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -111,8 +170,7 @@ export const NovoConteudoStepper: React.FC<NovoConteudoStepperProps> = ({
 
     const handleFinalizeClick = () => {
         if (!userSecret && !userSecret2) {
-            alert('Você não tem autenticação de dois fatores configurada. Entre em contato com o suporte.');
-            // Or allow bypass? Based on requirements: "Validação 2FA obrigatória"
+            showAlert('error', 'Segurança Necessária', 'Você não tem autenticação de dois fatores configurada no seu perfil. Entre em contato com o administrador do sistema para habilitar antes de assinar documentos.');
             return;
         }
         setIs2FAOpen(true);
@@ -131,7 +189,7 @@ export const NovoConteudoStepper: React.FC<NovoConteudoStepperProps> = ({
                     protocol,
                     requester_name: userName,
                     requester_sector: requesterSector,
-                    description,
+                    description: `**Título do Pedido:** ${contentTitle}\n\n**Descrição Detalhada:**\n${description}`,
                     user_id: userId,
                     status: 'Em Análise',
                     digital_signature: { enabled: true, date: new Date().toISOString() }
@@ -164,12 +222,14 @@ export const NovoConteudoStepper: React.FC<NovoConteudoStepperProps> = ({
                 await supabase.storage.from('marketing_attachments').upload(path, file);
             }
 
-            alert('Solicitação finalizada com sucesso!');
-            onNavigate(''); // Go back to dashboard
+            showAlert('success', 'Pedido Enviado!', 'Sua solicitação de marketing foi finalizada com sucesso e já está em análise.', () => {
+                setAlertConfig(prev => ({ ...prev, isOpen: false }));
+                onNavigate(''); // Go back to dashboard
+            }, false, 'Fechar Aba');
 
         } catch (error) {
             console.error("Erro ao enviar pedido:", error);
-            alert("Ocorreu um erro ao finalizar o pedido de marketing.");
+            showAlert('error', 'Oops, ocorreu um erro!', 'Não foi possível finalizar o pedido de marketing neste momento. Tente novamente mais tarde.');
         } finally {
             setSubmitting(false);
         }
@@ -234,6 +294,18 @@ export const NovoConteudoStepper: React.FC<NovoConteudoStepperProps> = ({
                     {currentStep === 0 && (
                         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
                             <h2 className="text-xl font-bold text-slate-800">1. Informações Gerais</h2>
+
+                            <div>
+                                <label className="block text-sm font-bold text-slate-700 mb-2">Título do Conteúdo *</label>
+                                <input
+                                    type="text"
+                                    value={contentTitle}
+                                    onChange={e => setContentTitle(e.target.value)}
+                                    placeholder="Ex: Campanha de Conscientização..."
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 font-bold focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all placeholder:font-normal"
+                                />
+                            </div>
+
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div>
                                     <label className="block text-sm font-bold text-slate-700 mb-2">Solicitante</label>
@@ -262,84 +334,66 @@ export const NovoConteudoStepper: React.FC<NovoConteudoStepperProps> = ({
 
                     {currentStep === 2 && (
                         <div className="flex flex-col h-full animate-in fade-in slide-in-from-bottom-2 duration-300 min-h-0">
-                            <div className="flex items-center justify-between border-b border-slate-100 pb-2 md:pb-3 mb-4 shrink-0">
-                                <h2 className="text-lg md:text-xl font-bold text-slate-800">3. Conteúdos Necessários</h2>
-                                <div className="flex items-center gap-3">
-                                    <span className={`text-[10px] md:text-xs text-amber-500 font-bold ${contents.length >= 3 ? 'block' :
-                                        contents.length === 2 ? 'block lg:hidden' :
-                                            contents.length === 1 ? 'block md:hidden' : 'hidden'
-                                        }`}>
-                                        Limite visual atingido
-                                    </span>
-                                    <button
-                                        onClick={addContent}
-                                        className={`items-center gap-2 px-3 auto py-1.5 md:py-2 bg-indigo-50 text-indigo-600 rounded-xl font-bold hover:bg-indigo-100 transition-colors text-xs md:text-sm ${contents.length >= 3 ? '!hidden' :
-                                            contents.length === 2 ? 'hidden lg:flex' :
-                                                contents.length === 1 ? 'hidden md:flex' : 'flex'
-                                            }`}
-                                    >
-                                        <Plus className="w-4 h-4" /> Adicionar Item
-                                    </button>
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-3 mb-4 shrink-0 gap-3">
+                                <div>
+                                    <h2 className="text-lg md:text-xl font-bold text-slate-800">3. Conteúdos Necessários</h2>
+                                    <p className="text-[10px] md:text-xs text-slate-500 font-medium mt-0.5">Adicione os itens que farão parte deste pedido</p>
                                 </div>
+                                <button
+                                    onClick={() => handleOpenModal()}
+                                    className="flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-colors text-xs md:text-sm shadow-sm"
+                                >
+                                    <Plus className="w-4 h-4" /> Adicionar Item
+                                </button>
                             </div>
 
-                            <div className={`flex-1 overflow-hidden grid gap-3 md:gap-4 content-start ${contents.length === 1 ? 'grid-cols-1' :
-                                contents.length === 2 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1 md:grid-cols-3'
-                                }`}>
-                                {contents.map((item, index) => (
-                                    <div key={item.id} className="p-3 md:p-4 bg-slate-50 rounded-2xl border border-slate-200 relative group flex flex-col gap-3 min-h-0 shrink-0">
-                                        <div className="flex items-center justify-between shrink-0">
-                                            <h4 className="font-bold text-slate-600 text-sm">Item {index + 1}</h4>
-                                            <button
-                                                onClick={() => removeContent(item.id)}
-                                                className="text-slate-400 hover:text-rose-500 transition-colors p-1.5 hover:bg-white rounded-lg z-10"
-                                                title="Remover item"
-                                            >
-                                                <Trash2 className="w-4 h-4" />
-                                            </button>
+                            <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col gap-3 min-h-0">
+                                {contents.length === 0 ? (
+                                    <div className="flex flex-col items-center justify-center h-48 bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl p-6 text-center shrink-0">
+                                        <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm mb-3">
+                                            <File className="w-5 h-5 text-slate-400" />
                                         </div>
-
-                                        <div className="flex flex-col gap-3 flex-1 min-h-0">
-                                            <div>
-                                                <ModernSelect
-                                                    label="Tipo de Conteúdo *"
-                                                    value={item.type}
-                                                    onChange={v => updateContent(item.id, 'type', v)}
-                                                    options={[
-                                                        { value: 'Imagem', label: 'Imagem (Arte)' },
-                                                        { value: 'Vídeo', label: 'Vídeo' },
-                                                        { value: 'Voz', label: 'Voz/Locução' },
-                                                        { value: 'Cobertura', label: 'Cobertura' },
-                                                        { value: 'Outros', label: 'Outros' }
-                                                    ]}
-                                                />
-                                            </div>
-                                            <div className="relative" style={{ zIndex: 50 - index }}>
-                                                <ModernSelect
-                                                    label="Setor Alvo *"
-                                                    searchable
-                                                    value={item.sector}
-                                                    onChange={v => updateContent(item.id, 'sector', v)}
-                                                    options={sectors.map(s => ({ value: s.name, label: s.name }))}
-                                                />
-                                            </div>
-                                            <div className="grid grid-cols-2 gap-3">
-                                                <div>
-                                                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 ml-1">Data do Evento *</label>
-                                                    <input type="date" value={item.date} onChange={e => updateContent(item.id, 'date', e.target.value)} className="w-full border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs bg-white focus:ring-2 focus:ring-indigo-500 outline-none" />
-                                                </div>
-                                                <div>
-                                                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 ml-1">Hora do Evento</label>
-                                                    <input type="time" value={item.time} onChange={e => updateContent(item.id, 'time', e.target.value)} className="w-full border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs bg-white focus:ring-2 focus:ring-indigo-500 outline-none" />
-                                                </div>
-                                            </div>
-                                            <div>
-                                                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 ml-1">Local do Evento (Opcional)</label>
-                                                <input type="text" value={item.location} onChange={e => updateContent(item.id, 'location', e.target.value)} placeholder="Ex: Praça principal..." className="w-full border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs bg-white focus:ring-2 focus:ring-indigo-500 outline-none" />
-                                            </div>
-                                        </div>
+                                        <h3 className="text-sm font-bold text-slate-700 mb-1">Nenhum item adicionado</h3>
+                                        <p className="text-xs text-slate-500 max-w-xs mx-auto">
+                                            Clique no botão acima para adicionar o primeiro item de conteúdo deste pedido.
+                                        </p>
                                     </div>
-                                ))}
+                                ) : (
+                                    contents.map((item, index) => (
+                                        <div key={item.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all group gap-4 shrink-0">
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className="px-2 py-0.5 rounded uppercase tracking-wider text-[10px] font-bold bg-indigo-50 text-indigo-600 border border-indigo-100/50">
+                                                        {item.type}
+                                                    </span>
+                                                    {item.date && (
+                                                        <span className="text-[10px] sm:text-xs font-bold text-slate-500 bg-slate-50 px-2 py-0.5 rounded border border-slate-100">
+                                                            {new Date(item.date).toLocaleDateString('pt-BR')}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <h4 className="font-bold text-slate-800 text-sm sm:text-base truncate">{contentTitle || 'Conteúdo Sem Título'}</h4>
+                                                <p className="text-[10px] sm:text-xs text-slate-500 truncate mt-0.5">Setor Alvo: <span className="font-semibold text-slate-700">{item.sector}</span></p>
+                                            </div>
+
+                                            <div className="flex items-center sm:self-center self-end gap-2 shrink-0">
+                                                <button
+                                                    onClick={() => handleOpenModal(item)}
+                                                    className="px-3 py-1.5 bg-slate-50 text-slate-600 text-xs font-bold rounded-lg hover:bg-slate-100 transition-colors border border-slate-200"
+                                                >
+                                                    Editar
+                                                </button>
+                                                <button
+                                                    onClick={() => removeContent(item.id)}
+                                                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors border border-transparent hover:border-rose-100"
+                                                    title="Remover item"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
                             </div>
                         </div>
                     )}
@@ -407,6 +461,98 @@ export const NovoConteudoStepper: React.FC<NovoConteudoStepperProps> = ({
                     )}
                 </div>
             </div>
+
+            {/* Add/Edit Content Modal */}
+            {isContentModalOpen && editingContent && (
+                <div className="fixed inset-0 z-[120] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                        <div className="p-6 border-b border-slate-100">
+                            <h3 className="text-xl font-black text-slate-800 tracking-tight">
+                                {contents.some(c => c.id === editingContent.id) ? 'Editar Conteúdo' : 'Adicionar Conteúdo'}
+                            </h3>
+                            <p className="text-sm text-slate-500 font-medium">Preencha os detalhes do material necessário.</p>
+                        </div>
+
+                        <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto custom-scrollbar">
+
+                            <div className="relative" style={{ zIndex: 60 }}>
+                                <ModernSelect
+                                    label="Tipo de Conteúdo *"
+                                    searchable
+                                    value={editingContent.type}
+                                    onChange={v => setEditingContent({ ...editingContent, type: v })}
+                                    options={[
+                                        { value: 'Imagem', label: 'Imagem (Arte)' },
+                                        { value: 'Vídeo', label: 'Vídeo' },
+                                        { value: 'Voz', label: 'Voz/Locução' },
+                                        { value: 'Cobertura', label: 'Cobertura Fotográfica/Fílmica' },
+                                        { value: 'Texto', label: 'Texto/Redação' },
+                                        { value: 'Outros', label: 'Outros' }
+                                    ]}
+                                />
+                            </div>
+
+                            <div className="relative" style={{ zIndex: 50 }}>
+                                <ModernSelect
+                                    label="Setor Alvo *"
+                                    searchable
+                                    value={editingContent.sector}
+                                    onChange={v => setEditingContent({ ...editingContent, sector: v })}
+                                    options={sectors.map(s => ({ value: s.name, label: s.name }))}
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4 relative" style={{ zIndex: 40 }}>
+                                <div>
+                                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2 ml-1">Data Prevista *</label>
+                                    <input
+                                        type="date"
+                                        value={editingContent.date}
+                                        onChange={e => setEditingContent({ ...editingContent, date: e.target.value })}
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-700 font-bold focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2 ml-1">Hora (Opcional)</label>
+                                    <input
+                                        type="time"
+                                        value={editingContent.time}
+                                        onChange={e => setEditingContent({ ...editingContent, time: e.target.value })}
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-700 font-bold focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="relative" style={{ zIndex: 30 }}>
+                                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2 ml-1">Local (Opcional)</label>
+                                <input
+                                    type="text"
+                                    value={editingContent.location}
+                                    onChange={e => setEditingContent({ ...editingContent, location: e.target.value })}
+                                    placeholder="Ex: Praça principal..."
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-700 focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="p-6 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3">
+                            <button
+                                onClick={() => setIsContentModalOpen(false)}
+                                className="px-5 py-2.5 rounded-xl font-bold text-slate-600 hover:bg-slate-200 transition-colors text-sm"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleSaveContent}
+                                className="px-5 py-2.5 rounded-xl font-bold bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm hover:shadow shadow-indigo-200 transition-all text-sm"
+                            >
+                                Salvar Item
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* 2FA Modal Integration */}
             <TwoFactorModal
                 isOpen={is2FAOpen}
@@ -416,6 +562,9 @@ export const NovoConteudoStepper: React.FC<NovoConteudoStepperProps> = ({
                 secret2={userSecret2 || ''}
                 signatureName={userName}
             />
+
+            {/* Custom Interactive Alert Modal */}
+            <MarketingAlertModal {...alertConfig} />
         </div>
     );
 };
