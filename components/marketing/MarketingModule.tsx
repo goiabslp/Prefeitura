@@ -3,6 +3,7 @@ import { User, Person, Sector, AppState } from '../../types';
 import { MarketingDashboard } from './MarketingDashboard';
 import { NovoConteudoStepper } from './NovoConteudoStepper';
 import { MeusConteudosList } from './MeusConteudosList';
+import { MarketingDetails } from './MarketingDetails';
 
 interface MarketingModuleProps {
     currentView: string;
@@ -56,11 +57,11 @@ export const MarketingModule: React.FC<MarketingModuleProps> = ({
             )}
 
             {subView === 'details' && selectedRequestId && (
-                <div className="p-8">
-                    {/* Placeholder for Request Details */}
-                    <h2>Details view for ID: {selectedRequestId}</h2>
-                    <button onClick={() => onNavigate('')}>Voltar</button>
-                </div>
+                <MarketingDetails
+                    requestId={selectedRequestId}
+                    userRole={userRole}
+                    onBack={() => onNavigate('')}
+                />
             )}
         </div>
     );
