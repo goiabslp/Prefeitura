@@ -1084,7 +1084,6 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                                         </button>
                                                                         {currentPaymentStatus === 'paid' && order.paymentDate && (
                                                                             <div className="flex flex-col ml-2 mt-0.5">
-                                                                                <span className="text-[8px] font-bold text-slate-400 uppercase tracking-wide">Data do Pagamento</span>
                                                                                 <span className="text-[9px] font-bold text-emerald-600 flex items-center gap-1">
                                                                                     <Check className="w-2.5 h-2.5" />
                                                                                     {new Date(order.paymentDate).toLocaleDateString('pt-BR')} {new Date(order.paymentDate).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
@@ -1120,7 +1119,6 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
 
                                                                         {currentPaymentStatus === 'paid' && order.paymentDate && (
                                                                             <div className="flex flex-col ml-2 mt-0.5">
-                                                                                <span className="text-[8px] font-bold text-slate-400 uppercase tracking-wide">Data do Pagamento</span>
                                                                                 <span className="text-[9px] font-bold text-emerald-600 flex items-center gap-1">
                                                                                     <Check className="w-2.5 h-2.5" />
                                                                                     {new Date(order.paymentDate).toLocaleDateString('pt-BR')} {new Date(order.paymentDate).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
