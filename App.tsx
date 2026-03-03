@@ -929,6 +929,7 @@ const App: React.FC = () => {
           console.error("Failed to save Compras edit:", e);
           setOrders(prev => prev.map(o => o.id === finalOrder.id ? editingOrder : o)); // Revert
           showToast("Erro ao salvar edição. Revertendo...", "error");
+          return false;
         }
       } else if (finalOrder.blockType === 'diarias') {
         setServiceRequests(prev => prev.map(o => o.id === finalOrder.id ? finalOrder : o));
@@ -938,6 +939,7 @@ const App: React.FC = () => {
           setServiceRequests(prev => prev.map(o => o.id === finalOrder.id ? editingOrder : o));
           setOrders(prev => prev.map(o => o.id === finalOrder.id ? editingOrder : o));
           showToast("Erro ao salvar diária.", "error");
+          return false;
         }
       } else if (finalOrder.blockType === 'licitacao') {
         setLicitacaoProcesses(prev => prev.map(o => o.id === finalOrder.id ? finalOrder : o));
@@ -947,6 +949,7 @@ const App: React.FC = () => {
           setLicitacaoProcesses(prev => prev.map(o => o.id === finalOrder.id ? editingOrder : o));
           setOrders(prev => prev.map(o => o.id === finalOrder.id ? editingOrder : o));
           showToast("Erro ao salvar processo.", "error");
+          return false;
         }
       } else {
         // Optimistic Update Oficio
@@ -960,8 +963,15 @@ const App: React.FC = () => {
           setOficios(prev => prev.map(o => o.id === finalOrder.id ? editingOrder : o));
           setOrders(prev => prev.map(o => o.id === finalOrder.id ? editingOrder : o));
           showToast("Erro ao salvar ofício.", "error");
+          return false;
         }
       }
+
+      setAppState(updatedSnapshot);
+      clearDraft();
+      setIsFinalizedView(true);
+      setIsAdminSidebarOpen(false);
+      return true;
     } else {
       let protocolString = '';
       let uniqueProtocolId = ''; // Secondary unique tracking ID
