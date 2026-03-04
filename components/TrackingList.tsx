@@ -896,7 +896,19 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                             </div>
                             <div className="flex-1 overflow-auto bg-slate-100 p-8 flex justify-center">
                                 <DocumentPreview
-                                    state={previewOrder.documentSnapshot as any}
+                                    state={{
+                                        ...previewOrder.documentSnapshot,
+                                        content: {
+                                            ...(previewOrder.documentSnapshot?.content || {}),
+                                            protocol: previewOrder.protocol,
+                                            leftBlockText: `Solicitação Nº: ${previewOrder.protocol}`,
+                                            requesterName: previewOrder.documentSnapshot?.content?.requesterName || previewOrder.userName,
+                                            globalStatus: previewOrder.status,
+                                            paymentStatus: previewOrder.paymentStatus,
+                                            paymentDate: previewOrder.paymentDate,
+                                            createdAt: previewOrder.createdAt
+                                        }
+                                    } as any}
                                     scale={0.8}
                                 />
                             </div>

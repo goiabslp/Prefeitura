@@ -1613,7 +1613,15 @@ const App: React.FC = () => {
       setIsStepperLocked(false);
     }
 
-    if (snapshotToUse) setAppState(snapshotToUse);
+    if (snapshotToUse) {
+      setAppState(prev => ({
+        ...prev,
+        content: {
+          ...prev.content,
+          ...snapshotToUse.content
+        }
+      }));
+    }
     setActiveBlock(order.blockType);
     setEditingOrder(order);
     setCurrentView('editor');
