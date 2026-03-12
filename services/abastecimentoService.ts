@@ -25,6 +25,7 @@ export interface AbastecimentoRecord {
     userName?: string;
     sectorId?: string;
     payment_status?: string;
+    unit_price?: number;
     created_at?: string;
 }
 
@@ -200,6 +201,7 @@ export const AbastecimentoService = {
                 userName: item.user_name,
                 sectorId: item.sector_id,
                 payment_status: item.payment_status,
+                unit_price: item.unit_price,
                 created_at: item.created_at
             })) || [];
 
@@ -382,7 +384,8 @@ export const AbastecimentoService = {
                 user_id: record.userId,
                 user_name: record.userName,
                 sector_id: record.sectorId,
-                payment_status: record.payment_status || 'Em Aberto'
+                payment_status: record.payment_status || 'Em Aberto',
+                unit_price: record.unit_price
             };
 
             const { error } = await supabase

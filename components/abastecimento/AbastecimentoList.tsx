@@ -72,6 +72,14 @@ const AbastecimentoCard = ({ item, isAdmin, onEdit, onDelete, vehicleModelMap, v
                                 colorClass="text-emerald-700 font-black"
                                 flex="col-span-1 wide:col-span-1"
                             />
+                            {item.unit_price && (
+                                <DataItem
+                                    label="Preço/L"
+                                    value={`R$ ${item.unit_price.toFixed(2)}`}
+                                    colorClass="text-slate-500 font-medium"
+                                    flex="col-span-1 wide:col-span-1"
+                                />
+                            )}
                         </div>
 
                         {/* Chevron Toggle */}

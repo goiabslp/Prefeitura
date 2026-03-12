@@ -53,6 +53,8 @@ export const AbastecimentoForm: React.FC<AbastecimentoFormProps> = ({ onBack, on
     const [cost, setCost] = useState(0);
     const [formattedCost, setFormattedCost] = useState('R$ 0,00');
     const [lastOdometer, setLastOdometer] = useState<number | null>(null);
+    const [unitPrice, setUnitPrice] = useState<number>(0);
+    const [isInitialLoad, setIsInitialLoad] = useState(true);
 
 
     // Formatting Helpers
@@ -128,11 +130,19 @@ export const AbastecimentoForm: React.FC<AbastecimentoFormProps> = ({ onBack, on
                 }
             });
             setFuelPrices(newPrices);
+            
+            // If it's a new record, update unitPrice when station/prices change
+            if (!initialData && fuelType) {
+                setUnitPrice(newPrices[fuelType] || 0);
+            }
         } else {
             // Revert to global if station has no specific prices
             setFuelPrices(globalPrices);
+            if (!initialData && fuelType) {
+                setUnitPrice(globalPrices[fuelType] || 0);
+            }
         }
-    }, [station, gasStations, globalPrices]);
+    }, [station, gasStations, globalPrices, fuelType, initialData]);
 
     // Fetch latest odometer when vehicle changes
     useEffect(() => {
@@ -176,28 +186,45 @@ export const AbastecimentoForm: React.FC<AbastecimentoFormProps> = ({ onBack, on
             setInvoiceNumber(initialData.invoiceNumber || '');
             const initialCost = initialData.cost;
             setCost(initialCost);
+            setUnitPrice(initialData.unit_price || 0);
             setFormattedCost(`R$ ${initialCost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+            
+            // Set initial load to false after a short delay to allow effects to settle
+            setTimeout(() => setIsInitialLoad(false), 100);
+        } else {
+            setIsInitialLoad(false);
         }
 
-    }, [initialData, fuelTypes]);
+    }, [initialData, fuelTypes, vehicles]);
 
     useEffect(() => {
         const calculateCost = () => {
+            // DO NOT recalculate if it's the initial load of an edit
+            if (isInitialLoad && initialData) return;
+
             if (!liters || !fuelType) {
                 setCost(0);
                 setFormattedCost('R$ 0,00');
                 return;
             }
-            const price = fuelPrices[fuelType] || 0;
+            
             const litersFloat = parseFormattedNumber(liters);
-            const total = litersFloat * price;
+            const total = litersFloat * unitPrice;
             // Round to 2 decimals for precision requirement
             const roundedTotal = Number(total.toFixed(2));
             setCost(roundedTotal);
             setFormattedCost(`R$ ${roundedTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
         };
         calculateCost();
-    }, [liters, fuelType, fuelPrices]);
+    }, [liters, fuelType, unitPrice, isInitialLoad, initialData]);
+
+    // Split effect to update unitPrice when fuelType changes explicitly
+    useEffect(() => {
+        if (!isInitialLoad && fuelType) {
+            const newPrice = fuelPrices[fuelType] || 0;
+            setUnitPrice(newPrice);
+        }
+    }, [fuelType]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -248,7 +275,8 @@ export const AbastecimentoForm: React.FC<AbastecimentoFormProps> = ({ onBack, on
                         invoiceNumber,
                         userId: authUser?.id,
                         userName: authUser?.name,
-                        sectorId: matchedVehicle?.sectorId
+                        sectorId: matchedVehicle?.sectorId,
+                        unit_price: unitPrice
                     };
                     setPendingData(newRecord);
                     setAdminOverrideModalOpen(true);
@@ -287,6 +315,7 @@ export const AbastecimentoForm: React.FC<AbastecimentoFormProps> = ({ onBack, on
             userId: initialData?.userId || authUser?.id,
             userName: initialData?.userName || authUser?.name,
             sectorId: matchedVehicle?.sectorId || initialData?.sectorId,
+            unit_price: unitPrice,
             created_at: initialData?.created_at
         };
 
@@ -414,223 +443,199 @@ export const AbastecimentoForm: React.FC<AbastecimentoFormProps> = ({ onBack, on
                         <div className="col-span-12 wide:col-span-6 space-y-1">
                             <label className={labelClass}>Número da Nota</label>
                             <div className="relative group">
+                                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-cyan-500 transition-colors">
+                                    <FileText className="w-5 h-5" />
+                                </div>
                                 <input
                                     type="text"
-                                    inputMode="numeric"
-                                    pattern="[0-9]*"
-                                    placeholder="000.000"
                                     value={invoiceNumber}
                                     onChange={(e) => setInvoiceNumber(e.target.value)}
-                                    disabled={!!initialData}
-                                    className={`${inputClass} ${initialData ? 'bg-slate-100 cursor-not-allowed opacity-70' : ''}`}
+                                    placeholder="Ex: 000.123"
+                                    className={`${inputClass} pl-12`}
                                 />
-                                <FileText className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                             </div>
                         </div>
 
                         {/* Row 2: Veículo e Motorista */}
-                        <div className="col-span-12 wide:col-span-6">
+                        <div className="col-span-12 sm:col-span-6 space-y-1">
+                            <label className={labelClass}>Veículo</label>
                             <CustomSelect
-                                label="Veículo"
+                                options={vehicleOptions}
                                 value={vehicle}
                                 onChange={setVehicle}
-                                options={vehicleOptions}
-                                placeholder="Selecione o veículo"
+                                placeholder="Selecione o veículo..."
                                 icon={Truck}
-                                required
-                                mobileThreshold={1201}
-                                isLoading={isLoadingVehicles}
-                                onFocus={() => refetchVehicles()}
                             />
                         </div>
-                        <div className="col-span-12 wide:col-span-6">
+
+                        <div className="col-span-12 sm:col-span-6 space-y-1">
+                            <label className={labelClass}>Motorista</label>
                             <CustomSelect
-                                label="Motorista"
+                                options={driverOptions}
                                 value={driver}
                                 onChange={setDriver}
-                                options={driverOptions}
-                                placeholder="Selecione o motorista"
+                                placeholder="Selecione o motorista..."
                                 icon={User}
-                                required
-                                mobileThreshold={1201}
-                                isLoading={isLoadingPersons}
-                                onFocus={() => refetchPersons()}
                             />
                         </div>
 
-                        {/* Row 3: Odômetro, Combustível, Litros (Grouped) */}
-                        <div className="col-span-12 grid grid-cols-12 gap-4 bg-slate-50 p-3 sm:p-4 rounded-2xl border border-slate-100">
-                            <div className="col-span-12 wide:col-span-4 space-y-1">
-                                <label className={labelClass}>Horímetro/Odômetro (KM/H)</label>
-                                <div className="relative group">
-                                    <input
-                                        type="text"
-                                        inputMode="numeric"
-                                        required
-                                        placeholder="00.000,00"
-                                        value={odometer}
-                                        onChange={handleOdometerChange}
-                                        className="w-full font-bold text-slate-800 bg-white border border-slate-200 rounded-xl px-3 py-2.5 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 transition-all outline-none"
-                                    />
-                                    <div className="absolute right-3 top-1/2 -translate-y-1/2 px-1.5 py-0.5 bg-slate-100 rounded text-[10px] font-bold text-slate-400">
-                                        KM/H
-                                    </div>
-                                </div>
-                                {lastOdometer !== null && !initialData && (
-                                    <p className="text-[10px] text-slate-400 mt-1 ml-1">
-                                        Último registro: <span className="font-bold">{lastOdometer.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                                    </p>
-                                )}
-                            </div>
-
-                            <div className="col-span-6 wide:col-span-4">
-                                <CustomSelect
-                                    label="Combustível"
-                                    value={fuelType}
-                                    onChange={setFuelType}
-                                    options={fuelOptions}
-                                    placeholder="Tipo"
-                                    icon={Fuel}
-                                    required
-                                    mobileThreshold={1201}
-                                    disableMobileModal={true}
-                                    forceDirection="up"
-                                    isLoading={isLoadingFuelTypes}
-                                    onFocus={() => refetchFuelTypes()}
-                                />
-                            </div>
-
-                            <div className="col-span-6 wide:col-span-4 space-y-1">
-                                <label className={labelClass}>Litros</label>
-                                <div className="relative group">
-                                    <input
-                                        type="text"
-                                        inputMode="numeric"
-                                        required
-                                        placeholder="00,000"
-                                        value={liters}
-                                        onChange={handleLitersChange}
-                                        className={inputClass}
-                                    />
-                                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">
-                                        L
-                                    </div>
-                                </div>
-                            </div>
+                        {/* Row 3: Posto e Combustível */}
+                        <div className="col-span-12 sm:col-span-6 space-y-1">
+                            <label className={labelClass}>Posto</label>
+                            <CustomSelect
+                                options={stationOptions}
+                                value={station}
+                                onChange={setStation}
+                                placeholder="Selecione o posto..."
+                                icon={MapPin}
+                            />
                         </div>
 
-                        {/* Row 4: Posto e Total */}
-                        <div className="hidden wide:block wide:col-span-8">
-                            <div className="space-y-1">
-                                <CustomSelect
-                                    label="Posto de Abastecimento"
-                                    value={station}
-                                    onChange={setStation}
-                                    options={stationOptions}
-                                    placeholder="Selecione o posto..."
-                                    icon={MapPin}
-                                    required
-                                    mobileThreshold={1201}
-                                    disabled={!!initialData}
-                                />
-                                {gasStations.length === 0 && (
-                                    <p className="text-[10px] text-amber-600 mt-1 ml-1 flex items-center gap-1">
-                                        ⚠️ Nenhum posto cadastrado.
-                                    </p>
-                                )}
-                            </div>
+                        <div className="col-span-12 sm:col-span-6 space-y-1">
+                            <label className={labelClass}>Combustível</label>
+                            <CustomSelect
+                                options={fuelOptions}
+                                value={fuelType}
+                                onChange={setFuelType}
+                                placeholder="Selecione o combustível..."
+                                icon={Fuel}
+                            />
                         </div>
 
-                        <div className="col-span-12 wide:col-span-4">
-                            <label className={labelClass}>Valor Total</label>
-                            <div className="relative group mt-1">
+                        {/* Row 4: Litros, Odômetro, Valor Total */}
+                        <div className="col-span-12 sm:col-span-4 space-y-1">
+                            <label className={labelClass}>Litros</label>
+                            <div className="relative group">
+                                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-cyan-500 transition-colors">
+                                    <Fuel className="w-5 h-5" />
+                                </div>
                                 <input
                                     type="text"
-                                    inputMode="numeric"
+                                    value={liters}
+                                    onChange={handleLitersChange}
+                                    placeholder="0,000"
+                                    className={`${inputClass} pl-12 font-mono`}
+                                    required
+                                />
+                            </div>
+                        </div>
+
+                        <div className="col-span-12 sm:col-span-4 space-y-1">
+                            <label className={labelClass}>Odômetro / Horímetro</label>
+                            <div className="relative group">
+                                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-cyan-500 transition-colors">
+                                    <Clock className="w-5 h-5" />
+                                </div>
+                                <input
+                                    type="text"
+                                    value={odometer}
+                                    onChange={handleOdometerChange}
+                                    placeholder="0,00"
+                                    className={`${inputClass} pl-12 font-mono`}
+                                    required
+                                />
+                                {lastOdometer !== null && (
+                                    <div className="absolute right-3 top-1/2 -translate-y-1/2 px-2 py-0.5 bg-slate-100 rounded text-[10px] font-bold text-slate-500">
+                                        Ult: {lastOdometer.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="col-span-12 sm:col-span-4 space-y-1">
+                            <label className={labelClass}>Valor Total (Calculado)</label>
+                            <div className="relative group">
+                                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-emerald-500 transition-colors">
+                                    <DollarSign className="w-5 h-5" />
+                                </div>
+                                <input
+                                    type="text"
                                     value={formattedCost}
                                     onChange={handleCostChange}
-                                    className="w-full font-black text-xl text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-xl px-10 py-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all outline-none"
+                                    className={`${inputClass} pl-12 text-emerald-600 font-bold border-emerald-100 bg-emerald-50/30 focus:border-emerald-500 focus:ring-emerald-500/20`}
                                 />
-                                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-emerald-600" />
                             </div>
                         </div>
                     </div>
 
-                    {/* Footer Actions */}
-                    <div className="flex items-center justify-end gap-3 pt-6 border-t border-slate-100 mt-2">
+                    {/* Action Buttons */}
+                    <div className="flex flex-col-reverse sm:flex-row items-center justify-end gap-3 mt-10 pt-6 border-t border-slate-100">
                         <button
                             type="button"
                             onClick={handleCancel}
-                            className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl text-sm transition-all active:scale-95"
+                            className="w-full sm:w-auto px-6 py-3 rounded-xl text-slate-600 font-bold hover:bg-slate-100 transition-all flex items-center justify-center gap-2"
                         >
+                            <X className="w-5 h-5" />
                             Cancelar
                         </button>
                         <button
                             type="submit"
-                            className="flex items-center gap-2 px-6 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white font-bold rounded-xl shadow-md shadow-cyan-600/20 text-sm transition-all active:scale-95"
+                            disabled={isSaving}
+                            className="w-full sm:w-auto px-8 py-3 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 shadow-lg shadow-slate-900/10 hover:shadow-slate-900/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 group disabled:opacity-70"
                         >
-                            <Save className="w-4 h-4" />
-                            Salvar Registro
+                            {isSaving ? (
+                                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                            ) : (
+                                <Save className="w-5 h-5 text-cyan-400 group-hover:scale-110 transition-transform" />
+                            )}
+                            {initialData ? 'Salvar Alterações' : 'Concluir Registro'}
                         </button>
                     </div>
                 </form>
+
+                {/* Info Bar at Bottom */}
+                <div className="bg-slate-50 px-6 py-3 flex items-center gap-6 border-t border-slate-100">
+                    <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                        <User className="w-3.5 h-3.5" />
+                        Fiscal: <span className="text-slate-600 ml-1">{authUser?.name || authUser?.username || 'Sistema'}</span>
+                    </div>
+                    {initialData?.protocol && (
+                        <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                            <FileText className="w-3.5 h-3.5" />
+                            Protocolo: <span className="text-slate-600 ml-1">{initialData.protocol}</span>
+                        </div>
+                    )}
+                </div>
             </div>
 
+            {/* Confirmation Modal */}
             <AbastecimentoConfirmationModal
                 isOpen={confirmModalOpen}
-                onClose={() => { setConfirmModalOpen(false); setIsOdometerOverridden(false); }}
+                onClose={() => setConfirmModalOpen(false)}
                 onConfirm={handleFinalSave}
-                data={pendingData ? {
-                    invoiceNumber: pendingData.invoiceNumber || '',
-                    vehicle: pendingData.vehicle,
-                    fuelType: pendingData.fuelType,
-                    liters: pendingData.liters,
-                    cost: pendingData.cost,
-                    odometer: odometer, // Passing formatted string directly
-                    lastOdometer: lastOdometer
-                } : null}
-                isEdit={!!initialData}
-                isSaving={isSaving}
+                data={pendingData!}
             />
 
-            {adminOverrideModalOpen && pendingData && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-fade-in">
-                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
-                        <div className="p-6 pb-0">
-                            <div className="flex items-center gap-3 text-red-600 mb-2">
-                                <div className="p-2 bg-red-100 rounded-lg">
-                                    <Clock className="w-6 h-6" />
-                                </div>
-                                <h3 className="text-lg font-bold">Atenção Admin</h3>
+            {/* Admin Override Modal */}
+            {adminOverrideModalOpen && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 w-full max-w-md overflow-hidden animate-scale-in">
+                        <div className="p-6 text-center">
+                            <div className="w-16 h-16 bg-amber-50 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-amber-100">
+                                <Clock className="w-8 h-8 text-amber-500" />
                             </div>
-                            <p className="text-sm text-slate-600 mb-6">
-                                O Horímetro/Odômetro informado (<strong>{pendingData.odometer.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong>)
-                                é menor ou igual ao último registro gravado no sistema (<strong>{(lastOdometer ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong>).
+                            <h3 className="text-xl font-bold text-slate-900 mb-2">Bloqueio de Odômetro</h3>
+                            <p className="text-slate-500 text-sm leading-relaxed mb-6">
+                                O odômetro informado ({pendingData?.odometer.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}) é menor ou igual ao último registro ({lastOdometer?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}).
+                                <br/><br/>
+                                <span className="font-bold text-slate-700 underline decoration-amber-500/30">Como você possui privilégios de Admin, deseja sobrescrever esta validação?</span>
                             </p>
-                            <p className="text-sm text-slate-700 font-bold mb-6">
-                                Deseja forçar o registro mesmo com essa discrepância de quilometragem?
-                            </p>
-                        </div>
 
-                        <div className="p-4 bg-slate-50 border-t border-slate-100 flex gap-3 flex-shrink-0">
-                            <button
-                                type="button"
-                                onClick={() => { setAdminOverrideModalOpen(false); setIsOdometerOverridden(false); }}
-                                className="flex-1 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-50 transition-colors"
-                            >
-                                Cancelar
-                            </button>
-                            <button
-                                type="button"
-                                disabled={isSaving}
-                                onClick={async () => {
-                                    setIsOdometerOverridden(true);
-                                    await handleFinalSave(true);
-                                }}
-                                className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
-                            >
-                                {isSaving ? 'Salvando...' : 'Autorizar Lançamento'}
-                            </button>
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setAdminOverrideModalOpen(false)}
+                                    className="flex-1 px-4 py-3 rounded-xl border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 transition-all"
+                                >
+                                    Não, Corrigir
+                                </button>
+                                <button
+                                    onClick={() => handleFinalSave(true)}
+                                    className="flex-1 px-4 py-3 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition-all flex items-center justify-center gap-2"
+                                >
+                                    <Save className="w-4 h-4 text-cyan-400" />
+                                    Sim, Sobrescrever
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>

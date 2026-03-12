@@ -8,7 +8,7 @@ interface AbastecimentoConfirmationModalProps {
     onClose: () => void;
     onConfirm: () => void;
     data: {
-        invoiceNumber: string;
+        invoiceNumber?: string;
         vehicle: string;
         fuelType: string;
         liters: number;
