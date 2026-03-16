@@ -125,29 +125,43 @@ export const AbastecimentoConfirmationModal: React.FC<AbastecimentoConfirmationM
 
                         {/* Right Column: Odometer & Visual Summary */}
                         <div className="space-y-4 wide:space-y-6">
-                            {/* Odometer Comparison */}
+                            {/* Odometer Comparison - Refined Structure */}
                             <div className="bg-slate-50/50 rounded-2xl p-4 wide:p-6 space-y-4 border border-slate-100">
-                                {!isEdit && (
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-[9px] wide:text-xs uppercase font-bold text-slate-400 tracking-wider">
-                                            Intervalo: {data.lastOdometer !== null && data.lastOdometer !== undefined 
-                                                ? (currentOdometer - data.lastOdometer).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) 
-                                                : '0,00'}
-                                        </span>
-                                        {data.lastOdometer !== null && data.lastOdometer !== undefined && (
-                                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${currentOdometer > data.lastOdometer ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-                                                {currentOdometer > data.lastOdometer ? '+' : ''}{(currentOdometer - data.lastOdometer).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} KM/H
+                                <div className="space-y-3">
+                                    {/* Odometer ATUAL */}
+                                    {!isEdit && (
+                                        <div className="flex items-center justify-between py-1 border-b border-slate-100/50">
+                                            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Horímetro Atual</span>
+                                            <span className="text-sm font-bold text-slate-600">
+                                                {data.lastOdometer?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'} <span className="text-[10px] text-slate-400">KM/H</span>
                                             </span>
-                                        )}
-                                    </div>
-                                )}
-                                <div className="flex flex-col">
-                                    <span className="text-[9px] wide:text-xs uppercase font-bold text-indigo-400 tracking-widest mb-1">Novo Horímetro</span>
-                                    <div className="flex items-baseline gap-2">
-                                        <span className={`text-2xl wide:text-3xl font-black ${isInvalidOdometer ? 'text-red-600' : 'text-indigo-600'}`}>
-                                            {currentOdometer.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                                        </span>
-                                        <span className="text-sm font-bold text-slate-400">KM/H</span>
+                                        </div>
+                                    )}
+
+                                    {/* Odometer DIFERENÇA */}
+                                    {!isEdit && data.lastOdometer !== null && data.lastOdometer !== undefined && (
+                                        <div className="flex items-center justify-between py-1 border-b border-slate-100/50">
+                                            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Horímetro Diferença</span>
+                                            <div className="flex items-center gap-2">
+                                                <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${currentOdometer >= data.lastOdometer ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                                                    {currentOdometer > data.lastOdometer ? '+' : ''}{(currentOdometer - data.lastOdometer).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                                </span>
+                                                <span className="text-sm font-bold text-slate-600">
+                                                    {(currentOdometer - data.lastOdometer).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} <span className="text-[10px] text-slate-400">KM/H</span>
+                                                </span>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Odometer NOVO */}
+                                    <div className="flex flex-col pt-1">
+                                        <span className="text-[10px] uppercase font-bold text-indigo-400 tracking-widest mb-1">Horímetro Novo</span>
+                                        <div className="flex items-baseline gap-2">
+                                            <span className={`text-2xl wide:text-3xl font-black ${isInvalidOdometer ? 'text-red-600' : 'text-indigo-600'}`}>
+                                                {currentOdometer.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                            </span>
+                                            <span className="text-sm font-bold text-slate-400 font-mono">KM/H</span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
