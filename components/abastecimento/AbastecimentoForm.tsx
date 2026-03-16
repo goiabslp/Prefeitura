@@ -503,6 +503,7 @@ export const AbastecimentoForm: React.FC<AbastecimentoFormProps> = ({ onBack, on
                                 onChange={setFuelType}
                                 placeholder="Selecione o combustível..."
                                 icon={Fuel}
+                                showSearch={false}
                             />
                         </div>
 

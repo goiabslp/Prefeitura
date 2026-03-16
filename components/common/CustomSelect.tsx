@@ -24,6 +24,7 @@ interface CustomSelectProps {
     disabled?: boolean;
     isLoading?: boolean;
     onFocus?: () => void;
+    showSearch?: boolean;
 }
 
 // Sub-component for options to enable granular memoization
@@ -80,7 +81,8 @@ export const CustomSelect: React.FC<CustomSelectProps> = memo(({
     forceDirection,
     disabled = false,
     isLoading = false,
-    onFocus
+    onFocus,
+    showSearch = true
 }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
@@ -192,7 +194,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = memo(({
     }, [isOpen, isMobile, disableMobileModal, forceDirection]);
 
     useEffect(() => {
-        if (isOpen && searchInputRef.current) {
+        if (isOpen && showSearch && searchInputRef.current) {
             // Focus search input after a short delay to allow transition
             setTimeout(() => {
                 searchInputRef.current?.focus();
@@ -239,19 +241,21 @@ export const CustomSelect: React.FC<CustomSelectProps> = memo(({
                 </div>
 
                 {/* Search */}
-                <div className="p-3 border-b border-slate-50">
-                    <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                        <input
-                            ref={searchInputRef}
-                            type="text"
-                            className="w-full pl-9 pr-4 py-3 text-sm rounded-xl border border-slate-200 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 outline-none bg-slate-50 focus:bg-white transition-all placeholder:text-slate-400 font-medium"
-                            placeholder="Buscar opção..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                        />
+                {showSearch && (
+                    <div className="p-3 border-b border-slate-50">
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                            <input
+                                ref={searchInputRef}
+                                type="text"
+                                className="w-full pl-9 pr-4 py-3 text-sm rounded-xl border border-slate-200 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 outline-none bg-slate-50 focus:bg-white transition-all placeholder:text-slate-400 font-medium"
+                                placeholder="Buscar opção..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                        </div>
                     </div>
-                </div>
+                )}
 
                 {/* List */}
                 <div className="overflow-y-auto p-2 custom-scrollbar flex-1 min-h-0">
@@ -320,20 +324,22 @@ export const CustomSelect: React.FC<CustomSelectProps> = memo(({
                             ? 'bottom-full mb-2 slide-in-from-bottom-2'
                             : 'mt-2 slide-in-from-top-2'
                             }`}>
-                            <div className="p-2 border-b border-slate-50 bg-slate-50/50">
-                                <div className="relative">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                    <input
-                                        ref={searchInputRef}
-                                        type="text"
-                                        className="w-full pl-9 pr-4 py-2 text-sm rounded-lg border border-slate-200 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/20 outline-none bg-white placeholder:text-slate-300"
-                                        placeholder="Buscar..."
-                                        value={searchTerm}
-                                        onChange={(e) => setSearchTerm(e.target.value)}
-                                        onClick={(e) => e.stopPropagation()}
-                                    />
+                            {showSearch && (
+                                <div className="p-2 border-b border-slate-50 bg-slate-50/50">
+                                    <div className="relative">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                        <input
+                                            ref={searchInputRef}
+                                            type="text"
+                                            className="w-full pl-9 pr-4 py-2 text-sm rounded-lg border border-slate-200 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/20 outline-none bg-white placeholder:text-slate-300"
+                                            placeholder="Buscar..."
+                                            value={searchTerm}
+                                            onChange={(e) => setSearchTerm(e.target.value)}
+                                            onClick={(e) => e.stopPropagation()}
+                                        />
+                                    </div>
                                 </div>
-                            </div>
+                            )}
 
                             <div
                                 className="overflow-y-auto custom-scrollbar p-1"
