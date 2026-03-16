@@ -112,7 +112,7 @@ export const AbastecimentoConfirmationModal: React.FC<AbastecimentoConfirmationM
                                     <span className="text-[9px] wide:text-xs uppercase font-bold text-slate-400 tracking-wider mb-1 flex items-center gap-1">
                                         <Fuel className="w-3 h-3" /> Combustível
                                     </span>
-                                    <span className="text-base wide:text-lg font-bold text-slate-800">{data.fuelType.split(' - ')[0]}</span>
+                                    <span className="text-base wide:text-lg font-bold text-slate-800 uppercase">{data.fuelType.split(' - ')[0]}</span>
                                 </div>
                                 <div className="flex flex-col">
                                     <span className="text-[9px] wide:text-xs uppercase font-bold text-slate-400 tracking-wider mb-1 flex items-center gap-1">
