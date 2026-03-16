@@ -128,17 +128,21 @@ export const AbastecimentoConfirmationModal: React.FC<AbastecimentoConfirmationM
                             {/* Odometer Comparison */}
                             <div className="bg-slate-50/50 rounded-2xl p-4 wide:p-6 space-y-4 border border-slate-100">
                                 {!isEdit && (
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-[9px] wide:text-xs uppercase font-bold text-slate-400 tracking-wider">
-                                            Intervalo: {data.lastOdometer !== null && data.lastOdometer !== undefined 
-                                                ? (currentOdometer - data.lastOdometer).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) 
-                                                : '0,00'}
-                                        </span>
-                                        {data.lastOdometer !== null && data.lastOdometer !== undefined && (
-                                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${currentOdometer > data.lastOdometer ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-                                                {currentOdometer > data.lastOdometer ? '+' : ''}{(currentOdometer - data.lastOdometer).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} KM/H
+                                    <div className="grid grid-cols-2 gap-4 pb-3 border-b border-slate-100/50 mb-1">
+                                        <div className="flex flex-col">
+                                            <span className="text-[9px] wide:text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-0.5">Atual</span>
+                                            <span className="text-xs wide:text-sm font-bold text-slate-600">
+                                                {data.lastOdometer?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'}
                                             </span>
-                                        )}
+                                        </div>
+                                        <div className="flex flex-col items-end text-right">
+                                            <span className="text-[9px] wide:text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-0.5">Diferença</span>
+                                            <span className={`text-xs wide:text-sm font-black ${currentOdometer > (data.lastOdometer || 0) ? 'text-emerald-600' : 'text-slate-600'}`}>
+                                                {data.lastOdometer !== null && data.lastOdometer !== undefined 
+                                                    ? `${currentOdometer > data.lastOdometer ? '+' : ''}${(currentOdometer - data.lastOdometer).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` 
+                                                    : '0,00'}
+                                            </span>
+                                        </div>
                                     </div>
                                 )}
                                 <div className="flex flex-col">
