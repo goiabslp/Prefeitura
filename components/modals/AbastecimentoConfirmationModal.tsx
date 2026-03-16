@@ -128,10 +128,10 @@ export const AbastecimentoConfirmationModal: React.FC<AbastecimentoConfirmationM
                             {/* Odometer Comparison - Refined Structure */}
                             <div className="bg-slate-50/50 rounded-2xl p-4 wide:p-6 space-y-4 border border-slate-100">
                                 <div className="space-y-3">
-                                    {/* Odometer ATUAL */}
+                                    {/* Odometer ANTERIOR */}
                                     {!isEdit && (
                                         <div className="flex items-center justify-between py-1 border-b border-slate-100/50">
-                                            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Horímetro Atual</span>
+                                            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Horímetro Anterior</span>
                                             <span className="text-sm font-bold text-slate-600">
                                                 {data.lastOdometer?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'} <span className="text-[10px] text-slate-400">KM/H</span>
                                             </span>
