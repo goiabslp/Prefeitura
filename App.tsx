@@ -36,7 +36,7 @@ import * as vehicleSchedulingService from './services/vehicleSchedulingService';
 import * as licitacaoService from './services/licitacaoService';
 import { AbastecimentoService } from './services/abastecimentoService';
 import * as taskService from './services/taskService';
-import { saveRhHorasExtras } from './services/rhService';
+import { saveRhHorasExtras, updateRhHorasExtras } from './services/rhService';
 import { Send, CheckCircle2, X, Download, Save, FilePlus, Package, History, FileText, Settings, LogOut, ChevronRight, ChevronDown, Search, Filter, Upload, Trash2, Printer, Edit, ArrowLeft, Loader2, ShieldAlert } from 'lucide-react';
 
 // Components
@@ -3825,16 +3825,22 @@ const App: React.FC = () => {
                       setActionProcessing({ isOpen: true, stage: 'sending' });
                       await advanceActionStep('sending', 500);
 
-                      const savedRecord = await saveRhHorasExtras({
-                        month: data.month,
-                        sector: currentUser?.sector || 'Geral',
-                        entries: data.entries,
-                        user_id: currentUser?.id || '',
-                        user_name: currentUser?.name || 'Sistema',
-                        signature_name: currentUser?.name || 'Sistema',
-                        signature_role: currentUser?.jobTitle || '',
-                        signature_sector: currentUser?.sector || ''
-                      });
+                      const savedRecord = data.id 
+                        ? await updateRhHorasExtras(data.id, {
+                            month: data.month,
+                            entries: data.entries,
+                            updated_at: new Date().toISOString()
+                          })
+                        : await saveRhHorasExtras({
+                            month: data.month,
+                            sector: currentUser?.sector || 'Geral',
+                            entries: data.entries,
+                            user_id: currentUser?.id || '',
+                            user_name: currentUser?.name || 'Sistema',
+                            signature_name: currentUser?.name || 'Sistema',
+                            signature_role: currentUser?.jobTitle || '',
+                            signature_sector: currentUser?.sector || ''
+                          });
 
                       await advanceActionStep('validating', 1000); // Use 'validating' instead of 'processing'
                       await advanceActionStep('confirming', 500); // Use 'confirming' instead of 'finalizing'

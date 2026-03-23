@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Users, UserPlus, Save, Trash2, Calendar, FileText, Clock, ChevronRight, Search, Check, ChevronDown, X } from 'lucide-react';
-import { User, AppState, Person, Job, Sector } from '../../types';
+import { User, AppState, Person, Job, Sector, RhHorasExtras } from '../../types';
 
 interface HorasExtrasFormProps {
     users: User[];
@@ -11,6 +11,7 @@ interface HorasExtrasFormProps {
     currentUserId: string;
     onSave: (data: any) => void;
     onCancel: () => void;
+    editingRecord?: RhHorasExtras | null;
     appState?: AppState;
 }
 
@@ -22,7 +23,9 @@ export const HorasExtrasForm: React.FC<HorasExtrasFormProps> = ({
     userRole,
     currentUserId,
     onSave,
-    onCancel
+    onCancel,
+    editingRecord,
+    appState
 }) => {
     const months = [
         'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -32,7 +35,7 @@ export const HorasExtrasForm: React.FC<HorasExtrasFormProps> = ({
     const currentMonthIndex = new Date().getMonth();
     const currentMonthName = months[currentMonthIndex];
 
-    const [selectedMonth] = useState<string>(currentMonthName);
+    const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthName);
     const [entries, setEntries] = useState<{ userId: string, name: string, jobTitle: string, sector: string, hours: number, isCedido?: boolean }[]>([]);
 
     const [selectedUserId, setSelectedUserId] = useState<string>('');
@@ -58,6 +61,20 @@ export const HorasExtrasForm: React.FC<HorasExtrasFormProps> = ({
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
+
+    useEffect(() => {
+        if (editingRecord) {
+            setSelectedMonth(editingRecord.month);
+            setEntries(editingRecord.entries.map(e => ({
+                ...e,
+                // Ensure isCedido is correctly interpreted if it was stored
+                isCedido: e.isCedido || false
+            })));
+        } else {
+            setSelectedMonth(currentMonthName);
+            setEntries([]);
+        }
+    }, [editingRecord, currentMonthName]);
 
     const currentUser = users.find(u => u.id === currentUserId);
     const currentUserSectorId = currentUser?.sectorId || sectors.find(s => s.name === currentUser?.sector)?.id;
@@ -125,9 +142,10 @@ export const HorasExtrasForm: React.FC<HorasExtrasFormProps> = ({
         }
 
         onSave({
+            id: editingRecord?.id,
             month: selectedMonth,
             entries: validEntries,
-            sector: currentUserSectorName
+            sector: editingRecord?.sector || currentUserSectorName
         });
     };
 

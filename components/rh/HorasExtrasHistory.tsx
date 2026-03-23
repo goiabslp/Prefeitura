@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { RhHorasExtras } from '../../types';
 import { getRhHorasExtrasHistory, deleteRhHorasExtras } from '../../services/rhService';
-import { FileDown, Calendar, Users, Signature, FileText, Search, Trash2 } from 'lucide-react';
+import { FileDown, Calendar, Users, Signature, FileText, Search, Trash2, Edit2 } from 'lucide-react';
 
 interface HorasExtrasHistoryProps {
     onDownloadPdf: (record: RhHorasExtras) => void;
+    onEdit: (record: RhHorasExtras) => void;
     highlightId?: string | null;
     userRole: string;
     currentUserSector: string;
@@ -12,6 +13,7 @@ interface HorasExtrasHistoryProps {
 
 export const HorasExtrasHistory: React.FC<HorasExtrasHistoryProps> = ({
     onDownloadPdf,
+    onEdit,
     highlightId,
     userRole,
     currentUserSector
@@ -174,6 +176,14 @@ export const HorasExtrasHistory: React.FC<HorasExtrasHistoryProps> = ({
                                             </td>
                                             <td className="py-3 px-4 text-center">
                                                 <div className="flex items-center justify-center gap-2">
+                                                    <button
+                                                        onClick={() => onEdit(record)}
+                                                        className="inline-flex items-center justify-center gap-1.5 text-xs font-medium bg-white text-slate-700 hover:text-indigo-600 hover:bg-slate-50 border border-slate-200 hover:border-indigo-200 px-2.5 py-1.5 rounded-md transition-all shadow-sm"
+                                                        title="Editar Lançamento"
+                                                    >
+                                                        <Edit2 className="h-4 w-4" />
+                                                        <span className="hidden sm:inline">Editar</span>
+                                                    </button>
                                                     <button
                                                         onClick={() => onDownloadPdf(record)}
                                                         className="inline-flex items-center justify-center gap-1.5 text-xs font-medium bg-white text-slate-700 hover:text-indigo-600 hover:bg-slate-50 border border-slate-200 hover:border-indigo-200 px-2.5 py-1.5 rounded-md transition-all shadow-sm"

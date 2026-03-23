@@ -83,3 +83,23 @@ export const deleteRhHorasExtras = async (id: string): Promise<boolean> => {
         throw appError;
     }
 };
+export const updateRhHorasExtras = async (id: string, data: Partial<RhHorasExtras>): Promise<RhHorasExtras> => {
+    try {
+        const { data: updatedData, error } = await supabase
+            .from('rh_horas_extras')
+            .update(data)
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) {
+            throw error;
+        }
+
+        return updatedData;
+    } catch (error) {
+        const appError = handleSupabaseError(error);
+        console.error('[rhService] updateRhHorasExtras Error:', appError.message);
+        throw appError;
+    }
+};

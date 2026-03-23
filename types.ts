@@ -278,6 +278,7 @@ export interface RhHorasExtras {
   signature_name: string;
   signature_role: string;
   signature_sector: string;
+  updated_at?: string;
 }
 
 export type AccountStatus = 'Ativa' | 'Pendente';

@@ -40,6 +40,7 @@ export const RHModule: React.FC<RHModuleProps> = ({
     const [activeTab, setActiveTab] = useState<'novo' | 'historico'>('novo');
     const [highlightId, setHighlightId] = useState<string | null>(null);
     const [generatingPdfRecord, setGeneratingPdfRecord] = useState<RhHorasExtras | null>(null);
+    const [editingRecord, setEditingRecord] = useState<RhHorasExtras | null>(null);
 
     useEffect(() => {
         const handleForceHistory = (e: any) => {
@@ -142,8 +143,15 @@ export const RHModule: React.FC<RHModuleProps> = ({
                                         sectors={sectors}
                                         userRole={userRole}
                                         currentUserId={userId}
-                                        onSave={onSaveForm}
-                                        onCancel={() => onNavigate('rh')}
+                                        editingRecord={editingRecord}
+                                        onSave={(data) => {
+                                            onSaveForm(data);
+                                            setEditingRecord(null);
+                                        }}
+                                        onCancel={() => {
+                                            setEditingRecord(null);
+                                            onNavigate('rh');
+                                        }}
                                         appState={appState}
                                     />
                                 ) : (
@@ -151,6 +159,10 @@ export const RHModule: React.FC<RHModuleProps> = ({
                                         userRole={userRole}
                                         currentUserSector={userRole === 'admin' ? 'Geral' : (users.find(u => u.id === userId)?.sector || 'Geral')}
                                         onDownloadPdf={handleDownloadPdf}
+                                        onEdit={(record) => {
+                                            setEditingRecord(record);
+                                            setActiveTab('novo');
+                                        }}
                                     />
                                 )}
                             </div>
