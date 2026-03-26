@@ -171,3 +171,79 @@ export const useDeletePurchaseOrder = () => {
         },
     });
 };
+
+export const useUpdatePurchaseOrderAccount = () => {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ id, description, userName, advanceStatus, isAdmin }: any) =>
+            comprasService.updateOrderAccount(id, description, userName, advanceStatus, isAdmin),
+        onMutate: async ({ id, description, advanceStatus }) => {
+            await queryClient.cancelQueries({ queryKey: purchaseOrderKeys.all });
+
+            const previousData = queryClient.getQueryData(purchaseOrderKeys.all);
+
+            // Optimistically update all matching queries (infinite or regular list)
+            queryClient.setQueriesData({ queryKey: purchaseOrderKeys.lists() }, (old: any) => {
+                if (!old) return old;
+
+                // Handle Infinite Query structure
+                if (old.pages) {
+                    return {
+                        ...old,
+                        pages: old.pages.map((page: any) =>
+                            page.map((order: any) => {
+                                if (order.id === id) {
+                                    return {
+                                        ...order,
+                                        status: advanceStatus ? 'approved' : order.status,
+                                        documentSnapshot: {
+                                            ...order.documentSnapshot,
+                                            content: {
+                                                ...order.documentSnapshot?.content,
+                                                selectedAccount: description
+                                            }
+                                        }
+                                    };
+                                }
+                                return order;
+                            })
+                        )
+                    };
+                }
+
+                // Handle Regular Query structure (Array)
+                if (Array.isArray(old)) {
+                    return old.map((order: any) => {
+                        if (order.id === id) {
+                            return {
+                                ...order,
+                                status: advanceStatus ? 'approved' : order.status,
+                                documentSnapshot: {
+                                    ...order.documentSnapshot,
+                                    content: {
+                                        ...order.documentSnapshot?.content,
+                                        selectedAccount: description
+                                    }
+                                }
+                            };
+                        }
+                        return order;
+                    });
+                }
+
+                return old;
+            });
+
+            return { previousData };
+        },
+        onError: (err, variables, context) => {
+            if (context?.previousData) {
+                queryClient.setQueryData(purchaseOrderKeys.all, context.previousData);
+            }
+        },
+        onSettled: () => {
+            queryClient.invalidateQueries({ queryKey: purchaseOrderKeys.all });
+        },
+    });
+};

@@ -16,6 +16,7 @@ interface AccountSelectionModalProps {
     sectors: Sector[];
     order?: Order;
     isAdmin?: boolean;
+    isSuccess?: boolean;
 }
 
 export const AccountSelectionModal: React.FC<AccountSelectionModalProps> = ({
@@ -25,7 +26,8 @@ export const AccountSelectionModal: React.FC<AccountSelectionModalProps> = ({
     currentUser,
     sectors,
     order,
-    isAdmin = false
+    isAdmin = false,
+    isSuccess = false
 }) => {
     const currentAccountDesc = order?.documentSnapshot?.content?.selectedAccount;
     const [accounts, setAccounts] = useState<PurchaseAccount[]>([]);
@@ -112,7 +114,42 @@ export const AccountSelectionModal: React.FC<AccountSelectionModalProps> = ({
                     </button>
                 </div>
 
-                <div className="flex-1 overflow-hidden flex flex-col">
+                <div className="flex-1 overflow-hidden flex flex-col relative">
+                    <AnimatePresence>
+                        {isSuccess && (
+                            <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                className="absolute inset-0 z-[50] bg-white flex flex-col items-center justify-center p-8 text-center"
+                            >
+                                <motion.div
+                                    initial={{ scale: 0.5, opacity: 0 }}
+                                    animate={{ scale: 1, opacity: 1 }}
+                                    transition={{ type: "spring", damping: 12, stiffness: 200 }}
+                                    className="w-24 h-24 bg-emerald-500 rounded-[2.5rem] flex items-center justify-center mb-6 shadow-2xl shadow-emerald-500/20"
+                                >
+                                    <CheckCircle2 className="w-12 h-12 text-white" />
+                                </motion.div>
+                                <motion.h4
+                                    initial={{ y: 20, opacity: 0 }}
+                                    animate={{ y: 0, opacity: 1 }}
+                                    transition={{ delay: 0.2 }}
+                                    className="text-3xl font-black text-slate-900 uppercase tracking-tighter"
+                                >
+                                    Pronto!
+                                </motion.h4>
+                                <motion.p
+                                    initial={{ y: 20, opacity: 0 }}
+                                    animate={{ y: 0, opacity: 1 }}
+                                    transition={{ delay: 0.3 }}
+                                    className="text-slate-500 font-bold mt-2"
+                                >
+                                    O status foi atualizado com sucesso.
+                                </motion.p>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
                     {!isSelecting ? (
                         <div className="flex-1 p-8 flex flex-col items-center justify-center animate-fade-in">
                             <h4 className="text-xl font-black text-slate-800 uppercase mb-4 tracking-tight">Conta Selecionada</h4>

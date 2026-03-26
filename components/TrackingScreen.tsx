@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { createPortal } from 'react-dom';
 import {
     ArrowLeft, Search, PackageX, FileText, Clock, Trash2,
@@ -16,7 +17,7 @@ import { AccountSelectionModal } from './compras/AccountSelectionModal';
 import { updateOrderAccount } from '../services/comprasService';
 import { formatLocalDate } from '../utils/dateUtils';
 import { useOficios, useOficio, useUpdateOficioDescription, useInfiniteOficios } from '../hooks/useOficios';
-import { usePurchaseOrders, usePurchaseOrder, useInfinitePurchaseOrders } from '../hooks/usePurchaseOrders';
+import { usePurchaseOrders, usePurchaseOrder, useInfinitePurchaseOrders, useUpdatePurchaseOrderAccount, purchaseOrderKeys } from '../hooks/usePurchaseOrders';
 import { useServiceRequests, useServiceRequest, useInfiniteServiceRequests } from '../hooks/useServiceRequests';
 import { useInfiniteLicitacao } from '../hooks/useLicitacao';
 
@@ -66,6 +67,10 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
     onViewOrder,
     sectors = []
 }) => {
+    const queryClient = useQueryClient();
+    const updateAccountMutation = useUpdatePurchaseOrderAccount();
+    const [localOptimisticUpdates, setLocalOptimisticUpdates] = useState<Record<string, Partial<Order>>>({});
+    const [successOrderId, setSuccessOrderId] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [purchaseStatusFilter, setPurchaseStatusFilter] = useState('all');
     const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
@@ -153,12 +158,22 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
 
     const purchaseOrdersData = React.useMemo(() => {
         const remote = infinitePurchaseOrders?.pages.flat() || [];
-        if (!orders || orders.length === 0) return remote;
-        return remote.map(order => {
+        
+        // Final merged list
+        const baseList = (!orders || orders.length === 0) ? remote : remote.map(order => {
             const local = orders.find(o => o.id === order.id);
             return local ? { ...order, ...local } : order;
         });
-    }, [infinitePurchaseOrders, orders]);
+
+        // Apply local overrides for absolute immediate feedback
+        return baseList.map(order => {
+            const override = localOptimisticUpdates[order.id];
+            if (override) {
+                return { ...order, ...override };
+            }
+            return order;
+        });
+    }, [infinitePurchaseOrders, orders, localOptimisticUpdates]);
 
     // LICITACAO
     const {
@@ -491,28 +506,43 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
         );
     };
 
-    const handleSelectAccount = async (account: PurchaseAccount, advanceStatus: boolean = false) => {
+    const handleSelectAccount = (account: PurchaseAccount, advanceStatus: boolean = false) => {
         if (!accountSelectionOrder) return;
-        try {
-            await updateOrderAccount(accountSelectionOrder.id, account.description, currentUser.name, advanceStatus, isAdmin);
-            setAccountSelectionOrder(null);
-            // The order will be updated in the parent state if it's subscribed to realtime or if we trigger a refresh.
-            // Since onUpdateOrderStatus is available, maybe we should use it?
-            // Actually, updateOrderAccount already does the database work.
-            // If we want the UI to update immediately, we might need a refresh callback.
-            // But usually the parent App handles the state.
-            // For now, let's assume the user will see it after a refresh or if we call onUpdateOrderStatus with specialized trigger.
-            if (onUpdateOrderStatus) {
-                // Trigger a generic status update to force re-fetch if necessary, 
-                // but updateOrderAccount already moved it to 'approved'.
-                // To be safe, let's just alert success and close.
-                alert(advanceStatus ? 'Conta vinculada e pedido liberado para o setor de compras!' : 'Conta vinculada atualizada com sucesso!');
-                window.location.reload(); // Quick way to sync for now, or we could pass a refresh function
+        
+        const id = accountSelectionOrder.id;
+
+        // 1. Optimistic status update for IMMEDIATE feedback in the list
+        setLocalOptimisticUpdates(prev => ({
+            ...prev,
+            [id]: {
+                status: advanceStatus ? 'approved' : accountSelectionOrder.status,
+                documentSnapshot: {
+                    ...accountSelectionOrder.documentSnapshot!,
+                    content: {
+                        ...accountSelectionOrder.documentSnapshot!.content,
+                        selectedAccount: account.description
+                    }
+                }
             }
-        } catch (error: any) {
-            console.error("Error selecting account:", error);
-            alert(error.message || "Erro ao vincular conta.");
-        }
+        }));
+
+        // 2. Show Success State in Modal
+        setSuccessOrderId(id);
+
+        // 3. Perform mutation in background
+        updateAccountMutation.mutate({
+            id,
+            description: account.description,
+            userName: currentUser.name,
+            advanceStatus,
+            isAdmin
+        });
+
+        // 4. Delay closing to show "Pronto!"
+        setTimeout(() => {
+            setAccountSelectionOrder(null);
+            setSuccessOrderId(null);
+        }, 1200);
     };
 
     const priorityStyles = {
@@ -1518,106 +1548,152 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                 </div>
                                 <button onClick={() => setStatusSelectionOrder(null)} className="p-3 hover:bg-white hover:shadow-sm rounded-2xl text-slate-400 hover:text-slate-900 transition-all active:scale-90"><X className="w-6 h-6" /></button>
                             </div>
-                            <div className="flex-1 overflow-y-auto custom-scrollbar p-8">
-                                {!pendingStatus ? (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        {(Object.keys(purchaseStatusMap) as Array<keyof typeof purchaseStatusMap>).map((key) => {
-                                            const cfg = purchaseStatusMap[key];
-                                            const isActive = statusSelectionOrder.purchaseStatus === key;
-                                            const isDisabled = key === 'aprovacao_orcamento' && !isAdmin;
+                            <div className="flex-1 overflow-y-auto custom-scrollbar relative">
+                                <AnimatePresence mode="wait">
+                                    {successOrderId === statusSelectionOrder.id ? (
+                                        <motion.div
+                                            key="success"
+                                            initial={{ opacity: 0, scale: 0.9 }}
+                                            animate={{ opacity: 1, scale: 1 }}
+                                            exit={{ opacity: 0 }}
+                                            className="absolute inset-0 z-50 flex flex-col items-center justify-center p-12 text-center bg-white min-h-[400px]"
+                                        >
+                                            <motion.div
+                                                initial={{ scale: 0, rotate: -45 }}
+                                                animate={{ scale: 1, rotate: 0 }}
+                                                transition={{ type: "spring", damping: 10 }}
+                                                className="w-20 h-20 bg-emerald-500 rounded-3xl flex items-center justify-center mb-6 shadow-xl shadow-emerald-500/20"
+                                            >
+                                                <CheckCircle2 className="w-10 h-10 text-white" />
+                                            </motion.div>
+                                            <h4 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">Pronto!</h4>
+                                            <p className="text-slate-400 font-bold mt-2 uppercase tracking-widest text-[9px]">Histórico Atualizado com Sucesso</p>
+                                        </motion.div>
+                                    ) : (
+                                        <motion.div key="list" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="p-8">
+                                            {!pendingStatus ? (
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    {(Object.keys(purchaseStatusMap) as Array<keyof typeof purchaseStatusMap>).map((key) => {
+                                                        const cfg = purchaseStatusMap[key];
+                                                        const isActive = statusSelectionOrder.purchaseStatus === key;
+                                                        const isDisabled = key === 'aprovacao_orcamento' && !isAdmin;
 
-                                            return (
-                                                <button
-                                                    key={key}
-                                                    onClick={() => {
-                                                        if (isDisabled) return;
-                                                        if (key === 'realizado') {
-                                                            setPendingStatus('realizado');
-                                                            setForecastDate(statusSelectionOrder.completionForecast || '');
-                                                            return;
-                                                        }
-                                                        onUpdatePurchaseStatus?.(statusSelectionOrder, key, `Alteração via Histórico por ${currentUser.name}`);
-                                                        setStatusSelectionOrder(null);
-                                                    }}
-                                                    disabled={isDisabled}
-                                                    className={`p-6 rounded-[1.5rem] border-2 text-left transition-all relative group overflow-hidden ${isActive ? 'bg-indigo-50 border-indigo-600 text-indigo-900' :
-                                                        isDisabled ? 'bg-slate-50 border-slate-100 text-slate-300 cursor-not-allowed opacity-50' :
-                                                            'bg-white border-slate-100 text-slate-600 hover:border-indigo-300 hover:bg-slate-50 active:scale-[0.98]'
-                                                        }`}
-                                                >
-                                                    <div className="flex items-start gap-4 h-full relative z-10">
-                                                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 transition-colors ${isActive ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30' :
-                                                            isDisabled ? 'bg-slate-100 text-slate-300' : 'bg-slate-100 text-slate-400 group-hover:bg-indigo-100 group-hover:text-indigo-600'}`}>
-                                                            <cfg.icon className="w-6 h-6" />
+                                                        return (
+                                                            <button
+                                                                key={key}
+                                                                onClick={() => {
+                                                                    if (isDisabled) return;
+                                                                    if (key === 'realizado') {
+                                                                        setPendingStatus('realizado');
+                                                                        setForecastDate(statusSelectionOrder.completionForecast || '');
+                                                                        return;
+                                                                    }
+                                                                    const id = statusSelectionOrder.id;
+                                                                    // Optimistic
+                                                                    setLocalOptimisticUpdates(prev => ({ ...prev, [id]: { purchaseStatus: key as any } }));
+                                                                    setSuccessOrderId(id);
+
+                                                                    onUpdatePurchaseStatus?.(statusSelectionOrder, key, `Alteração via Histórico por ${currentUser.name}`);
+                                                                    
+                                                                    setTimeout(() => {
+                                                                        setStatusSelectionOrder(null);
+                                                                        setSuccessOrderId(null);
+                                                                    }, 1500);
+                                                                }}
+                                                                disabled={isDisabled}
+                                                                className={`p-6 rounded-[1.5rem] border-2 text-left transition-all relative group overflow-hidden ${isActive ? 'bg-indigo-50 border-indigo-600 text-indigo-900' :
+                                                                    isDisabled ? 'bg-slate-50 border-slate-100 text-slate-300 cursor-not-allowed opacity-50' :
+                                                                        'bg-white border-slate-100 text-slate-600 hover:border-indigo-300 hover:bg-slate-50 active:scale-[0.98]'
+                                                                    }`}
+                                                            >
+                                                                <div className="flex items-start gap-4 h-full relative z-10">
+                                                                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 transition-colors ${isActive ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30' :
+                                                                        isDisabled ? 'bg-slate-100 text-slate-300' : 'bg-slate-100 text-slate-400 group-hover:bg-indigo-100 group-hover:text-indigo-600'}`}>
+                                                                        <cfg.icon className="w-6 h-6" />
+                                                                    </div>
+                                                                    <div>
+                                                                        <div className="flex items-center gap-2">
+                                                                            <span className="font-black uppercase tracking-widest text-[11px] leading-none mb-1">{cfg.label}</span>
+                                                                            {isActive && <div className="w-2 h-2 bg-indigo-600 rounded-full animate-pulse" />}
+                                                                            {isDisabled && <Lock className="w-3.5 h-3.5 text-slate-300" />}
+                                                                        </div>
+                                                                        <p className="text-xs font-medium leading-relaxed opacity-70">
+                                                                            {isDisabled ? 'Requer autorização administrativa para prosseguir.' : (key === statusSelectionOrder.purchaseStatus ? 'Status atual deste processo de compra.' : 'Clique para atualizar o processo para esta etapa.')}
+                                                                        </p>
+                                                                    </div>
+                                                                </div>
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            ) : (
+                                                <div className="max-w-md mx-auto py-8">
+                                                    <div className="text-center mb-8">
+                                                        <div className="w-20 h-20 bg-emerald-50 text-emerald-600 rounded-[2rem] flex items-center justify-center mx-auto mb-4 border-2 border-emerald-100 shadow-xl shadow-emerald-500/10">
+                                                            <CalendarCheck className="w-10 h-10" />
                                                         </div>
-                                                        <div>
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="font-black uppercase tracking-widest text-[11px] leading-none mb-1">{cfg.label}</span>
-                                                                {isActive && <div className="w-2 h-2 bg-indigo-600 rounded-full animate-pulse" />}
-                                                                {isDisabled && <Lock className="w-3.5 h-3.5 text-slate-300" />}
+                                                        <h4 className="text-2xl font-black text-slate-900 uppercase">Previsão de Entrega</h4>
+                                                        <p className="text-slate-500 font-medium mt-2">Informe a data prevista para a conclusão/entrega deste pedido para prosseguir.</p>
+                                                    </div>
+
+                                                    <div className="space-y-6">
+                                                        <div className="relative group">
+                                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block px-2">Data da Previsão (Obrigatório)</label>
+                                                            <div className="relative">
+                                                                <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-emerald-600 transition-colors" />
+                                                                <input
+                                                                    type="date"
+                                                                    value={forecastDate}
+                                                                    onChange={(e) => setForecastDate(e.target.value)}
+                                                                    className="w-full pl-12 pr-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:bg-white focus:border-emerald-500 transition-all font-bold text-slate-700"
+                                                                />
                                                             </div>
-                                                            <p className="text-xs font-medium leading-relaxed opacity-70">
-                                                                {isDisabled ? 'Requer autorização administrativa para prosseguir.' : (key === statusSelectionOrder.purchaseStatus ? 'Status atual deste processo de compra.' : 'Clique para atualizar o processo para esta etapa.')}
-                                                            </p>
+                                                        </div>
+
+                                                        <div className="flex flex-col gap-3 pt-4">
+                                                            <button
+                                                                disabled={!forecastDate}
+                                                                onClick={() => {
+                                                                    const id = statusSelectionOrder.id;
+                                                                    // Optimistic
+                                                                    setLocalOptimisticUpdates(prev => ({ 
+                                                                        ...prev, 
+                                                                        [id]: { purchaseStatus: 'realizado', completionForecast: forecastDate } 
+                                                                    }));
+                                                                    setSuccessOrderId(id);
+
+                                                                    onUpdatePurchaseStatus?.(
+                                                                        statusSelectionOrder,
+                                                                        'realizado',
+                                                                        `Pedido realizado com previsão para ${formatLocalDate(forecastDate)}`,
+                                                                        undefined,
+                                                                        forecastDate
+                                                                    );
+                                                                    
+                                                                    setTimeout(() => {
+                                                                        setStatusSelectionOrder(null);
+                                                                        setPendingStatus(null);
+                                                                        setForecastDate('');
+                                                                        setSuccessOrderId(null);
+                                                                    }, 1500);
+                                                                }}
+                                                                className="w-full py-5 bg-emerald-600 text-white font-black text-xs uppercase tracking-[0.2em] rounded-2xl shadow-xl shadow-emerald-600/20 hover:bg-emerald-700 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
+                                                            >
+                                                                <CheckCircle2 className="w-5 h-5" /> Confirmar Realização
+                                                            </button>
+                                                            <button
+                                                                onClick={() => setPendingStatus(null)}
+                                                                className="w-full py-4 text-slate-400 font-black text-[10px] uppercase tracking-widest hover:text-slate-900 transition-colors"
+                                                            >
+                                                                Voltar para a lista de status
+                                                            </button>
                                                         </div>
                                                     </div>
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                ) : (
-                                    <div className="max-w-md mx-auto py-8">
-                                        <div className="text-center mb-8">
-                                            <div className="w-20 h-20 bg-emerald-50 text-emerald-600 rounded-[2rem] flex items-center justify-center mx-auto mb-4 border-2 border-emerald-100 shadow-xl shadow-emerald-500/10">
-                                                <CalendarCheck className="w-10 h-10" />
-                                            </div>
-                                            <h4 className="text-2xl font-black text-slate-900 uppercase">Previsão de Entrega</h4>
-                                            <p className="text-slate-500 font-medium mt-2">Informe a data prevista para a conclusão/entrega deste pedido para prosseguir.</p>
-                                        </div>
-
-                                        <div className="space-y-6">
-                                            <div className="relative group">
-                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block px-2">Data da Previsão (Obrigatório)</label>
-                                                <div className="relative">
-                                                    <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-emerald-600 transition-colors" />
-                                                    <input
-                                                        type="date"
-                                                        value={forecastDate}
-                                                        onChange={(e) => setForecastDate(e.target.value)}
-                                                        className="w-full pl-12 pr-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:bg-white focus:border-emerald-500 transition-all font-bold text-slate-700"
-                                                    />
                                                 </div>
-                                            </div>
-
-                                            <div className="flex flex-col gap-3 pt-4">
-                                                <button
-                                                    disabled={!forecastDate}
-                                                    onClick={() => {
-                                                        onUpdatePurchaseStatus?.(
-                                                            statusSelectionOrder,
-                                                            'realizado',
-                                                            `Pedido realizado com previsão para ${formatLocalDate(forecastDate)}`,
-                                                            undefined,
-                                                            forecastDate
-                                                        );
-                                                        setStatusSelectionOrder(null);
-                                                        setPendingStatus(null);
-                                                        setForecastDate('');
-                                                    }}
-                                                    className="w-full py-5 bg-emerald-600 text-white font-black text-xs uppercase tracking-[0.2em] rounded-2xl shadow-xl shadow-emerald-600/20 hover:bg-emerald-700 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
-                                                >
-                                                    <CheckCircle2 className="w-5 h-5" /> Confirmar Realização
-                                                </button>
-                                                <button
-                                                    onClick={() => setPendingStatus(null)}
-                                                    className="w-full py-4 text-slate-400 font-black text-[10px] uppercase tracking-widest hover:text-slate-900 transition-colors"
-                                                >
-                                                    Voltar para a lista de status
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
+                                            )}
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
                             </div>
                             <div className="p-6 bg-slate-50 border-t border-slate-100 text-center">
                                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">
@@ -1631,61 +1707,98 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
 
                 {/* MODAL DE DECISÃO ADMINISTRATIVA (APROVAR/REPROVAR) */}
                 {adminApprovalOrder && createPortal(
-                    <div className="fixed inset-0 z-[1200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-fade-in">
-                        <div className="w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl border border-white/20 overflow-hidden flex flex-col animate-slide-up">
-                            <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-                                <div className="flex items-center gap-4">
-                                    <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-600/20">
-                                        <ShieldAlert className="w-6 h-6 text-white" />
-                                    </div>
-                                    <div>
-                                        <h3 className="text-xl font-black text-slate-900 tracking-tight uppercase">Decisão Administrativa</h3>
-                                        <p className="text-[10px] font-bold text-indigo-600 font-mono tracking-widest">{adminApprovalOrder.protocol}</p>
-                                    </div>
-                                </div>
-                                <button onClick={() => setAdminApprovalOrder(null)} className="p-3 hover:bg-white hover:shadow-md rounded-2xl text-slate-400 transition-all">
-                                    <X className="w-6 h-6" />
-                                </button>
-                            </div>
-
-                            <div className="p-8 text-center">
-                                <p className="text-slate-500 text-sm font-medium leading-relaxed mb-6">
-                                    Selecione a ação definitiva para este pedido. A aprovação permitirá que o setor de compras prossiga, enquanto a rejeição encerrará o processo.
-                                </p>
-
-                                <div className="grid grid-cols-2 gap-4">
-                                    <button
-                                        onClick={() => {
-                                            onUpdateOrderStatus?.(adminApprovalOrder, 'approved', 'Aprovação Administrativa via Histórico');
-                                            setAdminApprovalOrder(null);
-                                        }}
-                                        className="flex flex-col items-center justify-center gap-3 p-6 bg-emerald-50 border border-emerald-100 rounded-3xl hover:bg-emerald-600 group transition-all"
+                    <div className="fixed inset-0 z-[1200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-fade-in text-slate-900">
+                        <div className="w-full max-w-sm bg-white rounded-[2.5rem] shadow-2xl border border-white/20 overflow-hidden flex flex-col animate-slide-up relative">
+                             <AnimatePresence mode="wait">
+                                {successOrderId === adminApprovalOrder.id ? (
+                                    <motion.div
+                                        key="success"
+                                        initial={{ opacity: 0, scale: 0.8 }}
+                                        animate={{ opacity: 1, scale: 1 }}
+                                        exit={{ opacity: 0, scale: 1.1 }}
+                                        className="p-12 text-center bg-white min-h-[300px] flex flex-col items-center justify-center"
                                     >
-                                        <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-emerald-600 shadow-sm group-hover:scale-110 transition-transform">
-                                            <CheckCircle2 className="w-6 h-6" />
+                                        <motion.div
+                                            initial={{ scale: 0, rotate: -45 }}
+                                            animate={{ scale: 1, rotate: 0 }}
+                                            transition={{ type: "spring", damping: 12, stiffness: 200 }}
+                                            className="w-20 h-20 bg-emerald-500 rounded-[2rem] flex items-center justify-center mb-6 shadow-2xl shadow-emerald-500/20"
+                                        >
+                                            <CheckCircle2 className="w-10 h-10 text-white" />
+                                        </motion.div>
+                                        <h4 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">Pronto!</h4>
+                                        <p className="text-slate-400 font-bold mt-2 uppercase tracking-widest text-[8px]">Status Atualizado Instantaneamente</p>
+                                    </motion.div>
+                                ) : (
+                                    <motion.div key="form" exit={{ opacity: 0, scale: 0.95 }}>
+                                        <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                                            <div className="flex items-center gap-4">
+                                                <div className="w-10 h-10 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-600/20">
+                                                    <ShieldAlert className="w-5 h-5 text-white" />
+                                                </div>
+                                                <div>
+                                                    <h3 className="text-lg font-black text-slate-900 tracking-tight uppercase">Decisão</h3>
+                                                    <p className="text-[9px] font-bold text-indigo-600 font-mono tracking-widest uppercase">{adminApprovalOrder.protocol}</p>
+                                                </div>
+                                            </div>
+                                            <button onClick={() => setAdminApprovalOrder(null)} className="p-2 hover:bg-white hover:shadow-md rounded-xl text-slate-400 transition-all">
+                                                <X className="w-5 h-5" />
+                                            </button>
                                         </div>
-                                        <span className="text-xs font-black uppercase tracking-widest text-emerald-700 group-hover:text-white text-center">Aprovar</span>
-                                    </button>
 
-                                    <button
-                                        onClick={() => {
-                                            setAdminApprovalOrder(null);
-                                            setAdminRejectionOrder(adminApprovalOrder);
-                                            setRejectionReason('');
-                                        }}
-                                        className="flex flex-col items-center justify-center gap-3 p-6 bg-rose-50 border border-rose-100 rounded-3xl hover:bg-rose-600 group transition-all"
-                                    >
-                                        <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-rose-600 shadow-sm group-hover:scale-110 transition-transform">
-                                            <XCircle className="w-6 h-6" />
+                                        <div className="p-8 text-center">
+                                            <p className="text-slate-500 text-[11px] font-bold uppercase tracking-wide leading-relaxed mb-6 opacity-60">
+                                                Selecione a ação definitiva para este pedido de compra.
+                                            </p>
+
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <button
+                                                    onClick={() => {
+                                                        const id = adminApprovalOrder.id;
+                                                        // 1. Optimistic status update
+                                                        setLocalOptimisticUpdates(prev => ({
+                                                            ...prev,
+                                                            [id]: { status: 'payment_account' }
+                                                        }));
+                                                        // 2. Show Success
+                                                        setSuccessOrderId(id);
+                                                        // 3. Trigger remote update
+                                                        onUpdateOrderStatus?.(adminApprovalOrder, 'approved', 'Aprovação Administrativa via Histórico');
+                                                        // 4. Delay close
+                                                        setTimeout(() => {
+                                                            setAdminApprovalOrder(null);
+                                                            setSuccessOrderId(null);
+                                                        }, 1500);
+                                                    }}
+                                                    className="flex flex-col items-center justify-center gap-3 p-6 bg-emerald-50 border border-emerald-100 rounded-3xl hover:bg-emerald-600 group transition-all"
+                                                >
+                                                    <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-emerald-600 shadow-sm group-hover:scale-110 transition-transform">
+                                                        <CheckCircle2 className="w-5 h-5" />
+                                                    </div>
+                                                    <span className="text-[10px] font-black uppercase tracking-widest text-emerald-700 group-hover:text-white text-center">Aprovar</span>
+                                                </button>
+
+                                                <button
+                                                    onClick={() => {
+                                                        setAdminApprovalOrder(null);
+                                                        setAdminRejectionOrder(adminApprovalOrder);
+                                                        setRejectionReason('');
+                                                    }}
+                                                    className="flex flex-col items-center justify-center gap-3 p-6 bg-rose-50 border border-rose-100 rounded-3xl hover:bg-rose-600 group transition-all"
+                                                >
+                                                    <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-rose-600 shadow-sm group-hover:scale-110 transition-transform">
+                                                        <XCircle className="w-5 h-5" />
+                                                    </div>
+                                                    <span className="text-[10px] font-black uppercase tracking-widest text-rose-700 group-hover:text-white text-center">Reprovar</span>
+                                                </button>
+                                            </div>
                                         </div>
-                                        <span className="text-xs font-black uppercase tracking-widest text-rose-700 group-hover:text-white text-center">Reprovar</span>
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-center">
-                                <button onClick={() => setAdminApprovalOrder(null)} className="px-8 py-3 bg-white text-slate-400 font-bold text-xs uppercase tracking-widest rounded-xl border border-slate-200 hover:bg-slate-100 transition-all">Cancelar</button>
-                            </div>
+                                        <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-center">
+                                            <button onClick={() => setAdminApprovalOrder(null)} className="px-8 py-3 bg-white text-slate-400 font-black text-[10px] uppercase tracking-widest rounded-xl border border-slate-200 hover:bg-slate-100 transition-all opacity-50">Cancelar Operação</button>
+                                        </div>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
                         </div>
                     </div>,
                     document.body
@@ -1746,7 +1859,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                     document.body
                 )}
 
-            </div >
+            </div>
 
             {accountSelectionOrder && createPortal(
                 <AccountSelectionModal
@@ -1757,6 +1870,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                     sectors={sectors}
                     order={accountSelectionOrder}
                     isAdmin={isAdmin}
+                    isSuccess={successOrderId === accountSelectionOrder.id}
                 />,
                 document.body
             )}

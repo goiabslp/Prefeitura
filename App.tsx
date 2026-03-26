@@ -1747,10 +1747,7 @@ const App: React.FC = () => {
       return { ...oldData, ...updatedOrder };
     });
 
-    const isPurchaseAction = updatedOrder.blockType === 'compras';
-    if (isPurchaseAction) {
-      setActionProcessing({ isOpen: true, stage: 'sending' });
-    }
+    // Removed blocking overlay for instantaneous feel
 
     try {
       // 4. API Sync
@@ -1782,9 +1779,7 @@ const App: React.FC = () => {
 
       showToast("Erro ao atualizar status. As alterações foram desfeitas.", "error");
     } finally {
-      if (isPurchaseAction) {
-        setActionProcessing(prev => ({ ...prev, isOpen: false }));
-      }
+        // Overlay removed
     }
   };
 
@@ -1858,8 +1853,7 @@ const App: React.FC = () => {
       return { ...oldData, ...updatedOrder };
     });
 
-    // Start modal feedback (non-blocking for logic)
-    setActionProcessing({ isOpen: true, stage: 'sending' });
+    // Removed blocking overlay for instantaneous feel
 
     try {
       await comprasService.updatePurchaseStatus(updatedOrder.id, purchaseStatus as string, newMovement, budgetFileUrl, completionForecast);
@@ -1872,7 +1866,7 @@ const App: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: purchaseOrderKeys.lists() });
       showToast("Erro ao atualizar status de compra: " + (error.message || "Unknown"), "error");
     } finally {
-      setActionProcessing(prev => ({ ...prev, isOpen: false }));
+        // Overlay removed
     }
   };
 
