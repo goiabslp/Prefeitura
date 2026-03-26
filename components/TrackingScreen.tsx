@@ -122,8 +122,8 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
     } = useInfinitePurchaseOrders(
         20,
         searchTerm,
-        purchaseStatusFilter === 'pending_approval' ? 'pending_approval' : (purchaseStatusFilter === 'rejected' ? 'rejected' : undefined),
-        (purchaseStatusFilter !== 'all' && purchaseStatusFilter !== 'pending_approval' && purchaseStatusFilter !== 'rejected') ? purchaseStatusFilter : undefined
+        purchaseStatusFilter === 'pending_approval' || purchaseStatusFilter === 'rejected' || purchaseStatusFilter === 'payment_account' ? purchaseStatusFilter : undefined,
+        (purchaseStatusFilter !== 'all' && purchaseStatusFilter !== 'pending_approval' && purchaseStatusFilter !== 'rejected' && purchaseStatusFilter !== 'payment_account') ? purchaseStatusFilter : undefined
     );
 
     const { data: remoteAllPurchaseOrders } = usePurchaseOrders();
@@ -149,6 +149,8 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                 counts['pending_approval'] = (counts['pending_approval'] || 0) + 1;
             } else if (status === 'rejected') {
                 counts['rejected'] = (counts['rejected'] || 0) + 1;
+            } else if (status === 'payment_account') {
+                counts['payment_account'] = (counts['payment_account'] || 0) + 1;
             } else if (pStatus) {
                 counts[pStatus] = (counts[pStatus] || 0) + 1;
             }
@@ -615,11 +617,12 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                 [
                                                     { id: 'all', label: 'Todos' },
                                                     { id: 'pending_approval', label: 'Em Aprovação' },
-                                                    { id: 'recebido', label: 'Recebido' },
+                                                    { id: 'payment_account', label: 'Conta de Pagamento' },
+                                                    { id: 'recebido', label: 'Pedido Recebido' },
                                                     { id: 'coletando_orcamento', label: 'Orçamento' },
                                                     { id: 'aprovacao_orcamento', label: 'Aprovação' },
                                                     { id: 'coletando_dotacao', label: 'Dotação' },
-                                                    { id: 'realizado', label: 'Realizado' },
+                                                    { id: 'realizado', label: 'Pedido Realizado' },
                                                     { id: 'concluido', label: 'Concluído' },
                                                     { id: 'rejected', label: 'Rejeitado' },
                                                     { id: 'cancelado', label: 'Cancelado' },
@@ -643,9 +646,10 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                         {[
                                                             { id: 'all', label: 'Todos os Pedidos' },
                                                             { id: 'pending_approval', label: 'Em Aprovação' },
+                                                            { id: 'payment_account', label: 'Conta de Pagamento' },
                                                             { id: 'recebido', label: 'Pedido Recebido' },
                                                             { id: 'coletando_orcamento', label: 'Orçamento' },
-                                                            { id: 'aprovacao_orcamento', label: 'Aprovação Orçamentária' },
+                                                            { id: 'aprovacao_orcamento', label: 'Aprovação' },
                                                             { id: 'coletando_dotacao', label: 'Dotação' },
                                                             { id: 'realizado', label: 'Pedido Realizado' },
                                                             { id: 'concluido', label: 'Concluído' },
