@@ -124,6 +124,7 @@ const VIEW_TO_PATH: Record<string, string> = {
   'vehicle-scheduling:vs_calendar': '/AgendamentoVeiculos/Agendar',
   'vehicle-scheduling:vs_history': '/AgendamentoVeiculos/Historico',
   'vehicle-scheduling:vs_approvals': '/AgendamentoVeiculos/Aprovacoes',
+  'vehicle-scheduling:dashboard': '/AgendamentoVeiculos/Dashboard',
   'abastecimento:new': '/Abastecimento/NovoAbastecimento',
   'abastecimento:management': '/Abastecimento/GestaoAbastecimento',
   'abastecimento:dashboard': '/Abastecimento/DashboardAbastecimento',
@@ -3620,12 +3621,14 @@ const App: React.FC = () => {
                   if (activeBlock === 'vs_calendar') return 'calendar';
                   if (activeBlock === 'vs_history') return 'history';
                   if (activeBlock === 'vs_approvals') return 'approvals';
+                  if (activeBlock === 'dashboard') return 'dashboard';
                   return 'menu';
                 })()}
                 onNavigate={(path) => {
                   if (path === '/AgendamentoVeiculos/Agendar') setActiveBlock('vs_calendar');
                   else if (path === '/AgendamentoVeiculos/Historico') setActiveBlock('vs_history');
                   else if (path === '/AgendamentoVeiculos/Aprovacoes') setActiveBlock('vs_approvals');
+                  else if (path === '/AgendamentoVeiculos/Dashboard') setActiveBlock('dashboard');
                   else setActiveBlock(null); // Menu
                   window.history.pushState({}, '', path);
                 }}

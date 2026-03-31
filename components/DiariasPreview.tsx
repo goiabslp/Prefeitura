@@ -224,12 +224,12 @@ export const DiariasPreview: React.FC<DiariasPreviewProps> = ({ state, isGenerat
           ) : (
             <div className="flex flex-col h-full gap-6">
               <div className="px-3 py-1 rounded-t-lg" style={{ backgroundColor: branding.primaryColor || '#4f46e5' }}><span className="font-black text-[7.5pt] text-white uppercase tracking-widest">06. Evidências / Comprovantes</span></div>
-              <div className="flex-1 grid grid-rows-2 gap-4">
+              <div className={`flex-1 grid ${(page.content as EvidenceItem[]).length === 1 ? 'grid-rows-1' : 'grid-rows-2'} gap-4`}>
                 {(page.content as EvidenceItem[]).map((item, idx) => (
-                  <div key={idx} className="border border-slate-200 rounded-xl overflow-hidden flex flex-col bg-slate-50/20 p-2">
-                    <div className="mb-2 border-b border-slate-200 pb-1"><span className="text-[7pt] font-black text-slate-400 uppercase">Item: {item.title || 'Sem título'}</span></div>
-                    <div className="flex-1 flex items-center justify-center bg-white rounded-lg border border-slate-100 overflow-hidden">
-                      {item.imageUrl ? <img src={item.imageUrl} alt={item.title} className="max-w-full max-h-[90mm] object-contain" /> : <div className="text-slate-200 flex flex-col items-center"><div className="w-16 h-16 border-4 border-dashed border-slate-100 rounded-full mb-2"></div><span className="text-[10pt] font-bold">Sem imagem</span></div>}
+                  <div key={idx} className="border border-slate-200 rounded-xl overflow-hidden flex flex-col bg-slate-50/20 p-2 relative h-full">
+                    <div className="mb-2 border-b border-slate-200 pb-1 shrink-0"><span className="text-[7pt] font-black text-slate-400 uppercase">Item: {item.title || 'Sem título'}</span></div>
+                    <div className="flex-1 flex items-center justify-center bg-white rounded-lg border border-slate-100 overflow-hidden relative min-h-0">
+                      {item.imageUrl ? <img src={item.imageUrl} alt={item.title} className="absolute inset-0 w-full h-full object-contain p-1" /> : <div className="text-slate-200 flex flex-col items-center"><div className="w-16 h-16 border-4 border-dashed border-slate-100 rounded-full mb-2"></div><span className="text-[10pt] font-bold">Sem imagem</span></div>}
                     </div>
                   </div>
                 ))}

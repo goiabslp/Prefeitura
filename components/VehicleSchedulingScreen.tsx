@@ -16,6 +16,7 @@ import { DateTimePickerModal } from './DateTimePickerModal';
 import { VehicleScheduleHistory } from './VehicleScheduleHistory';
 import { VehicleScheduleApprovals } from './VehicleScheduleApprovals';
 import { SelectionModal } from './SelectionModal';
+import { VehicleScheduleDashboard } from './VehicleScheduleDashboard';
 
 interface VehicleSchedulingScreenProps {
   schedules: VehicleSchedule[];
@@ -30,7 +31,7 @@ interface VehicleSchedulingScreenProps {
   currentUserName?: string;
   currentUserRole: UserRole;
   currentUserPermissions?: AppPermission[];
-  requestedView?: 'menu' | 'calendar' | 'history' | 'approvals';
+  requestedView?: 'menu' | 'calendar' | 'history' | 'approvals' | 'dashboard';
   onNavigate?: (path: string) => void;
   state: AppState;
 }
@@ -79,7 +80,7 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
   onNavigate,
   state
 }) => {
-  const [activeSubView, setActiveSubView] = useState<'menu' | 'calendar' | 'history' | 'approvals'>('menu');
+  const [activeSubView, setActiveSubView] = useState<'menu' | 'calendar' | 'history' | 'approvals' | 'dashboard'>('menu');
 
   const currentUserPersonId = useMemo(() => {
     if (!currentUserName) return undefined;
@@ -108,14 +109,15 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
     }
   }, [requestedView]);
 
-  const handleSubViewChange = (view: 'menu' | 'calendar' | 'history' | 'approvals') => {
+  const handleSubViewChange = (view: 'menu' | 'calendar' | 'history' | 'approvals' | 'dashboard') => {
     setActiveSubView(view);
     if (onNavigate) {
       const paths = {
         'menu': '/AgendamentoVeiculos',
         'calendar': '/AgendamentoVeiculos/Agendar',
         'history': '/AgendamentoVeiculos/Historico',
-        'approvals': '/AgendamentoVeiculos/Aprovacoes'
+        'approvals': '/AgendamentoVeiculos/Aprovacoes',
+        'dashboard': '/AgendamentoVeiculos/Dashboard'
       };
       onNavigate(paths[view]);
     }
@@ -474,6 +476,23 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
                 </button>
               )}
 
+              {/* Card: Dashboard Analítico */}
+              <button
+                onClick={() => handleSubViewChange('dashboard')}
+                className="group relative flex-1 min-w-[260px] md:min-w-[280px] max-w-[380px] min-h-[160px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-cyan-500/30 hover:border-cyan-200 hover:from-white hover:to-cyan-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden shrink-0 basis-0 grow"
+                style={{ animationDelay: '300ms' }}
+              >
+                <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
+                <div className="absolute bottom-0 left-0 w-24 h-24 bg-cyan-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
+
+                <div className="w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-gradient-to-br from-cyan-500 to-cyan-600 flex items-center justify-center mb-3 text-white group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300 shadow-lg shadow-cyan-500/30 ring-4 ring-white">
+                  <Activity className="w-6 h-6 md:w-7 md:h-7 drop-shadow-md" />
+                </div>
+
+                <h3 className="text-lg md:text-2xl font-bold text-slate-800 mb-1 group-hover:text-slate-900 tracking-tight">Dashboard Analítico</h3>
+                <p className="text-[10px] md:text-xs font-bold text-slate-400 group-hover:text-cyan-600 transition-colors uppercase tracking-widest">Indicadores de Frota</p>
+              </button>
+
             </div>
           </div>
         </div>
@@ -593,6 +612,15 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
           currentUserPersonId={currentUserPersonId}
           currentUserRole={currentUserRole}
           state={state}
+        />
+      )}
+      {activeSubView === 'dashboard' && (
+        <VehicleScheduleDashboard
+          schedules={schedules}
+          vehicles={vehicles}
+          persons={persons}
+          sectors={sectors}
+          onBack={() => handleSubViewChange('menu')}
         />
       )}
       {selectedDay && createPortal(
