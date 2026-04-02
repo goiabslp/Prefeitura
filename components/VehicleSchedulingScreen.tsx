@@ -31,6 +31,7 @@ interface VehicleSchedulingScreenProps {
   currentUserName?: string;
   currentUserRole: UserRole;
   currentUserPermissions?: AppPermission[];
+  currentUserSector?: string;
   requestedView?: 'menu' | 'calendar' | 'history' | 'approvals' | 'dashboard';
   onNavigate?: (path: string) => void;
   state: AppState;
@@ -76,17 +77,40 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
   currentUserName,
   currentUserRole,
   currentUserPermissions = [],
+  currentUserSector,
   requestedView,
   onNavigate,
   state
 }) => {
   const [activeSubView, setActiveSubView] = useState<'menu' | 'calendar' | 'history' | 'approvals' | 'dashboard'>('menu');
 
-  const currentUserPersonId = useMemo(() => {
+  const normalizeString = (str: string) =>
+    str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+
+  const currentUserPerson = useMemo(() => {
     if (!currentUserName) return undefined;
-    const person = persons.find(p => p.name.toLowerCase() === currentUserName.toLowerCase());
-    return person?.id;
+    const search = normalizeString(currentUserName);
+    if (!search) return undefined;
+
+    // Try multiple matching levels
+    let person = persons.find(p => normalizeString(p.name) === search);
+
+    if (!person) {
+      person = persons.find(p => normalizeString(p.name).startsWith(search));
+    }
+
+    if (!person) {
+      person = persons.find(p => search.startsWith(normalizeString(p.name)));
+    }
+
+    if (!person) {
+      person = persons.find(p => normalizeString(p.name).includes(search) || search.includes(normalizeString(p.name)));
+    }
+
+    return person;
   }, [persons, currentUserName]);
+
+  const currentUserPersonId = currentUserPerson?.id;
 
   const canViewApprovals = useMemo(() => {
     if (currentUserRole === 'admin') return true;
@@ -316,11 +340,28 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
       if (departure < now) departure = now;
       if (!initialDate) departure.setMinutes(0, 0, 0);
       const returnDate = new Date(departure.getTime() + (4 * 60 * 60 * 1000));
+      // Resolve pre-filled sector ID
+      let defaultSectorId = currentUserPerson?.sectorId || '';
+      if (!defaultSectorId && currentUserSector) {
+        const searchSector = normalizeString(currentUserSector);
+        const matchedSector = sectors.find(s =>
+          normalizeString(s.name) === searchSector ||
+          normalizeString(s.name).includes(searchSector) ||
+          searchSector.includes(normalizeString(s.name))
+        );
+        if (matchedSector) defaultSectorId = matchedSector.id;
+      }
+
       setFormData({
-        vehicleId: initialVehicleId || '', driverId: '', serviceSectorId: '', requesterPersonId: '',
+        vehicleId: initialVehicleId || '',
+        driverId: '',
+        serviceSectorId: defaultSectorId,
+        requesterPersonId: currentUserPersonId || '',
         departureDateTime: getLocalISOString(departure),
         returnDateTime: getLocalISOString(returnDate),
-        destination: '', purpose: '', status: 'pendente',
+        destination: '',
+        purpose: '',
+        status: 'pendente',
         vehicleLocation: '',
         passengers: []
       });
@@ -334,6 +375,10 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
       showToast("Preencha todos os campos obrigatórios.", "warning");
       return;
     }
+    if (!formData.passengers || formData.passengers.length === 0) {
+      showToast("A seção de Passageiros é obrigatória. Adicione pelo menos uma pessoa.", "warning");
+      return;
+    }
     const now = Date.now();
     const depTime = new Date(formData.departureDateTime!).getTime();
     const retTime = new Date(formData.returnDateTime!).getTime();
@@ -345,7 +390,23 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
       showToast("A data/hora de retorno deve ser posterior à de saída.", "warning");
       return;
     }
-    if (formData.status === 'confirmado' && !isVehicleAvailable(formData.vehicleId, formData.departureDateTime!, formData.returnDateTime!, editingSchedule?.id)) {
+    // Lógica de aprovação automática
+    const selectedVehicle = vehicles.find(v => v.id === formData.vehicleId);
+    const isAdmin = currentUserRole === 'admin';
+    const isFleetManager = currentUserPermissions?.includes('parent_frotas');
+    const isResponsible = selectedVehicle?.responsiblePersonId === currentUserPersonId;
+    const isManager = selectedVehicle?.requestManagerIds?.includes(currentUserPersonId || '');
+    const hasAuthority = isAdmin || isFleetManager || isResponsible || isManager;
+
+    let finalStatus = formData.status || 'pendente';
+    let authorizedBy = formData.authorizedByName;
+
+    if (!editingSchedule && hasAuthority) {
+      finalStatus = 'confirmado';
+      authorizedBy = currentUserName || 'Gestor';
+    }
+
+    if (finalStatus === 'confirmado' && !isVehicleAvailable(formData.vehicleId, formData.departureDateTime!, formData.returnDateTime!, editingSchedule?.id)) {
       showToast("Este veículo já possui um agendamento CONFIRMADO neste período.", "error");
       return;
     }
@@ -360,6 +421,8 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
         // Update
         const data = {
           ...formData,
+          status: finalStatus,
+          authorizedByName: authorizedBy,
           departureDateTime: utcDeparture,
           returnDateTime: utcReturn,
           id: editingSchedule.id,
@@ -372,13 +435,15 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
         // Create
         const data = {
           ...formData,
+          status: finalStatus,
+          authorizedByName: authorizedBy || undefined,
           departureDateTime: utcDeparture,
           returnDateTime: utcReturn,
           requesterId: currentUserId,
           // id and createdAt will be generated by backend
         } as any; // Cast to any or strict omit type 
         await onAddSchedule(data);
-        showToast("Agendamento realizado com sucesso!", "success");
+        showToast(hasAuthority ? "Agendamento aprovado e realizado!" : "Agendamento realizado com sucesso!", "success");
       }
       setIsModalOpen(false);
     } catch (error) {
@@ -390,7 +455,7 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
   };
 
   const pendingApprovals = schedules.filter(s => s.status === 'pendente').length;
-  const labelClass = "block text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-2 ml-1";
+  const labelClass = "block text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600 mb-2 ml-1";
   const inputClass = "w-full rounded-2xl border border-slate-200 bg-slate-50/50 p-3.5 text-sm font-bold text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 outline-none transition-all placeholder:text-slate-400";
 
   const renderDashboard = () => (
@@ -408,7 +473,7 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
       </button>
 
       <div className="flex-1 bg-slate-50 font-sans flex flex-col overflow-hidden relative z-0">
-        <div className="flex-1 flex flex-col items-center justify-center w-full h-full p-4 md:p-8 pt-36 md:pt-40 min-h-0 container mx-auto">
+        <div className="flex-1 flex flex-col items-center justify-center w-full h-full p-4 md:p-8 pt-24 md:pt-28 min-h-0 container mx-auto">
           <div className="w-full flex-1 flex flex-col items-center justify-center max-h-full">
 
             {/* Header */}
@@ -420,13 +485,13 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
               <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mt-2">Sistema Unificado de Agendamentos</p>
             </div>
 
-            {/* Actions Grid */}
-            <div className="w-full flex flex-wrap justify-center items-stretch gap-4 md:gap-6 max-w-6xl animate-in zoom-in duration-500 fill-mode-backwards p-2">
+            {/* Actions Grid - Responsive & Auto-adjusting */}
+            <div className="w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 max-w-7xl animate-in zoom-in duration-500 fill-mode-backwards p-2">
 
               {/* Card: Agendar Veículo */}
               <button
                 onClick={() => handleSubViewChange('calendar')}
-                className="group relative flex-1 min-w-[260px] md:min-w-[280px] max-w-[380px] min-h-[160px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-indigo-500/30 hover:border-indigo-200 hover:from-white hover:to-indigo-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden shrink-0 basis-0 grow"
+                className="group relative w-full min-h-[140px] md:min-h-[180px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-indigo-500/30 hover:border-indigo-200 hover:from-white hover:to-indigo-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden"
                 style={{ animationDelay: '0ms' }}
               >
                 <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
@@ -443,7 +508,7 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
               {/* Card: Meus Agendamentos */}
               <button
                 onClick={() => handleSubViewChange('history')}
-                className="group relative flex-1 min-w-[260px] md:min-w-[280px] max-w-[380px] min-h-[160px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-emerald-500/30 hover:border-emerald-200 hover:from-white hover:to-emerald-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden shrink-0 basis-0 grow"
+                className="group relative w-full min-h-[140px] md:min-h-[180px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-emerald-500/30 hover:border-emerald-200 hover:from-white hover:to-emerald-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden"
                 style={{ animationDelay: '100ms' }}
               >
                 <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
@@ -461,7 +526,7 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
               {canViewApprovals && (
                 <button
                   onClick={() => handleSubViewChange('approvals')}
-                  className="group relative flex-1 min-w-[260px] md:min-w-[280px] max-w-[380px] min-h-[160px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-amber-500/30 hover:border-amber-200 hover:from-white hover:to-amber-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden shrink-0 basis-0 grow"
+                  className="group relative w-full min-h-[140px] md:min-h-[180px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-amber-500/30 hover:border-amber-200 hover:from-white hover:to-amber-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden"
                   style={{ animationDelay: '200ms' }}
                 >
                   <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
@@ -479,7 +544,7 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
               {/* Card: Dashboard Analítico */}
               <button
                 onClick={() => handleSubViewChange('dashboard')}
-                className="group relative flex-1 min-w-[260px] md:min-w-[280px] max-w-[380px] min-h-[160px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-cyan-500/30 hover:border-cyan-200 hover:from-white hover:to-cyan-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden shrink-0 basis-0 grow"
+                className="group relative w-full min-h-[140px] md:min-h-[180px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-cyan-500/30 hover:border-cyan-200 hover:from-white hover:to-cyan-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden"
                 style={{ animationDelay: '300ms' }}
               >
                 <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
@@ -861,7 +926,11 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
                 <div className="md:col-span-2"><label className={labelClass}><Info className="w-3 h-3 inline mr-2" /> Objetivo da Viagem</label><textarea value={formData.purpose} onChange={e => setFormData({ ...formData, purpose: e.target.value })} readOnly={editingSchedule?.status === 'confirmado'} className={`${inputClass} min-h-[100px] resize-none pt-4 ${editingSchedule?.status === 'confirmado' ? 'bg-slate-50 cursor-not-allowed border-slate-200' : ''}`} placeholder="Descreva brevemente o motivo da saída..." /></div>
 
                 <div className="md:col-span-2 pt-4 border-t border-slate-100">
-                  <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-4 flex items-center gap-2"><Users className="w-4 h-4" /> Informações da Tripulação / Passageiros</label>
+                  <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600 mb-4 flex items-center gap-2">
+                    <Users className="w-4 h-4" /> 
+                    Informações da Tripulação / Passageiros
+                    <span className="ml-2 text-[8px] bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded-full border border-rose-200">Obrigatório</span>
+                  </label>
 
                   {editingSchedule?.status !== 'confirmado' && (
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-3 mb-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
