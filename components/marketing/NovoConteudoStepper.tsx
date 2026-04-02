@@ -150,7 +150,8 @@ export const NovoConteudoStepper: React.FC<NovoConteudoStepperProps> = ({
         if (isEditing) {
             setContents(contents.map(c => c.id === editingContent.id ? editingContent : c));
         } else {
-            setContents([...contents, editingContent]);
+            // Prepend new content so it appears at the top of the list in the builder
+            setContents([editingContent, ...contents]);
         }
         setIsContentModalOpen(false);
         setEditingContent(null);
@@ -181,8 +182,16 @@ export const NovoConteudoStepper: React.FC<NovoConteudoStepperProps> = ({
         setSubmitting(true);
 
         try {
-            // 1. Create Request
-            const protocol = `MKT-${new Date().getFullYear()}${(Math.random() * 9000 + 1000).toFixed(0)}`;
+            // 1. Create Request - Using a timestamp-based protocol for natural ordering
+            const now = new Date();
+            const datePart = now.getFullYear().toString() + 
+                             (now.getMonth() + 1).toString().padStart(2, '0') + 
+                             now.getDate().toString().padStart(2, '0');
+            const timePart = now.getHours().toString().padStart(2, '0') + 
+                             now.getMinutes().toString().padStart(2, '0');
+            const randomPart = (Math.random() * 900 + 100).toFixed(0); // 3 digit random for safety
+            
+            const protocol = `MKT-${datePart}${timePart}-${randomPart}`;
             const { data: requestDef, error: reqError } = await supabase
                 .from('marketing_requests')
                 .insert([{

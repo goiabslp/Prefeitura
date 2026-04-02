@@ -73,8 +73,8 @@ export const MarketingModule: React.FC<MarketingModuleProps> = ({
                             </div>
                         </div>
                     </header>
-                    <div className="flex-1 overflow-auto p-4 md:p-6 bg-slate-50/50">
-                        <div className="max-w-6xl mx-auto bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden min-h-[500px]">
+                    <div className="flex-1 overflow-hidden p-4 md:p-6 bg-[#f8fafc]">
+                        <div className="max-w-6xl mx-auto bg-white rounded-[2rem] border border-slate-200 shadow-xl overflow-hidden min-h-[500px] flex flex-col relative h-full">
                             <MeusConteudosList userId={userId} onOpenDetails={(id) => onNavigate('details', id)} />
                         </div>
                     </div>

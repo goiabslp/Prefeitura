@@ -41,20 +41,26 @@ export const MarketingDetails: React.FC<MarketingDetailsProps> = ({ requestId, u
         return match && match[1] ? match[1] : 'Sem Título';
     };
 
-    const extractEventDetails = (desc?: string) => {
+    const extractEventDetails = (desc?: string, firstContent?: any) => {
         if (!desc) return { date: '-', time: '-', location: '-', details: '' };
 
+        // Try regex first for description-based details
         const dateMatch = desc.match(/\*\*Data do Evento:\*\* (.*?)\n/);
         const timeMatch = desc.match(/\*\*Hora do Evento:\*\* (.*?)\n/);
         const localMatch = desc.match(/\*\*Local do Evento:\*\* (.*?)\n/);
+
+        // Fallback to first content item if regex fails
+        const date = dateMatch && dateMatch[1] ? dateMatch[1].trim() : (firstContent?.event_date || '-');
+        const time = timeMatch && timeMatch[1] ? timeMatch[1].trim() : (firstContent?.event_time || '-');
+        const location = localMatch && localMatch[1] ? localMatch[1].trim() : (firstContent?.event_location || '-');
 
         const descParts = desc.split('**Descrição Detalhada:**');
         const detailsText = descParts.length > 1 ? descParts[1].trim() : desc;
 
         return {
-            date: dateMatch && dateMatch[1] ? dateMatch[1].trim() : '-',
-            time: timeMatch && timeMatch[1] ? timeMatch[1].trim() : '-',
-            location: localMatch && localMatch[1] ? localMatch[1].trim() : '-',
+            date: date === '-' ? '-' : format(new Date(date), "dd/MM/yyyy", { locale: ptBR }),
+            time: time,
+            location: location,
             details: detailsText
         };
     };
@@ -217,7 +223,7 @@ export const MarketingDetails: React.FC<MarketingDetailsProps> = ({ requestId, u
                 const { data: contentData, error: contentError } = await supabase
                     .from('marketing_contents')
                     .select('*')
-                    .eq('marketing_request_id', requestId);
+                    .eq('request_id', requestId);
 
                 if (contentError) throw contentError;
                 setContents(contentData || []);
@@ -307,7 +313,6 @@ export const MarketingDetails: React.FC<MarketingDetailsProps> = ({ requestId, u
     const renderStepContent = () => {
         switch (currentStep) {
             case 0:
-                const isSigned = request.is_signed || (request.signature_date && request.signed_by);
                 return (
                     <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -318,7 +323,7 @@ export const MarketingDetails: React.FC<MarketingDetailsProps> = ({ requestId, u
                                 <input
                                     type="text"
                                     readOnly
-                                    value={request.applicant_name || ''}
+                                    value={request.requester_name || ''}
                                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-700 focus:outline-none opacity-80 cursor-not-allowed"
                                 />
                             </div>
@@ -329,7 +334,7 @@ export const MarketingDetails: React.FC<MarketingDetailsProps> = ({ requestId, u
                                 <input
                                     type="text"
                                     readOnly
-                                    value={request.requesting_sector || ''}
+                                    value={request.requester_sector || ''}
                                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-700 focus:outline-none opacity-80 cursor-not-allowed"
                                 />
                             </div>
@@ -353,18 +358,18 @@ export const MarketingDetails: React.FC<MarketingDetailsProps> = ({ requestId, u
                                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-700 focus:outline-none opacity-80 cursor-not-allowed"
                                 />
                             </div>
-                            <div className="md:col-span-2">
+                             <div className="md:col-span-2">
                                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2 ml-1">
                                     Assinatura Eletrônica
                                 </label>
-                                <div className={`w-full border rounded-xl px-4 py-3 flex items-center justify-between opacity-80 cursor-not-allowed ${isSigned ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-slate-50 border-slate-200 text-slate-600'}`}>
+                                <div className={`w-full border rounded-xl px-4 py-3 flex items-center justify-between opacity-80 cursor-not-allowed ${request.digital_signature?.enabled ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-slate-50 border-slate-200 text-slate-600'}`}>
                                     <div className="flex items-center gap-2 font-medium text-sm">
-                                        <CheckCircle2 className={`w-4 h-4 ${isSigned ? 'text-emerald-500' : 'text-slate-400'}`} />
-                                        {isSigned ? 'Assinado Digitalmente' : 'Aguardando Assinatura'}
+                                        <CheckCircle2 className={`w-4 h-4 ${request.digital_signature?.enabled ? 'text-emerald-500' : 'text-slate-400'}`} />
+                                        {request.digital_signature?.enabled ? 'Assinado Digitalmente' : 'Aguardando Assinatura'}
                                     </div>
-                                    {isSigned && request.signature_date && (
+                                    {request.digital_signature?.date && (
                                         <div className="text-xs font-bold bg-white px-3 py-1 rounded-lg shadow-sm border border-emerald-100">
-                                            {format(new Date(request.signature_date), "dd/MM/yyyy HH:mm")}
+                                            {format(new Date(request.digital_signature.date), "dd/MM/yyyy HH:mm", { locale: ptBR })}
                                         </div>
                                     )}
                                 </div>
@@ -374,7 +379,7 @@ export const MarketingDetails: React.FC<MarketingDetailsProps> = ({ requestId, u
                 );
 
             case 1:
-                const evDetails = extractEventDetails(request.description);
+                const evDetails = extractEventDetails(request.description, contents[0]);
                 return (
                     <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -455,18 +460,18 @@ export const MarketingDetails: React.FC<MarketingDetailsProps> = ({ requestId, u
                                                 </span>
                                                 <span className="px-2.5 py-1 text-[10px] font-bold bg-slate-100 text-slate-500 rounded-md flex items-center gap-1.5">
                                                     <Clock className="w-3 h-3" />
-                                                    {item.expected_date ? format(new Date(item.expected_date), "dd/MM/yyyy", { locale: ptBR }) : 'S/ Data'}
+                                                    {item.event_date ? format(new Date(item.event_date), "dd/MM/yyyy", { locale: ptBR }) : 'S/ Data'}
                                                 </span>
-                                                {item.target_sector && (
+                                                {item.content_sector && (
                                                     <span className="px-2.5 py-1 text-[10px] font-semibold bg-emerald-50 text-emerald-600 rounded-md border border-emerald-100">
-                                                        {item.target_sector}
+                                                        {item.content_sector}
                                                     </span>
                                                 )}
                                             </div>
 
                                             <div className="text-xs text-slate-500 mt-2">
-                                                {item.location && <p><strong className="text-slate-600 font-bold">Local:</strong> {item.location}</p>}
-                                                {item.expected_time && <p><strong className="text-slate-600 font-bold">Horário:</strong> {item.expected_time}</p>}
+                                                {item.event_location && <p><strong className="text-slate-600 font-bold">Local:</strong> {item.event_location}</p>}
+                                                {item.event_time && <p><strong className="text-slate-600 font-bold">Horário:</strong> {item.event_time}</p>}
                                             </div>
                                         </div>
                                     </div>

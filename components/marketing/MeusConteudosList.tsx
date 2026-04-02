@@ -52,7 +52,8 @@ export const MeusConteudosList: React.FC<MeusConteudosListProps> = ({ userId, on
                         marketing_contents ( content_type )
                     `)
                     .eq('user_id', userId)
-                    .order('created_at', { ascending: false });
+                    .order('created_at', { ascending: false })
+                    .order('protocol', { ascending: false });
 
                 if (error) throw error;
                 setRequests(data || []);
@@ -133,14 +134,14 @@ export const MeusConteudosList: React.FC<MeusConteudosListProps> = ({ userId, on
     }
 
     return (
-        <div className="absolute inset-0 overflow-auto custom-scrollbar">
-            <table className="w-full text-left border-collapse min-w-[600px]">
-                <thead className="sticky top-0 z-10 bg-slate-50/90 backdrop-blur-sm">
-                    <tr className="border-b border-slate-100 uppercase text-[10px] tracking-wider text-slate-400 font-bold">
-                        <th className="py-3 px-4 md:py-4 md:px-6 whitespace-nowrap">Título do Conteúdo</th>
-                        <th className="py-3 px-4 md:py-4 md:px-6 whitespace-nowrap">Data de criação</th>
-                        <th className="py-3 px-4 md:py-4 md:px-6 whitespace-nowrap text-center">STATUS</th>
-                        <th className="py-3 px-4 md:py-4 md:px-6 whitespace-nowrap text-right">Ação</th>
+        <div className="flex-1 overflow-auto custom-scrollbar bg-white">
+            <table className="w-full text-left border-collapse min-w-full">
+                <thead className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur-md shadow-sm">
+                    <tr className="border-b border-slate-100 uppercase text-[10px] tracking-widest text-slate-400 font-black">
+                        <th className="py-4 px-6 md:px-8 whitespace-nowrap">Título do Conteúdo</th>
+                        <th className="py-4 px-6 md:px-8 whitespace-nowrap">Data de criação</th>
+                        <th className="py-4 px-6 md:px-8 whitespace-nowrap text-center">STATUS</th>
+                        <th className="py-4 px-6 md:px-8 whitespace-nowrap text-right">Ação</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -155,13 +156,13 @@ export const MeusConteudosList: React.FC<MeusConteudosListProps> = ({ userId, on
                                 onClick={() => onOpenDetails(req.id)}
                                 className="group border-b border-slate-50 hover:bg-slate-50/80 cursor-pointer transition-colors"
                             >
-                                <td className="py-3 px-4 md:py-4 md:px-6">
-                                    <div className="font-bold text-slate-800 text-sm md:text-base mb-0.5 max-w-[200px] md:max-w-[300px] truncate" title={extractTitle(req.description)}>
+                                <td className="py-4 px-6 md:px-8">
+                                    <div className="font-bold text-slate-800 text-sm md:text-base mb-0.5 max-w-[200px] md:max-w-[400px] truncate" title={extractTitle(req.description)}>
                                         {extractTitle(req.description)}
                                     </div>
-                                    <div className="text-[10px] text-slate-400 font-mono tracking-wide">{req.protocol}</div>
+                                    <div className="text-[10px] text-slate-400 font-mono tracking-widest">{req.protocol}</div>
                                 </td>
-                                <td className="py-3 px-4 md:py-4 md:px-6">
+                                <td className="py-4 px-6 md:px-8">
                                     <div className="text-xs md:text-sm text-slate-500 font-medium">
                                         {format(new Date(req.created_at), "dd/MM/yyyy", { locale: ptBR })}
                                     </div>
@@ -169,13 +170,13 @@ export const MeusConteudosList: React.FC<MeusConteudosListProps> = ({ userId, on
                                         {format(new Date(req.created_at), "HH:mm")}
                                     </div>
                                 </td>
-                                <td className="py-3 px-4 md:py-4 md:px-6 text-center">
-                                    <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-${statusConfig.color}-50 text-${statusConfig.color}-700 border border-${statusConfig.color}-200 shadow-sm mx-auto`}>
+                                <td className="py-4 px-6 md:px-8 text-center">
+                                    <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-${statusConfig.color}-50 text-${statusConfig.color}-700 border border-${statusConfig.color}-200 shadow-sm mx-auto`}>
                                         <StatusIcon className={`w-3.5 h-3.5 md:w-4 md:h-4 text-${statusConfig.color}-500`} />
                                         <span className="text-[10px] md:text-xs font-black tracking-widest uppercase">{req.status}</span>
                                     </div>
                                 </td>
-                                <td className="py-3 px-4 md:py-4 md:px-6 text-right">
+                                <td className="py-4 px-6 md:px-8 text-right">
                                     <button
                                         onClick={(e) => handleDeleteClick(e, req.id, extractTitle(req.description))}
                                         className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-white border border-slate-200 text-slate-400 flex items-center justify-center hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 transition-all shadow-sm ml-auto opacity-0 group-hover:opacity-100"
