@@ -53,6 +53,15 @@ export interface GasStation {
     fuel_prices?: FuelConfig;
 }
 
+export interface ScheduledPriceUpdate {
+    id?: string;
+    station_id: string;
+    prices: FuelConfig;
+    scheduled_date: string;
+    applied?: boolean;
+    created_at?: string;
+}
+
 const DEFAULT_CONFIG: FuelConfig = {
     diesel: 0,
     gasolina: 0,
@@ -513,6 +522,60 @@ export const AbastecimentoService = {
         } catch (error) {
             console.error('Error fetching all latest odometers:', error);
             return {};
+        }
+    },
+
+    getScheduledPrices: async (stationId?: string): Promise<ScheduledPriceUpdate[]> => {
+        try {
+            let query = supabase
+                .from('abastecimento_scheduled_prices')
+                .select('*')
+                .order('scheduled_date', { ascending: true });
+
+            if (stationId) {
+                query = query.eq('station_id', stationId);
+            }
+
+            const { data, error } = await query;
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.error('Error loading scheduled prices:', error);
+            return [];
+        }
+    },
+
+    saveScheduledPrice: async (update: ScheduledPriceUpdate): Promise<void> => {
+        try {
+            const { error } = await supabase
+                .from('abastecimento_scheduled_prices')
+                .upsert(update);
+            if (error) throw error;
+        } catch (error) {
+            console.error('Error saving scheduled price:', error);
+            throw error;
+        }
+    },
+
+    deleteScheduledPrice: async (id: string): Promise<void> => {
+        try {
+            const { error } = await supabase
+                .from('abastecimento_scheduled_prices')
+                .delete()
+                .eq('id', id);
+            if (error) throw error;
+        } catch (error) {
+            console.error('Error deleting scheduled price:', error);
+            throw error;
+        }
+    },
+
+    applyPendingPriceUpdates: async (): Promise<void> => {
+        try {
+            const { error } = await supabase.rpc('apply_scheduled_fuel_prices');
+            if (error) throw error;
+        } catch (error) {
+            console.error('Error applying scheduled prices:', error);
         }
     }
 };

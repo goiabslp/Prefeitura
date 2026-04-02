@@ -1,9 +1,9 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { ArrowLeft, TrendingUp, Droplet, DollarSign, Truck, Settings, LayoutDashboard, Building2, MapPin, CreditCard, Fuel, Save, Plus, Calendar, ChevronDown, History, BarChart3, Search, ChevronRight, FileText, Filter, FileSpreadsheet, Download, CalendarDays, Factory, Car, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, TrendingUp, Droplet, DollarSign, Truck, Settings, LayoutDashboard, Building2, MapPin, CreditCard, Fuel, Save, Plus, Calendar, ChevronDown, History, BarChart3, Search, ChevronRight, FileText, Filter, FileSpreadsheet, Download, CalendarDays, Factory, Car, AlertTriangle, Trash2 } from 'lucide-react';
 import { ModernSelect } from '../common/ModernSelect';
 import { ModernDateInput } from '../common/ModernDateInput';
-import { AbastecimentoService, AbastecimentoRecord, AbastecimentoReportHistory } from '../../services/abastecimentoService';
+import { AbastecimentoService, AbastecimentoRecord, AbastecimentoReportHistory, ScheduledPriceUpdate, GasStation, FuelConfig } from '../../services/abastecimentoService';
 import { getVehicles, getSectors } from '../../services/entityService';
 import { AbastecimentoReportPDF } from './AbastecimentoReportPDF';
 import { AppState, Vehicle, Sector } from '../../types';
@@ -40,7 +40,7 @@ interface VehicleStat {
 
 interface ConfigPanelProps {
     fuelTypes: { key: string; label: string; price: number }[];
-    gasStations: { id: string; name: string; cnpj?: string; city?: string; fuel_prices?: any }[];
+    gasStations: GasStation[];
 }
 
 const ConfigPanel: React.FC<ConfigPanelProps> = ({ fuelTypes, gasStations: initialGasStations }) => {
@@ -48,6 +48,18 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ fuelTypes, gasStations: initi
     const [gasStations, setGasStations] = useState(initialGasStations);
     const [newStation, setNewStation] = useState({ name: '', cnpj: '', city: '' });
     const [selectedStationId, setSelectedStationId] = useState<string>('');
+    const [scheduledUpdates, setScheduledUpdates] = useState<ScheduledPriceUpdate[]>([]);
+    const [showScheduleModal, setShowScheduleModal] = useState(false);
+    const [scheduleForm, setScheduleForm] = useState<{
+        stationId: string,
+        prices: FuelConfig,
+        date: string
+    }>({
+        stationId: '',
+        prices: { diesel: 0, gasolina: 0, etanol: 0, arla: 0 },
+        date: ''
+    });
+
     const [showToast, setShowToast] = useState(false);
     const [toastMessage, setToastMessage] = useState('');
 
@@ -67,6 +79,41 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ fuelTypes, gasStations: initi
             setFuelConfig({ diesel: 0, gasolina: 0, etanol: 0, arla: 0 });
         }
     }, [selectedStationId, gasStations]);
+
+    const handleAddStation = async () => {
+        if (!newStation.name) return;
+
+        const station = {
+            id: crypto.randomUUID(),
+            ...newStation,
+            fuel_prices: { diesel: 0, gasolina: 0, etanol: 0, arla: 0 }
+        };
+
+        await AbastecimentoService.saveGasStation(station);
+        const updatedStations = await AbastecimentoService.getGasStations();
+        setGasStations(updatedStations);
+        setNewStation({ name: '', cnpj: '', city: '' });
+        showSuccessToast('Posto adicionado com sucesso!');
+    };
+
+    const handleDeleteStation = async (id: string) => {
+        if (window.confirm('Excluir este posto?')) {
+            await AbastecimentoService.deleteGasStation(id);
+            const updatedStations = await AbastecimentoService.getGasStations();
+            setGasStations(updatedStations);
+            if (selectedStationId === id) setSelectedStationId('');
+        }
+    };
+
+
+    useEffect(() => {
+        const init = async () => {
+            await AbastecimentoService.applyPendingPriceUpdates();
+            const updates = await AbastecimentoService.getScheduledPrices();
+            setScheduledUpdates(updates.filter(u => !u.applied));
+        };
+        init();
+    }, []);
 
     const handleSaveConfig = async () => {
         if (!selectedStationId) {
@@ -91,28 +138,44 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ fuelTypes, gasStations: initi
         }
     };
 
-    const handleAddStation = async () => {
-        if (!newStation.name) return;
+    const handleScheduleUpdate = async () => {
+        if (!scheduleForm.stationId || !scheduleForm.date) {
+            showSuccessToast('Preencha todos os campos obrigatórios.');
+            return;
+        }
 
-        const station = {
-            id: crypto.randomUUID(),
-            ...newStation,
-            fuel_prices: { diesel: 0, gasolina: 0, etanol: 0, arla: 0 }
-        };
+        try {
+            const update: ScheduledPriceUpdate = {
+                station_id: scheduleForm.stationId,
+                prices: scheduleForm.prices,
+                scheduled_date: scheduleForm.date
+            };
 
-        await AbastecimentoService.saveGasStation(station);
-        const updatedStations = await AbastecimentoService.getGasStations();
-        setGasStations(updatedStations);
-        setNewStation({ name: '', cnpj: '', city: '' });
-        showSuccessToast('Posto adicionado com sucesso!');
+            await AbastecimentoService.saveScheduledPrice(update);
+            const updates = await AbastecimentoService.getScheduledPrices();
+            setScheduledUpdates(updates.filter(u => !u.applied));
+            setShowScheduleModal(false);
+            setScheduleForm({
+                stationId: '',
+                prices: { diesel: 0, gasolina: 0, etanol: 0, arla: 0 },
+                date: ''
+            });
+            showSuccessToast('Aditivo de preço programado com sucesso!');
+        } catch (error) {
+            console.error(error);
+            showSuccessToast('Erro ao programar aditivo.');
+        }
     };
 
-    const handleDeleteStation = async (id: string) => {
-        if (window.confirm('Excluir este posto?')) {
-            await AbastecimentoService.deleteGasStation(id);
-            const updatedStations = await AbastecimentoService.getGasStations();
-            setGasStations(updatedStations);
-            if (selectedStationId === id) setSelectedStationId('');
+    const handleDeleteSchedule = async (id: string) => {
+        if (window.confirm('Excluir esta alteração programada?')) {
+            try {
+                await AbastecimentoService.deleteScheduledPrice(id);
+                setScheduledUpdates(prev => prev.filter(u => u.id !== id));
+                showSuccessToast('Programação excluída.');
+            } catch (error) {
+                console.error(error);
+            }
         }
     };
 
@@ -317,17 +380,182 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({ fuelTypes, gasStations: initi
                     </div>
                 </div>
 
-                <div className="flex justify-end mt-6 pt-6 border-t border-slate-100">
+                <div className="flex justify-end mt-6 pt-6 border-t border-slate-100 gap-4">
+                    <button
+                        onClick={() => {
+                            if (selectedStationId) {
+                                const st = gasStations.find(s => s.id === selectedStationId);
+                                setScheduleForm({
+                                    stationId: selectedStationId,
+                                    prices: st?.fuel_prices || { diesel: 0, gasolina: 0, etanol: 0, arla: 0 },
+                                    date: ''
+                                });
+                            }
+                            setShowScheduleModal(true);
+                        }}
+                        className="flex items-center gap-2 px-6 py-3 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl shadow-lg shadow-amber-600/20 transition-all active:scale-95"
+                    >
+                        <CalendarDays className="w-4 h-4" />
+                        Programar Aditivo de Preço
+                    </button>
                     <button
                         onClick={handleSaveConfig}
                         disabled={!selectedStationId}
                         className="flex items-center gap-2 px-6 py-3 bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl shadow-lg shadow-cyan-600/20 transition-all active:scale-95"
                     >
                         <Save className="w-4 h-4" />
-                        Salvar Valores do Posto
+                        Salvar Valores do Posto agora
                     </button>
                 </div>
+
+                {/* Scheduled Updates List */}
+                {scheduledUpdates.length > 0 && (
+                    <div className="mt-12 border-t border-slate-200 pt-8">
+                        <div className="flex items-center gap-3 mb-6">
+                            <History className="w-5 h-5 text-slate-400" />
+                            <h3 className="text-sm font-black text-slate-500 uppercase tracking-widest">Alterações Programadas</h3>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {scheduledUpdates.map(update => {
+                                const st = gasStations.find(s => s.id === update.station_id);
+                                return (
+                                    <div key={update.id} className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex items-center justify-between group hover:border-amber-200 transition-all">
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center text-amber-600">
+                                                <Calendar className="w-5 h-5" />
+                                            </div>
+                                            <div>
+                                                <p className="font-bold text-slate-900">{st?.name || 'Posto Desconhecido'}</p>
+                                                <p className="text-xs text-slate-500 font-medium">Aplicação: <span className="text-amber-600 font-bold">{new Date(update.scheduled_date + 'T12:00:00').toLocaleDateString('pt-BR')}</span></p>
+                                            </div>
+                                        </div>
+                                        <button
+                                            onClick={() => update.id && handleDeleteSchedule(update.id)}
+                                            className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all opacity-0 group-hover:opacity-100"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
             </div>
+
+            {/* Scheduled Price Modal */}
+            {showScheduleModal && (
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md transition-all overflow-y-auto">
+                    <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-5xl overflow-hidden animate-in zoom-in-95 duration-300 my-auto">
+                        <div className="bg-amber-600 px-6 py-4 text-white">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+                                        <CalendarDays className="w-5 h-5" />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-lg font-black leading-none">Programar Aditivo</h2>
+                                        <p className="text-white/80 text-[10px] font-bold uppercase tracking-widest mt-1">Atualização automática de preços</p>
+                                    </div>
+                                </div>
+                                <button onClick={() => setShowScheduleModal(false)} className="w-8 h-8 bg-white/10 hover:bg-white/20 rounded-lg flex items-center justify-center transition-all">
+                                    <Plus className="w-5 h-5 rotate-45" />
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="p-6">
+                            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+                                {/* Left Section: Posto & Prices (Wider) */}
+                                <div className="lg:col-span-3 space-y-6">
+                                    <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
+                                        <ModernSelect
+                                            label="Posto Selecionado"
+                                            value={scheduleForm.stationId}
+                                            onChange={val => {
+                                                const st = gasStations.find(s => s.id === val);
+                                                setScheduleForm({
+                                                    ...scheduleForm,
+                                                    stationId: val,
+                                                    prices: st?.fuel_prices || { diesel: 0, gasolina: 0, etanol: 0, arla: 0 }
+                                                });
+                                            }}
+                                            options={[
+                                                { value: "", label: "Selecione o posto..." },
+                                                ...gasStations.map(s => ({
+                                                    value: s.id,
+                                                    label: `${s.name} - ${s.city}`
+                                                }))
+                                            ]}
+                                            icon={Building2}
+                                        />
+                                    </div>
+
+                                    <div className={`grid grid-cols-2 gap-3 transition-all ${!scheduleForm.stationId ? 'opacity-30 grayscale pointer-events-none' : ''}`}>
+                                        {[
+                                            { label: 'Diesel', key: 'diesel' },
+                                            { label: 'Gasolina', key: 'gasolina' },
+                                            { label: 'Etanol', key: 'etanol' },
+                                            { label: 'Arla', key: 'arla' }
+                                        ].map((fuel) => (
+                                            <div key={fuel.key} className="bg-slate-50 border border-slate-200 rounded-xl p-3 hover:border-amber-400 transition-colors">
+                                                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Novo Preço {fuel.label}</label>
+                                                <div className="relative">
+                                                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs">R$</span>
+                                                    <input
+                                                        type="number"
+                                                        step="0.01"
+                                                        className="w-full pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none font-black text-slate-900 transition-all text-sm"
+                                                        value={scheduleForm.prices[fuel.key as keyof FuelConfig] || ''}
+                                                        onChange={e => setScheduleForm({
+                                                            ...scheduleForm,
+                                                            prices: { ...scheduleForm.prices, [fuel.key]: parseFloat(e.target.value) || 0 }
+                                                        })}
+                                                    />
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Right Section: Date & Confirm (Narrower) */}
+                                <div className="lg:col-span-2 flex flex-col justify-between space-y-6 lg:border-l lg:border-slate-100 lg:pl-6">
+                                    <div className={`space-y-4 transition-all ${!scheduleForm.stationId ? 'opacity-30' : ''}`}>
+                                        <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4">
+                                            <ModernDateInput
+                                                label="Data da Alteração"
+                                                value={scheduleForm.date}
+                                                onChange={val => setScheduleForm({ ...scheduleForm, date: val })}
+                                            />
+                                            <div className="mt-3 flex items-start gap-2">
+                                                <div className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1 shrink-0" />
+                                                <p className="text-[10px] text-amber-700 font-bold leading-relaxed uppercase tracking-tight">Os valores serão atualizados à meia-noite da data selecionada.</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-3 pt-6 lg:pt-0">
+                                        <button
+                                            onClick={handleScheduleUpdate}
+                                            disabled={!scheduleForm.stationId || !scheduleForm.date}
+                                            className="w-full px-6 py-4 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black rounded-2xl shadow-xl shadow-amber-600/20 transition-all active:scale-[0.98] flex items-center justify-center gap-3 text-sm uppercase tracking-wider"
+                                        >
+                                            <CalendarDays className="w-5 h-5" />
+                                            Confirmar Programação
+                                        </button>
+                                        <button
+                                            onClick={() => setShowScheduleModal(false)}
+                                            className="w-full px-6 py-3 bg-slate-50 hover:bg-slate-100 text-slate-600 font-bold rounded-2xl transition-all text-sm uppercase tracking-wider"
+                                        >
+                                            Cancelar
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
