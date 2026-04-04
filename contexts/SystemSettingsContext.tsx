@@ -6,20 +6,23 @@ interface ModuleSetting {
     module_key: string;
     label: string;
     is_enabled: boolean;
+    is_enabled_mobile: boolean;
     parent_key: string | null;
     order_index: number;
     description?: string;
 }
 
 interface SystemSettingsContextType {
-    moduleStatus: Record<string, boolean>; // key: module_key, value: is_enabled
+    moduleStatus: Record<string, boolean>; // key: module_key, value: is_enabled (web)
+    mobileModuleStatus: Record<string, boolean>; // key: module_key, value: is_enabled_mobile
     isLoading: boolean;
-    toggleModule: (key: string, enabled: boolean) => Promise<boolean>;
+    toggleModule: (key: string, enabled: boolean, channel?: 'web' | 'mobile') => Promise<boolean>;
     settings: ModuleSetting[];
 }
 
 const SystemSettingsContext = createContext<SystemSettingsContextType>({
     moduleStatus: {},
+    mobileModuleStatus: {},
     isLoading: true,
     toggleModule: async () => false,
     settings: []
@@ -28,6 +31,7 @@ const SystemSettingsContext = createContext<SystemSettingsContextType>({
 export const SystemSettingsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [settings, setSettings] = useState<ModuleSetting[]>([]);
     const [moduleStatus, setModuleStatus] = useState<Record<string, boolean>>({});
+    const [mobileModuleStatus, setMobileModuleStatus] = useState<Record<string, boolean>>({});
     const [isLoading, setIsLoading] = useState(true);
 
     // Initial Fetch
@@ -40,42 +44,25 @@ export const SystemSettingsProvider: React.FC<{ children: React.ReactNode }> = (
 
             if (error) {
                 console.error('Error fetching global settings:', error);
-                // Fail open if table doesn't exist yet (migration pending)
                 setIsLoading(false);
                 return;
             }
 
             if (data) {
-                const fetchedSettings = data || [];
-                // Check if calendario is missing from DB and add it as a virtual setting
-                if (!fetchedSettings.find(s => s.module_key === 'parent_calendario')) {
-                    fetchedSettings.push({
-                        id: 'virtual_calendario',
-                        module_key: 'parent_calendario',
-                        label: 'Calendário',
-                        is_enabled: true,
-                        parent_key: null,
-                        order_index: 55,
-                        description: 'Módulo de Agenda e Eventos'
-                    });
-                }
+                const fetchedSettings = data as ModuleSetting[];
+                
                 setSettings(fetchedSettings);
-                const statusMap: Record<string, boolean> = {};
+                
+                const webStatusMap: Record<string, boolean> = {};
+                const mobileStatusMap: Record<string, boolean> = {};
+                
                 fetchedSettings.forEach(s => {
-                    statusMap[s.module_key] = s.is_enabled;
+                    webStatusMap[s.module_key] = s.is_enabled;
+                    mobileStatusMap[s.module_key] = s.is_enabled_mobile ?? true;
                 });
-                setModuleStatus(statusMap);
-            } else {
-                setSettings([{
-                    id: 'virtual_calendario',
-                    module_key: 'parent_calendario',
-                    label: 'Calendário',
-                    is_enabled: true,
-                    parent_key: null,
-                    order_index: 55,
-                    description: 'Módulo de Agenda e Eventos'
-                }]);
-                setModuleStatus({ 'parent_calendario': true });
+                
+                setModuleStatus(webStatusMap);
+                setMobileModuleStatus(mobileStatusMap);
             }
         } catch (err) {
             console.error('Unexpected error fetching settings:', err);
@@ -91,7 +78,6 @@ export const SystemSettingsProvider: React.FC<{ children: React.ReactNode }> = (
         const subscription = supabase
             .channel('global_settings_changes')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'global_module_settings' }, (payload) => {
-                // Simple strategy: refetch all to ensure consistency
                 fetchSettings();
             })
             .subscribe();
@@ -101,18 +87,24 @@ export const SystemSettingsProvider: React.FC<{ children: React.ReactNode }> = (
         };
     }, []);
 
-    const toggleModule = async (key: string, enabled: boolean) => {
+    const toggleModule = async (key: string, enabled: boolean, channel: 'web' | 'mobile' = 'web') => {
+        const fieldName = channel === 'web' ? 'is_enabled' : 'is_enabled_mobile';
         try {
             const { error } = await supabase
                 .from('global_module_settings')
-                .update({ is_enabled: enabled, updated_at: new Date().toISOString() })
+                .update({ [fieldName]: enabled, updated_at: new Date().toISOString() })
                 .eq('module_key', key);
 
             if (error) throw error;
 
             // Optimistic update
-            setModuleStatus(prev => ({ ...prev, [key]: enabled }));
-            setSettings(prev => prev.map(s => s.module_key === key ? { ...s, is_enabled: enabled } : s));
+            if (channel === 'web') {
+                setModuleStatus(prev => ({ ...prev, [key]: enabled }));
+            } else {
+                setMobileModuleStatus(prev => ({ ...prev, [key]: enabled }));
+            }
+            
+            setSettings(prev => prev.map(s => s.module_key === key ? { ...s, [fieldName]: enabled } : s));
 
             return true;
         } catch (error) {
@@ -123,7 +115,7 @@ export const SystemSettingsProvider: React.FC<{ children: React.ReactNode }> = (
     };
 
     return (
-        <SystemSettingsContext.Provider value={{ moduleStatus, isLoading, toggleModule, settings }}>
+        <SystemSettingsContext.Provider value={{ moduleStatus, mobileModuleStatus, isLoading, toggleModule, settings }}>
             {children}
         </SystemSettingsContext.Provider>
     );

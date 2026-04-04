@@ -5,7 +5,7 @@ import {
   ChevronRight, ChevronDown, Layout, Settings2, Power,
   Activity, Info, FileText, ShoppingCart, Gavel, Briefcase,
   Car, Calendar, Truck, Fuel, Sprout, HardHat, CheckSquare,
-  Users, Megaphone, Box
+  Users, Megaphone, Box, Monitor, Smartphone
 } from 'lucide-react';
 import { useSystemSettings } from '../../contexts/SystemSettingsContext';
 import { GlobalLoading } from '../common/GlobalLoading';
@@ -17,6 +17,7 @@ interface SystemAccessControlProps {
 export const SystemAccessControl: React.FC<SystemAccessControlProps> = ({ onBack }) => {
     const { settings = [], toggleModule, isLoading } = useSystemSettings();
     const [searchTerm, setSearchTerm] = useState('');
+    const [activeTab, setActiveTab] = useState<'web' | 'mobile'>('web');
     const [processingKey, setProcessingKey] = useState<string | null>(null);
     const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({});
 
@@ -50,7 +51,7 @@ export const SystemAccessControl: React.FC<SystemAccessControlProps> = ({ onBack
     const handleToggle = async (key: string, currentValue: boolean) => {
         setProcessingKey(key);
         try {
-            await toggleModule(key, !currentValue);
+            await toggleModule(key, !currentValue, activeTab);
         } finally {
             setProcessingKey(null);
         }
@@ -99,7 +100,7 @@ export const SystemAccessControl: React.FC<SystemAccessControlProps> = ({ onBack
                                 <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Global Master</span>
                             </div>
                         </div>
-                        <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mt-1 ml-1">Configuração de disponibilidade dos módulos em tempo real</p>
+                        <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mt-1 ml-1">Ambiente de gestão de disponibilidade multicanal</p>
                     </div>
                 </div>
 
@@ -116,13 +117,28 @@ export const SystemAccessControl: React.FC<SystemAccessControlProps> = ({ onBack
                     </div>
                 </div>
 
-                <div className="flex items-center gap-3">
-                    <div className="hidden lg:flex flex-col items-end leading-tight mr-3">
-                        <span className="text-sm font-bold text-slate-900 tracking-tight">{settings.length} Módulos</span>
-                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Ativos & Gerenciáveis</span>
-                    </div>
-                    <button className="p-3 rounded-2xl bg-white border border-slate-200 text-slate-400 hover:text-indigo-600 hover:border-indigo-200 hover:bg-indigo-50 transition-all shadow-sm active:rotate-180 duration-500">
-                        <RefreshCw className="w-5 h-5" />
+                <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-2xl">
+                    <button 
+                        onClick={() => setActiveTab('web')}
+                        className={`flex items-center gap-2 px-6 py-2.5 rounded-[1.25rem] text-xs font-black uppercase tracking-widest transition-all duration-300 ${
+                            activeTab === 'web' 
+                                ? 'bg-white text-indigo-600 shadow-lg shadow-indigo-500/10' 
+                                : 'text-slate-400 hover:text-slate-600'
+                        }`}
+                    >
+                        <Monitor className="w-4 h-4" />
+                        Versão Web
+                    </button>
+                    <button 
+                        onClick={() => setActiveTab('mobile')}
+                        className={`flex items-center gap-2 px-6 py-2.5 rounded-[1.25rem] text-xs font-black uppercase tracking-widest transition-all duration-300 ${
+                            activeTab === 'mobile' 
+                                ? 'bg-white text-rose-600 shadow-lg shadow-rose-500/10' 
+                                : 'text-slate-400 hover:text-slate-600'
+                        }`}
+                    >
+                        <Smartphone className="w-4 h-4" />
+                        Versão Mobile
                     </button>
                 </div>
             </header>
@@ -134,34 +150,38 @@ export const SystemAccessControl: React.FC<SystemAccessControlProps> = ({ onBack
                         filteredParents.map((parent) => {
                             const children = settings.filter(s => s.parent_key === parent.module_key);
                             const isExpanded = expandedModules[parent.module_key] || searchTerm.length > 0;
-                            const activeChildrenCount = children.filter(c => c.is_enabled).length;
+                            
+                            const isEnabled = activeTab === 'web' ? parent.is_enabled : parent.is_enabled_mobile;
+                            const activeChildrenCount = children.filter(c => activeTab === 'web' ? c.is_enabled : c.is_enabled_mobile).length;
 
                             return (
                                 <div 
                                     key={parent.id}
                                     className={`group bg-white rounded-3xl border transition-all duration-300 overflow-hidden shadow-sm hover:shadow-md ${
-                                        parent.is_enabled ? 'border-slate-200' : 'border-rose-100 bg-rose-50/20'
+                                        isEnabled ? 'border-slate-200' : (activeTab === 'web' ? 'border-indigo-100 bg-indigo-50/10' : 'border-rose-100 bg-rose-50/10')
                                     }`}
                                 >
                                     {/* Parent Item */}
                                     <div className="p-5 flex items-center justify-between gap-6 cursor-pointer" onClick={() => toggleExpand(parent.module_key)}>
                                         <div className="flex items-center gap-5 min-w-0">
                                             <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-500 ${
-                                                parent.is_enabled 
-                                                    ? 'bg-slate-50 text-slate-900 group-hover:bg-indigo-600 group-hover:text-white shadow-inner' 
-                                                    : 'bg-rose-100/50 text-rose-500 shadow-none'
+                                                isEnabled 
+                                                    ? `bg-slate-50 text-slate-900 group-hover:bg-${activeTab === 'web' ? 'indigo' : 'rose'}-600 group-hover:text-white shadow-inner` 
+                                                    : `bg-${activeTab === 'web' ? 'indigo' : 'rose'}-100/50 text-${activeTab === 'web' ? 'indigo' : 'rose'}-500 shadow-none`
                                             }`}>
                                                 {getModuleIcon(parent.module_key)}
                                             </div>
                                             
                                             <div className="min-w-0">
                                                 <div className="flex items-center gap-2">
-                                                    <h3 className={`font-black text-lg tracking-tight ${parent.is_enabled ? 'text-slate-900' : 'text-slate-400 font-bold'}`}>
+                                                    <h3 className={`font-black text-lg tracking-tight ${isEnabled ? 'text-slate-900' : 'text-slate-400 font-bold'}`}>
                                                         {parent.label}
                                                     </h3>
                                                     {children.length > 0 && (
-                                                        <span className="px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-500 text-[9px] font-black uppercase tracking-wider">
-                                                            {activeChildrenCount}/{children.length} Sub
+                                                        <span className={`px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider ${
+                                                            isEnabled ? 'bg-slate-100 text-slate-500' : 'bg-slate-50 text-slate-300'
+                                                        }`}>
+                                                            {activeChildrenCount}/{children.length} {activeTab === 'web' ? 'WEB' : 'MOB'}
                                                         </span>
                                                     )}
                                                 </div>
@@ -174,21 +194,30 @@ export const SystemAccessControl: React.FC<SystemAccessControlProps> = ({ onBack
                                         </div>
 
                                         <div className="flex items-center gap-6" onClick={e => e.stopPropagation()}>
-                                            <div className="flex items-center gap-3 pr-6 border-r border-slate-100">
-                                                <span className={`text-[10px] font-black uppercase tracking-widest transition-colors ${parent.is_enabled ? 'text-emerald-500' : 'text-slate-300'}`}>
-                                                    {parent.is_enabled ? 'Ativo' : 'Inativo'}
+                                            <button 
+                                                onClick={() => handleToggle(parent.module_key, isEnabled)}
+                                                disabled={processingKey === parent.module_key}
+                                                className="flex items-center gap-3 pr-6 border-r border-slate-100 group/status"
+                                            >
+                                                <span className={`text-[10px] font-black uppercase tracking-widest transition-colors ${
+                                                    isEnabled 
+                                                        ? (activeTab === 'web' ? 'text-indigo-500' : 'text-rose-500') 
+                                                        : 'text-slate-300'
+                                                } group-hover/status:underline`}>
+                                                    {isEnabled ? 'Habilitado' : 'Desabilitado'}
                                                 </span>
-                                                <label className="relative inline-flex items-center cursor-pointer">
-                                                    <input
-                                                        type="checkbox"
-                                                        className="sr-only peer"
-                                                        checked={parent.is_enabled}
-                                                        onChange={() => handleToggle(parent.module_key, parent.is_enabled)}
-                                                        disabled={processingKey === parent.module_key}
-                                                    />
-                                                    <div className={`w-12 h-6.5 bg-slate-200 rounded-full peer peer-checked:after:translate-x-[22px] peer-checked:after:border-white after:content-[''] after:absolute after:top-0.75 after:left-[3px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500 peer-focus:ring-4 peer-focus:ring-emerald-500/10`}></div>
-                                                </label>
-                                            </div>
+                                                <div className="relative inline-flex items-center cursor-pointer">
+                                                    <div className={`w-12 h-6.5 bg-slate-200 rounded-full transition-all relative ${
+                                                        isEnabled 
+                                                            ? (activeTab === 'web' ? 'bg-indigo-500' : 'bg-rose-500') 
+                                                            : 'bg-slate-200'
+                                                    }`}>
+                                                        <div className={`absolute top-0.75 left-[3px] bg-white border-slate-300 border rounded-full h-5 w-5 transition-all transform ${
+                                                            isEnabled ? 'translate-x-[22px]' : 'translate-x-0'
+                                                        }`}></div>
+                                                    </div>
+                                                </div>
+                                            </button>
 
                                             <button 
                                                 onClick={(e) => { e.stopPropagation(); toggleExpand(parent.module_key); }}
@@ -203,42 +232,46 @@ export const SystemAccessControl: React.FC<SystemAccessControlProps> = ({ onBack
                                     {children.length > 0 && isExpanded && (
                                         <div className="bg-slate-50/50 border-t border-slate-100 p-2 animate-slide-down">
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                                {children.map((child) => (
-                                                    <div
-                                                        key={child.id}
-                                                        className={`flex items-center justify-between pl-14 pr-4 py-3 rounded-2xl transition-all border group/child ${
-                                                            child.is_enabled && parent.is_enabled 
-                                                                ? 'bg-white border-slate-200 shadow-sm hover:shadow-md' 
-                                                                : 'bg-transparent border-transparent opacity-60'
-                                                        }`}
-                                                    >
-                                                        <div className="flex items-center gap-3 min-w-0">
-                                                            <div className={`p-1.5 rounded-lg ${child.is_enabled && parent.is_enabled ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-200/50 text-slate-300'}`}>
-                                                                <Settings2 className="w-3.5 h-3.5" />
-                                                            </div>
-                                                            <div className="min-w-0">
-                                                                <span className={`text-xs font-bold tracking-tight block truncate ${child.is_enabled && parent.is_enabled ? 'text-slate-800' : 'text-slate-400'}`}>
-                                                                    {child.label}
-                                                                </span>
-                                                            </div>
-                                                        </div>
-
-                                                        <button
-                                                            disabled={processingKey === child.module_key || !parent.is_enabled}
-                                                            onClick={() => handleToggle(child.module_key, child.is_enabled)}
-                                                            className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border ${
-                                                                !parent.is_enabled
-                                                                    ? 'text-slate-200 border-transparent opacity-20 cursor-not-allowed'
-                                                                    : child.is_enabled
-                                                                        ? 'text-indigo-600 bg-indigo-50 border-indigo-100 hover:bg-indigo-600 hover:text-white'
-                                                                        : 'text-slate-400 bg-white border-slate-200 hover:border-slate-300'
+                                                {children.map((child) => {
+                                                    const isChildEnabled = activeTab === 'web' ? child.is_enabled : child.is_enabled_mobile;
+                                                    
+                                                    return (
+                                                        <div
+                                                            key={child.id}
+                                                            className={`flex items-center justify-between pl-14 pr-4 py-3 rounded-2xl transition-all border group/child ${
+                                                                isChildEnabled && isEnabled 
+                                                                    ? 'bg-white border-slate-200 shadow-sm hover:shadow-md' 
+                                                                    : 'bg-transparent border-transparent opacity-60'
                                                             }`}
                                                         >
-                                                            {child.is_enabled ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Power className="w-3.5 h-3.5" />}
-                                                            {child.is_enabled ? 'Ativo' : 'Habilitar'}
-                                                        </button>
-                                                    </div>
-                                                ))}
+                                                            <div className="flex items-center gap-3 min-w-0">
+                                                                <div className={`p-1.5 rounded-lg ${isChildEnabled && isEnabled ? (activeTab === 'web' ? 'bg-indigo-50 text-indigo-600' : 'bg-rose-50 text-rose-600') : 'bg-slate-200/50 text-slate-300'}`}>
+                                                                    <Settings2 className="w-3.5 h-3.5" />
+                                                                </div>
+                                                                <div className="min-w-0">
+                                                                    <span className={`text-xs font-bold tracking-tight block truncate ${isChildEnabled && isEnabled ? 'text-slate-800' : 'text-slate-400'}`}>
+                                                                        {child.label}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+
+                                                            <button
+                                                                disabled={processingKey === child.module_key || !isEnabled}
+                                                                onClick={() => handleToggle(child.module_key, isChildEnabled)}
+                                                                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border ${
+                                                                    !isEnabled
+                                                                        ? 'text-slate-200 border-transparent opacity-20 cursor-not-allowed'
+                                                                        : isChildEnabled
+                                                                            ? (activeTab === 'web' ? 'text-indigo-600 bg-indigo-50 border-indigo-100 hover:bg-indigo-600 hover:text-white' : 'text-rose-600 bg-rose-50 border-rose-100 hover:bg-rose-600 hover:text-white')
+                                                                            : 'text-slate-400 bg-white border-slate-200 hover:bg-slate-900 hover:text-white'
+                                                                }`}
+                                                            >
+                                                                {isChildEnabled ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Power className="w-3.5 h-3.5" />}
+                                                                {isChildEnabled ? 'Desabilitar' : 'Habilitar'}
+                                                            </button>
+                                                        </div>
+                                                    );
+                                                })}
                                             </div>
                                         </div>
                                     )}
@@ -251,7 +284,6 @@ export const SystemAccessControl: React.FC<SystemAccessControlProps> = ({ onBack
                                 <Search className="w-10 h-10 text-slate-200" />
                             </div>
                             <h3 className="font-black text-xl text-slate-800">Nenhum módulo corresponde à busca</h3>
-                            <p className="text-sm font-medium text-slate-400 mt-2 max-w-sm px-6">Tente ajustar seus termos de pesquisa ou resetar os filtros para encontrar o que procura.</p>
                             <button 
                                 onClick={() => setSearchTerm('')}
                                 className="mt-8 px-8 py-3 bg-indigo-600 text-white font-black text-xs uppercase tracking-widest rounded-2xl shadow-lg shadow-indigo-200 hover:bg-slate-900 transition-all active:scale-95"
@@ -269,7 +301,7 @@ export const SystemAccessControl: React.FC<SystemAccessControlProps> = ({ onBack
                 type="overlay"
                 isOpen={!!processingKey}
                 message="Sincronizando..."
-                description="Atualizando chaves globais de acesso aos módulos"
+                description={`Atualizando disponibilidade no canal ${activeTab.toUpperCase()}`}
             />
         </div>
     );

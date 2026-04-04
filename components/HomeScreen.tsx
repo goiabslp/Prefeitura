@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { FilePlus, Package, History, FileText, ArrowRight, ArrowLeft, ShoppingCart, Gavel, Wallet, Inbox, CalendarRange, FileSearch, Droplet, Fuel, BarChart3, TrendingUp, LogOut, Sprout, HardHat, Activity, Car, ChevronDown, CalendarDays, Users, LayoutGrid, Megaphone } from 'lucide-react';
 import { UserRole, UIConfig, AppPermission, BlockType } from '../types';
 import { TasksDashboard } from './dashboard/TasksDashboard';
@@ -74,10 +74,22 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     subView = ''
 }) => {
     // Permission Checks
-    const { moduleStatus } = useSystemSettings();
+    const { moduleStatus, mobileModuleStatus } = useSystemSettings();
+    const [isMobileViewport, setIsMobileViewport] = useState(window.innerWidth < 700);
 
-    // Permission Checks (AND Global Status)
-    const isModuleActive = (key: string) => moduleStatus[key] !== false; // Default true if missing
+    useEffect(() => {
+        const handleResize = () => setIsMobileViewport(window.innerWidth < 700);
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
+    // Permission Checks (AND Global Status - Web or Mobile)
+    const isModuleActive = (key: string) => {
+        if (isMobileViewport) {
+            return mobileModuleStatus[key] !== false;
+        }
+        return moduleStatus[key] !== false;
+    };
 
     const canAccessOficio = permissions.includes('parent_criar_oficio') && isModuleActive('parent_criar_oficio');
     const canAccessCompras = permissions.includes('parent_compras') && isModuleActive('parent_compras');
