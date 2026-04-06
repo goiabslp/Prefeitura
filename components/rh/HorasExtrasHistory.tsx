@@ -9,6 +9,7 @@ interface HorasExtrasHistoryProps {
     highlightId?: string | null;
     userRole: string;
     currentUserSector: string;
+    lastRefresh?: number;
 }
 
 export const HorasExtrasHistory: React.FC<HorasExtrasHistoryProps> = ({
@@ -16,7 +17,8 @@ export const HorasExtrasHistory: React.FC<HorasExtrasHistoryProps> = ({
     onEdit,
     highlightId,
     userRole,
-    currentUserSector
+    currentUserSector,
+    lastRefresh
 }) => {
     const [history, setHistory] = useState<RhHorasExtras[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -25,7 +27,7 @@ export const HorasExtrasHistory: React.FC<HorasExtrasHistoryProps> = ({
 
     useEffect(() => {
         loadHistory();
-    }, []);
+    }, [lastRefresh]);
 
     const loadHistory = async () => {
         setIsLoading(true);

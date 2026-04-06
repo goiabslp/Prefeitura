@@ -61,6 +61,18 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
       scope = 'vehicle-scheduling';
     } else if (currentView === 'abastecimento') {
       scope = 'abastecimento';
+    } else if (currentView === 'marketing') {
+      scope = 'marketing';
+    } else if (currentView === 'rh') {
+      scope = 'rh';
+    } else if (currentView === 'agricultura') {
+      scope = 'agriculture';
+    } else if (currentView === 'obras') {
+      scope = 'obras';
+    } else if (currentView === 'projetos') {
+      scope = 'projetos';
+    } else if (currentView === 'calendario') {
+      scope = 'calendar';
     } else if (currentView === 'admin' || currentView === 'purchase-management') {
       scope = 'transactions';
     } else if (currentView === 'home') {

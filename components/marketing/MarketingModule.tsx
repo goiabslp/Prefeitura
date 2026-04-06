@@ -25,6 +25,7 @@ interface MarketingModuleProps {
     subView?: string;
     selectedRequestId?: string;
     onNavigate: (view: string, id?: string) => void;
+    lastRefresh?: number;
 }
 
 export const MarketingModule: React.FC<MarketingModuleProps> = ({
@@ -39,7 +40,8 @@ export const MarketingModule: React.FC<MarketingModuleProps> = ({
     onBack,
     subView,
     selectedRequestId,
-    onNavigate
+    onNavigate,
+    lastRefresh
 }) => {
     const [hasSeenTour, setHasSeenTour] = React.useState<boolean>(true); // Default to true to avoid flash
     const [isTourOpen, setIsTourOpen] = React.useState(false);
@@ -155,6 +157,7 @@ export const MarketingModule: React.FC<MarketingModuleProps> = ({
                                 userRole={userRole} 
                                 onOpenDetails={(id) => onNavigate('details', id)} 
                                 onLoaded={(id) => setFirstRequestId(id)}
+                                lastRefresh={lastRefresh}
                             />
                         </div>
                     </div>

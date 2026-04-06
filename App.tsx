@@ -36,6 +36,7 @@ import * as vehicleSchedulingService from './services/vehicleSchedulingService';
 import * as licitacaoService from './services/licitacaoService';
 import { AbastecimentoService } from './services/abastecimentoService';
 import * as taskService from './services/taskService';
+import { marketingSyncService } from './services/marketingSyncService';
 import { saveRhHorasExtras, updateRhHorasExtras } from './services/rhService';
 import { Send, CheckCircle2, X, Download, Save, FilePlus, Package, History, FileText, Settings, LogOut, ChevronRight, ChevronDown, Search, Filter, Upload, Trash2, Printer, Edit, ArrowLeft, Loader2, ShieldAlert } from 'lucide-react';
 
@@ -372,6 +373,12 @@ const App: React.FC = () => {
       const fetchCompras = !scope || scope === 'compras';
       const fetchDiarias = !scope || scope === 'diarias';
       const fetchOficios = !scope || scope === 'oficio';
+      const fetchMarketing = !scope || scope === 'marketing';
+      const fetchRh = !scope || scope === 'rh';
+      const fetchAgriculture = !scope || scope === 'agriculture';
+      const fetchObras = !scope || scope === 'obras';
+      const fetchProjetos = !scope || scope === 'projetos';
+      const fetchCalendar = !scope || scope === 'calendar';
       const fetchTasks = true; // Always fetch tasks for now or optimize later
 
       // Batch 1: Metadata & Config (Fast)
@@ -479,6 +486,13 @@ const App: React.FC = () => {
       }
       if (fetchTasks || fetchTransactions) {
         promises.push(taskService.getTasks().then(d => { savedTasks = d; }));
+      }
+      if (fetchMarketing && currentUser) {
+        // Marketing sync triggers
+        promises.push(marketingSyncService.syncWeeklyBirthdays(currentUser.id, currentUser.name));
+      }
+      if (fetchRh) {
+        // Any RH specific global refresh logic if needed
       }
 
       await Promise.all(promises);

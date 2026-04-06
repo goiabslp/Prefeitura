@@ -10,9 +10,10 @@ interface MeusConteudosListProps {
     userRole?: string;
     onOpenDetails: (id: string) => void;
     onLoaded?: (firstId: string) => void;
+    lastRefresh?: number;
 }
 
-export const MeusConteudosList: React.FC<MeusConteudosListProps> = ({ userId, userRole, onOpenDetails, onLoaded }) => {
+export const MeusConteudosList: React.FC<MeusConteudosListProps> = ({ userId, userRole, onOpenDetails, onLoaded, lastRefresh }) => {
     const isAdmin = userRole?.toLowerCase() === 'admin' || userRole?.toLowerCase() === 'marketing' || userRole === 'Administrador' || userRole === 'Marketing';
     const [requests, setRequests] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -82,7 +83,7 @@ export const MeusConteudosList: React.FC<MeusConteudosListProps> = ({ userId, us
         if (userId) {
             fetchRequests();
         }
-    }, [userId]);
+    }, [userId, lastRefresh]);
 
     const handleQuickStatusUpdate = async (e: React.MouseEvent, reqId: string, currentStatus: string) => {
         e.stopPropagation();
