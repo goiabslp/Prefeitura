@@ -44,6 +44,7 @@ export const MarketingModule: React.FC<MarketingModuleProps> = ({
                     onNavigate={onNavigate}
                     onBack={onBack}
                     userId={userId}
+                    userRole={userRole}
                 />
             )}
 
@@ -68,14 +69,18 @@ export const MarketingModule: React.FC<MarketingModuleProps> = ({
                                 <ArrowLeft className="w-5 h-5" />
                             </button>
                             <div>
-                                <h1 className="text-2xl font-black text-slate-800 tracking-tight">Meus Conteúdos</h1>
-                                <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Histórico de Solicitações</p>
+                                <h1 className="text-2xl font-black text-slate-800 tracking-tight">
+                                    {(userRole?.toLowerCase() === 'admin' || userRole?.toLowerCase() === 'marketing' || userRole === 'Administrador' || userRole === 'Marketing') ? 'Gestão de Conteúdos' : 'Meus Conteúdos'}
+                                </h1>
+                                <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+                                    {(userRole?.toLowerCase() === 'admin' || userRole?.toLowerCase() === 'marketing' || userRole === 'Administrador' || userRole === 'Marketing') ? 'Controle Geral de Demandas' : 'Histórico de Solicitações'}
+                                </p>
                             </div>
                         </div>
                     </header>
                     <div className="flex-1 overflow-hidden p-4 md:p-6 bg-[#f8fafc]">
                         <div className="max-w-6xl mx-auto bg-white rounded-[2rem] border border-slate-200 shadow-xl overflow-hidden min-h-[500px] flex flex-col relative h-full">
-                            <MeusConteudosList userId={userId} onOpenDetails={(id) => onNavigate('details', id)} />
+                            <MeusConteudosList userId={userId} userRole={userRole} onOpenDetails={(id) => onNavigate('details', id)} />
                         </div>
                     </div>
                 </div>
@@ -85,6 +90,9 @@ export const MarketingModule: React.FC<MarketingModuleProps> = ({
                 <MarketingDetails
                     requestId={selectedRequestId}
                     userRole={userRole}
+                    userId={userId}
+                    userName={userName}
+                    users={users}
                     onBack={() => onNavigate('')}
                 />
             )}

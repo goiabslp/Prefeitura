@@ -5,9 +5,11 @@ interface MarketingDashboardProps {
     onNavigate: (view: string, id?: string) => void;
     onBack?: () => void;
     userId: string;
+    userRole?: string;
 }
 
-export const MarketingDashboard: React.FC<MarketingDashboardProps> = ({ onNavigate, onBack, userId }) => {
+export const MarketingDashboard: React.FC<MarketingDashboardProps> = ({ onNavigate, onBack, userId, userRole }) => {
+    const isSpecialUser = userRole?.toLowerCase() === 'admin' || userRole?.toLowerCase() === 'marketing' || userRole === 'Administrador' || userRole === 'Marketing';
     return (
         <div className="flex-1 bg-slate-50 font-sans flex flex-col overflow-hidden relative z-0">
             {/* Fixed Back Button - Standardized Position */}
@@ -67,8 +69,12 @@ export const MarketingDashboard: React.FC<MarketingDashboardProps> = ({ onNaviga
                                 <PackageCheck className="w-6 h-6 md:w-7 md:h-7 drop-shadow-md" />
                             </div>
 
-                            <h3 className="text-lg md:text-2xl font-bold text-slate-800 mb-1 group-hover:text-slate-900 tracking-tight uppercase">Meus Conteúdos</h3>
-                            <p className="text-[10px] md:text-xs font-bold text-slate-400 group-hover:text-emerald-600 transition-colors uppercase tracking-widest text-center px-4">Visualizar os pedidos realizados</p>
+                            <h3 className="text-lg md:text-2xl font-bold text-slate-800 mb-1 group-hover:text-slate-900 tracking-tight uppercase">
+                                {isSpecialUser ? 'Gestão de Conteúdos' : 'Meus Conteúdos'}
+                            </h3>
+                            <p className="text-[10px] md:text-xs font-bold text-slate-400 group-hover:text-emerald-600 transition-colors uppercase tracking-widest text-center px-4">
+                                {isSpecialUser ? 'Visualizar e gerenciar solicitações' : 'Visualizar os pedidos realizados'}
+                            </p>
                         </button>
 
                     </div>

@@ -3,7 +3,7 @@ import { supabase } from '../../services/supabaseClient';
 import { ProcessStepper } from '../common/ProcessStepper';
 import { TwoFactorModal } from '../TwoFactorModal';
 import { ModernSelect } from '../common/ModernSelect';
-import { Loader2, Plus, Trash2, UploadCloud, File, Image as ImageIcon, Camera, Mic, Video, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { Loader2, Plus, Trash2, UploadCloud, File, Image as ImageIcon, Camera, Mic, Video, ArrowLeft, CheckCircle2, Calendar, Clock } from 'lucide-react';
 import { Sector } from '../../types';
 import { MarketingAlertModal, MarketingAlertModalProps } from './MarketingAlertModal';
 
@@ -19,8 +19,6 @@ interface ContentItem {
     id: string;
     type: string;
     sector: string;
-    date: string;
-    time: string;
     location: string;
 }
 
@@ -41,6 +39,12 @@ export const NovoConteudoStepper: React.FC<NovoConteudoStepperProps> = ({
     const [description, setDescription] = useState('');
     const [contents, setContents] = useState<ContentItem[]>([]);
     const [files, setFiles] = useState<File[]>([]);
+    
+    // Event Range State
+    const [eventStartDate, setEventStartDate] = useState('');
+    const [eventEndDate, setEventEndDate] = useState('');
+    const [eventStartTime, setEventStartTime] = useState('');
+    const [eventEndTime, setEventEndTime] = useState('');
 
     // Content Add Modal State
     const [isContentModalOpen, setIsContentModalOpen] = useState(false);
@@ -99,9 +103,9 @@ export const NovoConteudoStepper: React.FC<NovoConteudoStepperProps> = ({
         if (currentStep === 0 && !contentTitle.trim()) return showAlert('error', 'Campo Obrigatório', 'O Título do Conteúdo é obrigatório.');
         if (currentStep === 1 && description.trim().length < 10) return showAlert('error', 'Descrição Curta', 'A descrição da demanda deve ter ao menos 10 caracteres para que possamos entender sua necessidade.');
         if (currentStep === 2) {
-            const hasInvalidContent = contents.some(c => !c.type || !c.sector || !c.date);
+            const hasInvalidContent = contents.some(c => !c.type || !c.sector);
             if (hasInvalidContent) {
-                return showAlert('warning', 'Campos Pendentes', 'Preencha os campos obrigatórios de todos os itens de conteúdo (Tipo, Setor e Data) antes de prosseguir.');
+                return showAlert('warning', 'Campos Pendentes', 'Preencha os campos obrigatórios de todos os itens de conteúdo (Tipo e Setor) antes de prosseguir.');
             }
         }
 
@@ -134,15 +138,15 @@ export const NovoConteudoStepper: React.FC<NovoConteudoStepperProps> = ({
         if (item) {
             setEditingContent(item);
         } else {
-            setEditingContent({ id: Date.now().toString(), type: '', sector: '', date: '', time: '', location: '' });
+            setEditingContent({ id: Date.now().toString(), type: '', sector: '', location: '' });
         }
         setIsContentModalOpen(true);
     };
 
     const handleSaveContent = () => {
         if (!editingContent) return;
-        if (!editingContent.type || !editingContent.sector || !editingContent.date) {
-            showAlert('error', 'Preencha os Dados', 'Para salvar, é necessário preencher todos os campos obrigatórios: Tipo de Conteúdo, Setor Alvo e Data.');
+        if (!editingContent.type || !editingContent.sector) {
+            showAlert('error', 'Preencha os Dados', 'Para salvar, é necessário preencher todos os campos obrigatórios: Tipo de Conteúdo e Setor Alvo.');
             return;
         }
 
@@ -198,7 +202,7 @@ export const NovoConteudoStepper: React.FC<NovoConteudoStepperProps> = ({
                     protocol,
                     requester_name: userName,
                     requester_sector: requesterSector,
-                    description: `**Título do Pedido:** ${contentTitle}\n\n**Descrição Detalhada:**\n${description}`,
+                    description: `**Título do Pedido:** ${contentTitle}\n**Data de Início:** ${eventStartDate || 'N/A'}\n**Data de Fim:** ${eventEndDate || 'N/A'}\n**Hora de Início:** ${eventStartTime || 'N/A'}\n**Hora de Fim:** ${eventEndTime || 'N/A'}\n\n**Descrição Detalhada:**\n${description}`,
                     user_id: userId,
                     status: 'Em Análise',
                     digital_signature: { enabled: true, date: new Date().toISOString() }
@@ -213,8 +217,6 @@ export const NovoConteudoStepper: React.FC<NovoConteudoStepperProps> = ({
                 request_id: requestDef.id,
                 content_type: c.type,
                 content_sector: c.sector,
-                event_date: c.date || null,
-                event_time: c.time || null,
                 event_location: c.location
             }));
 
@@ -321,15 +323,79 @@ export const NovoConteudoStepper: React.FC<NovoConteudoStepperProps> = ({
                     )}
 
                     {currentStep === 1 && (
-                        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
-                            <h2 className="text-xl font-bold text-slate-800">2. Descrição da Demanda</h2>
-                            <p className="text-sm text-slate-500 mb-4">Descreva detalhadamente qual é a necessidade da sua solicitação de marketing.</p>
-                            <textarea
-                                value={description}
-                                onChange={(e) => setDescription(e.target.value)}
-                                className="w-full h-48 border border-slate-200 rounded-2xl p-4 focus:ring-2 focus:ring-indigo-500 outline-none resize-none transition-shadow"
-                                placeholder="Digite aqui a descrição do pedido..."
-                            />
+                        <div className="flex flex-col h-full animate-in fade-in slide-in-from-bottom-4 duration-300 min-h-0">
+                            <div className="shrink-0 mb-6">
+                                <h2 className="text-xl font-bold text-slate-800">2. Detalhes da Demanda</h2>
+                                <p className="text-sm text-slate-500 mt-1">Defina o período do evento e descreva sua necessidade.</p>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 shrink-0">
+                                {/* Date Range */}
+                                <div className="space-y-3 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                                    <div className="flex items-center gap-2 text-indigo-600 mb-1">
+                                        <Calendar className="w-4 h-4" />
+                                        <span className="text-xs font-black uppercase tracking-widest">Período do Evento</span>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1">Data de Início</label>
+                                            <input
+                                                type="date"
+                                                value={eventStartDate}
+                                                onChange={e => setEventStartDate(e.target.value)}
+                                                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-700 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1">Data de Fim</label>
+                                            <input
+                                                type="date"
+                                                value={eventEndDate}
+                                                onChange={e => setEventEndDate(e.target.value)}
+                                                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-700 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Time Range */}
+                                <div className="space-y-3 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                                    <div className="flex items-center gap-2 text-amber-600 mb-1">
+                                        <Clock className="w-4 h-4" />
+                                        <span className="text-xs font-black uppercase tracking-widest">Horário do Evento</span>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1">Hora de Início</label>
+                                            <input
+                                                type="time"
+                                                value={eventStartTime}
+                                                onChange={e => setEventStartTime(e.target.value)}
+                                                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-700 focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 outline-none transition-all"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1">Hora de Fim</label>
+                                            <input
+                                                type="time"
+                                                value={eventEndTime}
+                                                onChange={e => setEventEndTime(e.target.value)}
+                                                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-700 focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 outline-none transition-all"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="flex-1 flex flex-col min-h-0">
+                                <label className="block text-sm font-bold text-slate-700 mb-2">Descrição Detalhada *</label>
+                                <textarea
+                                    value={description}
+                                    onChange={(e) => setDescription(e.target.value)}
+                                    className="w-full h-full min-h-[120px] border border-slate-200 rounded-2xl p-4 focus:ring-2 focus:ring-indigo-500 outline-none resize-none transition-shadow text-slate-700"
+                                    placeholder="Digite aqui a descrição detalhada do pedido..."
+                                />
+                            </div>
                         </div>
                     )}
 
@@ -367,11 +433,6 @@ export const NovoConteudoStepper: React.FC<NovoConteudoStepperProps> = ({
                                                     <span className="px-2 py-0.5 rounded uppercase tracking-wider text-[10px] font-bold bg-indigo-50 text-indigo-600 border border-indigo-100/50">
                                                         {item.type}
                                                     </span>
-                                                    {item.date && (
-                                                        <span className="text-[10px] sm:text-xs font-bold text-slate-500 bg-slate-50 px-2 py-0.5 rounded border border-slate-100">
-                                                            {new Date(item.date).toLocaleDateString('pt-BR')}
-                                                        </span>
-                                                    )}
                                                 </div>
                                                 <h4 className="font-bold text-slate-800 text-sm sm:text-base truncate">{contentTitle || 'Conteúdo Sem Título'}</h4>
                                                 <p className="text-[10px] sm:text-xs text-slate-500 truncate mt-0.5">Setor Alvo: <span className="font-semibold text-slate-700">{item.sector}</span></p>
@@ -511,27 +572,6 @@ export const NovoConteudoStepper: React.FC<NovoConteudoStepperProps> = ({
                                     onChange={v => setEditingContent({ ...editingContent, sector: v })}
                                     options={sectors.map(s => ({ value: s.name, label: s.name }))}
                                 />
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4 relative" style={{ zIndex: 40 }}>
-                                <div>
-                                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2 ml-1">Data Prevista *</label>
-                                    <input
-                                        type="date"
-                                        value={editingContent.date}
-                                        onChange={e => setEditingContent({ ...editingContent, date: e.target.value })}
-                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-700 font-bold focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2 ml-1">Hora (Opcional)</label>
-                                    <input
-                                        type="time"
-                                        value={editingContent.time}
-                                        onChange={e => setEditingContent({ ...editingContent, time: e.target.value })}
-                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-700 font-bold focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all"
-                                    />
-                                </div>
                             </div>
 
                             <div className="relative" style={{ zIndex: 30 }}>

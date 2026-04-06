@@ -7,10 +7,12 @@ import { MarketingAlertModal, MarketingAlertModalProps } from './MarketingAlertM
 
 interface MeusConteudosListProps {
     userId: string;
+    userRole?: string;
     onOpenDetails: (id: string) => void;
 }
 
-export const MeusConteudosList: React.FC<MeusConteudosListProps> = ({ userId, onOpenDetails }) => {
+export const MeusConteudosList: React.FC<MeusConteudosListProps> = ({ userId, userRole, onOpenDetails }) => {
+    const isAdmin = userRole?.toLowerCase() === 'admin' || userRole?.toLowerCase() === 'marketing' || userRole === 'Administrador' || userRole === 'Marketing';
     const [requests, setRequests] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -41,7 +43,7 @@ export const MeusConteudosList: React.FC<MeusConteudosListProps> = ({ userId, on
         const fetchRequests = async () => {
             try {
                 // Fetch requests and their contents
-                const { data, error } = await supabase
+                let query = supabase
                     .from('marketing_requests')
                     .select(`
                         id,
@@ -49,9 +51,17 @@ export const MeusConteudosList: React.FC<MeusConteudosListProps> = ({ userId, on
                         description,
                         status,
                         created_at,
+                        requester_name,
+                        delivery_date,
+                        responsible:profiles!marketing_requests_responsible_id_fkey ( name ),
                         marketing_contents ( content_type )
-                    `)
-                    .eq('user_id', userId)
+                    `);
+
+                if (!isAdmin) {
+                    query = query.eq('user_id', userId);
+                }
+
+                const { data, error } = await query
                     .order('created_at', { ascending: false })
                     .order('protocol', { ascending: false });
 
@@ -68,6 +78,30 @@ export const MeusConteudosList: React.FC<MeusConteudosListProps> = ({ userId, on
             fetchRequests();
         }
     }, [userId]);
+
+    const handleQuickStatusUpdate = async (e: React.MouseEvent, reqId: string, currentStatus: string) => {
+        e.stopPropagation();
+        if (!isAdmin || currentStatus === 'Revisando' || currentStatus === 'Concluído') return;
+
+        try {
+            const { error } = await supabase
+                .from('marketing_requests')
+                .update({ status: 'Revisando' })
+                .eq('id', reqId);
+
+            if (error) throw error;
+
+            // Optimistic Update
+            setRequests(prev => prev.map(req => 
+                req.id === reqId ? { ...req, status: 'Revisando' } : req
+            ));
+
+            showAlert('success', 'Status Atualizado', 'A solicitação agora está em revisão.');
+        } catch (err) {
+            console.error("Erro ao atualizar status rápido:", err);
+            showAlert('error', 'Erro', 'Não foi possível atualizar o status.');
+        }
+    };
 
     const handleDeleteClick = (e: React.MouseEvent, reqId: string, title?: string) => {
         e.stopPropagation(); // Prevents row from opening details
@@ -100,7 +134,10 @@ export const MeusConteudosList: React.FC<MeusConteudosListProps> = ({ userId, on
     const getStatusConfig = (status: string) => {
         switch (status) {
             case 'Em Análise': return { color: 'amber', icon: Clock };
+            case 'Revisando': return { color: 'blue', icon: AlertCircle };
+            case 'Produzindo': return { color: 'indigo', icon: Loader2 };
             case 'Aprovado': return { color: 'emerald', icon: CheckCircle2 };
+            case 'Concluído': return { color: 'emerald', icon: CheckCircle2 };
             case 'Rejeitado': return { color: 'rose', icon: AlertCircle };
             default: return { color: 'slate', icon: FileText };
         }
@@ -139,8 +176,11 @@ export const MeusConteudosList: React.FC<MeusConteudosListProps> = ({ userId, on
                 <thead className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur-md shadow-sm">
                     <tr className="border-b border-slate-100 uppercase text-[10px] tracking-widest text-slate-400 font-black">
                         <th className="py-4 px-6 md:px-8 whitespace-nowrap">Título do Conteúdo</th>
+                        <th className="py-4 px-6 md:px-8 whitespace-nowrap">Solicitante</th>
+                        <th className="py-4 px-6 md:px-8 whitespace-nowrap text-center">Responsável</th>
                         <th className="py-4 px-6 md:px-8 whitespace-nowrap">Data de criação</th>
                         <th className="py-4 px-6 md:px-8 whitespace-nowrap text-center">STATUS</th>
+                        <th className="py-4 px-6 md:px-8 whitespace-nowrap text-center">Previsão</th>
                         <th className="py-4 px-6 md:px-8 whitespace-nowrap text-right">Ação</th>
                     </tr>
                 </thead>
@@ -163,6 +203,16 @@ export const MeusConteudosList: React.FC<MeusConteudosListProps> = ({ userId, on
                                     <div className="text-[10px] text-slate-400 font-mono tracking-widest">{req.protocol}</div>
                                 </td>
                                 <td className="py-4 px-6 md:px-8">
+                                    <div className="text-xs font-bold text-slate-700 truncate max-w-[120px]" title={req.requester_name}>
+                                        {req.requester_name || '-'}
+                                    </div>
+                                </td>
+                                <td className="py-4 px-6 md:px-8 text-center">
+                                    <div className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg inline-block whitespace-nowrap min-w-[80px]">
+                                        {req.responsible?.name || 'Aguardando'}
+                                    </div>
+                                </td>
+                                <td className="py-4 px-6 md:px-8">
                                     <div className="text-xs md:text-sm text-slate-500 font-medium">
                                         {format(new Date(req.created_at), "dd/MM/yyyy", { locale: ptBR })}
                                     </div>
@@ -171,10 +221,26 @@ export const MeusConteudosList: React.FC<MeusConteudosListProps> = ({ userId, on
                                     </div>
                                 </td>
                                 <td className="py-4 px-6 md:px-8 text-center">
-                                    <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-${statusConfig.color}-50 text-${statusConfig.color}-700 border border-${statusConfig.color}-200 shadow-sm mx-auto`}>
-                                        <StatusIcon className={`w-3.5 h-3.5 md:w-4 md:h-4 text-${statusConfig.color}-500`} />
+                                    <button 
+                                        onClick={(e) => handleQuickStatusUpdate(e, req.id, req.status)}
+                                        disabled={!isAdmin || req.status === 'Revisando' || req.status === 'Concluído'}
+                                        className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-${statusConfig.color}-50 text-${statusConfig.color}-700 border border-${statusConfig.color}-200 shadow-sm mx-auto transition-all ${isAdmin && req.status !== 'Revisando' && req.status !== 'Concluído' ? 'hover:bg-blue-100 hover:text-blue-800 hover:border-blue-300 active:scale-95' : 'cursor-default'}`}
+                                    >
+                                        <StatusIcon className={`w-3.5 h-3.5 md:w-4 md:h-4 text-${statusConfig.color}-500 ${req.status === 'Produzindo' ? 'animate-spin' : ''}`} />
                                         <span className="text-[10px] md:text-xs font-black tracking-widest uppercase">{req.status}</span>
-                                    </div>
+                                    </button>
+                                </td>
+                                <td className="py-4 px-6 md:px-8 text-center text-xs font-bold text-slate-600">
+                                    {req.delivery_date ? (
+                                        <div className="flex flex-col items-center">
+                                            <span className="text-indigo-600 tracking-tighter">
+                                                {format(new Date(req.delivery_date), "dd/MM/yyyy", { locale: ptBR })}
+                                            </span>
+                                            <span className="text-[10px] text-slate-400 font-medium">Forecast</span>
+                                        </div>
+                                    ) : (
+                                        <span className="text-slate-300">—</span>
+                                    )}
                                 </td>
                                 <td className="py-4 px-6 md:px-8 text-right">
                                     <button
