@@ -263,7 +263,7 @@ export const NovoConteudoStepper: React.FC<NovoConteudoStepperProps> = ({
                     <span className="sm:hidden">Novo Pedido</span>
                 </h1>
 
-                <div className="flex-1 min-w-0 pr-2">
+                <div id="tour-stepper" className="flex-1 min-w-0 pr-2">
                     <div className="w-full">
                         <ProcessStepper
                             compact
@@ -295,7 +295,7 @@ export const NovoConteudoStepper: React.FC<NovoConteudoStepperProps> = ({
                 <div className="w-full max-w-4xl mx-auto bg-white rounded-2xl md:rounded-3xl border border-slate-200 shadow-sm p-4 md:p-6 flex flex-col flex-1 min-h-0">
 
                     {currentStep === 0 && (
-                        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                        <div id="tour-info-fields" className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
                             <h2 className="text-xl font-bold text-slate-800">1. Informações Gerais</h2>
 
                             <div>
@@ -323,7 +323,7 @@ export const NovoConteudoStepper: React.FC<NovoConteudoStepperProps> = ({
                     )}
 
                     {currentStep === 1 && (
-                        <div className="flex flex-col h-full animate-in fade-in slide-in-from-bottom-4 duration-300 min-h-0">
+                        <div id="tour-description-fields" className="flex flex-col h-full animate-in fade-in slide-in-from-bottom-4 duration-300 min-h-0">
                             <div className="shrink-0 mb-6">
                                 <h2 className="text-xl font-bold text-slate-800">2. Detalhes da Demanda</h2>
                                 <p className="text-sm text-slate-500 mt-1">Defina o período do evento e descreva sua necessidade.</p>
@@ -400,7 +400,7 @@ export const NovoConteudoStepper: React.FC<NovoConteudoStepperProps> = ({
                     )}
 
                     {currentStep === 2 && (
-                        <div className="flex flex-col h-full animate-in fade-in slide-in-from-bottom-2 duration-300 min-h-0">
+                        <div id="tour-content-items" className="flex flex-col h-full animate-in fade-in slide-in-from-bottom-2 duration-300 min-h-0">
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-3 mb-4 shrink-0 gap-3">
                                 <div>
                                     <h2 className="text-lg md:text-xl font-bold text-slate-800">3. Conteúdos Necessários</h2>
@@ -461,7 +461,7 @@ export const NovoConteudoStepper: React.FC<NovoConteudoStepperProps> = ({
                     )}
 
                     {currentStep === 3 && (
-                        <div className="flex flex-col h-full animate-in fade-in slide-in-from-bottom-2 duration-300 min-h-0">
+                        <div id="tour-attachments" className="flex flex-col h-full animate-in fade-in slide-in-from-bottom-2 duration-300 min-h-0">
                             <div className="flex items-center justify-between border-b border-slate-100 pb-2 md:pb-4 mb-4 shrink-0">
                                 <h2 className="text-lg md:text-xl font-bold text-slate-800">4. Anexos Adicionais</h2>
                             </div>
@@ -506,7 +506,7 @@ export const NovoConteudoStepper: React.FC<NovoConteudoStepperProps> = ({
                     )}
 
                     {currentStep === 4 && (
-                        <div className="flex flex-col items-center justify-center h-full animate-in fade-in slide-in-from-bottom-2 duration-300 min-h-0">
+                        <div id="tour-signature" className="flex flex-col items-center justify-center h-full animate-in fade-in slide-in-from-bottom-2 duration-300 min-h-0">
                             <div className="text-center pb-4 md:pb-6 border-b border-slate-100 max-w-sm w-full mx-auto shrink-0">
                                 <div className="w-16 h-16 md:w-20 md:h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-3 text-emerald-600 ring-8 ring-emerald-50 shrink-0">
                                     <CheckCircle2 className="w-8 h-8 md:w-10 md:h-10" />

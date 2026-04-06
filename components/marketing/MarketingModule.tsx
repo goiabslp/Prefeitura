@@ -5,6 +5,9 @@ import { MarketingDashboard } from './MarketingDashboard';
 import { NovoConteudoStepper } from './NovoConteudoStepper';
 import { MeusConteudosList } from './MeusConteudosList';
 import { MarketingDetails } from './MarketingDetails';
+import { MarketingOnboarding } from './MarketingOnboarding';
+import { supabase } from '../../services/supabaseClient';
+import { HelpCircle } from 'lucide-react';
 
 interface MarketingModuleProps {
     currentView: string;
@@ -36,6 +39,35 @@ export const MarketingModule: React.FC<MarketingModuleProps> = ({
     selectedRequestId,
     onNavigate
 }) => {
+    const [hasSeenTour, setHasSeenTour] = React.useState<boolean>(true); // Default to true to avoid flash
+    const [isTourOpen, setIsTourOpen] = React.useState(false);
+    const [tourStepperIndex, setTourStepperIndex] = React.useState(0);
+
+    React.useEffect(() => {
+        const checkTourStatus = async () => {
+            const { data } = await supabase
+                .from('profiles')
+                .select('has_seen_marketing_tour')
+                .eq('id', userId)
+                .single();
+            
+            if (data && !data.has_seen_marketing_tour) {
+                setHasSeenTour(false);
+                setIsTourOpen(true);
+            }
+        };
+        checkTourStatus();
+    }, [userId]);
+
+    const handleCompleteTour = async () => {
+        setIsTourOpen(false);
+        setHasSeenTour(true);
+        await supabase
+            .from('profiles')
+            .update({ has_seen_marketing_tour: true })
+            .eq('id', userId);
+    };
+
     // Filter out the "TESTE" user for everyone except "Administrador"
     const isStrictAdmin = userRole?.toLowerCase() === 'admin' || userRole?.toLowerCase() === 'administrador';
     
@@ -53,6 +85,20 @@ export const MarketingModule: React.FC<MarketingModuleProps> = ({
                     userId={userId}
                     userRole={userRole}
                 />
+            )}
+
+            {/* Help Button - Triggers Tour */}
+            {!isTourOpen && (
+                <button 
+                    onClick={() => setIsTourOpen(true)}
+                    className="fixed bottom-6 right-6 z-[100] w-12 h-12 rounded-full bg-white shadow-lg border border-indigo-100 flex items-center justify-center text-indigo-600 hover:bg-indigo-600 hover:text-white hover:-translate-y-1 transition-all group lg:w-32 lg:rounded-2xl lg:gap-2 lg:px-4"
+                    title="Manual de Instruções"
+                >
+                    <HelpCircle className="w-6 h-6" />
+                    <span className="hidden lg:inline text-[10px] font-black uppercase tracking-widest">Aprender</span>
+                    <div className="absolute -top-1 -right-1 w-3 h-3 bg-indigo-500 rounded-full animate-ping opacity-75"></div>
+                    <div className="absolute -top-1 -right-1 w-3 h-3 bg-indigo-500 rounded-full"></div>
+                </button>
             )}
 
             {subView === 'new' && (
@@ -103,6 +149,16 @@ export const MarketingModule: React.FC<MarketingModuleProps> = ({
                     onBack={() => onNavigate('')}
                 />
             )}
+
+            <MarketingOnboarding 
+                isOpen={isTourOpen}
+                onClose={() => setIsTourOpen(false)}
+                onComplete={handleCompleteTour}
+                currentView={subView || 'dashboard'}
+                onNavigate={onNavigate}
+                stepperIndex={tourStepperIndex}
+                onSetStepperIndex={setTourStepperIndex}
+            />
         </div>
     );
 };

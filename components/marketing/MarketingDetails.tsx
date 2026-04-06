@@ -784,7 +784,7 @@ export const MarketingDetails: React.FC<MarketingDetailsProps> = ({ requestId, u
 
             case 3:
                 return (
-                    <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                    <div id="tour-production-tab" className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
                         <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm overflow-hidden flex flex-col relative w-full">
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
                                 <h3 className="text-base font-bold text-emerald-700 flex items-center gap-2">
@@ -1017,6 +1017,7 @@ export const MarketingDetails: React.FC<MarketingDetailsProps> = ({ requestId, u
                 <div className="flex items-center shrink-0 gap-2">
                     {hasAdminPowers && (request.status === 'Aprovado' || request.status === 'Revisando' || request.status === 'Em Andamento') && (
                         <button
+                            id="tour-init-button"
                             onClick={() => setIsProductionModalOpen(true)}
                             className="px-4 py-1.5 bg-purple-600 text-white font-black uppercase tracking-wider rounded-xl shadow-lg hover:bg-purple-700 transition-all active:scale-95 animate-pulse-purple flex items-center gap-2 text-[10px] md:text-xs group"
                         >

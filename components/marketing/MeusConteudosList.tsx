@@ -179,8 +179,8 @@ export const MeusConteudosList: React.FC<MeusConteudosListProps> = ({ userId, us
                         <th className="py-4 px-6 md:px-8 whitespace-nowrap">Solicitante</th>
                         <th className="py-4 px-6 md:px-8 whitespace-nowrap text-center">Responsável</th>
                         <th className="py-4 px-6 md:px-8 whitespace-nowrap">Data de criação</th>
-                        <th className="py-4 px-6 md:px-8 whitespace-nowrap text-center">STATUS</th>
-                        <th className="py-4 px-6 md:px-8 whitespace-nowrap text-center">Previsão</th>
+                        <th id="tour-status-col" className="py-4 px-6 md:px-8 whitespace-nowrap text-center">STATUS</th>
+                        <th id="tour-forecast-col" className="py-4 px-6 md:px-8 whitespace-nowrap text-center">Previsão</th>
                         <th className="py-4 px-6 md:px-8 whitespace-nowrap text-center">Ações</th>
                     </tr>
                 </thead>

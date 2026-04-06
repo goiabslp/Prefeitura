@@ -11,7 +11,7 @@ interface MarketingDashboardProps {
 export const MarketingDashboard: React.FC<MarketingDashboardProps> = ({ onNavigate, onBack, userId, userRole }) => {
     const isSpecialUser = userRole?.toLowerCase() === 'admin' || userRole?.toLowerCase() === 'marketing' || userRole === 'Administrador' || userRole === 'Marketing';
     return (
-        <div className="flex-1 bg-slate-50 font-sans flex flex-col overflow-hidden relative z-0">
+        <div id="tour-dashboard" className="flex-1 bg-slate-50 font-sans flex flex-col overflow-hidden relative z-0">
             {/* Fixed Back Button - Standardized Position */}
             <button
                 onClick={onBack}
@@ -41,6 +41,7 @@ export const MarketingDashboard: React.FC<MarketingDashboardProps> = ({ onNaviga
 
                         {/* Card: Novo Conteúdo */}
                         <button
+                            id="tour-new-content"
                             onClick={() => onNavigate('new')}
                             className="group relative w-full min-h-[140px] md:min-h-[180px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-indigo-500/30 hover:border-indigo-200 hover:from-white hover:to-indigo-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden text-center"
                             style={{ animationDelay: '0ms' }}
@@ -58,6 +59,7 @@ export const MarketingDashboard: React.FC<MarketingDashboardProps> = ({ onNaviga
 
                         {/* Card: Meus Conteúdos */}
                         <button
+                            id="tour-list-content"
                             onClick={() => onNavigate('list')}
                             className="group relative w-full min-h-[140px] md:min-h-[180px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-emerald-500/30 hover:border-emerald-200 hover:from-white hover:to-emerald-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden text-center"
                             style={{ animationDelay: '100ms' }}
