@@ -36,6 +36,13 @@ export const MarketingModule: React.FC<MarketingModuleProps> = ({
     selectedRequestId,
     onNavigate
 }) => {
+    // Filter out the "TESTE" user for everyone except "Administrador"
+    const isStrictAdmin = userRole?.toLowerCase() === 'admin' || userRole?.toLowerCase() === 'administrador';
+    
+    const filteredUsers = isStrictAdmin 
+        ? users 
+        : users.filter(u => u.name?.toUpperCase() !== 'TESTE' && u.id !== '5cc4a14a-6516-4aaa-8878-623d58c3be3b');
+
     return (
         <div className="flex-1 flex flex-col h-full bg-[#f8fafc] w-full overflow-hidden animate-in fade-in zoom-in-95 duration-300">
             {/* Conditional Rendering Based on subView */}
@@ -92,7 +99,7 @@ export const MarketingModule: React.FC<MarketingModuleProps> = ({
                     userRole={userRole}
                     userId={userId}
                     userName={userName}
-                    users={users}
+                    users={filteredUsers}
                     onBack={() => onNavigate('')}
                 />
             )}

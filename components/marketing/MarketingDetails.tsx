@@ -34,6 +34,7 @@ export const MarketingDetails: React.FC<MarketingDetailsProps> = ({ requestId, u
     const [productionDate, setProductionDate] = useState('');
 
     const STEPS = ['Informações', 'Conteúdo', 'Anexos', 'Produção'];
+    const isStrictAdmin = userRole?.toLowerCase() === 'admin' || userRole === 'Administrador';
 
     const hasAdminPowers = userRole?.toLowerCase() === 'admin' || userRole?.toLowerCase() === 'marketing' || userRole === 'Administrador' || userRole === 'Marketing';
 
@@ -522,9 +523,9 @@ export const MarketingDetails: React.FC<MarketingDetailsProps> = ({ requestId, u
                                         <div className="w-full bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-3 text-sm text-indigo-700 font-bold flex items-center justify-between">
                                             <div className="flex items-center gap-2">
                                                 <div className="w-6 h-6 rounded-full bg-white flex items-center justify-center text-[10px] shrink-0 border border-indigo-100 uppercase">
-                                                    {request.responsible.name.charAt(0)}
+                                                    {(isStrictAdmin || request.responsible.name.toUpperCase() !== 'TESTE') ? request.responsible.name.charAt(0) : 'P'}
                                                 </div>
-                                                <span className="truncate">{request.responsible.name}</span>
+                                                <span className="truncate">{(isStrictAdmin || request.responsible.name.toUpperCase() !== 'TESTE') ? request.responsible.name : 'Privado'}</span>
                                             </div>
                                             {hasAdminPowers && !isTransferring && (
                                                 <button 
@@ -986,19 +987,24 @@ export const MarketingDetails: React.FC<MarketingDetailsProps> = ({ requestId, u
                     {activeViewers.length > 0 && request.status === 'Revisando' && (
                         <div className="flex items-center gap-2 px-3 py-1 bg-indigo-50/50 rounded-full border border-indigo-100/50 animate-in fade-in slide-in-from-left-2 duration-500">
                             <div className="flex -space-x-1.5 overflow-hidden">
-                                {activeViewers.map((viewer) => (
-                                    <div 
-                                        key={viewer.id} 
-                                        className="relative w-6 h-6 rounded-full border-2 border-white bg-indigo-600 flex items-center justify-center text-[8px] font-black text-white hover:z-10 transition-all cursor-help shrink-0"
-                                        title={`${viewer.name} (${viewer.role}) - Revisando agora`}
-                                    >
-                                        {getInitials(viewer.name)}
-                                        <div className="absolute bottom-0 right-0 w-1.5 h-1.5 bg-emerald-500 rounded-full border border-white"></div>
-                                    </div>
-                                ))}
+                                {activeViewers.map((viewer) => {
+                                    const isTeste = viewer.name?.toUpperCase() === 'TESTE' || viewer.id === '5cc4a14a-6516-4aaa-8878-623d58c3be3b';
+                                    if (!isStrictAdmin && isTeste) return null; // Complete hide from presence if is TESTE and not admin
+                                    
+                                    return (
+                                        <div 
+                                            key={viewer.id} 
+                                            className="relative w-6 h-6 rounded-full border-2 border-white bg-indigo-600 flex items-center justify-center text-[8px] font-black text-white hover:z-10 transition-all cursor-help shrink-0"
+                                            title={`${viewer.name} (${viewer.role}) - Revisando agora`}
+                                        >
+                                            {getInitials(viewer.name)}
+                                            <div className="absolute bottom-0 right-0 w-1.5 h-1.5 bg-emerald-500 rounded-full border border-white"></div>
+                                        </div>
+                                    );
+                                })}
                             </div>
                             <span className="text-[9px] font-bold text-indigo-600 hidden lg:inline tracking-tight uppercase whitespace-nowrap">
-                                {activeViewers.length === 1 ? '1 Revisor Ativo' : `${activeViewers.length} Revisores Ativos`}
+                                {activeViewers.filter(v => isStrictAdmin || (v.name?.toUpperCase() !== 'TESTE' && v.id !== '5cc4a14a-6516-4aaa-8878-623d58c3be3b')).length === 1 ? '1 Revisor Ativo' : `${activeViewers.filter(v => isStrictAdmin || (v.name?.toUpperCase() !== 'TESTE' && v.id !== '5cc4a14a-6516-4aaa-8878-623d58c3be3b')).length} Revisores Ativos`}
                             </span>
                         </div>
                     )}

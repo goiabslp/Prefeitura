@@ -208,8 +208,8 @@ export const MeusConteudosList: React.FC<MeusConteudosListProps> = ({ userId, us
                                     </div>
                                 </td>
                                 <td className="py-4 px-6 md:px-8 text-center min-w-[140px]">
-                                    <div className="text-[10px] md:text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg inline-block whitespace-nowrap max-w-[150px] truncate" title={req.responsible?.name || 'Aguardando'}>
-                                        {req.responsible?.name || 'Aguardando'}
+                                    <div className="text-[10px] md:text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg inline-block whitespace-nowrap max-w-[150px] truncate" title={(userRole?.toLowerCase() === 'admin' || userRole === 'Administrador' || req.responsible?.name?.toUpperCase() !== 'TESTE') ? req.responsible?.name || 'Aguardando' : 'Privado'}>
+                                        {(userRole?.toLowerCase() === 'admin' || userRole === 'Administrador' || req.responsible?.name?.toUpperCase() !== 'TESTE') ? req.responsible?.name || 'Aguardando' : 'Privado'}
                                     </div>
                                 </td>
                                 <td className="py-4 px-6 md:px-8">
