@@ -396,12 +396,12 @@ export const NovoConteudoStepper: React.FC<NovoConteudoStepperProps> = ({
                                 </div>
                             </div>
 
-                            <div className="flex-1 flex flex-col min-h-0">
+                            <div className="flex-1 flex flex-col min-h-0 min-h-[300px]">
                                 <label className="block text-sm font-bold text-slate-700 mb-2">Descrição Detalhada *</label>
                                 <textarea
                                     value={description}
                                     onChange={(e) => setDescription(e.target.value)}
-                                    className="w-full h-full min-h-[120px] border border-slate-200 rounded-2xl p-4 focus:ring-2 focus:ring-indigo-500 outline-none resize-none transition-shadow text-slate-700"
+                                    className="w-full flex-1 border border-slate-200 rounded-2xl p-4 focus:ring-2 focus:ring-indigo-500 outline-none resize-none transition-shadow text-slate-700 custom-scrollbar"
                                     placeholder="Digite aqui a descrição detalhada do pedido..."
                                 />
                             </div>

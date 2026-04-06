@@ -79,14 +79,14 @@ export const marketingSyncService = {
 
             // 6. Prepare content
             const collaboratorsList = birthdayCollaborators
-                .map(p => `- **${p.name}** (${sectorMap.get(p.sector_id) || 'Sem Setor'})`)
+                .map(p => `${p.name} - ${sectorMap.get(p.sector_id) || 'Sem Setor'}`)
                 .join('\n');
 
             const friday = new Date(sunday);
             friday.setDate(sunday.getDate() + 5);
             const fridayISO = friday.toISOString().split('T')[0];
 
-            const description = `Vamos celebrar os aniversariantes da semana! 🎉\n\nUma homenagem especial aos colaboradores que fazem a diferença todos os dias. Prepare um conteúdo criativo e engajador para redes sociais, valorizando cada aniversariante com carinho e reconhecimento.\n\n**Aniversariantes da Semana:**\n${collaboratorsList}`;
+            const description = `**Título do Pedido:** Aniversariante da Semana\n**Data de Início:** ${fridayISO}\n**Data de Fim:** ${fridayISO}\n**Hora de Início:** 12:00\n**Hora de Fim:** 12:00\n\n**Descrição Detalhada:**\nAniversariantes da Semana:\n${collaboratorsList}`;
 
             // 7. Create Request
             const { data: requestDef, error: reqError } = await supabase
@@ -117,7 +117,7 @@ export const marketingSyncService = {
                     content_type: 'Imagem',
                     content_sector: 'Gabinete',
                     event_date: fridayISO,
-                    event_time: '18:00:00',
+                    event_time: '12:00:00',
                     event_location: 'Divulgação no Instagram e demais redes sociais disponíveis.'
                 }]);
 

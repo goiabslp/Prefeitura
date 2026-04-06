@@ -181,6 +181,7 @@ export const MarketingDetails: React.FC<MarketingDetailsProps> = ({ requestId, u
 
             setIsProductionModalOpen(false);
             setProductionDate('');
+            setCurrentStep(3); // Auto switch to production tab
 
             showAlert('success', 'Produção Iniciada', 'A solicitação agora está em fase de produção.');
 
@@ -639,19 +640,19 @@ export const MarketingDetails: React.FC<MarketingDetailsProps> = ({ requestId, u
                                             {evDetails.startTime} {evDetails.endTime !== '-' && evDetails.endTime !== evDetails.startTime && ` - ${evDetails.endTime}`}
                                         </span>
                                     </div>
-                                    <div className="flex items-center justify-between py-1.5 border-b border-slate-50 last:border-0">
+                                    <div className="flex flex-col gap-1 py-1.5 border-b border-slate-50 last:border-0">
                                         <span className="text-xs font-bold text-slate-500">Local</span>
-                                        <span className="text-sm font-bold text-slate-800 truncate max-w-[150px]" title={evDetails.location}>{evDetails.location}</span>
+                                        <span className="text-sm font-bold text-slate-800 leading-tight" title={evDetails.location}>{evDetails.location}</span>
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm h-full flex flex-col">
+                            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm h-full flex flex-col min-h-[250px]">
                                 <h3 className="text-xs font-black uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-2">
                                     <FileText className="w-3.5 h-3.5 text-indigo-500" />
                                     Descrição do Pedido
                                 </h3>
-                                <div className="flex-1 bg-slate-50/50 rounded-xl p-3 text-[13px] leading-relaxed text-slate-600 overflow-y-auto max-h-[120px] custom-scrollbar border border-slate-100">
+                                <div className="flex-1 bg-slate-50/50 rounded-xl p-3 text-[13px] leading-relaxed text-slate-600 overflow-y-auto max-h-[400px] custom-scrollbar border border-slate-100">
                                     {evDetails.details.split('\n').filter(line => line.trim()).map((line: string, i: number) => (
                                         <p key={i} className="mb-1 last:mb-0">{line}</p>
                                     ))}
@@ -684,9 +685,15 @@ export const MarketingDetails: React.FC<MarketingDetailsProps> = ({ requestId, u
                                                     #{index + 1}
                                                 </span>
                                             </div>
-                                            <div className="space-y-1">
+                                            <div className="space-y-1.5">
+                                                <div className="flex flex-col gap-0.5">
+                                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Título do Conteúdo</span>
+                                                    <span className="text-xs font-black text-slate-800 leading-tight">
+                                                        {extractTitle(request.description)}
+                                                    </span>
+                                                </div>
                                                 {item.content_sector && (
-                                                    <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
+                                                    <div className="flex items-center gap-1.5 text-[10px] text-slate-500 pb-1 border-b border-slate-100">
                                                         <span className="font-bold text-slate-400">Setor:</span>
                                                         <span className="text-slate-700 font-medium">{item.content_sector}</span>
                                                     </div>
@@ -1017,21 +1024,21 @@ export const MarketingDetails: React.FC<MarketingDetailsProps> = ({ requestId, u
                     )}
                 </div>
 
-                <div className="flex-1 min-w-0 pr-2">
+                <div className="flex-1 min-w-0 flex items-center gap-4 overflow-hidden">
                     <ProcessStepper steps={STEPS} currentStep={currentStep} onStepClick={setCurrentStep} maxCompletedStep={STEPS.length} compact />
-                </div>
-
-                <div className="flex items-center shrink-0 gap-2">
-                    {hasAdminPowers && (request.status === 'Aprovado' || request.status === 'Revisando' || request.status === 'Em Andamento') && (
+                    {hasAdminPowers && ['Em Análise', 'Na Fila', 'Aprovado', 'Revisando', 'Em Andamento'].includes(request.status) && (
                         <button
                             id="tour-init-button"
                             onClick={() => setIsProductionModalOpen(true)}
-                            className="px-4 py-1.5 bg-purple-600 text-white font-black uppercase tracking-wider rounded-xl shadow-lg hover:bg-purple-700 transition-all active:scale-95 animate-pulse-purple flex items-center gap-2 text-[10px] md:text-xs group"
+                            className="px-4 py-1.5 bg-purple-600 text-white font-black uppercase tracking-wider rounded-xl shadow-lg hover:bg-purple-700 transition-all active:scale-95 animate-pulse-purple flex items-center gap-2 text-[10px] md:text-xs group shrink-0"
                         >
                             <Clock className="w-3 h-3 group-hover:rotate-180 transition-transform duration-500" />
                             <span>Iniciar Produção</span>
                         </button>
                     )}
+                </div>
+
+                <div className="flex items-center shrink-0">
                     <button
                         onClick={() => setCurrentStep(prev => prev + 1)}
                         disabled={currentStep === STEPS.length - 1}

@@ -148,7 +148,7 @@ export const DateTimePickerModal: React.FC<DateTimePickerModalProps> = ({
     if (!isOpen && !isClosing) return null;
 
     return createPortal(
-        <div className={`fixed inset-0 z-[400] flex items-end sm:items-center justify-center sm:p-4 transition-all duration-300 ${isClosing ? 'opacity-0' : 'opacity-100'}`}>
+        <div className={`fixed inset-0 z-[10001] flex items-end sm:items-center justify-center sm:p-4 transition-all duration-300 ${isClosing ? 'opacity-0' : 'opacity-100'}`}>
             <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md transition-opacity" onClick={handleClose} />
 
             <div className={`

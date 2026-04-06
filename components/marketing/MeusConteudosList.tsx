@@ -139,6 +139,7 @@ export const MeusConteudosList: React.FC<MeusConteudosListProps> = ({ userId, us
     const getStatusConfig = (status: string) => {
         switch (status) {
             case 'Em Análise': return { color: 'amber', icon: Clock };
+            case 'Na Fila': return { color: 'orange', icon: Clock };
             case 'Revisando': return { color: 'blue', icon: AlertCircle };
             case 'Produzindo': return { color: 'indigo', icon: Loader2 };
             case 'Aprovado': return { color: 'emerald', icon: CheckCircle2 };
