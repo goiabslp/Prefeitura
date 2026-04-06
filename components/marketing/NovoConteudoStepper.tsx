@@ -13,6 +13,7 @@ interface NovoConteudoStepperProps {
     userId: string;
     userName: string;
     sectors: Sector[];
+    activeStep?: number;
 }
 
 interface ContentItem {
@@ -27,7 +28,8 @@ export const NovoConteudoStepper: React.FC<NovoConteudoStepperProps> = ({
     onBack,
     userId,
     userName,
-    sectors
+    sectors,
+    activeStep
 }) => {
     const STEPS = ['Informações', 'Descrição', 'Conteúdo', 'Anexos', 'Assinatura'];
     const [currentStep, setCurrentStep] = useState(0);
@@ -96,6 +98,13 @@ export const NovoConteudoStepper: React.FC<NovoConteudoStepperProps> = ({
         };
         fetchUserData();
     }, [userId]);
+ 
+    useEffect(() => {
+        if (activeStep !== undefined) {
+            setCurrentStep(activeStep);
+            if (activeStep > maxCompletedStep) setMaxCompletedStep(activeStep - 1);
+        }
+    }, [activeStep]);
 
     const handleNext = () => {
         // Validation per step

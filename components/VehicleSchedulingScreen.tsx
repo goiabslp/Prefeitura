@@ -122,10 +122,6 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
     return isVehicleManager || isVehicleResponsible;
   }, [currentUserRole, currentUserPermissions, vehicles, currentUserPersonId]);
 
-  const visibleSchedules = useMemo(() => {
-    if (currentUserRole === 'admin') return schedules;
-    return schedules.filter(s => s.requesterId === currentUserId);
-  }, [schedules, currentUserRole, currentUserId]);
 
   useEffect(() => {
     if (requestedView && requestedView !== activeSubView) {
@@ -649,7 +645,7 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
       {activeSubView === 'calendar' && renderCalendar()}
       {activeSubView === 'history' && (
         <VehicleScheduleHistory
-          schedules={visibleSchedules}
+          schedules={schedules}
           vehicles={vehicles}
           persons={persons}
           sectors={sectors}

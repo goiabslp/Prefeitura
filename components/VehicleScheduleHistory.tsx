@@ -279,8 +279,8 @@ export const VehicleScheduleHistory: React.FC<VehicleScheduleHistoryProps> = ({
                         <div className="flex items-center justify-center">
                           <button
                             onClick={() => setManagingCrew(s)}
-                            disabled={['cancelado', 'em_curso', 'concluido'].includes(s.status)}
-                            className={`w-full px-3 py-2 border text-[9px] font-bold uppercase tracking-wide rounded-xl transition-all shadow-sm active:scale-95 flex items-center justify-center gap-2 ${['cancelado', 'em_curso', 'concluido'].includes(s.status) ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed opacity-60' : 'bg-indigo-50 border-indigo-100 text-indigo-600 hover:bg-indigo-600 hover:text-white hover:border-indigo-600'}`}
+                            disabled={['cancelado', 'em_curso', 'concluido'].includes(s.status) || (s.requesterId !== currentUserId && userRole !== 'admin')}
+                            className={`w-full px-3 py-2 border text-[9px] font-bold uppercase tracking-wide rounded-xl transition-all shadow-sm active:scale-95 flex items-center justify-center gap-2 ${(['cancelado', 'em_curso', 'concluido'].includes(s.status) || (s.requesterId !== currentUserId && userRole !== 'admin')) ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed opacity-60' : 'bg-indigo-50 border-indigo-100 text-indigo-600 hover:bg-indigo-600 hover:text-white hover:border-indigo-600'}`}
                           >
                             <Users className="w-3.5 h-3.5" /> {(s.passengers?.length || 0) + 1} Ocup.
                           </button>
@@ -342,7 +342,7 @@ export const VehicleScheduleHistory: React.FC<VehicleScheduleHistoryProps> = ({
                         OS
                       </button>
 
-                      {s.requesterId === currentUserId && (
+                      {(s.requesterId === currentUserId || userRole === 'admin') && (
                         <>
                           <button
                             onClick={() => onEdit(s)}

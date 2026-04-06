@@ -9,9 +9,10 @@ interface MeusConteudosListProps {
     userId: string;
     userRole?: string;
     onOpenDetails: (id: string) => void;
+    onLoaded?: (firstId: string) => void;
 }
 
-export const MeusConteudosList: React.FC<MeusConteudosListProps> = ({ userId, userRole, onOpenDetails }) => {
+export const MeusConteudosList: React.FC<MeusConteudosListProps> = ({ userId, userRole, onOpenDetails, onLoaded }) => {
     const isAdmin = userRole?.toLowerCase() === 'admin' || userRole?.toLowerCase() === 'marketing' || userRole === 'Administrador' || userRole === 'Marketing';
     const [requests, setRequests] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -66,7 +67,11 @@ export const MeusConteudosList: React.FC<MeusConteudosListProps> = ({ userId, us
                     .order('protocol', { ascending: false });
 
                 if (error) throw error;
-                setRequests(data || []);
+                const fetchedRequests = data || [];
+                setRequests(fetchedRequests);
+                if (fetchedRequests.length > 0 && onLoaded) {
+                    onLoaded(fetchedRequests[0].id);
+                }
             } catch (err) {
                 console.error("Erro ao buscar requests de marketing:", err);
             } finally {
@@ -245,7 +250,7 @@ export const MeusConteudosList: React.FC<MeusConteudosListProps> = ({ userId, us
                                 <td className="py-4 px-6 md:px-8 text-center">
                                     <button
                                         onClick={(e) => handleDeleteClick(e, req.id, extractTitle(req.description))}
-                                        className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-white border border-slate-200 text-slate-400 flex items-center justify-center hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 transition-all shadow-sm mx-auto group-hover:opacity-100 md:opacity-0"
+                                        className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-white border border-slate-200 text-slate-400 flex items-center justify-center hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 transition-all shadow-sm mx-auto"
                                         title="Excluir Solicitação"
                                     >
                                         <Trash2 className="w-4 h-4" />

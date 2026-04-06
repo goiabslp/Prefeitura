@@ -42,6 +42,7 @@ export const MarketingModule: React.FC<MarketingModuleProps> = ({
     const [hasSeenTour, setHasSeenTour] = React.useState<boolean>(true); // Default to true to avoid flash
     const [isTourOpen, setIsTourOpen] = React.useState(false);
     const [tourStepperIndex, setTourStepperIndex] = React.useState(0);
+    const [firstRequestId, setFirstRequestId] = React.useState<string | undefined>(undefined);
 
     React.useEffect(() => {
         const checkTourStatus = async () => {
@@ -108,6 +109,7 @@ export const MarketingModule: React.FC<MarketingModuleProps> = ({
                     userId={userId}
                     userName={userName}
                     sectors={sectors}
+                    activeStep={tourStepperIndex}
                 />
             )}
 
@@ -133,7 +135,12 @@ export const MarketingModule: React.FC<MarketingModuleProps> = ({
                     </header>
                     <div className="flex-1 overflow-hidden p-4 md:p-6 bg-[#f8fafc]">
                         <div className="max-w-6xl mx-auto bg-white rounded-[2rem] border border-slate-200 shadow-xl overflow-hidden min-h-[500px] flex flex-col relative h-full">
-                            <MeusConteudosList userId={userId} userRole={userRole} onOpenDetails={(id) => onNavigate('details', id)} />
+                            <MeusConteudosList 
+                                userId={userId} 
+                                userRole={userRole} 
+                                onOpenDetails={(id) => onNavigate('details', id)} 
+                                onLoaded={(id) => setFirstRequestId(id)}
+                            />
                         </div>
                     </div>
                 </div>
@@ -147,6 +154,7 @@ export const MarketingModule: React.FC<MarketingModuleProps> = ({
                     userName={userName}
                     users={filteredUsers}
                     onBack={() => onNavigate('')}
+                    activeTab={tourStepperIndex}
                 />
             )}
 
@@ -158,6 +166,7 @@ export const MarketingModule: React.FC<MarketingModuleProps> = ({
                 onNavigate={onNavigate}
                 stepperIndex={tourStepperIndex}
                 onSetStepperIndex={setTourStepperIndex}
+                firstRequestId={firstRequestId}
             />
         </div>
     );

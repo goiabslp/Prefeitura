@@ -16,9 +16,10 @@ interface MarketingDetailsProps {
     userName: string;
     users: User[];
     onBack: () => void;
+    activeTab?: number;
 }
 
-export const MarketingDetails: React.FC<MarketingDetailsProps> = ({ requestId, userRole, userId, userName, users, onBack }) => {
+export const MarketingDetails: React.FC<MarketingDetailsProps> = ({ requestId, userRole, userId, userName, users, onBack, activeTab }) => {
     const [currentStep, setCurrentStep] = useState(0);
     const [loading, setLoading] = useState(true);
     const [request, setRequest] = useState<any>(null);
@@ -386,6 +387,12 @@ export const MarketingDetails: React.FC<MarketingDetailsProps> = ({ requestId, u
             fetchDetails();
         }
     }, [requestId]);
+ 
+    useEffect(() => {
+        if (activeTab !== undefined) {
+            setCurrentStep(activeTab);
+        }
+    }, [activeTab]);
 
     // Presence Tracking Effect
     useEffect(() => {

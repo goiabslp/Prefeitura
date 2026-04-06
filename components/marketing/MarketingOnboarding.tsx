@@ -16,9 +16,10 @@ interface MarketingOnboardingProps {
     onClose: () => void;
     onComplete: () => void;
     currentView: string;
-    onNavigate: (view: string) => void;
+    onNavigate: (view: string, id?: string) => void;
     stepperIndex?: number;
     onSetStepperIndex?: (index: number) => void;
+    firstRequestId?: string;
 }
 
 export const MarketingOnboarding: React.FC<MarketingOnboardingProps> = ({
@@ -28,7 +29,8 @@ export const MarketingOnboarding: React.FC<MarketingOnboardingProps> = ({
     currentView,
     onNavigate,
     stepperIndex,
-    onSetStepperIndex
+    onSetStepperIndex,
+    firstRequestId
 }) => {
     const [currentStep, setCurrentStep] = useState(0);
     const [tooltipStyles, setTooltipStyles] = useState<React.CSSProperties>({});
@@ -162,13 +164,15 @@ export const MarketingOnboarding: React.FC<MarketingOnboardingProps> = ({
 
         const element = document.getElementById(currentStepData.targetId);
         if (!element) {
-            // Fallback for missing elements (e.g. view not loaded yet)
             setHighlightStyles({ opacity: 0, pointerEvents: 'none' });
             return;
         }
 
         const rect = element.getBoundingClientRect();
         const padding = 10;
+        const tooltipMargin = 20;
+        const tooltipHeight = tooltipRef.current?.offsetHeight || 250;
+        const tooltipWidth = tooltipRef.current?.offsetWidth || 300;
 
         setHighlightStyles({
             top: rect.top - padding,
@@ -183,28 +187,41 @@ export const MarketingOnboarding: React.FC<MarketingOnboardingProps> = ({
             transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)'
         });
 
+        let finalPosition = currentStepData.position || 'bottom';
         const tooltipPos = { top: 0, left: 0 };
-        const tooltipMargin = 20;
 
-        if (currentStepData.position === 'bottom') {
+        // Flip detection for top/bottom
+        if (finalPosition === 'bottom') {
+            const spaceBelow = window.innerHeight - rect.bottom;
+            if (spaceBelow < tooltipHeight + tooltipMargin + 40) {
+                finalPosition = 'top';
+            }
+        } else if (finalPosition === 'top') {
+            const spaceAbove = rect.top;
+            if (spaceAbove < tooltipHeight + tooltipMargin + 40) {
+                finalPosition = 'bottom';
+            }
+        }
+
+        if (finalPosition === 'bottom') {
             tooltipPos.top = rect.bottom + tooltipMargin;
             tooltipPos.left = rect.left + rect.width / 2;
-        } else if (currentStepData.position === 'top') {
-            tooltipPos.top = rect.top - tooltipMargin - 150; // Approximated height
+        } else if (finalPosition === 'top') {
+            tooltipPos.top = rect.top - tooltipMargin - tooltipHeight;
             tooltipPos.left = rect.left + rect.width / 2;
-        } else if (currentStepData.position === 'left') {
+        } else if (finalPosition === 'left') {
             tooltipPos.top = rect.top + rect.height / 2;
-            tooltipPos.left = rect.left - tooltipMargin - 300; // Approximated width
-        } else if (currentStepData.position === 'right') {
+            tooltipPos.left = rect.left - tooltipMargin - tooltipWidth;
+        } else if (finalPosition === 'right') {
             tooltipPos.top = rect.top + rect.height / 2;
             tooltipPos.left = rect.right + tooltipMargin;
         }
 
-        // Adjust for viewport bounds
+        // Final Bounds Check & Styling
         setTooltipStyles({
-            top: Math.max(20, Math.min(window.innerHeight - 200, tooltipPos.top)),
-            left: Math.max(20, Math.min(window.innerWidth - 320, tooltipPos.left)),
-            transform: currentStepData.position === 'bottom' || currentStepData.position === 'top' ? 'translateX(-50%)' : 'translateY(-50%)',
+            top: Math.max(20, Math.min(window.innerHeight - tooltipHeight - 20, tooltipPos.top)),
+            left: Math.max(20, Math.min(window.innerWidth - tooltipWidth / 2 - 20, tooltipPos.left)),
+            transform: finalPosition === 'bottom' || finalPosition === 'top' ? 'translateX(-50%)' : 'translateY(-50%)',
             position: 'fixed',
             zIndex: 99999,
             transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)'
@@ -215,10 +232,11 @@ export const MarketingOnboarding: React.FC<MarketingOnboardingProps> = ({
         if (isOpen) {
             // Handle Navigation Requirements
             if (currentStepData.viewChange) {
-                if (currentStepData.viewChange === 'details_demo') {
-                    // Logic to open a details demo if none exists or just stay in list
-                     onNavigate('list');
-                } else if (currentView !== currentStepData.viewChange) {
+                if (currentStepData.viewChange === 'details_demo' && firstRequestId) {
+                    if (currentView !== 'details') {
+                        onNavigate('details', firstRequestId);
+                    }
+                } else if (currentView !== currentStepData.viewChange && currentStepData.viewChange !== 'details_demo') {
                     onNavigate(currentStepData.viewChange);
                 }
             }
