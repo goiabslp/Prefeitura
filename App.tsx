@@ -358,8 +358,36 @@ const App: React.FC = () => {
   const [isLicitacaoSettingsOpen, setIsLicitacaoSettingsOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  // Track active state securely without causing infinite renders on useCallback deps
+  const appStateRef = useRef({ currentView, activeBlock });
+  useEffect(() => {
+    appStateRef.current = { currentView, activeBlock };
+  }, [currentView, activeBlock]);
+
   // Initial Data Fetch
   const refreshData = useCallback(async (silent = false, scope?: string) => {
+    // Evita atualização automática silenciosa em formulários
+    if (silent) {
+      const isFormScreen = () => {
+        const cv = appStateRef.current.currentView as string;
+        const ab = appStateRef.current.activeBlock as string;
+        if (cv === 'editor' || cv === 'licitacao-new') return true;
+        if (ab === 'new' || ab === 'vs_calendar') return true;
+        if (cv === 'abastecimento' && ab === 'new') return true;
+        if (cv === 'tarefas' && ab === 'new') return true;
+        if (cv === 'rh' && ab === 'horas-extras') return true;
+        if (cv === 'projetos' && ab === 'new') return true;
+        if (cv === 'marketing' && ab === 'new') return true;
+        return false;
+      };
+
+      
+      if (isFormScreen()) {
+        console.log("Auto-refresh bloqueado: Usuário está em uma tela de preenchimento (prevenção de perda de dados).");
+        return; 
+      }
+    }
+
     setIsRefreshing(true);
     if (!silent) showToast("Atualizando dados...", "info");
     try {
@@ -932,7 +960,7 @@ const App: React.FC = () => {
     };
   }, [currentUser, currentView, signOut]);
 
-  // --- INFO BALLOON: ATUALIZAÇÃO INTELIGENTE ---
+  // --- INFO MODAL: ATUALIZAÇÃO INTELIGENTE ---
   useEffect(() => {
     if (!currentUser) return;
     
@@ -940,56 +968,79 @@ const App: React.FC = () => {
     if (localStorage.getItem(INFO_KEY)) return;
 
     const timer = setTimeout(() => {
-      if (document.getElementById('sys-update-info-balloon')) return;
+      if (document.getElementById('sys-update-info-modal')) return;
 
-      const balloon = document.createElement('div');
-      balloon.id = 'sys-update-info-balloon';
-      balloon.style.cssText = `
-        position: fixed;
-        bottom: 24px;
-        right: 24px;
-        background: #1e293b;
-        color: white;
-        padding: 24px;
-        border-radius: 16px;
-        border: 1px solid #334155;
-        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 10px 10px -5px rgba(0, 0, 0, 0.2);
-        max-width: 320px;
-        z-index: 999999;
-        font-family: system-ui, -apple-system, sans-serif;
-        animation: slideUpFade 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      const overlay = document.createElement('div');
+      overlay.id = 'sys-update-info-modal';
+      overlay.style.cssText = `
+        position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(15,23,42,0.6); backdrop-filter: blur(4px);
+        z-index: 999999; display: flex; align-items: center; justify-content: center;
+        opacity: 0; transition: opacity 0.3s ease; padding: 20px;
       `;
-      balloon.innerHTML = `
-        <style>
-          @keyframes slideUpFade {
-            0% { transform: translateY(30px); opacity: 0; }
-            100% { transform: translateY(0); opacity: 1; }
-          }
-          .sys-balloon-btn {
-            background: #3b82f6; color: white; border: none; padding: 10px 16px;
-            border-radius: 8px; font-weight: 600; cursor: pointer; width: 100%;
-            margin-top: 16px; transition: background 0.2s; font-size: 14px;
-          }
-          .sys-balloon-btn:hover { background: #2563eb; }
-        </style>
-        <div style="display: flex; align-items: flex-start; gap: 10px; margin-bottom: 12px;">
-          <span style="font-size: 20px;">🔄</span>
-          <h3 style="margin: 0; font-size: 16px; font-weight: 600; color: #f8fafc; line-height: 1.3;">Atualização inteligente do sistema</h3>
+
+      const modal = document.createElement('div');
+      modal.style.cssText = `
+        background: #1e293b; color: white; padding: 32px; border-radius: 20px;
+        border: 1px solid #334155; max-width: 400px; width: 100%;
+        box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); font-family: system-ui, -apple-system, sans-serif;
+        text-align: center; position: relative;
+        transform: scale(0.9) translateY(20px); opacity: 0;
+        transition: all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+      `;
+
+      modal.innerHTML = `
+        <div style="background: rgba(59,130,246,0.1); width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px auto; color: #3b82f6;">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="animation: spinIconSys 4s linear infinite;">
+            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.92-5.23l.1.09"/>
+          </svg>
         </div>
-        <p style="margin: 0; font-size: 14px; color: #cbd5e1; line-height: 1.5;">
+        <h3 style="margin: 0 0 12px 0; font-size: 20px; font-weight: 700; color: #f8fafc;">Atualização inteligente do sistema</h3>
+        <p style="margin: 0 0 24px 0; font-size: 15px; color: #cbd5e1; line-height: 1.6;">
           Agora o sistema atualiza automaticamente a cada 2 horas, sem interromper seu trabalho.<br/><br/>
-          A atualização será aplicada quando você voltar à tela inicial ou atualizar a página.
+          A atualização será aplicada ao voltar à tela inicial ou ao atualizar a página.
         </p>
-        <button class="sys-balloon-btn" id="sys-balloon-close-btn">Entendi</button>
+        <button id="sys-modal-close-btn" style="background: #3b82f6; color: white; border: none; padding: 12px 24px; border-radius: 12px; font-weight: 600; cursor: pointer; width: 100%; font-size: 16px; transition: all 0.2s; box-shadow: 0 4px 12px rgba(59,130,246,0.3);">
+          Entendi
+        </button>
       `;
 
-      document.body.appendChild(balloon);
+      overlay.appendChild(modal);
+      document.body.appendChild(overlay);
 
-      document.getElementById('sys-balloon-close-btn')?.addEventListener('click', () => {
-        balloon.style.animation = 'slideUpFade 0.4s cubic-bezier(0.16, 1, 0.3, 1) reverse forwards';
-        localStorage.setItem(INFO_KEY, 'true');
-        setTimeout(() => balloon.remove(), 400);
+      // Hover effect on button
+      const btn = document.getElementById('sys-modal-close-btn');
+      if (btn) {
+        btn.addEventListener('mouseenter', () => btn.style.background = '#2563eb');
+        btn.addEventListener('mouseleave', () => btn.style.background = '#3b82f6');
+      }
+
+      // Animate In via RAF
+      requestAnimationFrame(() => {
+        overlay.style.opacity = '1';
+        modal.style.transform = 'scale(1) translateY(0)';
+        modal.style.opacity = '1';
       });
+
+      const closeModal = () => {
+        overlay.style.opacity = '0';
+        modal.style.transform = 'scale(0.9) translateY(20px)';
+        modal.style.opacity = '0';
+        localStorage.setItem(INFO_KEY, 'true');
+        setTimeout(() => overlay.remove(), 300);
+        document.removeEventListener('keydown', handleEsc);
+      };
+
+      const handleEsc = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') closeModal();
+      };
+      document.addEventListener('keydown', handleEsc);
+      
+      btn?.addEventListener('click', closeModal);
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) closeModal();
+      });
+
     }, 2000);
 
     return () => clearTimeout(timer);
@@ -1344,6 +1395,7 @@ const App: React.FC = () => {
           if (componentRef.current) {
             // Force light mode for capture if needed, or rely on preview styles
             const canvas = await html2canvas(componentRef.current, {
+              // @ts-ignore - 'scale' might be missing in older type definitions but is supported
               scale: 2,
               logging: false,
               useCORS: true,

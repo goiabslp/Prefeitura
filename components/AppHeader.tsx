@@ -49,6 +49,26 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   const isAdmin = currentUser.role === 'admin';
   const isNotHome = currentView !== 'home';
 
+  const isFormScreen = () => {
+    if (currentView === 'editor') return true; 
+    if (currentView === 'licitacao-new') return true;
+    
+    const activeBlockStr = activeBlock as string;
+    
+    // Subtelas de Criação/Edição nos outros módulos
+    if (activeBlockStr === 'new' || currentSubView === 'new') return true;
+    if (activeBlockStr === 'vs_calendar') return true; 
+    
+    // Filtros por Módulo
+    if (currentView === 'abastecimento' && (activeBlockStr === 'new' || currentSubView === 'new')) return true;
+    if (currentView === 'tarefas' && (activeBlockStr === 'new' || currentSubView === 'new')) return true;
+    if (currentView === 'rh' && (activeBlockStr === 'horas-extras' || currentSubView === 'horas-extras')) return true;
+    if (currentView === 'projetos' && (activeBlockStr === 'new' || currentSubView === 'new')) return true;
+    if (currentView === 'marketing' && (activeBlockStr === 'new' || currentSubView === 'new')) return true;
+
+    return false;
+  };
+
   const handleSmartRefresh = () => {
     let scope = 'transactions'; // Default fallback
 
@@ -260,12 +280,19 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
 
           {/* REFRESH BUTTON */}
           <button
-            onClick={handleSmartRefresh}
+            onClick={() => {
+              if (isFormScreen()) {
+                const confirmed = window.confirm("Você está em uma tela de preenchimento. Atualizar a página agora buscará dados do servidor e pode descartar o que você não salvou. Tem certeza que deseja atualizar?");
+                if (!confirmed) return;
+              }
+              handleSmartRefresh();
+            }}
             disabled={isRefreshing}
             className={`p-2 rounded-xl transition-all active:scale-95 group relative
               ${isRefreshing ? 'bg-indigo-50 text-indigo-600' : 'text-slate-400 hover:bg-slate-50 hover:text-indigo-600'}
+              ${isFormScreen() ? 'opacity-50 cursor-help text-slate-300' : ''}
             `}
-            title="Atualizar Dados"
+            title={isFormScreen() ? "Atualização cautelosa em formulário (pode causar perda de dados)" : "Atualizar Dados"}
           >
             <RefreshCw className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`} />
           </button>
