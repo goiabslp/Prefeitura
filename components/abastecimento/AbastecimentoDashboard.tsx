@@ -3040,7 +3040,12 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
                                                 onClick={async () => {
                                                     if (window.confirm('Tem certeza que deseja excluir este relatório?')) {
                                                         const { error } = await supabase.storage.from('attachments').remove([`empenho_reports/${file.name}`]);
-                                                        if (!error) loadSavedEmpenhoReports();
+                                                        if (error) {
+                                                            alert(`Erro ao excluir arquivo: ${error.message}`);
+                                                        } else {
+                                                            loadSavedEmpenhoReports();
+                                                            showSuccessToast('Arquivo excluído.');
+                                                        }
                                                     }
                                                 }}
                                                 className="w-8 h-8 flex items-center justify-center bg-white border border-slate-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 text-slate-400 rounded-lg transition-colors"
