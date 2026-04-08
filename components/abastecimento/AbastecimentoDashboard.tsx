@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { ArrowLeft, TrendingUp, Droplet, DollarSign, Truck, Settings, LayoutDashboard, Building2, MapPin, CreditCard, Fuel, Save, Plus, Calendar, ChevronDown, History, BarChart3, Search, ChevronRight, FileText, Filter, FileSpreadsheet, Download, CalendarDays, Factory, Car, AlertTriangle, Trash2 } from 'lucide-react';
+import { ArrowLeft, TrendingUp, Droplet, DollarSign, Truck, Settings, LayoutDashboard, Building2, MapPin, CreditCard, Fuel, Save, Plus, Calendar, ChevronDown, History, BarChart3, Search, ChevronRight, FileText, Filter, FileSpreadsheet, Download, CalendarDays, Factory, Car, AlertTriangle, Trash2, CheckSquare, Check, X, ShieldAlert } from 'lucide-react';
 import { ModernSelect } from '../common/ModernSelect';
 import { ModernDateInput } from '../common/ModernDateInput';
 import { AbastecimentoService, AbastecimentoRecord, AbastecimentoReportHistory, ScheduledPriceUpdate, GasStation, FuelConfig } from '../../services/abastecimentoService';
@@ -8,6 +8,8 @@ import { getVehicles, getSectors } from '../../services/entityService';
 import { AbastecimentoReportPDF } from './AbastecimentoReportPDF';
 import { AppState, Vehicle, Sector } from '../../types';
 import { supabase } from '../../services/supabaseClient';
+import { uploadFile } from '../../services/storageService';
+import { generateEmpenhoReportPDF } from '../../utils/empenhoReportGenerator';
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
     BarChart, Bar, PieChart, Pie, Cell, AreaChart, Area
@@ -25,7 +27,7 @@ interface AbastecimentoDashboardProps {
     refreshTrigger?: number;
 }
 
-type TabType = 'overview' | 'vehicle' | 'sector' | 'reports' | 'config';
+type TabType = 'overview' | 'vehicle' | 'sector' | 'reports' | 'lancamentos' | 'config';
 
 interface VehicleStat {
     id: string; // The key used in records (r.vehicle)
@@ -569,7 +571,7 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
     const [selectedVehicle, setSelectedVehicle] = useState<string | null>(null);
     const [allRecords, setAllRecords] = useState<AbastecimentoRecord[]>([]);
     const [showPrintPreview, setShowPrintPreview] = useState(false);
-    const [reportMode, setReportMode] = useState<'simplified' | 'complete' | 'listagem'>('complete');
+    const [reportMode, setReportMode] = useState<'simplified' | 'complete' | 'listagem' | 'empenhado'>('complete');
     const [appliedFilters, setAppliedFilters] = useState({
         startDate: (() => {
             const now = new Date();
@@ -597,6 +599,24 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
         const userSector = sectors.find(s => s.id === user?.sectorId);
         return userSector?.name || 'all';
     });
+
+    // --- Empenho States ---
+    const [showEmpenhoOverlay, setShowEmpenhoOverlay] = useState(false);
+    const [selectedEmpenhoRecords, setSelectedEmpenhoRecords] = useState<string[]>([]);
+    const [showEmpenhoModal, setShowEmpenhoModal] = useState(false);
+    const [empenhoForm, setEmpenhoForm] = useState({ projetoAtividade: '', numeroEmpenho: '' });
+    const [isEmpenhando, setIsEmpenhando] = useState(false);
+    const [sessionEmpenhados, setSessionEmpenhados] = useState<(AbastecimentoRecord & { projeto_atividade?: string; numero_empenho?: string; derivedSector?: string; derivedPlate?: string })[]>([]);
+    
+    // --- Toast State ---
+    const [showToast, setShowToast] = useState(false);
+    const [toastMessage, setToastMessage] = useState('');
+
+    const showSuccessToast = (msg: string) => {
+        setToastMessage(msg);
+        setShowToast(true);
+        setTimeout(() => setShowToast(false), 3000);
+    };
 
     const isAdmin = user?.role === 'admin';
     const userSectorName = sectors.find(s => s.id === user?.sectorId)?.name;
@@ -1450,6 +1470,21 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
         </div>
     );
 
+    const [savedEmpenhoReports, setSavedEmpenhoReports] = useState<any[]>([]);
+
+    const loadSavedEmpenhoReports = async () => {
+        const { data } = await supabase.storage.from('attachments').list('empenho_reports', { limit: 100 });
+        if (data && data.length > 0) {
+            // Sort by created_at descending
+            setSavedEmpenhoReports(data.filter(f => f.name.endsWith('.pdf')).sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()));
+        } else {
+            setSavedEmpenhoReports([]);
+        }
+    };
+
+    useEffect(() => {
+        loadSavedEmpenhoReports();
+    }, []);
 
     const renderOverview = () => (
         <div className="space-y-6 animate-fade-in pb-10">
@@ -1570,7 +1605,7 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
                                 />
                                 <Tooltip
                                     contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                                    formatter={(value: number) => [`R$ ${value.toLocaleString()}`, 'Gasto']}
+                                    formatter={((value: number) => [`R$ ${value.toLocaleString()}`, 'Gasto']) as any}
                                 />
                                 <Area
                                     type="monotone"
@@ -1607,7 +1642,7 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
                                 </Pie>
                                 <Tooltip
                                     contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                                    formatter={(value: number) => [`${formatNumber(value, 2)} L`, 'Volume']}
+                                    formatter={((value: number) => [`${formatNumber(value, 2)} L`, 'Volume']) as any}
                                 />
                                 <Legend verticalAlign="bottom" height={36} iconType="circle" />
                             </PieChart>
@@ -1640,7 +1675,7 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
                                 <Tooltip
                                     cursor={{ fill: '#f8fafc' }}
                                     contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                                    formatter={(value: number) => [formatCurrency(value), 'Gasto']}
+                                    formatter={((value: number) => [formatCurrency(value), 'Gasto']) as any}
                                 />
                                 <Bar dataKey="value" fill="#0ea5e9" radius={[0, 4, 4, 0]} barSize={20} />
                             </BarChart>
@@ -2524,8 +2559,515 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
         </div>
     );
 
+    const pendingEmpenhoRecords = useMemo(() => {
+        return reportData.records.filter(r => !sessionEmpenhados.some(s => s.id === r.id));
+    }, [reportData.records, sessionEmpenhados]);
+
+    const groupedRecordsForEmpenho = useMemo(() => {
+        const records = [...pendingEmpenhoRecords];
+        
+        // Sort by sector first, then plate
+        records.sort((a, b) => {
+            const sectorA = a.derivedSector || '';
+            const sectorB = b.derivedSector || '';
+            if (sectorA !== sectorB) return sectorA.localeCompare(sectorB);
+            const plateA = a.derivedPlate || '';
+            const plateB = b.derivedPlate || '';
+            return plateA.localeCompare(plateB);
+        });
+
+        const groups: Record<string, typeof records> = {};
+        records.forEach(r => {
+            const sector = r.derivedSector || 'Sem Setor';
+            if (!groups[sector]) groups[sector] = [];
+            groups[sector].push(r);
+        });
+
+        return groups;
+    }, [pendingEmpenhoRecords]);
+
+    const handleEmpenharSubmit = () => {
+        if (!empenhoForm.projetoAtividade || !empenhoForm.numeroEmpenho) {
+            showSuccessToast('Preencha os dados do empenho.');
+            return;
+        }
+        
+        // Add selected records to session with their new Emepenho params
+        const newBatch = pendingEmpenhoRecords
+            .filter(r => selectedEmpenhoRecords.includes(r.id))
+            .map(r => ({
+                ...r,
+                projeto_atividade: empenhoForm.projetoAtividade,
+                numero_empenho: empenhoForm.numeroEmpenho
+            }));
+
+        setSessionEmpenhados(prev => [...prev, ...newBatch]);
+        
+        // Reset interaction modal
+        setShowEmpenhoModal(false);
+        setEmpenhoForm({ projetoAtividade: '', numeroEmpenho: '' });
+        setSelectedEmpenhoRecords([]);
+        
+        showSuccessToast(`Lote anexado. Restam ${pendingEmpenhoRecords.length - newBatch.length} registros pendentes.`);
+    };
+
+    const handleFinalizarSessaoEmpenho = async () => {
+        setIsEmpenhando(true);
+        try {
+            // Group session items by Empenho Number to minimize DB updates
+            const batches: Record<string, { projeto: string, records: string[] }> = {};
+            sessionEmpenhados.forEach(s => {
+                const key = s.numero_empenho || '';
+                if (!batches[key]) batches[key] = { projeto: s.projeto_atividade || '', records: [] };
+                batches[key].records.push(s.id);
+            });
+
+            // Dispatch DB Updates
+            for (const [empenho, batchData] of Object.entries(batches)) {
+                await AbastecimentoService.updateAbastecimentoEmpenho(batchData.records, batchData.projeto, empenho);
+            }
+
+            const periodoStr = `${appliedFilters.startDate ? new Date(appliedFilters.startDate).toLocaleDateString('pt-BR') : 'Início'} a ${appliedFilters.endDate ? new Date(appliedFilters.endDate).toLocaleDateString('pt-BR') : 'Fim'}`;
+            const postoStr = appliedFilters.station && appliedFilters.station !== 'all' ? appliedFilters.station : 'Todos os Postos';
+            
+            // Generate Unified PDF grouped by Numero Empenho
+            const pdfBlob = generateEmpenhoReportPDF(sessionEmpenhados as any, periodoStr, postoStr);
+            
+            const pdfName = `Empenho_${Date.now()}.pdf`;
+            const fileObj = new File([pdfBlob], pdfName, { type: 'application/pdf' });
+            
+            await uploadFile(fileObj, 'attachments', `empenho_reports/${pdfName}`);
+            
+            showSuccessToast('Processo de Empenho Finalizado e PDF gerado consolidado!');
+            
+            loadSavedEmpenhoReports();
+            
+            // Update UI list safely
+            setAllRecords(prev => prev.map(r => {
+                const sessionFound = sessionEmpenhados.find(s => s.id === r.id);
+                if (sessionFound) {
+                    return { ...r, payment_status: 'Empenhado', projeto_atividade: sessionFound.projeto_atividade, numero_empenho: sessionFound.numero_empenho };
+                }
+                return r;
+            }));
+            
+            setShowEmpenhoOverlay(false);
+            setSessionEmpenhados([]);
+        } catch (error) {
+            console.error(error);
+            showSuccessToast('Erro ao finalizar o processo de empenho.');
+        } finally {
+            setIsEmpenhando(false);
+        }
+    };
+
+    const renderEmpenhoOverlay = () => {
+        const toggleSelection = (record: typeof reportData.records[0]) => {
+            const isSelected = selectedEmpenhoRecords.includes(record.id);
+            const recordsWithSamePlate = reportData.records.filter(r => r.derivedPlate === record.derivedPlate);
+            const idsWithSamePlate = recordsWithSamePlate.map(r => r.id);
+
+            if (isSelected) {
+                setSelectedEmpenhoRecords(prev => prev.filter(id => !idsWithSamePlate.includes(id)));
+            } else {
+                setSelectedEmpenhoRecords(prev => {
+                    const uniqueNewIds = idsWithSamePlate.filter(id => !prev.includes(id));
+                    return [...prev, ...uniqueNewIds];
+                });
+            }
+        };
+
+        const toggleSector = (sector: string, records: AbastecimentoRecord[]) => {
+            const allSelected = records.every(r => selectedEmpenhoRecords.includes(r.id));
+            if (allSelected) {
+                // Deselect all
+                setSelectedEmpenhoRecords(prev => prev.filter(id => !records.some(r => r.id === id)));
+            } else {
+                // Select all
+                const newIds = records.map(r => r.id).filter(id => !selectedEmpenhoRecords.includes(id));
+                setSelectedEmpenhoRecords(prev => [...prev, ...newIds]);
+            }
+        };
+
+        return (
+            <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden animate-fade-in relative flex flex-col h-[calc(100vh-200px)]">
+                <div className="p-6 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-10 shrink-0">
+                    <div className="flex items-center gap-4">
+                        <button 
+                            onClick={() => {
+                                if (sessionEmpenhados.length > 0) {
+                                    if(window.confirm('Existem lotes processados na memória. Ao sair, todo o progresso atual dessa sessão será perdido. Deseja realmente abortar?')) {
+                                        setSessionEmpenhados([]);
+                                        setShowEmpenhoOverlay(false);
+                                    }
+                                } else {
+                                    setShowEmpenhoOverlay(false);
+                                }
+                            }}
+                            className="w-10 h-10 bg-slate-50 hover:bg-slate-100 rounded-xl flex items-center justify-center text-slate-500 transition-colors"
+                        >
+                            <ArrowLeft className="w-5 h-5" />
+                        </button>
+                        <div>
+                            <h3 className="font-black text-slate-900 text-lg">Sessão de Empenho</h3>
+                            <div className="flex items-center gap-2 mt-0.5">
+                                <span className="text-[10px] font-black text-indigo-500 bg-indigo-50 px-2 rounded uppercase tracking-wider">{pendingEmpenhoRecords.length} aguardando</span>
+                                <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 rounded uppercase tracking-wider">{sessionEmpenhados.length} processados no buffer</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <button
+                            onClick={() => setShowEmpenhoModal(true)}
+                            disabled={selectedEmpenhoRecords.length === 0}
+                            className={`flex items-center gap-2 px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-lg ${selectedEmpenhoRecords.length > 0 ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-600/20 active:scale-95' : 'bg-slate-100 text-slate-400 cursor-not-allowed shadow-none'}`}
+                        >
+                            <CheckSquare className="w-4 h-4" />
+                            Anexar Lote ({selectedEmpenhoRecords.length})
+                        </button>
+                    </div>
+                </div>
+
+                <div className="flex-1 overflow-auto custom-scrollbar p-6 bg-slate-50 relative">
+                    <div className="max-w-4xl mx-auto space-y-8">
+                        {Object.entries(groupedRecordsForEmpenho).map(([sector, records]) => {
+                            const allSelected = records.every(r => selectedEmpenhoRecords.includes(r.id));
+                            const someSelected = records.some(r => selectedEmpenhoRecords.includes(r.id)) && !allSelected;
+
+                            return (
+                                <div key={sector} className="bg-white rounded-[1.5rem] shadow-sm border border-slate-200 overflow-hidden">
+                                    <div className="bg-slate-50 px-6 py-4 flex items-center justify-between border-b border-slate-100">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-8 h-8 bg-indigo-100 text-indigo-600 rounded-lg flex items-center justify-center">
+                                                <Factory className="w-4 h-4" />
+                                            </div>
+                                            <h4 className="font-black text-slate-800 uppercase tracking-widest text-xs">{sector}</h4>
+                                        </div>
+                                        <button 
+                                            onClick={() => toggleSector(sector, records)}
+                                            className="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider hover:text-indigo-600 transition-colors"
+                                        >
+                                            <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${allSelected ? 'bg-indigo-500 border-indigo-500 text-white' : someSelected ? 'bg-indigo-100 border-indigo-500 text-indigo-500' : 'border-slate-300'}`}>
+                                                {allSelected && <Check className="w-3 h-3" />}
+                                                {someSelected && <div className="w-2 h-0.5 bg-indigo-500 rounded" />}
+                                            </div>
+                                            {allSelected ? 'Desmarcar Todos' : 'Selecionar Todos'}
+                                        </button>
+                                    </div>
+                                    <div className="divide-y divide-slate-100">
+                                        {records.map(record => (
+                                            <div 
+                                                key={record.id} 
+                                                onClick={() => toggleSelection(record)}
+                                                className={`px-6 py-3 flex items-center justify-between cursor-pointer transition-colors hover:bg-indigo-50/30 ${selectedEmpenhoRecords.includes(record.id) ? 'bg-indigo-50/50' : ''}`}
+                                            >
+                                                <div className="flex items-center gap-4">
+                                                    <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors shrink-0 ${selectedEmpenhoRecords.includes(record.id) ? 'bg-indigo-500 border-indigo-500 text-white' : 'border-slate-300 bg-white'}`}>
+                                                        {selectedEmpenhoRecords.includes(record.id) && <Check className="w-3 h-3" />}
+                                                    </div>
+                                                    <div>
+                                                        <div className="flex items-center gap-2 mb-0.5">
+                                                            <span className="font-bold text-slate-900 text-sm">{record.derivedPlate}</span>
+                                                            <span className="text-[10px] font-black text-slate-400 bg-slate-100 px-2 rounded-full hidden sm:inline-flex">{record.date.split('T')[0].split('-').reverse().join('/')}</span>
+                                                        </div>
+                                                        <p className="text-[10px] font-bold text-slate-500 uppercase">{record.driver} • {record.odometer} km</p>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-6">
+                                                    <div className="hidden md:block text-right">
+                                                        <p className="font-bold text-slate-700 text-xs">{record.station}</p>
+                                                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">{record.fuelType}</p>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <p className="font-black text-emerald-600 text-sm">{formatCurrency(record.cost)}</p>
+                                                        <p className="text-[10px] font-bold text-slate-400">{formatNumber(record.liters)} L</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                        {pendingEmpenhoRecords.length === 0 && sessionEmpenhados.length === 0 && (
+                            <div className="text-center py-20">
+                                <FileSpreadsheet className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+                                <h3 className="text-lg font-black text-slate-900">Nenhum registro encontrado</h3>
+                                <p className="text-slate-500">Refine os filtros para buscar lançamentos.</p>
+                            </div>
+                        )}
+                        {pendingEmpenhoRecords.length === 0 && sessionEmpenhados.length > 0 && (
+                            <div className="bg-emerald-50 border border-emerald-200 rounded-[2rem] p-10 text-center animate-in zoom-in-95 duration-500">
+                                <div className="w-20 h-20 bg-emerald-500 text-white rounded-full flex items-center justify-center mx-auto mb-6 shadow-xl shadow-emerald-500/30">
+                                    <Check className="w-10 h-10" />
+                                </div>
+                                <h3 className="text-2xl font-black text-emerald-900 mb-2">Todos os Registros Anexados!</h3>
+                                <p className="text-emerald-700 mb-8 max-w-md mx-auto font-medium">Você processou todos os {sessionEmpenhados.length} lançamentos da fila dessa filtragem. O sistema gerará um único arquivo PDF organizando-os por Número de Empenho de forma consolidada e os submeterá ao Banco de Dados.</p>
+                                <button
+                                    onClick={handleFinalizarSessaoEmpenho}
+                                    disabled={isEmpenhando}
+                                    className={`px-10 py-5 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl shadow-xl shadow-emerald-600/20 transition-all uppercase tracking-widest ${isEmpenhando ? 'opacity-70 cursor-wait flex items-center justify-center gap-3 mx-auto' : 'active:scale-95'}`}
+                                >
+                                    {isEmpenhando ? <><Check className="w-5 h-5 animate-spin" /> Efetuando Inserção em Massa...</> : 'Gravar Dados e Gerar PDF Consolidado'}
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Empenho Modal */}
+                {showEmpenhoModal && (
+                    <div className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fade-in">
+                        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden relative">
+                            <div className="p-8">
+                                <div className="flex items-center justify-between mb-8">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-12 h-12 bg-indigo-100 rounded-2xl flex items-center justify-center text-indigo-600">
+                                            <ShieldAlert className="w-6 h-6" />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-xl font-black text-slate-900 leading-tight">Confirmar Empenho</h3>
+                                            <p className="text-xs font-bold text-indigo-600 uppercase tracking-wider">{selectedEmpenhoRecords.length} lançamentos</p>
+                                        </div>
+                                    </div>
+                                    <button 
+                                        onClick={() => setShowEmpenhoModal(false)}
+                                        className="w-8 h-8 bg-slate-100 hover:bg-slate-200 rounded-full flex items-center justify-center text-slate-500 transition-colors"
+                                    >
+                                        <X className="w-4 h-4" />
+                                    </button>
+                                </div>
+
+                                <div className="space-y-6">
+                                    <div>
+                                        <label className="block text-xs font-black uppercase tracking-wider text-slate-500 mb-2 ml-1">Projeto / Atividade</label>
+                                        <input
+                                            type="text"
+                                            value={empenhoForm.projetoAtividade}
+                                            onChange={e => setEmpenhoForm({ ...empenhoForm, projetoAtividade: e.target.value })}
+                                            placeholder="Ex: 2024 - Manutenção da Frota"
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 text-slate-900 font-bold focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-black uppercase tracking-wider text-slate-500 mb-2 ml-1">Número do Empenho</label>
+                                        <input
+                                            type="text"
+                                            value={empenhoForm.numeroEmpenho}
+                                            onChange={e => setEmpenhoForm({ ...empenhoForm, numeroEmpenho: e.target.value })}
+                                            placeholder="Ex: 10452/2024"
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3.5 text-slate-900 font-bold focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="mt-10 flex gap-3">
+                                    <button
+                                        onClick={() => setShowEmpenhoModal(false)}
+                                        className="flex-1 py-4 bg-slate-100 hover:bg-slate-200 text-slate-600 font-black rounded-2xl transition-all uppercase tracking-widest text-xs"
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        onClick={handleEmpenharSubmit}
+                                        disabled={!empenhoForm.projetoAtividade || !empenhoForm.numeroEmpenho}
+                                        className={`flex-[2] flex justify-center items-center gap-2 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl transition-all uppercase tracking-widest text-xs shadow-lg shadow-indigo-600/20 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed`}
+                                    >
+                                        Adicionar Lote à Sessão
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    };
+
+    const renderLancamentosView = () => {
+        if (showEmpenhoOverlay) {
+            return renderEmpenhoOverlay();
+        }
+
+        return (
+            <div className="space-y-6 animate-fade-in pb-20">
+            <div className="bg-white rounded-[1.5rem] sm:rounded-[2rem] shadow-sm border border-slate-200 p-4 sm:p-6 wide:p-8">
+                <div className="flex items-center gap-4 mb-6 pb-6 border-b border-slate-100">
+                    <div className="w-12 h-12 bg-blue-100 rounded-2xl flex items-center justify-center text-blue-600">
+                        <Filter className="w-6 h-6" />
+                    </div>
+                    <div>
+                        <h2 className="text-xl font-black text-slate-900 uppercase">Filtros de Lançamentos</h2>
+                        <p className="text-slate-500 text-sm font-medium">Extraia relatórios simplificados com os filtros abaixo</p>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+                    <div>
+                        <ModernDateInput
+                            label="Período Inicial"
+                            value={pendingFilters.startDate}
+                            onChange={(val) => setPendingFilters({ ...pendingFilters, startDate: val })}
+                        />
+                    </div>
+                    <div>
+                        <ModernDateInput
+                            label="Período Final"
+                            value={pendingFilters.endDate}
+                            onChange={(val) => setPendingFilters({ ...pendingFilters, endDate: val })}
+                        />
+                    </div>
+                    <div>
+                        <ModernSelect
+                            label="Posto"
+                            value={pendingFilters.station}
+                            onChange={(val) => setPendingFilters({ ...pendingFilters, station: val })}
+                            options={[
+                                { value: 'all', label: 'Todos os Postos' },
+                                ...gasStations.map(s => ({ value: s.name, label: s.name }))
+                            ]}
+                            icon={Building2}
+                            placeholder="Todos os Postos"
+                        />
+                    </div>
+
+
+                    <div className="sm:col-span-2 lg:col-span-1 flex items-end">
+                        <button
+                            onClick={() => {
+                                // For Lançamentos, clean other filters
+                                setAppliedFilters({ 
+                                    ...pendingFilters,
+                                    vehicle: 'all',
+                                    fuelType: 'all',
+                                    paymentStatus: 'all'
+                                });
+                            }}
+                            className="w-full md:w-auto px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white font-black uppercase tracking-widest text-xs rounded-xl shadow-lg shadow-blue-600/20 transition-all active:scale-95 flex items-center justify-center gap-2 h-[46px]"
+                        >
+                            <Filter className="w-4 h-4" />
+                            Aplicar
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div className="flex flex-col xl:flex-row gap-6 mt-6">
+                {/* Resumo Compacto with Integrated Report Modes */}
+                <div className="bg-slate-900 text-white rounded-3xl p-6 shadow-xl flex-[2] relative overflow-hidden flex flex-col justify-center">
+                    <div className="absolute right-0 top-0 opacity-10 p-4 pointer-events-none">
+                        <FileSpreadsheet className="w-48 h-48 -mr-10 -mt-10" />
+                    </div>
+                    <div className="relative z-10 flex flex-col md:flex-row md:items-end justify-between gap-6">
+                        <div>
+                            <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400 mb-4 flex items-center gap-2"><LayoutDashboard className="w-4 h-4" /> Resumo</h3>
+                            <div className="flex items-center gap-6">
+                                <div>
+                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Volume</p>
+                                    <p className="text-2xl font-black tracking-tighter">{formatNumber(reportData.grandTotalLiters)} L</p>
+                                </div>
+                                <div className="w-[1px] h-10 bg-white/10"></div>
+                                <div>
+                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Valor Total</p>
+                                    <p className="text-2xl font-black tracking-tighter text-emerald-400">{formatCurrency(reportData.grandTotalValue)}</p>
+                                </div>
+                            </div>
+                        </div>
+
+
+                    </div>
+                </div>
+
+                {/* Main Action Controls */}
+                <div className="flex flex-row xl:flex-col gap-3 flex-1 xl:max-w-xs">
+                    <button
+                        onClick={() => {
+                            if (reportMode === 'complete') setReportMode('simplified');
+                            handleOpenReport();
+                        }}
+                        disabled={isPreparingReport}
+                        className={`flex-1 flex items-center justify-center gap-3 px-6 py-4 bg-blue-600 hover:bg-blue-700 rounded-3xl text-sm font-black uppercase tracking-widest transition-all shadow-xl shadow-blue-600/20 text-white ${isPreparingReport ? 'opacity-70 cursor-wait' : 'active:scale-95'}`}
+                    >
+                        <Download className="w-5 h-5" /> Exportar
+                    </button>
+                    <button
+                        onClick={() => {
+                            setSelectedEmpenhoRecords([]);
+                            setShowEmpenhoOverlay(true);
+                        }}
+                        className="flex-1 flex items-center justify-center gap-3 px-6 py-4 bg-indigo-600 hover:bg-indigo-700 rounded-3xl text-sm font-black uppercase tracking-widest transition-all shadow-xl shadow-indigo-600/20 text-white active:scale-95"
+                    >
+                        <CheckSquare className="w-5 h-5" /> Inserir Empenho
+                    </button>
+                </div>
+            </div>
+            
+            {savedEmpenhoReports.length > 0 && (
+                <div className="mt-12 bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden">
+                    <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600">
+                                <History className="w-6 h-6" />
+                            </div>
+                            <div>
+                                <h3 className="font-black text-slate-900 text-lg uppercase">Relatórios de Empenho Salvos</h3>
+                                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">{savedEmpenhoReports.length} relatórios gerados</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {savedEmpenhoReports.map(file => {
+                            const date = new Date(file.created_at || '').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                            return (
+                                <div key={file.id} className="bg-slate-50 border border-slate-100 rounded-[1.5rem] p-5 flex items-start gap-4 transition-all hover:bg-slate-100/50 hover:border-slate-200">
+                                    <div className="w-10 h-10 bg-white rounded-xl shadow-sm flex items-center justify-center text-red-500 shrink-0 border border-slate-100">
+                                        <FileText className="w-5 h-5" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <h4 className="font-bold text-slate-900 text-sm truncate">{file.name}</h4>
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-1 mb-3">Gerado em: {date}</p>
+                                        <div className="flex gap-2">
+                                            <a
+                                                href={`${supabase.storage.from('attachments').getPublicUrl(`empenho_reports/${file.name}`).data.publicUrl}`}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase tracking-widest text-[9px] rounded-lg transition-colors"
+                                            >
+                                                <Download className="w-3 h-3" />
+                                                Baixar
+                                            </a>
+                                            <button
+                                                onClick={async () => {
+                                                    if (window.confirm('Tem certeza que deseja excluir este relatório?')) {
+                                                        const { error } = await supabase.storage.from('attachments').remove([`empenho_reports/${file.name}`]);
+                                                        if (!error) loadSavedEmpenhoReports();
+                                                    }
+                                                }}
+                                                className="w-8 h-8 flex items-center justify-center bg-white border border-slate-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200 text-slate-400 rounded-lg transition-colors"
+                                            >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
+        </div>
+        );
+    };
+
     return (
-        <div className="flex-1 h-full bg-slate-50 p-4 wide:p-6 overflow-auto custom-scrollbar">
+        <div className="flex-1 h-full bg-slate-50 p-4 wide:p-6 overflow-auto custom-scrollbar relative">
+            {showToast && (
+                <div className="fixed bottom-8 right-8 bg-emerald-600 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 animate-fade-in z-[100]">
+                    <Save className="w-5 h-5" />
+                    <span className="font-bold">{toastMessage}</span>
+                </div>
+            )}
             <div className="w-full space-y-8 animate-fade-in">
                 <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6 mb-8">
                     <div className="flex items-center gap-4">
@@ -2602,6 +3144,16 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
                                 <FileText className="w-3.5 h-3.5" />
                                 Relatórios
                             </button>
+                            <button
+                                onClick={() => setActiveTab('lancamentos')}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all duration-300 ${activeTab === 'lancamentos'
+                                    ? 'bg-white text-blue-600 shadow-sm ring-1 ring-black/5'
+                                    : 'text-slate-500 hover:text-slate-700'
+                                    }`}
+                            >
+                                <FileSpreadsheet className="w-3.5 h-3.5" />
+                                Lançamentos
+                            </button>
                             {user?.role === 'admin' && (
                                 <button
                                     onClick={() => setActiveTab('config')}
@@ -2623,6 +3175,7 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
                     {activeTab === 'vehicle' && renderVehicleView()}
                     {activeTab === 'sector' && renderSectorView()}
                     {activeTab === 'reports' && renderReportsView()}
+                    {activeTab === 'lancamentos' && renderLancamentosView()}
                     {activeTab === 'config' && user?.role === 'admin' && <ConfigPanel fuelTypes={fuelTypes} gasStations={gasStations as any} />}
                 </div>
             </div>

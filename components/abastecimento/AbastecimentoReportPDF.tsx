@@ -43,7 +43,7 @@ interface AbastecimentoReportPDFProps {
     };
     state: AppState;
     onClose: () => void;
-    mode: 'simplified' | 'complete' | 'listagem';
+    mode: 'simplified' | 'complete' | 'listagem' | 'empenhado';
 }
 
 export const AbastecimentoReportPDF: React.FC<AbastecimentoReportPDFProps> = ({
@@ -189,7 +189,7 @@ export const AbastecimentoReportPDF: React.FC<AbastecimentoReportPDFProps> = ({
         plateSummaryItems.push({ type: 'item', ...item });
     });
 
-    const totalPlatePages = mode === 'listagem' ? 0 : (Math.ceil(plateSummaryItems.length / PLATE_ITEMS_PER_PAGE) || 1);
+    const totalPlatePages = (mode === 'listagem' || mode === 'empenhado') ? 0 : (Math.ceil(plateSummaryItems.length / PLATE_ITEMS_PER_PAGE) || 1);
     const totalDetailPages = mode === 'complete' ? (Math.ceil(detailedItems.length / ITEMS_PER_PAGE) || 1) : 0;
 
     // 3. Prepare Consolidated Items
@@ -271,7 +271,7 @@ export const AbastecimentoReportPDF: React.FC<AbastecimentoReportPDFProps> = ({
         });
     });
 
-    const totalListagemPages = mode === 'listagem' ? (listagemPages.length || 1) : 0;
+    const totalListagemPages = (mode === 'listagem' || mode === 'empenhado') ? (listagemPages.length || 1) : 0;
     const totalSectorBreakdownPages = 1;
 
     const globalTotalPages = 1 + totalSectorBreakdownPages + totalPlatePages + totalDetailPages + totalListagemPages + totalConsolidatedPages;
@@ -516,16 +516,6 @@ export const AbastecimentoReportPDF: React.FC<AbastecimentoReportPDFProps> = ({
                         </div>
 
                         <table className="w-full border-collapse">
-                            {/* Only show main THEAD if the first item is NOT a header (to avoid double header at top), 
-                                OR always show it for page structure? 
-                                User asked for header "A cada nova lista". 
-                                If we put it inline, the top of the page might need one too if the split happened in the middle of a group.
-                                However, if the page starts with a 'header' item, we might have two headers if we keep the main one.
-                                Let's strictly follow: Main page header is good for page context. Inline header is for "Nova lista".
-                                If page starts with 'header' item, we can conditionally hide the main THEAD or just let it be double (standard table usually has main header).
-                                Actually, usually if you break by group, you might want the group header.
-                                Let's render the headers as requested inline.
-                            */}
                             <thead className="bg-slate-50 border-y border-slate-200">
                                 <tr className="text-[7pt] font-black uppercase tracking-widest text-slate-500">
                                     <th className="px-3 py-2 text-left w-[12%]">Data</th>
@@ -546,7 +536,6 @@ export const AbastecimentoReportPDF: React.FC<AbastecimentoReportPDFProps> = ({
                                         );
                                     }
                                     if (item.type === 'header') {
-                                        // If header is the first item on the page, skip it as the main THEAD already covers it
                                         if (idx === 0) return null;
                                         return (
                                             <tr key={`hdr-${idx}`} className="bg-slate-200/50 border-y border-slate-300">
@@ -664,7 +653,6 @@ export const AbastecimentoReportPDF: React.FC<AbastecimentoReportPDFProps> = ({
                                         return parts.length > 1 ? `${parts[0]} ${parts[parts.length - 1]}` : parts[0];
                                     };
 
-                                    // Regular record
                                     return (
                                         <tr key={idx} className="text-[7pt] font-medium text-slate-700">
                                             <td className="px-2 py-2 font-mono text-[8.5px] text-center whitespace-nowrap">{item.invoiceNumber || '-'}</td>
@@ -790,9 +778,9 @@ export const AbastecimentoReportPDF: React.FC<AbastecimentoReportPDFProps> = ({
                 <div id="report-pdf-content" className={`relative flex flex-col items-center py-12 ${isGenerating ? 'py-0 w-min origin-top-left items-start' : 'w-full max-w-5xl'}`}>
                     {renderSummaryPage()}
                     {renderSectorBreakdownPage()}
-                    {mode !== 'listagem' && renderPlateSummaryPages()}
+                    {mode !== 'listagem' && mode !== 'empenhado' && renderPlateSummaryPages()}
                     {mode === 'complete' && renderRecordPages()}
-                    {mode === 'listagem' && renderListagemPages()}
+                    {(mode === 'listagem' || mode === 'empenhado') && renderListagemPages()}
                     {mode === 'complete' && renderConsolidatedPages()}
                 </div>
             </div>

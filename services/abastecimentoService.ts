@@ -26,13 +26,15 @@ export interface AbastecimentoRecord {
     sectorId?: string;
     payment_status?: string;
     unit_price?: number;
+    projeto_atividade?: string;
+    numero_empenho?: string;
     created_at?: string;
 }
 
 export interface AbastecimentoReportHistory {
     id: string;
     created_at: string;
-    report_type: 'simplified' | 'complete' | 'listagem';
+    report_type: 'simplified' | 'complete' | 'listagem' | 'empenhado';
     start_date?: string;
     end_date?: string;
     station?: string;
@@ -211,6 +213,8 @@ export const AbastecimentoService = {
                 sectorId: item.sector_id,
                 payment_status: item.payment_status,
                 unit_price: item.unit_price,
+                projeto_atividade: item.projeto_atividade,
+                numero_empenho: item.numero_empenho,
                 created_at: item.created_at
             })) || [];
 
@@ -394,7 +398,9 @@ export const AbastecimentoService = {
                 user_name: record.userName,
                 sector_id: record.sectorId,
                 payment_status: record.payment_status || 'Em Aberto',
-                unit_price: record.unit_price
+                unit_price: record.unit_price,
+                projeto_atividade: record.projeto_atividade,
+                numero_empenho: record.numero_empenho
             };
 
             const { error } = await supabase
@@ -406,6 +412,25 @@ export const AbastecimentoService = {
             const appError = error instanceof Error ? error : handleSupabaseError(error);
             console.error('[AbastecimentoService] saveAbastecimento Error:', appError.message);
             throw appError;
+        }
+    },
+
+    updateAbastecimentoEmpenho: async (recordIds: string[], projetoAtividade: string, numeroEmpenho: string): Promise<void> => {
+        try {
+            if (!recordIds || recordIds.length === 0) return;
+            const { error } = await supabase
+                .from('abastecimentos')
+                .update({ 
+                    payment_status: 'Empenhado',
+                    projeto_atividade: projetoAtividade,
+                    numero_empenho: numeroEmpenho
+                })
+                .in('id', recordIds);
+
+            if (error) throw error;
+        } catch (error) {
+            console.error('[AbastecimentoService] updateAbastecimentoEmpenho Error:', error);
+            throw error;
         }
     },
 
