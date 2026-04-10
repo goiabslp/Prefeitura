@@ -684,19 +684,33 @@ const App: React.FC = () => {
       )
       .subscribe();
 
-    // System Update Channel (NEW)
-    const settingsChannel = supabase.channel('public:organization_settings')
+    // System Update Channel (NEW) - Enhanced with Broadcast for true Realtime
+    const settingsChannel = supabase.channel('global-updates')
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'organization_settings', filter: 'id=eq.global_config' },
-        async (payload) => {
+        (payload) => {
+          console.log("Realtime: DB Update received", payload);
           if (payload.new && 'system_update_target' in payload.new) {
-            setSystemUpdateTarget(payload.new.system_update_target);
+            setSystemUpdateTarget(payload.new.system_update_target as number);
             setIsUpdateModalDismissed(false);
           }
         }
       )
-      .subscribe();
+      .on(
+        'broadcast',
+        { event: 'system_update' },
+        (payload) => {
+          console.log("Realtime: Broadcast received", payload);
+          if (payload.payload?.target) {
+            setSystemUpdateTarget(payload.payload.target);
+            setIsUpdateModalDismissed(false);
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log("Channel global-updates status:", status);
+      });
 
     return () => {
       supabase.removeChannel(vehicleChannel);

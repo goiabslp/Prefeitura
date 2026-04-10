@@ -1,6 +1,6 @@
-import React from 'react';
 import { RefreshCw, Play, ArrowLeft } from 'lucide-react';
 import { updateSystemUpdateTarget } from '../services/settingsService';
+import { supabase } from '../services/supabaseClient';
 
 interface SystemUpdateScreenProps {
   onBack: () => void;
@@ -42,6 +42,20 @@ export const SystemUpdateScreen: React.FC<SystemUpdateScreenProps> = ({ onBack }
                 if (!window.confirm("ATENÇÃO: Isso afetará todos os usuários ativos. Deseja iniciar o processo de atualização agora?")) return;
                 
                 const targetEpoch = Date.now() + 60000;
+                
+                // 1. BROADCAST INSTANTLY for real-time (no DB latency)
+                const channel = supabase.channel('global-updates');
+                await channel.subscribe(async (status) => {
+                  if (status === 'SUBSCRIBED') {
+                    await channel.send({
+                      type: 'broadcast',
+                      event: 'system_update',
+                      payload: { target: targetEpoch }
+                    });
+                  }
+                });
+
+                // 2. Persist in DB for new logins/refreshers
                 const success = await updateSystemUpdateTarget(targetEpoch);
                 
                 if (success) {
