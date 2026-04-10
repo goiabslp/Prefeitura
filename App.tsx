@@ -271,6 +271,7 @@ const App: React.FC = () => {
   const [lastRefresh, setLastRefresh] = useState(0);
   const [systemUpdateTarget, setSystemUpdateTarget] = useState<number | null>(null);
   const [systemUpdateCountdown, setSystemUpdateCountdown] = useState<number | null>(null);
+  const [isUpdateModalDismissed, setIsUpdateModalDismissed] = useState(false);
   const [actionProcessing, setActionProcessing] = useState<{
     isOpen: boolean;
     stage: ProcessingStage;
@@ -325,6 +326,7 @@ const App: React.FC = () => {
         const { data } = await supabase.from('organization_settings').select('system_update_target').eq('id', 'global_config').single();
         if (data?.system_update_target) {
             setSystemUpdateTarget(data.system_update_target);
+            setIsUpdateModalDismissed(false);
         }
       }
     };
@@ -690,6 +692,7 @@ const App: React.FC = () => {
         async (payload) => {
           if (payload.new && 'system_update_target' in payload.new) {
             setSystemUpdateTarget(payload.new.system_update_target);
+            setIsUpdateModalDismissed(false);
           }
         }
       )
@@ -4452,37 +4455,37 @@ const App: React.FC = () => {
         customLabels={actionProcessing.customLabels}
       />
 
-      {/* GLOBAL SYSTEM UPDATE MODAL (TRIGGERED BY ADMIN) */}
-      {systemUpdateCountdown !== null && systemUpdateCountdown > 0 && createPortal(
-        <div className="fixed inset-0 z-[1000] bg-slate-900/40 backdrop-blur-xl flex items-center justify-center p-6 animate-fade-in">
-          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-100 p-8 text-center transform scale-in-center overflow-hidden relative">
+      {/* GLOBAL SYSTEM UPDATE NOTIFICATION (TRIGERRED BY ADMIN) */}
+      {systemUpdateCountdown !== null && systemUpdateCountdown > 0 && !isUpdateModalDismissed && createPortal(
+        <div className="fixed inset-0 z-[1000] bg-slate-900/10 backdrop-blur-[2px] flex items-center justify-center p-6 animate-fade-in pointer-events-none">
+          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-100 p-10 text-center transform scale-in-center overflow-hidden relative pointer-events-auto shadow-amber-500/10 active:scale-95 transition-all">
             {/* Background Accent */}
-            <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-amber-400 via-orange-500 to-amber-600"></div>
+            <div className="absolute top-0 left-0 right-0 h-3 bg-gradient-to-r from-amber-400 via-orange-500 to-amber-600"></div>
             
-            <div className="w-20 h-20 bg-amber-50 rounded-2xl flex items-center justify-center mx-auto mb-6 text-amber-500 ring-4 ring-amber-500/5">
+            <button 
+                onClick={() => setIsUpdateModalDismissed(true)}
+                className="absolute top-4 right-4 p-2 text-slate-300 hover:text-slate-500 hover:bg-slate-50 rounded-full transition-all"
+                title="Fechar Aviso"
+            >
+                <X className="w-6 h-6" />
+            </button>
+
+            <div className="w-20 h-20 bg-amber-50 rounded-2xl flex items-center justify-center mx-auto mb-8 text-amber-500 ring-8 ring-amber-500/5">
                 <Settings className="w-10 h-10 animate-spin-slow" />
             </div>
 
-            <h2 className="text-2xl font-black text-slate-900 mb-3 tracking-tight">
-                ⚠️ Atualização em andamento
+            <h2 className="text-2xl font-black text-slate-900 mb-4 tracking-tighter uppercase leading-tight">
+                ⚠️ O sistema será atualizado em {systemUpdateCountdown}s
             </h2>
             
-            <p className="text-slate-500 font-medium leading-relaxed mb-8">
-                Um administrador iniciou uma atualização. Ela será aplicada automaticamente ao retornar para a <b>Página Inicial</b> ou ao atualizar a página.
+            <p className="text-sm text-slate-500 font-medium leading-relaxed mb-10 px-4">
+                Um administrador iniciou uma atualização crítica. Você pode fechar este aviso para terminar o que está fazendo, mas salve seu trabalho.
             </p>
 
-            <div className="flex flex-col items-center gap-2">
-                <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tempo Restante</div>
-                <div className="text-5xl font-black text-slate-900 tabular-nums tracking-tighter">
-                    {systemUpdateCountdown}
-                    <span className="text-2xl ml-1 text-slate-400">s</span>
-                </div>
-            </div>
-
-            <div className="mt-8 pt-8 border-t border-slate-50">
-               <div className="flex items-center justify-center gap-2 text-xs font-bold text-amber-600 bg-amber-50 py-3 rounded-xl px-4">
-                  <span className="w-2 h-2 bg-amber-500 rounded-full animate-ping"></span>
-                  Sessão será recarregada em breve
+            <div className="mt-8 pt-8 border-t border-slate-50 flex items-center justify-center">
+               <div className="flex items-center gap-3 text-xs font-black text-amber-600 bg-amber-50 py-4 rounded-2xl px-8 uppercase tracking-widest shadow-inner">
+                  <span className="w-2.5 h-2.5 bg-amber-500 rounded-full animate-ping"></span>
+                  Confira o tempo no topo da tela
                </div>
             </div>
           </div>

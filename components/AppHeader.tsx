@@ -257,13 +257,13 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
           </div>
 
           {systemUpdateCountdown !== null && systemUpdateCountdown > 0 && (
-            <div className="flex items-center gap-3 px-4 py-2 bg-amber-50 border border-amber-200 rounded-xl animate-pulse ring-4 ring-amber-500/10">
-              <div className="flex items-center justify-center w-8 h-8 bg-amber-500 rounded-lg shadow-sm">
+            <div className="flex items-center gap-2.5 px-3.5 py-1.5 bg-slate-900 border border-slate-800 rounded-xl animate-pulse-glow shadow-lg shadow-amber-500/20">
+              <div className="flex items-center justify-center w-7 h-7 bg-amber-500 rounded-lg shadow-inner">
                 <Settings className="w-4 h-4 text-white animate-spin-slow" />
               </div>
               <div className="flex flex-col">
-                <span className="text-[10px] font-black text-amber-600 uppercase tracking-widest leading-none mb-0.5">Atualização em</span>
-                <span className="text-sm font-black text-amber-900 tabular-nums leading-none">{systemUpdateCountdown}s</span>
+                <span className="text-[9px] font-black text-amber-500 uppercase tracking-widest leading-none mb-0.5">SISTEMA ATUALIZA EM</span>
+                <span className="text-sm font-black text-white tabular-nums leading-none">{systemUpdateCountdown}<span className="text-[10px] ml-0.5 text-slate-400">seg</span></span>
               </div>
             </div>
           )}
