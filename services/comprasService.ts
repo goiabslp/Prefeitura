@@ -1,6 +1,5 @@
-
 import { supabase } from './supabaseClient';
-import { Order, InventoryItem, InventoryCategory, PurchaseAccount } from '../types';
+import { Order, InventoryItem, InventoryCategory, PurchaseAccount, InventoryImport } from '../types';
 import { notificationService } from './notificationService';
 
 import { handleSupabaseError } from '../utils/errorUtils';
@@ -475,6 +474,42 @@ export const updateInventoryItem = async (id: string, updates: Partial<Inventory
 export const deleteInventoryItem = async (id: string): Promise<void> => {
     const { error } = await supabase
         .from('procurement_inventory')
+        .delete()
+        .eq('id', id);
+    if (error) throw error;
+};
+
+// --- IMPORT TRACKING ---
+export const createInventoryImport = async (importData: Omit<InventoryImport, 'id' | 'imported_at'>): Promise<InventoryImport> => {
+    const { data, error } = await supabase
+        .from('procurement_inventory_imports')
+        .insert(importData)
+        .select()
+        .single();
+    if (error) throw error;
+    return data as InventoryImport;
+};
+
+export const updateInventoryImport = async (id: string, updates: Partial<InventoryImport>): Promise<void> => {
+    const { error } = await supabase
+        .from('procurement_inventory_imports')
+        .update(updates)
+        .eq('id', id);
+    if (error) throw error;
+};
+
+export const getInventoryImports = async (): Promise<InventoryImport[]> => {
+    const { data, error } = await supabase
+        .from('procurement_inventory_imports')
+        .select('*')
+        .order('imported_at', { ascending: false });
+    if (error) throw error;
+    return data as InventoryImport[];
+};
+
+export const deleteInventoryImport = async (id: string): Promise<void> => {
+    const { error } = await supabase
+        .from('procurement_inventory_imports')
         .delete()
         .eq('id', id);
     if (error) throw error;

@@ -483,6 +483,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             {/* EXCEL IMPORT MODAL */}
             {isExcelModalOpen && (
                 <ExcelImportModal
+                    userName={userName}
                     onClose={() => setIsExcelModalOpen(false)}
                 />
             )}

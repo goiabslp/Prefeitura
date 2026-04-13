@@ -88,6 +88,17 @@ export interface InventoryItem {
   original_order_protocol?: string;
   original_item_id?: string;
   created_at?: string;
+  import_id?: string;
+}
+
+export interface InventoryImport {
+  id: string;
+  filename: string;
+  imported_by: string;
+  imported_at: string;
+  items_added: number;
+  items_updated: number;
+  items_ignored: number;
 }
 
 export interface ContentData {
