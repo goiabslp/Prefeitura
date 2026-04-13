@@ -71,6 +71,7 @@ export interface PurchaseItem {
   originalProtocol?: string;
   category?: InventoryCategory;
   inventory_item_id?: string; // Add explicit reference to origin inventory item
+  fornecedor?: string;
 }
 
 export interface InventoryItem {
@@ -89,6 +90,7 @@ export interface InventoryItem {
   original_item_id?: string;
   created_at?: string;
   import_id?: string;
+  fornecedor?: string;
 }
 
 export interface InventoryImport {

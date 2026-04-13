@@ -8,9 +8,10 @@ interface ItemSelectionModalProps {
     onClose: () => void;
     onConfirm: (items: PurchaseItem[]) => void;
     onAddManual: () => void;
+    userRole?: string;
 }
 
-export const ItemSelectionModal: React.FC<ItemSelectionModalProps> = ({ onClose, onConfirm, onAddManual }) => {
+export const ItemSelectionModal: React.FC<ItemSelectionModalProps> = ({ onClose, onConfirm, onAddManual, userRole }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [items, setItems] = useState<InventoryItem[]>([]);
     const [loading, setLoading] = useState(true);
@@ -75,7 +76,8 @@ export const ItemSelectionModal: React.FC<ItemSelectionModalProps> = ({ onClose,
                 code: inv.code,
                 unit_value: inv.unit_value,
                 category: inv.category,
-                inventory_item_id: inv.id // Traced back to source for reservation logic
+                inventory_item_id: inv.id, // Traced back to source for reservation logic
+                fornecedor: inv.fornecedor
             };
         });
         onConfirm(purchaseItems);
@@ -170,9 +172,14 @@ export const ItemSelectionModal: React.FC<ItemSelectionModalProps> = ({ onClose,
                                                 <span className="text-[10px] font-black px-2 py-0.5 rounded bg-slate-100 text-slate-500 uppercase tracking-widest border border-slate-200">
                                                     Cód: {item.code || 'N/A'}
                                                 </span>
-                                                {item.unit_value !== undefined && item.unit_value > 0 && (
+                                                {item.unit_value !== undefined && item.unit_value > 0 && (userRole === 'compras' || userRole === 'admin') && (
                                                     <span className="text-[10px] font-bold text-slate-500 bg-white border border-slate-200 px-2 py-0.5 rounded">
                                                         R$ {item.unit_value.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+                                                    </span>
+                                                )}
+                                                {item.fornecedor && (userRole === 'compras' || userRole === 'admin') && (
+                                                    <span className="text-[10px] font-bold text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded truncate max-w-[150px]">
+                                                        {item.fornecedor}
                                                     </span>
                                                 )}
                                             </div>

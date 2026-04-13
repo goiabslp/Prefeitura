@@ -686,6 +686,7 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
           {isItemSelectionOpen && (
               <ItemSelectionModal
                   onClose={() => setIsItemSelectionOpen(false)}
+                  userRole={currentUser.role}
                   onAddManual={() => {
                       handleAddItem();
                       setIsItemSelectionOpen(false);

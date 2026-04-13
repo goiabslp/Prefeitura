@@ -81,7 +81,8 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ userName, on
             const unitIdx = headers.indexOf('unidade');
             const qtyIdx = headers.indexOf('quantidade');
             const descIdx = headers.indexOf('descricao');
-            const valIdx = headers.includes('valor') ? headers.indexOf('valor') : -1;
+            const valIdx = headers.includes('valor unitario') ? headers.indexOf('valor unitario') : (headers.includes('valor') ? headers.indexOf('valor') : -1);
+            const fornIdx = headers.indexOf('fornecedor');
 
             const rowsToImport = firstSheetData.slice(1).filter((row: any) => row[descIdx] && row[qtyIdx] !== undefined);
 
@@ -113,10 +114,15 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ userName, on
                 const incUnit = String(row[unitIdx] || 'Unidade').trim();
                 const incQty = Number(row[qtyIdx]) || 0;
                 const incDesc = String(row[descIdx] || '').trim();
-                const incValRaw = valIdx !== -1 ? row[valIdx] : 0;
+                const incValRaw = valIdx !== -1 && row[valIdx] !== undefined && row[valIdx] !== '' ? row[valIdx] : null;
+                const incFornRaw = fornIdx !== -1 ? row[fornIdx] : null;
+                const incForn = incFornRaw ? String(incFornRaw).trim() : null;
                 
-                let incVal = typeof incValRaw === 'number' ? incValRaw : parseFloat(String(incValRaw).replace(/[^0-9,-]+/g,"").replace(',', '.'));
-                if (isNaN(incVal)) incVal = 0;
+                let incVal: number | null = null;
+                if (incValRaw !== null) {
+                    incVal = typeof incValRaw === 'number' ? incValRaw : parseFloat(String(incValRaw).replace(/[^0-9,-]+/g,"").replace(',', '.'));
+                    if (isNaN(incVal)) incVal = 0;
+                }
 
                 let existingItem = currentInventory.find(item => 
                     (incCode && item.code === incCode) || 
@@ -126,22 +132,28 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ userName, on
                 if (existingItem) {
                     const currentVal = existingItem.unit_value || 0;
                     
-                    if (incVal < currentVal) {
+                    // Condição especial: valores novos em branco usam o valor existente
+                    const finalVal = incVal !== null ? incVal : currentVal;
+                    const finalForn = incForn !== null ? incForn : existingItem.fornecedor;
+                    
+                    if (finalVal < currentVal) {
                         await updateInventoryItem(existingItem.id, {
                             code: incCode || existingItem.code,
                             name: incDesc,
                             unit: incUnit,
                             quantity: incQty,
-                            unit_value: incVal,
+                            unit_value: finalVal,
+                            fornecedor: finalForn,
                             category: existingItem.category
                         });
                         updatedCount++;
-                    } else if (incVal > currentVal) {
+                    } else if (finalVal > currentVal) {
                         ignoredCount++;
-                    } else if (incVal === currentVal) {
+                    } else if (finalVal === currentVal) {
                         const newQty = existingItem.quantity + incQty;
                         await updateInventoryItem(existingItem.id, {
-                            quantity: newQty
+                            quantity: newQty,
+                            fornecedor: finalForn
                         });
                         updatedCount++;
                     }
@@ -151,7 +163,8 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ userName, on
                         name: incDesc,
                         unit: incUnit,
                         quantity: incQty,
-                        unit_value: incVal,
+                        unit_value: incVal !== null ? incVal : 0,
+                        fornecedor: incForn !== null ? incForn : '',
                         category: 'Material de Uso',
                         is_tendered: true,
                         import_id: newImportRecord.id // Links newly created items to the import record
@@ -265,7 +278,7 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({ userName, on
                                 </div>
                                 <h3 className="text-base font-bold text-slate-700 mb-2">Clique ou arraste a planilha base</h3>
                                 <p className="text-xs text-slate-400 max-w-[250px] leading-relaxed">
-                                    Formatos aceitos: .xlsx, .csv. Certifique-se de incluir as colunas: <strong className="text-slate-600">Código, Unidade, Quantidade, Descrição e Valor</strong>.
+                                    Formatos aceitos: .xlsx, .csv. Certifique-se de incluir as colunas: <strong className="text-slate-600">Código, Unidade, Quantidade, Descrição, Valor Unitario e Fornecedor</strong>.
                                 </p>
                                 <input 
                                     type="file" 
