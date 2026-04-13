@@ -51,7 +51,7 @@ export const OrderDetailsScreen: React.FC<OrderDetailsScreenProps> = ({
     const [accounts, setAccounts] = useState<PurchaseAccount[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [isCreatingAccount, setIsCreatingAccount] = useState(false);
-    const [newAccountData, setNewAccountData] = useState({ account_number: '', description: '', sector: '' });
+    const [newAccountData, setNewAccountData] = useState({ account_number: '', description: '', sector: '', agency: '' });
 
     const content = order.documentSnapshot?.content;
 
@@ -174,6 +174,7 @@ export const OrderDetailsScreen: React.FC<OrderDetailsScreenProps> = ({
         try {
             const created = await purchaseAccountService.requestAccount({
                 account_number: newAccountData.account_number,
+                agency: newAccountData.agency || '0001',
                 description: newAccountData.description,
                 sector: newAccountData.sector || content?.requesterSector || 'Geral'
             });
@@ -183,7 +184,7 @@ export const OrderDetailsScreen: React.FC<OrderDetailsScreenProps> = ({
                 await purchaseAccountService.approveAccount(created.id);
                 await handleSelectAccount({ ...created, status: 'Ativa' });
                 setIsCreatingAccount(false);
-                setNewAccountData({ account_number: '', description: '', sector: '' });
+                setNewAccountData({ account_number: '', description: '', sector: '', agency: '' });
             }
         } catch (error) {
             console.error("Error creating account:", error);
@@ -660,7 +661,10 @@ export const OrderDetailsScreen: React.FC<OrderDetailsScreenProps> = ({
     );
 
     // Helper to render Items Tab Content
-    const renderItems = () => (
+    const renderItems = () => {
+        const canViewFullDetails = ['admin', 'compras', 'licitacao'].includes(currentUser?.role as string) || !!currentUser?.permissions?.includes('parent_compras') || !!currentUser?.permissions?.includes('parent_licitacao');
+
+        return (
         <div className="p-8 w-full animate-fade-in">
             <div className="max-w-5xl mx-auto space-y-4">
                 <div className="flex items-center justify-between mb-4 px-4">
@@ -696,8 +700,13 @@ export const OrderDetailsScreen: React.FC<OrderDetailsScreenProps> = ({
                                             </div>
                                         </td>
                                         <td className="px-6 py-5">
-                                            <div className="flex flex-col">
+                                            <div className="flex flex-col gap-1">
                                                 <span className="font-bold text-slate-800 text-sm group-hover:text-indigo-600 transition-colors">{item.name}</span>
+                                                {canViewFullDetails && item.code && (
+                                                    <span className="w-fit px-2 py-0.5 bg-indigo-50 border border-indigo-100 rounded text-[9px] font-black text-indigo-600 uppercase tracking-tight shadow-sm">
+                                                        Cód: {item.code}
+                                                    </span>
+                                                )}
                                                 {item.details && <span className="text-xs text-slate-400 font-medium">{item.details}</span>}
                                             </div>
                                         </td>
@@ -734,7 +743,8 @@ export const OrderDetailsScreen: React.FC<OrderDetailsScreenProps> = ({
                 </div>
             </div>
         </div>
-    );
+        );
+    };
 
     // Helper to render Justification Tab Content
     const renderJustification = () => (

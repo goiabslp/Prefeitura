@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { FilePlus, Package, History, FileText, ArrowRight, ArrowLeft, ShoppingCart, Gavel, Wallet, Inbox, CalendarRange, FileSearch, Droplet, Fuel, BarChart3, TrendingUp, LogOut, Sprout, HardHat, Activity, Car, ChevronDown, CalendarDays, Users, LayoutGrid, Megaphone } from 'lucide-react';
+import { FilePlus, Package, History, FileText, ArrowRight, ArrowLeft, ShoppingCart, Gavel, Wallet, Inbox, CalendarRange, FileSearch, Droplet, Fuel, BarChart3, TrendingUp, LogOut, Sprout, HardHat, Activity, Car, ChevronDown, CalendarDays, Users, LayoutGrid, Megaphone, Database } from 'lucide-react';
 import { UserRole, UIConfig, AppPermission, BlockType } from '../types';
 import { TasksDashboard } from './dashboard/TasksDashboard';
 import { QuickTaskCreation } from './dashboard/QuickTaskCreation';
 import { UpcomingEventsNotification } from './calendario/UpcomingEventsNotification';
 import { useSystemSettings } from '../contexts/SystemSettingsContext';
 import { Order, User } from '../types';
+import { ExcelImportModal } from './compras/ExcelImportModal';
 
 interface HomeScreenProps {
     onNewOrder: (block?: BlockType, forceReset?: boolean) => void;
@@ -76,6 +77,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     // Permission Checks
     const { moduleStatus, mobileModuleStatus } = useSystemSettings();
     const [isMobileViewport, setIsMobileViewport] = useState(window.innerWidth < 700);
+    const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
 
     useEffect(() => {
         const handleResize = () => setIsMobileViewport(window.innerWidth < 700);
@@ -109,7 +111,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     const canAccessMarketing = (permissions.includes('parent_marketing') || userRole === 'admin') && isModuleActive('parent_marketing');
     const firstName = userName.split(' ')[0];
 
-    // --- Helper Functions for Card Styling ---
     // --- Helper Functions for Card Styling ---
     const getCardClass = (color: string, hideOnMobile: boolean = false) => {
         // Dynamic classes for hover states
@@ -206,7 +207,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         }
     };
 
-    // --- Active Block Rendering Logic (Unchanged from original essentially, but restyled container) ---
+    // --- Active Block Rendering Logic ---
     const renderActiveBlock = () => {
         const getBlockConfig = () => {
             switch (activeBlock) {
@@ -224,8 +225,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         };
 
         const config = getBlockConfig();
-
-        const pendingComprasCount = 0;
 
         // Define Action Buttons for Active Block
         const actionButtons: Array<any> = [];
@@ -245,7 +244,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 desc: `Consulte registros de ${activeBlock?.toUpperCase()}`,
                 icon: History,
                 onClick: onTrackOrder,
-                color: 'purple' // Use distinct color for history? Or theme color? Let's use theme color but slightly diff shading if needed, or stick to purple for history globally. Stick to purple for consistency.
+                color: 'purple'
             });
         }
 
@@ -272,7 +271,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
         // Specific Extra Buttons
         if (activeBlock === 'compras') {
-            actionButtons.push({ label: 'Itens', desc: 'Catálogo e Inventário', icon: Package, onClick: onManageInventory, color: 'amber' });
+            if (isModuleActive('parent_compras_itens') && permissions.includes('parent_compras_itens')) {
+                actionButtons.push({ label: 'Itens', desc: 'Catálogo e Inventário', icon: Package, onClick: onManageInventory, color: 'amber' });
+            }
+            if (isModuleActive('parent_compras_dados') && permissions.includes('parent_compras_dados')) {
+                actionButtons.push({ label: 'Dados', desc: 'Importar Planilha de Estoque', icon: Database, onClick: () => setIsExcelModalOpen(true), color: 'cyan' });
+            }
         }
         if (activeBlock === 'licitacao') {
             if (canAccessLicitacaoTriagem) actionButtons.push({ label: 'Triagem', desc: 'Triagem de Processos', icon: Inbox, onClick: onManageLicitacaoScreening, color: 'amber' });
@@ -292,7 +296,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
         return (
             <>
-                {/* Fixed Back Button - Hoisted up to ensure true fixed positioning regardless of parent transforms */}
+                {/* Fixed Back Button */}
                 <button
                     onClick={() => setActiveBlock(null)}
                     className="fixed top-20 left-4 desktop:top-24 desktop:left-8 z-[999] group flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-bold transition-all p-2 pr-4 rounded-full bg-white/90 backdrop-blur-md border border-slate-200/60 shadow-lg hover:shadow-xl hover:bg-white hover:-translate-y-0.5 hover:border-indigo-100"
@@ -305,11 +309,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 </button>
 
                 <div className="w-full h-full flex flex-col relative animate-fade-in z-0 overflow-hidden">
-                    {/* Centered Content Container */}
                     <div className="flex-1 w-full h-full p-4 desktop:p-8 pt-20 desktop:pt-24">
                         <div className="w-full min-h-full flex flex-col items-center justify-center container mx-auto">
-
-                            {/* Header */}
                             <div className="flex flex-col items-center mb-8 shrink-0 animation-delay-100 animate-in fade-in slide-in-from-bottom-4 duration-500">
                                 <div className={`p-5 rounded-[2rem] bg-gradient-to-br from-${config.color}-50 to-${config.color}-100/50 mb-5 shadow-sm ring-8 ring-white/50`}>
                                     <config.icon className={`w-12 h-12 text-${config.color}-600 drop-shadow-sm`} />
@@ -317,7 +318,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                                 <h2 className="text-3xl desktop:text-5xl font-black text-slate-800 tracking-tight text-center drop-shadow-sm">{config.name}</h2>
                             </div>
 
-                            {/* Actions Grid */}
                             <div className="w-full flex flex-wrap justify-center items-stretch gap-3 desktop:gap-4 max-w-6xl animate-in zoom-in duration-500 fill-mode-backwards p-2">
                                 {actionButtons.map((btn, idx) => (
                                     <button
@@ -331,11 +331,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
                                         <div className={`relative w-12 h-12 desktop:w-14 desktop:h-14 rounded-2xl bg-gradient-to-br from-${btn.color}-500 to-${btn.color}-600 flex items-center justify-center mb-3 text-white group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300 shadow-lg shadow-${btn.color}-500/30 ring-4 ring-white`}>
                                             <btn.icon className="w-6 h-6 desktop:w-7 desktop:h-7 drop-shadow-md" />
-                                            {btn.badge > 0 && (
-                                                <div className="absolute -top-2.5 -right-2.5 min-w-[24px] h-6 px-1.5 bg-rose-500 text-white text-[11px] font-black flex items-center justify-center rounded-full shadow-md ring-4 ring-white animate-in zoom-in spin-in-12 duration-300">
-                                                    {btn.badge > 99 ? '99+' : btn.badge}
-                                                </div>
-                                            )}
                                         </div>
 
                                         <h3 className="text-lg desktop:text-2xl font-bold text-slate-800 mb-1 group-hover:text-slate-900 tracking-tight">{btn.label}</h3>
@@ -352,7 +347,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
     return (
         <div className="fixed inset-0 w-full h-full bg-[#F8FAFC] font-sans flex flex-col overflow-hidden relative">
-
             {activeBlock ? (
                 <div className="flex-1 flex flex-col overflow-hidden bg-[#FAFAFA] relative">
                     {renderActiveBlock()}
@@ -485,6 +479,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                     // For now, let's close.
                 }}
             />
+
+            {/* EXCEL IMPORT MODAL */}
+            {isExcelModalOpen && (
+                <ExcelImportModal
+                    onClose={() => setIsExcelModalOpen(false)}
+                />
+            )}
 
             <UpcomingEventsNotification />
         </div>

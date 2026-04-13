@@ -895,7 +895,9 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                         title: 'Compras',
                         permissions: [
                           { id: 'parent_compras', label: 'Gestão de Compras' },
-                          { id: 'parent_compras_pedidos', label: 'Gestão de Pedidos' }
+                          { id: 'parent_compras_pedidos', label: 'Gestão de Pedidos' },
+                          { id: 'parent_compras_itens', label: 'Catálogo e Inventário' },
+                          { id: 'parent_compras_dados', label: 'Importar Planilha' }
                         ],
                         color: 'emerald'
                       },

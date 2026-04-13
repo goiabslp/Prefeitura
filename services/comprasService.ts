@@ -172,11 +172,18 @@ export const savePurchaseOrder = async (order: Order): Promise<void> => {
     };
 
     // Backend Validation
+    let isNewOrder = false;
     if (order.id) {
-        const { data: current } = await supabase.from('purchase_orders').select('status, document_snapshot').eq('id', order.id).single();
-        if (current?.status === 'rejected' && order.status !== 'rejected') {
-            throw new Error("Validação de Segurança: Pedido de compra rejeitado não pode ser editado nem modificado.");
+        const { data: current } = await supabase.from('purchase_orders').select('status, document_snapshot').eq('id', order.id).maybeSingle();
+        if (current) {
+            if (current.status === 'rejected' && order.status !== 'rejected') {
+                throw new Error("Validação de Segurança: Pedido de compra rejeitado não pode ser editado nem modificado.");
+            }
+        } else {
+            isNewOrder = true;
         }
+    } else {
+        isNewOrder = true;
     }
 
     // Rule: Mandatory account for ALL purchase orders (creation and update)
@@ -187,6 +194,21 @@ export const savePurchaseOrder = async (order: Order): Promise<void> => {
 
     const { error } = await supabase.from('purchase_orders').upsert(dbOrder);
     if (error) throw error;
+
+    // INVENTORY RESERVATION: If new order, reserve inventory mapped items
+    if (isNewOrder && order.documentSnapshot?.content?.purchaseItems) {
+        for (const item of order.documentSnapshot.content.purchaseItems) {
+            if (item.inventory_item_id && item.quantity > 0) {
+                const { data: invItem } = await supabase.from('procurement_inventory').select('reserved_quantity').eq('id', item.inventory_item_id).single();
+                if (invItem) {
+                    const currentRes = invItem.reserved_quantity || 0;
+                    await supabase.from('procurement_inventory').update({
+                        reserved_quantity: currentRes + item.quantity
+                    }).eq('id', item.inventory_item_id);
+                }
+            }
+        }
+    }
 };
 
 export const deletePurchaseOrder = async (id: string): Promise<void> => {
@@ -283,6 +305,24 @@ export const updateOrderStatus = async (id: string, status: string, historyEntry
         .eq('id', id);
 
     if (error) throw error;
+
+    // INVENTORY ROLLBACK: If cancelled or rejected, rollback reservations
+    if ((finalStatus === 'canceled' || finalStatus === 'rejected') && current.status !== 'canceled' && current.status !== 'rejected') {
+        if (current.document_snapshot?.content?.purchaseItems) {
+            for (const item of current.document_snapshot.content.purchaseItems) {
+                if (item.inventory_item_id && item.quantity > 0) {
+                    const { data: invItem } = await supabase.from('procurement_inventory').select('reserved_quantity').eq('id', item.inventory_item_id).single();
+                    if (invItem) {
+                        const currentRes = invItem.reserved_quantity || 0;
+                        const newRes = Math.max(0, currentRes - item.quantity); // Prevent negative
+                        await supabase.from('procurement_inventory').update({
+                            reserved_quantity: newRes
+                        }).eq('id', item.inventory_item_id);
+                    }
+                }
+            }
+        }
+    }
 };
 
 export const updateCompletionForecast = async (id: string, forecast: string): Promise<void> => {
@@ -304,7 +344,7 @@ export const updatePurchaseStatus = async (id: string, status: string, historyEn
     // 1. Fetch current history to ensure we append to the latest version + Backend Validation
     const { data: current, error: fetchError } = await supabase
         .from('purchase_orders')
-        .select('status_history, status, completion_forecast, document_snapshot')
+        .select('status_history, status, purchase_status, completion_forecast, document_snapshot')
         .eq('id', id)
         .single();
 
@@ -345,6 +385,29 @@ export const updatePurchaseStatus = async (id: string, status: string, historyEn
         .eq('id', id);
 
     if (error) throw error;
+
+    // INVENTORY WITHDRAWAL: If item is concluded/realized, definitively withdraw from physical stock and clear from reservation pool
+    if ((status === 'concluido' || status === 'realizado') && current.purchase_status !== 'concluido' && current.purchase_status !== 'realizado') {
+        if (current.document_snapshot?.content?.purchaseItems) {
+            for (const item of current.document_snapshot.content.purchaseItems) {
+                if (item.inventory_item_id && item.quantity > 0) {
+                    const { data: invItem } = await supabase.from('procurement_inventory').select('quantity, reserved_quantity').eq('id', item.inventory_item_id).single();
+                    if (invItem) {
+                        const currentQty = invItem.quantity || 0;
+                        const currentRes = invItem.reserved_quantity || 0;
+                        
+                        const newQty = Math.max(0, currentQty - item.quantity);
+                        const newRes = Math.max(0, currentRes - item.quantity);
+
+                        await supabase.from('procurement_inventory').update({
+                            quantity: newQty,
+                            reserved_quantity: newRes
+                        }).eq('id', item.inventory_item_id);
+                    }
+                }
+            }
+        }
+    }
 
     // Notification Trigger
     // Fetch order to get user_id notification target

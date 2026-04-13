@@ -11,6 +11,7 @@ import { uploadFile } from '../../services/storageService';
 import { purchaseAccountService } from '../../services/purchaseAccountService';
 import { PurchaseAccount, User as UserType } from '../../types';
 import { AccountManagementTab } from '../compras/AccountManagementTab';
+import { ItemSelectionModal } from '../compras/ItemSelectionModal';
 import { Landmark, X } from 'lucide-react';
 
 interface ComprasFormProps {
@@ -183,6 +184,7 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
   const [isManagementModalOpen, setIsManagementModalOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isItemSelectionOpen, setIsItemSelectionOpen] = useState(false);
 
   // Effects to enforce initial state empty values have been removed to prevent 
   // unintended state resets during user interaction.
@@ -542,8 +544,13 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
 
                       {/* 1. Description Input (Grows) */}
                       <div className="flex-1 min-w-0">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 ml-1 block">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 ml-1 flex items-center gap-2">
                           Descrição do Item
+                          {item.code && (
+                             <span className="bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded text-[9px] border border-emerald-100">
+                               Cód: {item.code}
+                             </span>
+                          )}
                         </label>
                         <input
                           type="text"
@@ -667,13 +674,28 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
 
           {/* Fixed Floating Add Button */}
           <button
-            onClick={handleAddItem}
+            onClick={() => setIsItemSelectionOpen(true)}
             className="fixed bottom-6 right-6 sm:bottom-10 sm:right-10 z-[60] group flex items-center justify-center gap-2 px-6 py-4 bg-emerald-600 text-white rounded-full text-xs font-bold uppercase tracking-widest shadow-2xl shadow-emerald-600/40 hover:bg-emerald-700 hover:scale-105 active:scale-95 transition-all outline-none animate-bounce-in"
           >
             <Plus className="w-5 h-5 group-hover:rotate-90 transition-transform" />
-            <span className="hidden sm:inline">Adicionar Item</span>
+            <span className="hidden sm:inline">Adicionar Itens</span>
             <span className="inline sm:hidden">Add</span>
           </button>
+
+          {/* Item Selection Modal */}
+          {isItemSelectionOpen && (
+              <ItemSelectionModal
+                  onClose={() => setIsItemSelectionOpen(false)}
+                  onAddManual={() => {
+                      handleAddItem();
+                      setIsItemSelectionOpen(false);
+                  }}
+                  onConfirm={(items) => {
+                      handleUpdate('content', 'purchaseItems', [...(content.purchaseItems || []), ...items]);
+                      setIsItemSelectionOpen(false);
+                  }}
+              />
+          )}
         </div>
       )}
 
