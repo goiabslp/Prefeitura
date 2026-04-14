@@ -330,31 +330,11 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
             </button>
           )}
 
-          {
-            isAdmin && currentView !== 'admin' && (
-              <button
-                onClick={() => onOpenAdmin(null)}
-                className="hidden desktop:flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-indigo-600 text-white text-xs font-bold rounded-xl transition-all shadow-lg shadow-slate-900/10 active:scale-95"
-              >
-                <Settings className="w-4 h-4" />
-                Administração
-              </button>
-            )
-          }
 
-          <div className="h-8 w-px bg-slate-200 mx-1"></div>
-
-          <div className="flex flex-col items-center gap-0.5 transform translate-y-1">
-
-            <SyncIndicator />
-          </div>
-
-          <div className="h-8 w-px bg-slate-200 mx-1"></div>
 
           {/* Notification Center */}
           <TwoFactorStatus />
-          <div className="w-2"></div>
-          <ChatIcon />
+
           <div className="w-2"></div>
           <NotificationBell />
 
@@ -401,6 +381,18 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                 </button>
               </div>
             </div>
+
+            {
+              isAdmin && currentView !== 'admin' && (
+                <button
+                  onClick={() => onOpenAdmin(null)}
+                  className="p-2 rounded-xl text-slate-400 hover:bg-slate-50 hover:text-indigo-600 transition-all active:scale-95 group"
+                  title="Administração"
+                >
+                  <Settings className="w-5 h-5" />
+                </button>
+              )
+            }
           </div>
         </div >
       </div >
