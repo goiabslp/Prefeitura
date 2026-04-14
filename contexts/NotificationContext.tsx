@@ -17,6 +17,7 @@ export interface Notification {
     read: boolean;
     createdAt: Date;
     link?: string; // Optional link to navigate to
+    isUiOnly?: boolean;
 }
 
 interface NotificationContextType {
@@ -105,12 +106,7 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
 
 
 
-    const addNotification = useCallback(async (title: string, message: string, type: ToastType = 'info', link?: string) => {
-        // This context method is for client-side optimistic updates OR for creating notifications for SELF.
-        // For creating notifications for OTHERS, use notificationService directly.
-        if (!user) return;
-
-        // Optimistic update
+    const addNotification = useCallback((title: string, message: string, type: ToastType = 'info', link?: string) => {
         const tempId = Math.random().toString(36).substr(2, 9);
         const newNotification: Notification = {
             id: tempId,
@@ -119,33 +115,11 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
             type,
             read: false,
             createdAt: new Date(),
-            link
+            link,
+            isUiOnly: true
         };
         setNotifications(prev => [newNotification, ...prev]);
-
-        // Persist to DB
-        // Only if not 'login' (transient)
-        if (type !== 'login') {
-            await notificationService.createNotification({
-                user_id: user.id,
-                title,
-                message,
-                type: type as any,
-                link
-            });
-
-            // We don't need to refetch here anymore as Realtime will push the new record.
-            // But if we want to replace the tempId one immediately with the real ID,
-            // we could do that if the Realtime event hasn't arrived yet.
-            // For simplicity, the Realtime listener's deduplication check `prev.some(n => n.id === newNotif.id)`
-            // doesn't handle tempId.
-            // Let's refine addNotification to avoid double entries.
-        } else {
-            // For login, we don't persist to DB, so likely no real ID update needed unless we want to keep it in local memory only.
-            // The tempId is fine.
-        }
-
-    }, [user]);
+    }, []);
 
     // Real-time Login Listener
     useEffect(() => {
@@ -196,7 +170,7 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
         await notificationService.clearAll(user.id);
     }, [user]);
 
-    const unreadCount = notifications.filter(n => !n.read).length;
+    const unreadCount = notifications.filter(n => !n.read && !n.isUiOnly).length;
 
     return (
         <NotificationContext.Provider value={{

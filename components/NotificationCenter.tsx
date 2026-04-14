@@ -9,6 +9,8 @@ interface NotificationCenterProps {
 
 export const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, onClose }) => {
     const { notifications, markAsRead, markAllAsRead, removeNotification, clearAll } = useNotification();
+    const displayNotifications = notifications.filter(n => !n.read && !n.isUiOnly);
+
     const centerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -52,13 +54,13 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, 
                     <div>
                         <h3 className="font-bold text-slate-800 text-lg leading-tight">Notificações</h3>
                         <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
-                            {notifications.filter(n => !n.read).length} não lidas
+                            {displayNotifications.length} não lidas
                         </p>
                     </div>
                 </div>
 
                 <div className="flex items-center gap-1">
-                    {notifications.length > 0 && (
+                    {displayNotifications.length > 0 && (
                         <button
                             onClick={markAllAsRead}
                             className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition-colors"
@@ -67,7 +69,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, 
                             <Check className="w-4 h-4" />
                         </button>
                     )}
-                    {notifications.length > 0 && (
+                    {displayNotifications.length > 0 && (
                         <button
                             onClick={clearAll}
                             className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
@@ -87,7 +89,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, 
 
             {/* List */}
             <div className="flex-1 overflow-y-auto custom-scrollbar p-2">
-                {notifications.length === 0 ? (
+                {displayNotifications.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-20 text-center opacity-50">
                         <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4 text-slate-300">
                             <Bell className="w-8 h-8" />
@@ -97,7 +99,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ isOpen, 
                     </div>
                 ) : (
                     <div className="flex flex-col gap-2">
-                        {notifications.map((notification) => (
+                        {displayNotifications.map((notification) => (
                             <div
                                 key={notification.id}
                                 className={`relative group p-4 rounded-2xl border transition-all duration-200 flex gap-4
