@@ -930,10 +930,6 @@ const App: React.FC = () => {
       const needsUpdate = (!storedWindow || parseInt(storedWindow) < currentWindow) || needsForcedUpdate;
 
       if (!currentUser) {
-        if (needsUpdate) {
-           if (needsForcedUpdate) localStorage.setItem(FORCED_WINDOW_KEY, systemUpdateTarget!.toString());
-           else localStorage.setItem(WINDOW_KEY, currentWindow.toString());
-        }
         initialMountCheck.current = false;
         return;
       }
@@ -3748,7 +3744,7 @@ const App: React.FC = () => {
                     ) : currentView === 'admin' && adminTab === 'access_control' ? (
                       <SystemAccessControl onBack={() => setAdminTab(null)} />
                     ) : (
-                      <div className={activeBlock === 'compras' && currentView === 'editor' ? 'fixed left-[-9999px] top-0 pointer-events-none opacity-0' : 'w-full h-full'}>
+                      <div className={(activeBlock === 'compras' || activeBlock === 'diarias') && currentView === 'editor' ? 'fixed left-[-9999px] top-0 pointer-events-none opacity-0' : 'w-full h-full'}>
                         <DocumentPreview ref={componentRef} state={appState} isGenerating={isDownloading} mode={currentView === 'admin' ? 'admin' : 'editor'} blockType={activeBlock} onRemoveImage={handleRemoveImage} />
                       </div>
                     )}

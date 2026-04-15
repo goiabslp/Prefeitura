@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { User, Lock, ArrowRight, FileText, ShieldCheck, CheckCircle2, Eye, EyeOff } from 'lucide-react';
 import { UIConfig } from '../types';
 import { getCachedImage, IMAGE_KEYS } from '../services/cacheService';
+import { supabase } from '../services/supabaseClient';
 
 interface LoginScreenProps {
   onLogin: (username: string, password: string) => Promise<{ error?: any; data?: any }>;
@@ -17,6 +18,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, uiConfig }) =
   const [loading, setLoading] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [isUpdatingSystem, setIsUpdatingSystem] = useState(false);
 
   // Carrega credenciais salvas ao montar o componente
   useEffect(() => {
@@ -40,20 +42,88 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, uiConfig }) =
     setError('');
     setLoading(true);
 
-    setLoading(true);
-
     try {
+      let needsRefreshedAssets = false;
+      try {
+        const DEPLOY_EPOCH = new Date('2026-04-07T09:20:00-03:00').getTime();
+        const REFRESH_INTERVAL_MS = 120 * 60 * 1000;
+        const WINDOW_KEY = 'sys_refresh_window_v1';
+        const FORCED_WINDOW_KEY = 'sys_forced_refresh_target_v1';
+
+        const now = Date.now();
+        const currentWindow = Math.floor((now - DEPLOY_EPOCH) / REFRESH_INTERVAL_MS);
+        const storedWindow = localStorage.getItem(WINDOW_KEY);
+        
+        const { data: orgData } = await supabase.from('organization_settings').select('system_update_target').eq('id', 'global_config').single();
+        const systemUpdateTarget = orgData?.system_update_target;
+
+        let needsForcedUpdate = false;
+        if (systemUpdateTarget && now >= systemUpdateTarget) {
+          const storedForcedTarget = localStorage.getItem(FORCED_WINDOW_KEY);
+          if (!storedForcedTarget || parseInt(storedForcedTarget) < systemUpdateTarget) {
+            needsForcedUpdate = true;
+          }
+        }
+
+        const needsUpdate = (!storedWindow || parseInt(storedWindow) < currentWindow) || needsForcedUpdate;
+
+        if (needsUpdate) {
+            setIsUpdatingSystem(true);
+            needsRefreshedAssets = true;
+            
+            const preservedKeys = [WINDOW_KEY, FORCED_WINDOW_KEY, 'has_seen_update_info_v1', 'remember_user', 'remember_pass'];
+            const preservedData: Record<string, string | null> = {};
+            
+            for (let i = 0; i < localStorage.length; i++) {
+              const key = localStorage.key(i);
+              if (key && (key.startsWith('sb-') || preservedKeys.includes(key))) {
+                preservedData[key] = localStorage.getItem(key);
+              }
+            }
+
+            localStorage.clear();
+            sessionStorage.clear();
+            
+            if ('caches' in window) {
+              try {
+                const keys = await caches.keys();
+                await Promise.all(keys.map(k => caches.delete(k)));
+              } catch(e) {}
+            }
+            
+            Object.entries(preservedData).forEach(([key, val]) => {
+              if (val !== null) localStorage.setItem(key, val);
+            });
+            
+            if (needsForcedUpdate) {
+                localStorage.setItem(FORCED_WINDOW_KEY, systemUpdateTarget!.toString());
+            } else {
+                localStorage.setItem(WINDOW_KEY, currentWindow.toString());
+            }
+
+            await new Promise(resolve => setTimeout(resolve, 2000)); 
+            setIsUpdatingSystem(false);
+        }
+      } catch (checkErr) { 
+        console.error("System update check failed", checkErr);
+        setIsUpdatingSystem(false);
+      }
+
       const emailToUse = username.includes('@') ? username : `${username}@projeto.local`;
       const { error } = await onLogin(emailToUse, password);
 
       if (!error) {
-        // Salva ou remove do localStorage baseado no checkbox
         if (rememberMe) {
           localStorage.setItem('remember_user', username);
           localStorage.setItem('remember_pass', password);
         } else {
           localStorage.removeItem('remember_user');
           localStorage.removeItem('remember_pass');
+        }
+
+        if (needsRefreshedAssets) {
+            window.location.reload();
+            return;
         }
       } else {
         setError('Credenciais inválidas. Tente novamente.');
@@ -242,6 +312,22 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, uiConfig }) =
           animation: shake 0.3s ease-in-out;
         }
       `}} />
+
+      {isUpdatingSystem && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-[#0a0c10]/90 backdrop-blur-xl animate-fade-in" style={{ animation: 'fadeIn 0.3s forwards' }}>
+           <div className="w-full max-w-sm bg-[#161b22] rounded-[2rem] shadow-[0_0_50px_rgba(79,70,229,0.3)] border border-indigo-500/20 p-10 text-center relative overflow-hidden flex flex-col items-center">
+             <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-blue-500"></div>
+             <div className="text-indigo-400 mb-6 relative">
+                 <div className="absolute inset-0 bg-indigo-500/20 rounded-full blur-xl animate-pulse"></div>
+                 <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="animate-spin relative z-10" style={{ animation: 'spin 2s linear infinite' }}>
+                   <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.92-5.23l.1.09"/>
+                 </svg>
+             </div>
+             <h3 className="text-xl font-black text-white mb-2 uppercase tracking-widest">Atualizando</h3>
+             <p className="text-sm text-slate-400 font-medium">Aplicando patches e limpando cache antes de iniciar a sessão...</p>
+           </div>
+        </div>
+      )}
     </div>
   );
 };

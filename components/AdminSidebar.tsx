@@ -11,6 +11,7 @@ import { DiariaForm } from './forms/DiariaForm';
 import { ComprasForm } from './forms/ComprasForm';
 import { LicitacaoForm } from './forms/LicitacaoForm';
 import { ComprasStepWizard } from './compras/ComprasStepWizard';
+import { DiariasStepWizard } from './diarias/DiariasStepWizard';
 import { AccountManagementTab } from './compras/AccountManagementTab';
 import { updateSystemUpdateTarget } from '../services/settingsService';
 
@@ -151,11 +152,20 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
         );
       case 'diarias':
         return (
-          <DiariaForm
-            state={state} content={content}
-            allowedSignatures={allowedSignatures} handleUpdate={handleUpdate} onUpdate={onUpdate}
-            persons={persons} sectors={sectors} jobs={jobs}
+          <DiariasStepWizard
+            state={state}
+            content={content}
+            allowedSignatures={allowedSignatures}
+            handleUpdate={handleUpdate}
+            onUpdate={onUpdate}
+            persons={persons}
+            sectors={sectors}
+            jobs={jobs}
             activeBlock={activeBlock}
+            currentUser={currentUser}
+            onFinish={onFinish ? handleFinishWithAnimation : async () => { }}
+            onBack={onBack}
+            isLoading={isDownloading || finishStatus === 'loading'}
           />
         );
       case 'compras':
@@ -216,13 +226,13 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       {/* Sidebar - relative no desktop para permitir lado-a-lado com o preview */}
       <div className={`
         fixed desktop:relative inset-y-0 left-0 h-full
-        ${activeBlock === 'compras' ? 'w-full' : 'w-full desktop:w-[500px] lg:w-[550px] xl:w-[600px]'}
+        ${(activeBlock === 'compras' || activeBlock === 'diarias') ? 'w-full' : 'w-full desktop:w-[500px] lg:w-[550px] xl:w-[600px]'}
         bg-white shadow-2xl desktop:shadow-none border-r border-slate-200
         transform transition-all duration-300 ease-in-out z-50 shrink-0
         flex flex-col 
         ${isOpen ? 'translate-x-0 opacity-100 visible' : '-translate-x-full opacity-0 invisible absolute desktop:w-0'}
       `}>
-        {activeBlock !== 'compras' && (
+        {(activeBlock !== 'compras' && activeBlock !== 'diarias') && (
           <div className="flex items-center justify-between p-6 border-b border-gray-100 bg-white z-10 shrink-0">
             <div className="flex items-center gap-3">
               {(mode !== 'admin' && onBack) ? (
@@ -324,7 +334,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
           </div>
         )}
 
-        {mode !== 'admin' && activeTab === 'content' && activeBlock !== 'licitacao' && activeBlock !== 'compras' && !isReadOnly && (
+        {mode !== 'admin' && activeTab === 'content' && activeBlock !== 'licitacao' && activeBlock !== 'compras' && activeBlock !== 'diarias' && !isReadOnly && (
           <div className="p-6 border-t border-gray-200 bg-white/80 backdrop-blur-xl sticky bottom-0 z-20">
             <button onClick={handleFinishWithAnimation} disabled={finishStatus === 'loading' || finishStatus === 'success'} className={`w-full font-black py-4 px-6 rounded-2xl shadow-xl transform transition-all duration-300 flex items-center justify-center gap-3 uppercase tracking-widest text-xs ${finishStatus === 'success' ? 'bg-emerald-500 text-white' : 'bg-slate-900 text-white hover:bg-indigo-600 active:scale-95'}`}>
               {finishStatus === 'loading' ? <><Loader2 className="w-4 h-4 animate-spin" /><span>Processando...</span></> : finishStatus === 'success' ? <><Check className="w-4 h-4" /><span>Concluído!</span></> : <><Check className="w-4 h-4" /><span>Finalizar Edição</span></>}

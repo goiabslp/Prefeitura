@@ -19,6 +19,10 @@ interface DiariaFormProps {
   sectors: Sector[];
   jobs: Job[];
   activeBlock: BlockType | null;
+  currentStep?: number;
+  onFinish?: () => Promise<boolean | void> | void;
+  canFinish?: boolean;
+  isLoading?: boolean;
 }
 
 interface IBGECity {
@@ -49,7 +53,11 @@ export const DiariaForm: React.FC<DiariaFormProps> = ({
   persons,
   sectors,
   jobs,
-  activeBlock
+  activeBlock,
+  currentStep = 1,
+  onFinish,
+  canFinish,
+  isLoading
 }) => {
   const [cities, setCities] = useState<string[]>([]);
   const [isCityLoading, setIsCityLoading] = useState(false);
@@ -309,8 +317,10 @@ export const DiariaForm: React.FC<DiariaFormProps> = ({
 
   return (
     <div className="space-y-8 animate-fade-in pb-12">
-      <div className="space-y-4">
-        <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+      {currentStep === 1 && (
+        <>
+          <div className="space-y-4">
+            <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
           <Wallet className="w-4 h-4 text-indigo-600" /> Modalidade de Requisição
         </h3>
         <div className="grid grid-cols-2 gap-4">
@@ -346,11 +356,8 @@ export const DiariaForm: React.FC<DiariaFormProps> = ({
         </div>
       </div>
 
-      {content.subType ? (
-        <>
-
-
-          <div className="space-y-4">
+      {currentStep === 1 && content.subType && (
+          <div className="space-y-4 animate-fade-in">
             <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
               <User className="w-4 h-4 text-indigo-600" /> Dados do Solicitante
             </h3>
@@ -438,8 +445,13 @@ export const DiariaForm: React.FC<DiariaFormProps> = ({
               </div>
             </div>
           </div>
+        )}
+        </>
+      )}
 
-          <div className="space-y-4">
+      {currentStep === 2 && (
+        <>
+          <div className="space-y-4 animate-fade-in">
             <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
               <MapPin className="w-4 h-4 text-indigo-600" /> Logística e Período
             </h3>
@@ -635,8 +647,12 @@ export const DiariaForm: React.FC<DiariaFormProps> = ({
               </div>
             </div>
           </div>
+        </>
+      )}
 
-          <div className="space-y-4">
+      {currentStep === 3 && (
+        <>
+          <div className="space-y-4 animate-fade-in">
             <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
               <MessageSquare className="w-4 h-4 text-indigo-600" /> Justificativa da Viagem
             </h3>
@@ -686,8 +702,12 @@ export const DiariaForm: React.FC<DiariaFormProps> = ({
               </div>
             )}
           </div>
+        </>
+      )}
 
-          <div className="space-y-4">
+      {currentStep === 4 && (
+        <>
+          <div className="space-y-4 animate-fade-in">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
                 <Camera className="w-4 h-4 text-indigo-600" /> Comprovantes
@@ -751,8 +771,12 @@ export const DiariaForm: React.FC<DiariaFormProps> = ({
               )}
             </div>
           </div>
+        </>
+      )}
 
-          <div className="space-y-4 border-t border-slate-200 pt-6">
+      {currentStep === 5 && (
+        <>
+          <div className="space-y-4 pt-4 animate-fade-in">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2"><PenTool className="w-4 h-4" /> Autorização Final</h3>
               <button
@@ -800,12 +824,25 @@ export const DiariaForm: React.FC<DiariaFormProps> = ({
                 <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
               </label>
             </div>
+            
+            {/* Show local Finalizar button in case they need to click it here, like ComprasForm has */}
+            <div className="pt-8">
+              <button
+                onClick={onFinish}
+                disabled={isLoading || !canFinish}
+                className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase tracking-widest rounded-xl shadow-lg shadow-emerald-600/30 active:scale-95 transition-all flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                  {isLoading ? <><Loader2 className="w-5 h-5 animate-spin" /> Finalizando...</> : <><CheckCircle2 className="w-5 h-5" /> Finalizar Pedido de {content.subType === 'diaria' ? 'Diária' : 'Custeio'}</>}
+              </button>
+            </div>
           </div>
         </>
-      ) : (
+      )}
+
+      {!content.subType && currentStep !== 1 && (
         <div className="p-12 border-2 border-dashed border-slate-200 rounded-[2rem] flex flex-col items-center justify-center text-center space-y-4 bg-white/50">
           <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center text-slate-300"><ClipboardList className="w-8 h-8" /></div>
-          <p className="font-bold text-slate-600">Selecione o tipo acima para começar.</p>
+          <p className="font-bold text-slate-600">Selecione a Modalidade no Passo 1 para continuar.</p>
         </div>
       )}
     </div>
