@@ -301,7 +301,9 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
         const isPurchasingManager = currentUser.role === 'admin' || currentUser.role === 'compras';
 
         if (isCompras) {
-            if (isPurchasingManager) {
+            if (order.status === 'payment_account') {
+                hasPermission = isAdmin || order.userId === currentUser.id;
+            } else if (isPurchasingManager) {
                 hasPermission = true;
             } else {
                 const orderSector = order.documentSnapshot?.content.requesterSector || '';
@@ -616,11 +618,9 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                             {purchaseStatusFilter === 'all' ? 'Status' :
                                                 [
                                                     { id: 'all', label: 'Todos' },
-                                                    { id: 'pending_approval', label: 'Em Aprovação' },
                                                     { id: 'payment_account', label: 'Conta de Pagamento' },
                                                     { id: 'recebido', label: 'Pedido Recebido' },
                                                     { id: 'coletando_orcamento', label: 'Orçamento' },
-                                                    { id: 'aprovacao_orcamento', label: 'Aprovação' },
                                                     { id: 'coletando_dotacao', label: 'Dotação' },
                                                     { id: 'realizado', label: 'Pedido Realizado' },
                                                     { id: 'concluido', label: 'Concluído' },
@@ -645,11 +645,9 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                     <div className="max-h-[60vh] overflow-y-auto custom-scrollbar px-2 space-y-0.5">
                                                         {[
                                                             { id: 'all', label: 'Todos os Pedidos' },
-                                                            { id: 'pending_approval', label: 'Em Aprovação' },
                                                             { id: 'payment_account', label: 'Conta de Pagamento' },
                                                             { id: 'recebido', label: 'Pedido Recebido' },
                                                             { id: 'coletando_orcamento', label: 'Orçamento' },
-                                                            { id: 'aprovacao_orcamento', label: 'Aprovação' },
                                                             { id: 'coletando_dotacao', label: 'Dotação' },
                                                             { id: 'realizado', label: 'Pedido Realizado' },
                                                             { id: 'concluido', label: 'Concluído' },
