@@ -1353,9 +1353,11 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
                 if (rDate > end) return false;
             }
 
-            // ALWAYS Exclude ARLA from Reports as per user request
+            // Exclude ARLA from Reports UNLESS specifically filtered by it (as per user request to keep general reports clean)
             const fuel = r.fuelType?.toLowerCase() || '';
-            if (fuel.includes('arla')) return false;
+            const isArla = fuel.includes('arla');
+            const arlaSelected = appliedFilters.fuelType.some(f => f.toLowerCase() === 'arla');
+            if (isArla && !arlaSelected) return false;
 
             if (appliedFilters.station !== 'all' && r.station !== appliedFilters.station) return false;
             if (appliedFilters.sector !== 'all' && !r.derivedSector.toLowerCase().includes(appliedFilters.sector.toLowerCase())) return false;
