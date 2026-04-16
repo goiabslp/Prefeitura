@@ -182,13 +182,13 @@ export const MeusConteudosList: React.FC<MeusConteudosListProps> = ({ userId, us
             <table className="w-full text-left border-collapse min-w-full">
                 <thead className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur-md shadow-sm">
                     <tr className="border-b border-slate-100 uppercase text-[10px] tracking-widest text-slate-400 font-black">
-                        <th className="py-4 px-3 md:px-4 whitespace-nowrap">Título do Conteúdo</th>
-                        <th className="py-4 px-3 md:px-4 whitespace-nowrap">Solicitante</th>
-                        <th className="py-4 px-3 md:px-4 whitespace-nowrap text-center">Responsável</th>
-                        <th className="py-4 px-3 md:px-4 whitespace-nowrap">Data de criação</th>
-                        <th id="tour-status-col" className="py-4 px-3 md:px-4 whitespace-nowrap text-center">STATUS</th>
-                        <th id="tour-forecast-col" className="py-4 px-3 md:px-4 whitespace-nowrap text-center">Previsão</th>
-                        <th className="py-4 px-3 md:px-4 whitespace-nowrap text-center min-w-[100px]">Ações</th>
+                        <th className="py-4 px-2 md:px-3 whitespace-nowrap">Título do Conteúdo</th>
+                        <th className="py-4 px-2 md:px-3 whitespace-nowrap">Solicitante</th>
+                        <th className="py-4 px-2 md:px-3 whitespace-nowrap text-center">Responsável</th>
+                        <th className="py-4 px-2 md:px-3 whitespace-nowrap">Data de criação</th>
+                        <th id="tour-status-col" className="py-4 px-2 md:px-3 whitespace-nowrap text-center">STATUS</th>
+                        <th id="tour-forecast-col" className="py-4 px-2 md:px-3 whitespace-nowrap text-center">Previsão</th>
+                        <th className="py-4 px-2 md:px-3 whitespace-nowrap text-center min-w-[100px]">Ações</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -203,23 +203,23 @@ export const MeusConteudosList: React.FC<MeusConteudosListProps> = ({ userId, us
                                 onClick={() => onOpenDetails(req.id)}
                                 className="group border-b border-slate-50 hover:bg-slate-50/80 cursor-pointer transition-colors"
                             >
-                                <td className="py-4 px-3 md:px-4">
+                                <td className="py-4 px-2 md:px-3">
                                     <div className="font-bold text-slate-800 text-sm md:text-base mb-0.5 max-w-[200px] md:max-w-[400px] truncate" title={extractTitle(req.description)}>
                                         {extractTitle(req.description)}
                                     </div>
                                     <div className="text-[10px] text-slate-400 font-mono tracking-widest">{req.protocol}</div>
                                 </td>
-                                <td className="py-4 px-3 md:px-4">
+                                <td className="py-4 px-2 md:px-3">
                                     <div className="text-xs font-bold text-slate-700 truncate max-w-[120px]" title={req.requester_name}>
                                         {req.requester_name || '-'}
                                     </div>
                                 </td>
-                                <td className="py-4 px-3 md:px-4 text-center min-w-[140px]">
+                                <td className="py-4 px-2 md:px-3 text-center min-w-[140px]">
                                     <div className="text-[10px] md:text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg inline-block whitespace-nowrap max-w-[150px] truncate" title={(userRole?.toLowerCase() === 'admin' || userRole === 'Administrador' || req.responsible?.name?.toUpperCase() !== 'TESTE') ? req.responsible?.name || 'Aguardando' : 'Privado'}>
                                         {(userRole?.toLowerCase() === 'admin' || userRole === 'Administrador' || req.responsible?.name?.toUpperCase() !== 'TESTE') ? req.responsible?.name || 'Aguardando' : 'Privado'}
                                     </div>
                                 </td>
-                                <td className="py-4 px-3 md:px-4">
+                                <td className="py-4 px-2 md:px-3">
                                     <div className="text-xs md:text-sm text-slate-500 font-medium">
                                         {format(new Date(req.created_at), "dd/MM/yyyy", { locale: ptBR })}
                                     </div>
@@ -227,7 +227,7 @@ export const MeusConteudosList: React.FC<MeusConteudosListProps> = ({ userId, us
                                         {format(new Date(req.created_at), "HH:mm")}
                                     </div>
                                 </td>
-                                <td className="py-4 px-3 md:px-4 text-center">
+                                <td className="py-4 px-2 md:px-3 text-center">
                                     <button 
                                         onClick={(e) => handleQuickStatusUpdate(e, req.id, req.status)}
                                         disabled={!isAdmin || req.status === 'Revisando' || req.status === 'Concluído'}
@@ -237,7 +237,7 @@ export const MeusConteudosList: React.FC<MeusConteudosListProps> = ({ userId, us
                                         <span className="text-[10px] md:text-xs font-black tracking-widest uppercase">{req.status}</span>
                                     </button>
                                 </td>
-                                <td className="py-4 px-3 md:px-4 text-center text-xs font-bold text-slate-600">
+                                <td className="py-4 px-2 md:px-3 text-center text-xs font-bold text-slate-600">
                                     {req.delivery_date ? (
                                         <div className="flex flex-col items-center">
                                             <span className="text-indigo-600 tracking-tighter">
@@ -249,7 +249,7 @@ export const MeusConteudosList: React.FC<MeusConteudosListProps> = ({ userId, us
                                         <span className="text-slate-300">—</span>
                                     )}
                                 </td>
-                                <td className="py-4 px-3 md:px-4 text-center">
+                                <td className="py-4 px-2 md:px-3 text-center">
                                     <button
                                         onClick={(e) => handleDeleteClick(e, req.id, extractTitle(req.description))}
                                         className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-white border border-slate-200 text-slate-400 flex items-center justify-center hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 transition-all shadow-sm mx-auto"

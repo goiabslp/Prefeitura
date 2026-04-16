@@ -150,8 +150,8 @@ export const MarketingModule: React.FC<MarketingModuleProps> = ({
                             </div>
                         </div>
                     </header>
-                    <div className="flex-1 overflow-hidden p-4 md:p-6 bg-[#f8fafc]">
-                        <div className="max-w-6xl mx-auto bg-white rounded-[2rem] border border-slate-200 shadow-xl overflow-hidden min-h-[500px] flex flex-col relative h-full">
+                    <div className="flex-1 overflow-hidden p-2 md:p-4 bg-[#f8fafc]">
+                        <div className="max-w-[1400px] mx-auto bg-white rounded-[2rem] border border-slate-200 shadow-xl overflow-hidden min-h-[500px] flex flex-col relative h-full">
                             <MeusConteudosList 
                                 userId={userId} 
                                 userRole={userRole} 
