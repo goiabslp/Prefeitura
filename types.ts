@@ -359,7 +359,7 @@ export interface Vehicle {
   timingBeltLastChange?: number;
   timingBeltNextChange?: number;
   timingBeltCalculationBase?: 10000 | 20000 | 40000 | 50000 | 60000 | 80000 | 100000;
-
+  passengerCapacity?: number;
 }
 
 export interface VehicleDocument {
@@ -391,6 +391,8 @@ export interface VehicleSchedule {
   vehicleLocation?: string;
   authorizedByName?: string;
   passengers?: CrewMember[];
+  patientCount?: number;
+  companionCount?: number;
   cancellationReason?: string;
   cancelledAt?: string;
   cancelledBy?: string;

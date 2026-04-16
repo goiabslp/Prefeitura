@@ -31,6 +31,8 @@ export const getSchedules = async (): Promise<VehicleSchedule[]> => {
         createdAt: s.created_at,
         authorizedByName: s.authorized_by_name,
         passengers: s.passengers,
+        patientCount: s.patient_count,
+        companionCount: s.companion_count,
         cancellationReason: s.cancellation_reason,
         cancelledAt: s.cancelled_at,
         cancelledBy: s.cancelled_by
@@ -140,7 +142,9 @@ export const createSchedule = async (schedule: Omit<VehicleSchedule, 'id' | 'cre
         vehicle_location: schedule.vehicleLocation,
         status: schedule.status,
         authorized_by_name: schedule.authorizedByName,
-        passengers: schedule.passengers
+        passengers: schedule.passengers,
+        patient_count: schedule.patientCount,
+        companion_count: schedule.companionCount
     };
 
     const { data, error } = await supabase
@@ -171,7 +175,9 @@ export const createSchedule = async (schedule: Omit<VehicleSchedule, 'id' | 'cre
         createdAt: data.created_at,
 
         authorizedByName: data.authorized_by_name,
-        passengers: data.passengers
+        passengers: data.passengers,
+        patientCount: data.patient_count,
+        companionCount: data.companion_count
     };
 
     await notifyApprovers({ ...result });
@@ -194,6 +200,8 @@ export const updateSchedule = async (schedule: VehicleSchedule): Promise<Vehicle
         status: schedule.status,
         authorized_by_name: schedule.authorizedByName,
         passengers: schedule.passengers,
+        patient_count: schedule.patientCount,
+        companion_count: schedule.companionCount,
         cancellation_reason: schedule.cancellationReason,
         cancelled_at: schedule.cancelledAt,
         cancelled_by: schedule.cancelledBy
@@ -231,6 +239,8 @@ export const updateSchedule = async (schedule: VehicleSchedule): Promise<Vehicle
 
         authorizedByName: data.authorized_by_name,
         passengers: data.passengers,
+        patientCount: data.patient_count,
+        companionCount: data.companion_count,
         cancellationReason: data.cancellation_reason,
         cancelledAt: data.cancelled_at,
         cancelledBy: data.cancelled_by

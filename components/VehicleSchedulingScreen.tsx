@@ -144,6 +144,7 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
   };
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isPassengerModalOpen, setIsPassengerModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState<VehicleSchedule | null>(null);
   const [viewingSchedule, setViewingSchedule] = useState<VehicleSchedule | null>(null);
@@ -190,7 +191,9 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
     vehicleId: '', driverId: '', serviceSectorId: '', requesterPersonId: '',
     departureDateTime: '', returnDateTime: '', destination: '', purpose: '', status: 'pendente',
     vehicleLocation: '',
-    passengers: []
+    passengers: [],
+    patientCount: 0,
+    companionCount: 0
   });
   const [newPassenger, setNewPassenger] = useState<{ name: string, departureLocation: string, appointmentTime: string, appointmentLocation: string }>({
     name: '', departureLocation: '', appointmentTime: '', appointmentLocation: ''
@@ -359,7 +362,9 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
         purpose: '',
         status: 'pendente',
         vehicleLocation: '',
-        passengers: []
+        passengers: [],
+        patientCount: 0,
+        companionCount: 0
       });
       setNewPassenger({ name: '', departureLocation: '', appointmentTime: '', appointmentLocation: '' });
     }
@@ -371,8 +376,24 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
       showToast("Preencha todos os campos obrigatórios.", "warning");
       return;
     }
+    const patientCount = formData.patientCount || 0;
+    const companionCount = formData.companionCount || 0;
+    const totalPassengers = patientCount + companionCount + 1; // 1 for Driver
+    const selectedVehicle = vehicles.find(v => v.id === formData.vehicleId);
+
+    if (patientCount === 0 && companionCount === 0) {
+      showToast("A seção de Quantidade de Passageiros é obrigatória. Por favor, preencha os valores.", "warning");
+      return;
+    }
+
+    if (selectedVehicle && selectedVehicle.passengerCapacity !== undefined && totalPassengers > selectedVehicle.passengerCapacity) {
+      showToast(`O total de passageiros (${totalPassengers}) excede a capacidade do veículo (${selectedVehicle.model} - ${selectedVehicle.passengerCapacity} lugares).`, "error");
+      return;
+    }
+
     if (!formData.passengers || formData.passengers.length === 0) {
-      showToast("A seção de Passageiros é obrigatória. Adicione pelo menos uma pessoa.", "warning");
+      // Optional now or can be required depending on old rules, but user emphasizes passenger count. Keeping old check.
+      showToast("A lista detalhada de Passageiros / Tripulação também é obrigatória.", "warning");
       return;
     }
     const now = Date.now();
@@ -387,7 +408,6 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
       return;
     }
     // Lógica de aprovação automática
-    const selectedVehicle = vehicles.find(v => v.id === formData.vehicleId);
     const isAdmin = currentUserRole === 'admin';
     const isFleetManager = currentUserPermissions?.includes('parent_frotas');
     const isResponsible = selectedVehicle?.responsiblePersonId === currentUserPersonId;
@@ -921,6 +941,25 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
                 </div>
                 <div className="md:col-span-2"><label className={labelClass}><Info className="w-3 h-3 inline mr-2" /> Objetivo da Viagem</label><textarea value={formData.purpose} onChange={e => setFormData({ ...formData, purpose: e.target.value })} readOnly={editingSchedule?.status === 'confirmado'} className={`${inputClass} min-h-[100px] resize-none pt-4 ${editingSchedule?.status === 'confirmado' ? 'bg-slate-50 cursor-not-allowed border-slate-200' : ''}`} placeholder="Descreva brevemente o motivo da saída..." /></div>
 
+                <div className="md:col-span-2">
+                  <label className={labelClass}><Users className="w-3 h-3 inline mr-2" /> Quantidade de Passageiros</label>
+                  <button
+                    onClick={() => {
+                        if (editingSchedule?.status === 'confirmado') {
+                          showToast("Não é possível alterar os passageiros de um agendamento já confirmado.", "warning");
+                          return;
+                        }
+                        setIsPassengerModalOpen(true);
+                      }}
+                    className={`${inputClass} flex items-center justify-between transition-all text-left ${editingSchedule?.status === 'confirmado' ? 'bg-slate-50 cursor-not-allowed border-slate-200' : 'hover:bg-white'}`}
+                  >
+                    <span className={(formData.patientCount || formData.companionCount) ? 'text-slate-900 font-bold' : 'text-slate-400'}>
+                      {((formData.patientCount || 0) + (formData.companionCount || 0) + 1)} Passageiros (Total c/ Motorista)
+                    </span>
+                    {editingSchedule?.status === 'confirmado' ? <Lock className="w-4 h-4 text-slate-300" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+                  </button>
+                </div>
+
                 <div className="md:col-span-2 pt-4 border-t border-slate-100">
                   <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600 mb-4 flex items-center gap-2">
                     <Users className="w-4 h-4" /> 
@@ -995,6 +1034,70 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
               <button onClick={handleSave} disabled={isSaving} className="px-8 py-3 bg-slate-900 text-white font-black rounded-2xl hover:bg-indigo-600 shadow-xl flex items-center justify-center gap-3 transition-all uppercase text-[10px] tracking-[0.2em] active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed">
                 {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 {isSaving ? 'Processando...' : (editingSchedule ? 'Atualizar Dados' : 'Confirmar Agendamento')}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {isPassengerModalOpen && createPortal(
+        <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-3xl shadow-xl w-full max-w-sm overflow-hidden animate-slide-up border border-slate-100">
+            <div className="px-6 py-5 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+              <div>
+                <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest">Quantidade de Passageiros</h3>
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-1">Calcule a ocupação do veículo</p>
+              </div>
+              <button onClick={() => setIsPassengerModalOpen(false)} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-5">
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600 mb-2">
+                  <Users className="w-3 h-3 inline mr-2" />
+                  Pacientes
+                </label>
+                <input 
+                  type="number" 
+                  min="0"
+                  value={formData.patientCount || 0}
+                  onChange={(e) => setFormData({ ...formData, patientCount: parseInt(e.target.value) || 0 })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-black text-slate-900 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all text-center"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600 mb-2">
+                  <UserCircle className="w-3 h-3 inline mr-2" />
+                  Acompanhantes
+                </label>
+                <input 
+                  type="number" 
+                  min="0"
+                  value={formData.companionCount || 0}
+                  onChange={(e) => setFormData({ ...formData, companionCount: parseInt(e.target.value) || 0 })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-black text-slate-900 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all text-center"
+                />
+              </div>
+
+              <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 flex flex-col items-center justify-center">
+                <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-1">Total Calculado</span>
+                <div className="text-2xl font-black text-indigo-900">
+                  {((formData.patientCount || 0) + (formData.companionCount || 0) + 1)} <span className="text-xs text-indigo-600 ml-1 opacity-70 uppercase tracking-widest">Pessoas</span>
+                </div>
+                <span className="text-[9px] font-bold text-indigo-400 mt-2 text-center">(Incluindo +1 Motorista Obrigatório)</span>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex justify-end">
+              <button 
+                onClick={() => setIsPassengerModalOpen(false)}
+                className="px-6 py-2.5 bg-indigo-600 text-white font-black rounded-xl hover:bg-indigo-700 shadow-lg shadow-indigo-600/20 transition-all active:scale-95 text-[10px] uppercase tracking-widest"
+              >
+                Confirmar
               </button>
             </div>
           </div>

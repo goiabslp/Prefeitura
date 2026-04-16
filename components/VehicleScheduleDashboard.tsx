@@ -113,7 +113,16 @@ export const VehicleScheduleDashboard: React.FC<DashboardProps> = ({
   
   // Passenger metrics
   const totalPassengers = filteredSchedules.reduce((acc, s) => {
-    let pass = (s.passengers?.length || 0) + 1; // At least driver/requester
+    const pCount = s.patientCount || 0;
+    const cCount = s.companionCount || 0;
+    const arrCount = s.passengers?.length || 0;
+    
+    let pass = 1; // Motorista (sempre considerado)
+    if (pCount > 0 || cCount > 0) {
+      pass += pCount + cCount;
+    } else {
+      pass += arrCount;
+    }
     return acc + pass;
   }, 0);
 
