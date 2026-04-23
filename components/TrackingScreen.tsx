@@ -301,14 +301,15 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
         const isPurchasingManager = currentUser.role === 'admin' || currentUser.role === 'compras';
 
         if (isCompras) {
-            if (order.status === 'payment_account') {
-                hasPermission = isAdmin || order.userId === currentUser.id;
-            } else if (isPurchasingManager) {
+            const orderSector = order.documentSnapshot?.content?.requesterSector || order.requestingSector || '';
+            const userSector = currentUser.sector || '';
+            const isSameSector = userSector !== '' && orderSector.trim().toLowerCase() === userSector.trim().toLowerCase();
+            const isCreator = order.userId === currentUser.id || order.userName === currentUser.name;
+
+            if (isPurchasingManager) {
                 hasPermission = true;
             } else {
-                const orderSector = order.documentSnapshot?.content.requesterSector || '';
-                const userSector = currentUser.sector || '';
-                hasPermission = userSector !== '' && orderSector.trim().toLowerCase() === userSector.trim().toLowerCase();
+                hasPermission = isSameSector || isCreator;
             }
         } else if (activeBlock === 'oficio') {
             hasPermission = true; // Oficios are visible to all users
