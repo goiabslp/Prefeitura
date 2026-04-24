@@ -25,6 +25,12 @@ export const FloatingNotification: React.FC = () => {
             if (isRecent) {
                 setActiveToasts(prev => {
                     if (prev.find(n => n.id === latest.id)) return prev;
+                    
+                    // Prevent duplicate active toasts for the same event
+                    if (latest.type === 'login' && prev.some(n => n.type === 'login' && n.message === latest.message)) {
+                        return prev;
+                    }
+
                     return [...prev, latest];
                 });
 

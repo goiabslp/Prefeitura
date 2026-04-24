@@ -91,6 +91,8 @@ import { RHModule } from './components/rh/RHModule';
 import { ProjetosModule } from './components/projetos/ProjetosModule';
 import { MarketingModule } from './components/marketing/MarketingModule';
 import { SystemUpdateScreen } from './components/SystemUpdateScreen';
+import { NovoEventoScreen } from './components/diarias/NovoEventoScreen';
+import { LancamentosScreen } from './components/diarias/LancamentosScreen';
 
 const VIEW_TO_PATH: Record<string, string> = {
   'login': '/Login',
@@ -117,6 +119,8 @@ const VIEW_TO_PATH: Record<string, string> = {
   'tracking:oficio': '/Historico/Oficio',
   'tracking:compras': '/Historico/Compras',
   'tracking:diarias': '/Historico/Diarias',
+  'diarias-novo-evento': '/Diarias/NovoEvento',
+  'diarias-lancamentos': '/Diarias/Lancamentos',
   'editor:oficio': '/Editor/Oficio',
   'editor:compras': '/Editor/Compras',
   'editor:diarias': '/Editor/Diarias',
@@ -157,7 +161,7 @@ const PATH_TO_STATE: Record<string, any> = Object.fromEntries(
 );
 
 const App: React.FC = () => {
-  const [currentView, setCurrentView] = useState<'login' | 'home' | 'admin' | 'tracking' | 'editor' | 'vehicle-scheduling' | 'licitacao-screening' | 'licitacao-all' | 'abastecimento' | 'agricultura' | 'obras' | 'order-details' | 'tasks-dashboard' | 'purchase-inventory' | 'calendario' | 'rh' | 'projetos' | 'marketing'>('login');
+  const [currentView, setCurrentView] = useState<'login' | 'home' | 'admin' | 'tracking' | 'editor' | 'vehicle-scheduling' | 'licitacao-screening' | 'licitacao-all' | 'abastecimento' | 'agricultura' | 'obras' | 'order-details' | 'tasks-dashboard' | 'purchase-inventory' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'diarias-novo-evento' | 'diarias-lancamentos'>('login');
   const queryClient = useQueryClient();
   const { user: currentUser, signIn, signOut, refreshUser, loading: authLoading } = useAuth();
   const { moduleStatus } = useSystemSettings();
@@ -4308,6 +4312,29 @@ const App: React.FC = () => {
                 onEditOrder={handleEditOrder}
                 onDeleteOrder={handleDeleteOrder}
                 onUpdateOrderStatus={handleUpdateOrderStatus}
+              />
+            )}
+
+            {currentView === 'diarias-novo-evento' && currentUser && (
+              <NovoEventoScreen
+                currentUser={currentUser}
+                persons={persons}
+                sectors={sectors}
+                jobs={jobs}
+                onBack={() => {
+                  window.history.pushState({}, '', '/Diarias');
+                  window.dispatchEvent(new Event('popstate'));
+                }}
+              />
+            )}
+
+            {currentView === 'diarias-lancamentos' && currentUser && (
+              <LancamentosScreen
+                currentUser={currentUser}
+                onBack={() => {
+                  window.history.pushState({}, '', '/Diarias');
+                  window.dispatchEvent(new Event('popstate'));
+                }}
               />
             )}
 

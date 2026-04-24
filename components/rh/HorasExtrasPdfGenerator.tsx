@@ -81,8 +81,9 @@ export const HorasExtrasPdfGenerator: React.FC<HorasExtrasPdfGeneratorProps> = (
         }
     };
 
-    const sectorEntries = (record.entries || []).filter(e => !e.isCedido).sort((a, b) => a.name.localeCompare(b.name));
-    const cedidosEntries = (record.entries || []).filter(e => e.isCedido).sort((a, b) => a.name.localeCompare(b.name));
+    const validEntries = (record.entries || []).filter(e => e.status !== 'Pendente');
+    const sectorEntries = validEntries.filter(e => !e.isCedido).sort((a, b) => a.name.localeCompare(b.name));
+    const cedidosEntries = validEntries.filter(e => e.isCedido).sort((a, b) => a.name.localeCompare(b.name));
 
     const displayItems: { type: 'header' | 'row', title?: string, data?: any }[] = [];
     

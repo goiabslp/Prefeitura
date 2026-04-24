@@ -248,6 +248,30 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             });
         }
 
+        // Diárias Specific Buttons
+        if (activeBlock === 'diarias') {
+            actionButtons.push({
+                label: 'Novo Evento',
+                desc: 'Registrar evento externo',
+                icon: CalendarRange,
+                onClick: () => {
+                    window.history.pushState({}, '', '/Diarias/NovoEvento');
+                    window.dispatchEvent(new Event('popstate'));
+                },
+                color: 'amber'
+            });
+            actionButtons.push({
+                label: 'Lançamentos',
+                desc: 'Acompanhar Eventos',
+                icon: FileSearch,
+                onClick: () => {
+                    window.history.pushState({}, '', '/Diarias/Lancamentos');
+                    window.dispatchEvent(new Event('popstate'));
+                },
+                color: 'blue'
+            });
+        }
+
         // Tarefas Specific Buttons
         if (activeBlock === 'tarefas') {
             actionButtons.push({

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Users, UserPlus, Save, Trash2, Calendar, FileText, Clock, ChevronRight, Search, Check, ChevronDown, X } from 'lucide-react';
-import { User, AppState, Person, Job, Sector, RhHorasExtras } from '../../types';
+import { User, AppState, Person, Job, Sector, RhHorasExtras, HorasExtrasEntry, HorasExtrasEntryStatus } from '../../types';
 
 interface HorasExtrasFormProps {
     users: User[];
@@ -36,7 +36,7 @@ export const HorasExtrasForm: React.FC<HorasExtrasFormProps> = ({
     const currentMonthName = months[currentMonthIndex];
 
     const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthName);
-    const [entries, setEntries] = useState<{ userId: string, name: string, jobTitle: string, sector: string, hours: number, adicionalNoturno: number, isCedido?: boolean }[]>([]);
+    const [entries, setEntries] = useState<HorasExtrasEntry[]>([]);
 
     const [selectedUserId, setSelectedUserId] = useState<string>('');
     const [selectedHours, setSelectedHours] = useState<number>(1);
@@ -47,6 +47,8 @@ export const HorasExtrasForm: React.FC<HorasExtrasFormProps> = ({
     const [isAdicionalOpen, setIsAdicionalOpen] = useState(false);
     const [userSearch, setUserSearch] = useState('');
     const [pendingCedido, setPendingCedido] = useState<any | null>(null);
+    const [pendingExcesso, setPendingExcesso] = useState<{ person: any, forceCedido: boolean } | null>(null);
+    const [excessoJustificativa, setExcessoJustificativa] = useState('');
 
     const userDropdownRef = useRef<HTMLDivElement>(null);
     const hoursDropdownRef = useRef<HTMLDivElement>(null);
@@ -103,8 +105,8 @@ export const HorasExtrasForm: React.FC<HorasExtrasFormProps> = ({
 
     const availableUsersForAdd = accessiblePersons.filter(p => !entries.some(e => e.userId === p.id));
 
-    const handleAddEntry = (forceCedido: boolean = false) => {
-        const userIdToUse = forceCedido ? pendingCedido?.id : selectedUserId;
+    const handleAddEntry = (forceCedido: boolean = false, overrideExcesso: boolean = false) => {
+        const userIdToUse = forceCedido && pendingCedido ? pendingCedido.id : (pendingExcesso ? pendingExcesso.person.id : selectedUserId);
         if (!userIdToUse || selectedHours <= 0) return;
 
         const selectedPerson = allMappedPersons.find(p => p.id === userIdToUse);
@@ -115,6 +117,16 @@ export const HorasExtrasForm: React.FC<HorasExtrasFormProps> = ({
             return;
         }
 
+        // Check 16h limit for Motoristas/Operadores
+        const jobTitleLower = (selectedPerson?.jobTitle || '').toLowerCase();
+        const isRestrictedRole = jobTitleLower.includes('motorista') || jobTitleLower.includes('operador');
+        
+        if (isRestrictedRole && selectedHours > 16 && !overrideExcesso) {
+            setPendingExcesso({ person: selectedPerson, forceCedido });
+            setExcessoJustificativa('');
+            return; // Interrupt normal flow
+        }
+
         setEntries([...entries, {
             userId: userIdToUse,
             name: selectedPerson?.name || 'Sistema',
@@ -122,13 +134,23 @@ export const HorasExtrasForm: React.FC<HorasExtrasFormProps> = ({
             sector: selectedPerson?.sector || 'Geral',
             hours: selectedHours,
             adicionalNoturno: selectedAdicionalNoturno,
-            isCedido: isActuallyCedido
+            isCedido: forceCedido || isActuallyCedido,
+            status: (isRestrictedRole && selectedHours > 16) ? 'Pendente' : 'Aprovado',
+            justificativa: (isRestrictedRole && selectedHours > 16) ? excessoJustificativa : undefined
         }]);
 
         setSelectedUserId('');
         setSelectedHours(1);
         setSelectedAdicionalNoturno(0);
         setPendingCedido(null);
+        setPendingExcesso(null);
+        setExcessoJustificativa('');
+    };
+
+    const approveEntry = (index: number) => {
+        const newEntries = [...entries];
+        newEntries[index].status = 'Aprovado';
+        setEntries(newEntries);
     };
 
     const removeEntry = (index: number) => {
@@ -431,20 +453,27 @@ export const HorasExtrasForm: React.FC<HorasExtrasFormProps> = ({
                             <div className="space-y-3">
                                 {entries.map((entry, index) => {
                                     return (
-                                        <div key={index} className="group relative flex items-start p-4 bg-white border border-slate-100 hover:border-indigo-100 rounded-2xl shadow-sm hover:shadow-md transition-all animate-in slide-in-from-right-4 duration-300">
+                                        <div key={index} className={`group relative flex items-start p-4 bg-white border ${entry.status === 'Pendente' ? 'border-amber-200 bg-amber-50/30' : 'border-slate-100 hover:border-indigo-100'} rounded-2xl shadow-sm hover:shadow-md transition-all animate-in slide-in-from-right-4 duration-300`}>
                                             {/* Avatar initial */}
-                                            <div className="w-10 h-10 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-sm shrink-0 mr-3 mt-0.5">
+                                            <div className={`w-10 h-10 rounded-full ${entry.status === 'Pendente' ? 'bg-amber-100 text-amber-600' : 'bg-indigo-50 text-indigo-600'} flex items-center justify-center font-bold text-sm shrink-0 mr-3 mt-0.5`}>
                                                 {entry.name?.charAt(0) || 'U'}
                                             </div>
 
                                             <div className="flex-1 min-w-0 pr-8">
-                                                <p className="font-bold text-slate-800 text-sm leading-tight mb-1">{entry.name || 'Desconhecido'}</p>
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <p className="font-bold text-slate-800 text-sm leading-tight">{entry.name || 'Desconhecido'}</p>
+                                                    {entry.status === 'Pendente' && (
+                                                        <span className="text-[9px] font-black text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded uppercase tracking-widest border border-amber-200">
+                                                            Pendente
+                                                        </span>
+                                                    )}
+                                                </div>
                                                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                                                     <p className="text-[10px] uppercase font-bold text-slate-400">{entry.jobTitle || 'Sem cargo'}</p>
                                                     
                                                     <div className="flex items-center gap-1.5">
                                                         <span className="w-1 h-1 rounded-full bg-slate-300"></span>
-                                                        <p className="text-xs font-bold text-fuchsia-600 whitespace-nowrap">{entry.hours} hrs</p>
+                                                        <p className={`text-xs font-bold whitespace-nowrap ${entry.status === 'Pendente' ? 'text-amber-600' : 'text-fuchsia-600'}`}>{entry.hours} hrs</p>
                                                     </div>
 
                                                     {entry.adicionalNoturno > 0 && (
@@ -470,11 +499,29 @@ export const HorasExtrasForm: React.FC<HorasExtrasFormProps> = ({
                                                         </div>
                                                     )}
                                                 </div>
+
+                                                {entry.status === 'Pendente' && entry.justificativa && (
+                                                    <div className="mt-2 bg-white/60 p-2.5 rounded-lg border border-amber-100 text-xs text-amber-900 shadow-sm relative overflow-hidden">
+                                                        <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-amber-400"></div>
+                                                        <p className="font-bold mb-0.5 text-[10px] uppercase tracking-wider opacity-70">Justificativa do Excesso:</p>
+                                                        <p className="italic">"{entry.justificativa}"</p>
+                                                    </div>
+                                                )}
+
+                                                {entry.status === 'Pendente' && userRole === 'admin' && (
+                                                    <button
+                                                        onClick={() => approveEntry(index)}
+                                                        className="mt-3 text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-lg shadow-sm transition-colors flex items-center gap-1.5"
+                                                    >
+                                                        <Check className="w-3.5 h-3.5" />
+                                                        Aprovar Excesso
+                                                    </button>
+                                                )}
                                             </div>
 
                                             <button
                                                 onClick={() => removeEntry(index)}
-                                                className="absolute right-3 top-3 p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all opacity-0 group-hover:opacity-100"
+                                                className={`absolute right-3 top-3 p-2 rounded-xl transition-all opacity-0 group-hover:opacity-100 ${entry.status === 'Pendente' ? 'text-amber-400 hover:text-amber-600 hover:bg-amber-100' : 'text-slate-300 hover:text-rose-500 hover:bg-rose-50'}`}
                                                 title="Remover"
                                             >
                                                 <Trash2 className="w-4 h-4" />
@@ -514,6 +561,55 @@ export const HorasExtrasForm: React.FC<HorasExtrasFormProps> = ({
                             >
                                 <Check className="w-4 h-4" />
                                 Confirmar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* Confirmation Modal for Excesso de Horas */}
+            {pendingExcesso && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8 animate-scale-in">
+                        <div className="w-16 h-16 rounded-2xl bg-amber-50 text-amber-500 flex items-center justify-center mb-6 mx-auto">
+                            <Clock className="w-8 h-8" />
+                        </div>
+                        <h3 className="text-xl font-black text-slate-800 text-center mb-2 uppercase tracking-tight">Excesso de Horas Extras</h3>
+                        <p className="text-slate-500 text-center text-sm mb-6 font-medium leading-relaxed">
+                            O cargo <span className="text-indigo-600 font-bold">{pendingExcesso.person.jobTitle}</span> possui um limite padrão de 16 horas. O lançamento atual para <span className="text-slate-800 font-bold">{pendingExcesso.person.name}</span> é de <span className="text-rose-600 font-bold">{selectedHours} horas</span>.
+                            <br/><br/>
+                            Por favor, informe a justificativa obrigatória. O lançamento ficará pendente de aprovação.
+                        </p>
+                        
+                        <div className="mb-6">
+                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Justificativa <span className="text-rose-500">*</span></label>
+                            <textarea
+                                value={excessoJustificativa}
+                                onChange={(e) => setExcessoJustificativa(e.target.value)}
+                                placeholder="Descreva o motivo do excesso de horas..."
+                                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm min-h-[100px] resize-none focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                            />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <button
+                                onClick={() => { setPendingExcesso(null); setExcessoJustificativa(''); }}
+                                className="py-3.5 px-6 font-bold text-slate-500 bg-slate-50 hover:bg-slate-100 rounded-2xl transition-all text-sm border border-slate-200"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={() => {
+                                    if (!excessoJustificativa.trim()) {
+                                        alert("A justificativa é obrigatória.");
+                                        return;
+                                    }
+                                    handleAddEntry(pendingExcesso.forceCedido, true);
+                                }}
+                                disabled={!excessoJustificativa.trim()}
+                                className="py-3.5 px-6 font-bold text-white bg-amber-500 hover:bg-amber-600 rounded-2xl transition-all shadow-lg hover:shadow-amber-500/20 text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                <Check className="w-4 h-4" />
+                                Salvar Pendente
                             </button>
                         </div>
                     </div>

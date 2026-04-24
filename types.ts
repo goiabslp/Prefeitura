@@ -290,12 +290,26 @@ export interface Job {
   name: string;
 }
 
+export type HorasExtrasEntryStatus = 'Pendente' | 'Aprovado';
+
+export interface HorasExtrasEntry {
+  userId: string;
+  name: string;
+  jobTitle: string;
+  sector: string;
+  hours: number;
+  adicionalNoturno: number;
+  isCedido?: boolean;
+  status?: HorasExtrasEntryStatus;
+  justificativa?: string;
+}
+
 export interface RhHorasExtras {
   id: string;
   created_at?: string;
   month: string;
   sector: string;
-  entries: any[];
+  entries: HorasExtrasEntry[];
   user_id: string;
   user_name: string;
   signature_name: string;
@@ -441,5 +455,18 @@ export interface ProjetoHistory {
   action: ProjetoHistoryAction;
   message?: string;
   attachments?: { url: string; name: string; caption?: string }[];
+  created_at?: string;
+}
+
+export interface DiariaEvento {
+  id: string;
+  pessoas: { id: string; name: string }[];
+  destino: string;
+  data_saida: string;
+  data_retorno: string;
+  motivo: string;
+  setor_id?: string;
+  user_id: string;
+  user_name: string;
   created_at?: string;
 }

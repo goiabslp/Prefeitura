@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect, useRef } from 'react';
 import { ToastType as BaseToastType } from '../components/common/ToastNotification';
 import { notificationService } from '../services/notificationService';
 import { useAuth } from './AuthContext';
@@ -121,21 +121,31 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
         setNotifications(prev => [newNotification, ...prev]);
     }, []);
 
+    // Keep track of recent login notifications to prevent duplicates (Throttle/Debounce)
+    const recentLoginsRef = useRef<{ [username: string]: number }>({});
+
     // Real-time Login Listener
     useEffect(() => {
         const channel = supabase.channel('global_events')
             .on('broadcast', { event: 'user-login' }, (payload) => {
                 // Ensure payload has data
                 if (payload.payload && payload.payload.username) {
-                    // We don't want to notify about our own login (optional)
-                    // But if we want to see it for verification, let's keep it or filter by comparing username.
-                    // Usually "Logged IN" is for OTHERS to see.
-                    if (user && payload.payload.username === user.name) return;
+                    const username = payload.payload.username;
+                    
+                    if (user && username === user.name) return;
+
+                    // Throttle: Prevent duplicate notifications for the same user within 10 seconds
+                    const now = Date.now();
+                    const lastLogin = recentLoginsRef.current[username];
+                    if (lastLogin && (now - lastLogin < 10000)) {
+                        return; // Ignore duplicate/simultaneous event
+                    }
+                    recentLoginsRef.current[username] = now;
 
                     addNotification(
                         'Novo Acesso',
-                        `${payload.payload.username} acabou de entrar no sistema.`,
-                        'login' as any // We will add 'login' to ToastType or handle as 'info' with special logic
+                        `${username} acabou de entrar no sistema.`,
+                        'login' as any 
                     );
                 }
             })
