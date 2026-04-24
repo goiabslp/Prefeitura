@@ -54,20 +54,8 @@ export const HorasExtrasForm: React.FC<HorasExtrasFormProps> = ({
     const hoursDropdownRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (userDropdownRef.current && !userDropdownRef.current.contains(event.target as Node)) {
-                setIsUserOpen(false);
-            }
-            if (hoursDropdownRef.current && !hoursDropdownRef.current.contains(event.target as Node)) {
-                setIsHoursOpen(false);
-            }
-            const adicionalDropdown = document.getElementById('adicional-dropdown');
-            if (adicionalDropdown && !adicionalDropdown.contains(event.target as Node)) {
-                setIsAdicionalOpen(false);
-            }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
+        // As they are modals now, we don't necessarily need click-outside for dropdowns in the same way,
+        // but we'll leave it empty or remove the old logic since we'll use backdrop clicks.
     }, []);
 
     useEffect(() => {
@@ -246,69 +234,9 @@ export const HorasExtrasForm: React.FC<HorasExtrasFormProps> = ({
                                         <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-300 ${isUserOpen ? 'rotate-180 text-fuchsia-500' : ''}`} />
                                     </div>
 
-                                    {/* User Dropdown Menu */}
-                                    {isUserOpen && (
-                                        <div className="absolute z-50 w-full bottom-full mb-2 bg-white border border-slate-200 rounded-xl shadow-xl shadow-slate-200/50 overflow-hidden animate-fade-in-up origin-bottom">
-                                            <div className="p-2 border-b border-slate-100">
-                                                <div className="relative">
-                                                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                                                    <input
-                                                        type="text"
-                                                        autoFocus
-                                                        placeholder="Buscar nome ou cargo..."
-                                                        value={userSearch}
-                                                        onChange={(e) => setUserSearch(e.target.value)}
-                                                        className="w-full text-sm py-2 pl-9 pr-3 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-fuchsia-100 focus:border-fuchsia-400"
-                                                    />
-                                                    {userSearch && (
-                                                        <button
-                                                            onClick={(e) => { e.stopPropagation(); setUserSearch(''); }}
-                                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                                                        >
-                                                            <X className="w-3.5 h-3.5" />
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            </div>
-                                            <div className="max-h-60 overflow-y-auto p-1 custom-scrollbar">
-                                                {availableUsersForAdd.filter(u =>
-                                                    u.name.toLowerCase().includes(userSearch.toLowerCase()) ||
-                                                    (u.jobTitle || '').toLowerCase().includes(userSearch.toLowerCase())
-                                                ).length > 0 ? (
-                                                    availableUsersForAdd.filter(u =>
-                                                        u.name.toLowerCase().includes(userSearch.toLowerCase()) ||
-                                                        (u.jobTitle || '').toLowerCase().includes(userSearch.toLowerCase())
-                                                    ).map(u => (
-                                                        <div
-                                                            key={u.id}
-                                                            onClick={() => {
-                                                                setSelectedUserId(u.id);
-                                                                setIsUserOpen(false);
-                                                                setUserSearch('');
-                                                            }}
-                                                            className={`flex flex-col px-3 py-2 rounded-lg cursor-pointer transition-colors ${selectedUserId === u.id ? 'bg-fuchsia-50' : 'hover:bg-slate-50 text-slate-700'}`}
-                                                        >
-                                                            <div className="flex items-center justify-between">
-                                                                <span className={`text-sm font-bold ${selectedUserId === u.id ? 'text-fuchsia-700' : 'text-slate-800'}`}>{u.name}</span>
-                                                                {selectedUserId === u.id && <Check className="w-4 h-4 text-fuchsia-600" />}
-                                                            </div>
-                                                            <span className="text-xs text-slate-500 font-medium">{u.jobTitle || 'Sem cargo'}</span>
-                                                        </div>
-                                                    ))
-                                                ) : (
-                                                    <div className="px-4 py-6 text-center text-sm text-slate-500">
-                                                        Nenhum colaborador encontrado.
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    )}
-                                    {availableUsersForAdd.length === 0 && accessiblePersons.length > 0 && (
-                                        <p className="text-xs text-emerald-500 mt-2 font-medium">Todos os colaboradores já foram adicionados.</p>
-                                    )}
+                                    {/* User Dropdown Menu -> Moved to Modal at bottom */}
                                 </div>
 
-                                {/* Custom Hours Select */}
                                 <div className="md:col-span-3 relative group" ref={hoursDropdownRef}>
                                     <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Quantidade</label>
                                     <div
@@ -325,25 +253,7 @@ export const HorasExtrasForm: React.FC<HorasExtrasFormProps> = ({
                                         <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-300 ${isHoursOpen ? 'rotate-180 text-fuchsia-500' : ''}`} />
                                     </div>
 
-                                    {/* Hours Dropdown Menu */}
-                                    {isHoursOpen && (
-                                        <div className="absolute z-50 w-full bottom-full mb-2 bg-white border border-slate-200 rounded-xl shadow-xl shadow-slate-200/50 overflow-hidden animate-fade-in-up origin-bottom">
-                                            <div className="max-h-56 overflow-y-auto p-1 grid grid-cols-2 gap-1 custom-scrollbar">
-                                                {Array.from({ length: 50 }, (_, i) => i + 1).map(h => (
-                                                    <div
-                                                        key={h}
-                                                        onClick={() => {
-                                                            setSelectedHours(h);
-                                                            setIsHoursOpen(false);
-                                                        }}
-                                                        className={`flex items-center justify-center py-2 rounded-lg cursor-pointer transition-colors text-sm font-medium ${selectedHours === h ? 'bg-fuchsia-500 text-white shadow-sm' : 'hover:bg-slate-50 text-slate-700'}`}
-                                                    >
-                                                        {h.toString().padStart(2, '0')} hrs
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
+                                    {/* Hours Dropdown Menu -> Moved to Modal at bottom */}
                                 </div>
 
                                 {/* Adicional Noturno Select */}
@@ -364,33 +274,7 @@ export const HorasExtrasForm: React.FC<HorasExtrasFormProps> = ({
                                         <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-300 ${isAdicionalOpen ? 'rotate-180 text-indigo-500' : ''}`} />
                                     </div>
 
-                                    {isAdicionalOpen && (
-                                        <div className="absolute z-50 w-full bottom-full mb-2 bg-white border border-slate-200 rounded-xl shadow-xl shadow-slate-200/50 overflow-hidden animate-fade-in-up origin-bottom">
-                                            <div className="max-h-56 overflow-y-auto p-1 grid grid-cols-3 gap-1 custom-scrollbar">
-                                                <div
-                                                    onClick={() => {
-                                                        setSelectedAdicionalNoturno(0);
-                                                        setIsAdicionalOpen(false);
-                                                    }}
-                                                    className={`col-span-3 flex items-center justify-center py-2 rounded-lg cursor-pointer transition-colors text-sm font-bold ${selectedAdicionalNoturno === 0 ? 'bg-slate-800 text-white shadow-sm' : 'hover:bg-slate-50 text-slate-700 border border-slate-100'}`}
-                                                >
-                                                    Sem Adicional
-                                                </div>
-                                                {Array.from({ length: 150 }, (_, i) => i + 1).map(h => (
-                                                    <div
-                                                        key={h}
-                                                        onClick={() => {
-                                                            setSelectedAdicionalNoturno(h);
-                                                            setIsAdicionalOpen(false);
-                                                        }}
-                                                        className={`flex items-center justify-center py-2 rounded-lg cursor-pointer transition-colors text-sm font-medium ${selectedAdicionalNoturno === h ? 'bg-indigo-500 text-white shadow-sm' : 'hover:bg-slate-50 text-slate-700'}`}
-                                                    >
-                                                        {h}h
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
+                                    {/* Adicional Noturno Modal -> Moved to bottom */}
                                 </div>
                             </div>
 
@@ -611,6 +495,211 @@ export const HorasExtrasForm: React.FC<HorasExtrasFormProps> = ({
                                 <Check className="w-4 h-4" />
                                 Salvar Pendente
                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal: Selecionar Colaborador */}
+            {isUserOpen && (
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-fade-in p-4">
+                    {/* Overlay clickable */}
+                    <div className="absolute inset-0" onClick={() => setIsUserOpen(false)}></div>
+                    <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl relative flex flex-col max-h-[80vh] overflow-hidden animate-scale-in">
+                        <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                            <div>
+                                <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Colaborador</h3>
+                                <p className="text-xs font-bold text-slate-400 uppercase mt-1">Selecione para lançar horas</p>
+                            </div>
+                            <button
+                                onClick={() => setIsUserOpen(false)}
+                                className="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 hover:border-slate-300 transition-all shadow-sm"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        
+                        <div className="p-4 border-b border-slate-100">
+                            <div className="relative">
+                                <Search className="w-5 h-5 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
+                                <input
+                                    type="text"
+                                    autoFocus
+                                    placeholder="Buscar nome ou cargo..."
+                                    value={userSearch}
+                                    onChange={(e) => setUserSearch(e.target.value)}
+                                    className="w-full text-base py-3 pl-12 pr-4 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-fuchsia-100 focus:border-fuchsia-400 font-medium"
+                                />
+                                {userSearch && (
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); setUserSearch(''); }}
+                                        className="absolute right-4 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-300 hover:text-slate-700 transition-colors"
+                                    >
+                                        <X className="w-4 h-4" />
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="overflow-y-auto p-2 custom-scrollbar flex-1 bg-[#f8fafc]">
+                            {availableUsersForAdd.filter(u =>
+                                u.name.toLowerCase().includes(userSearch.toLowerCase()) ||
+                                (u.jobTitle || '').toLowerCase().includes(userSearch.toLowerCase())
+                            ).length > 0 ? (
+                                <div className="space-y-2 p-2">
+                                    {availableUsersForAdd.filter(u =>
+                                        u.name.toLowerCase().includes(userSearch.toLowerCase()) ||
+                                        (u.jobTitle || '').toLowerCase().includes(userSearch.toLowerCase())
+                                    ).map(u => (
+                                        <div
+                                            key={u.id}
+                                            onClick={() => {
+                                                setSelectedUserId(u.id);
+                                                setIsUserOpen(false);
+                                                setUserSearch('');
+                                            }}
+                                            className={`flex flex-col p-4 rounded-2xl cursor-pointer transition-all border ${selectedUserId === u.id ? 'bg-fuchsia-50 border-fuchsia-200 shadow-sm' : 'bg-white border-slate-200 hover:border-slate-300 hover:shadow-md'}`}
+                                        >
+                                            <div className="flex items-center justify-between mb-1">
+                                                <span className={`text-base font-bold ${selectedUserId === u.id ? 'text-fuchsia-700' : 'text-slate-800'}`}>{u.name}</span>
+                                                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${selectedUserId === u.id ? 'border-fuchsia-500 bg-fuchsia-500 text-white' : 'border-slate-300'}`}>
+                                                    {selectedUserId === u.id && <Check className="w-3 h-3" />}
+                                                </div>
+                                            </div>
+                                            <span className="text-sm text-slate-500 font-medium">{u.jobTitle || 'Sem cargo'}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="p-8 flex flex-col items-center justify-center text-center h-full">
+                                    <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mb-4">
+                                        <Search className="w-8 h-8 text-slate-300" />
+                                    </div>
+                                    <p className="font-bold text-slate-600">Nenhum colaborador encontrado.</p>
+                                    <p className="text-sm text-slate-400 mt-2 max-w-[200px]">Tente buscar por outro nome ou cargo.</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal: Selecionar Quantidade de Horas */}
+            {isHoursOpen && (
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-fade-in p-4">
+                    <div className="absolute inset-0" onClick={() => setIsHoursOpen(false)}></div>
+                    <div className="bg-[#f8fafc] w-full max-w-lg rounded-3xl shadow-2xl relative flex flex-col max-h-[80vh] overflow-hidden animate-scale-in border border-slate-200">
+                        <div className="p-6 border-b border-slate-200 flex items-center justify-between bg-white">
+                            <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 rounded-2xl bg-fuchsia-50 text-fuchsia-600 flex items-center justify-center">
+                                    <Clock className="w-6 h-6" />
+                                </div>
+                                <div>
+                                    <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Quantidade</h3>
+                                    <p className="text-xs font-bold text-slate-400 uppercase mt-1">Horas Extras</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setIsHoursOpen(false)}
+                                className="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 hover:border-slate-300 transition-all shadow-sm"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        
+                        <div className="overflow-y-auto p-4 custom-scrollbar flex-1">
+                            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
+                                {Array.from({ length: 50 }, (_, i) => i + 1).map(h => (
+                                    <button
+                                        key={h}
+                                        onClick={() => {
+                                            setSelectedHours(h);
+                                            setIsHoursOpen(false);
+                                        }}
+                                        className={`flex flex-col items-center justify-center p-3 rounded-2xl border-2 transition-all font-bold ${
+                                            selectedHours === h 
+                                            ? 'border-fuchsia-500 bg-fuchsia-500 text-white shadow-md transform scale-105' 
+                                            : 'border-slate-200 bg-white text-slate-600 hover:border-fuchsia-300 hover:bg-fuchsia-50'
+                                        }`}
+                                    >
+                                        <span className={`text-xl ${selectedHours === h ? 'text-white' : 'text-slate-800'}`}>
+                                            {h}
+                                        </span>
+                                        <span className={`text-[10px] uppercase tracking-wider mt-1 ${selectedHours === h ? 'text-fuchsia-100' : 'text-slate-400'}`}>
+                                            {h === 1 ? 'Hora' : 'Horas'}
+                                        </span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal: Selecionar Adicional Noturno */}
+            {isAdicionalOpen && (
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-fade-in p-4">
+                    <div className="absolute inset-0" onClick={() => setIsAdicionalOpen(false)}></div>
+                    <div className="bg-[#f8fafc] w-full max-w-lg rounded-3xl shadow-2xl relative flex flex-col max-h-[80vh] overflow-hidden animate-scale-in border border-slate-200">
+                        <div className="p-6 border-b border-slate-200 flex items-center justify-between bg-white">
+                            <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                                    <Clock className="w-6 h-6" />
+                                </div>
+                                <div>
+                                    <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Adicional Noturno</h3>
+                                    <p className="text-xs font-bold text-slate-400 uppercase mt-1">Horas Noturnas</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setIsAdicionalOpen(false)}
+                                className="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 hover:border-slate-300 transition-all shadow-sm"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        
+                        <div className="overflow-y-auto p-4 custom-scrollbar flex-1">
+                            <button
+                                onClick={() => {
+                                    setSelectedAdicionalNoturno(0);
+                                    setIsAdicionalOpen(false);
+                                }}
+                                className={`w-full flex items-center justify-between p-4 mb-4 rounded-2xl border-2 transition-all font-bold ${
+                                    selectedAdicionalNoturno === 0 
+                                    ? 'border-indigo-600 bg-indigo-600 text-white shadow-md' 
+                                    : 'border-slate-200 bg-white text-slate-700 hover:border-indigo-300 hover:bg-indigo-50'
+                                }`}
+                            >
+                                <span className="text-lg">Sem Adicional Noturno</span>
+                                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${selectedAdicionalNoturno === 0 ? 'border-white bg-indigo-500 text-white' : 'border-slate-300'}`}>
+                                    {selectedAdicionalNoturno === 0 && <Check className="w-3 h-3" />}
+                                </div>
+                            </button>
+
+                            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
+                                {Array.from({ length: 150 }, (_, i) => i + 1).map(h => (
+                                    <button
+                                        key={h}
+                                        onClick={() => {
+                                            setSelectedAdicionalNoturno(h);
+                                            setIsAdicionalOpen(false);
+                                        }}
+                                        className={`flex flex-col items-center justify-center p-3 rounded-2xl border-2 transition-all font-bold ${
+                                            selectedAdicionalNoturno === h 
+                                            ? 'border-indigo-500 bg-indigo-500 text-white shadow-md transform scale-105' 
+                                            : 'border-slate-200 bg-white text-slate-600 hover:border-indigo-300 hover:bg-indigo-50'
+                                        }`}
+                                    >
+                                        <span className={`text-xl ${selectedAdicionalNoturno === h ? 'text-white' : 'text-slate-800'}`}>
+                                            {h}
+                                        </span>
+                                        <span className={`text-[10px] uppercase tracking-wider mt-1 ${selectedAdicionalNoturno === h ? 'text-indigo-100' : 'text-slate-400'}`}>
+                                            {h === 1 ? 'Hora' : 'Horas'}
+                                        </span>
+                                    </button>
+                                ))}
+                            </div>
                         </div>
                     </div>
                 </div>
