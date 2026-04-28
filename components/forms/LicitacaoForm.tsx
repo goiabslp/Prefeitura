@@ -262,64 +262,67 @@ export const LicitacaoForm: React.FC<LicitacaoFormProps> = ({
     <div className="space-y-8 animate-fade-in pb-12">
       {/* STEP 1: DETALHES */}
       {currentStep === 1 && (
-        <>
-          <div className="space-y-4 border-t border-slate-200 pt-6">
-            <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+        <div className="space-y-6 pt-2">
+          {/* Sessão 1: Processo Licitatório */}
+          <div className="space-y-3">
+            <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
               <Gavel className="w-4 h-4 text-emerald-600" /> Processo Licitatório
             </h3>
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
-              <div>
-                <label className={labelClass}>Finalidade do Processo</label>
-                <div
-                  onClick={() => setIsFinalidadeModalOpen(true)}
-                  className={`${inputClass} flex items-center justify-between cursor-pointer`}
-                >
-                  <span className={content.title ? 'text-slate-900 font-bold' : 'text-slate-400'}>
-                    {content.title || 'Selecione a finalidade do processo...'}
-                  </span>
-                  <ChevronDown className="w-4 h-4 text-slate-400" />
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className={labelClass}>Finalidade do Processo</label>
+                  <div
+                    onClick={() => setIsFinalidadeModalOpen(true)}
+                    className={`${inputClass} flex items-center justify-between cursor-pointer`}
+                  >
+                    <span className={content.title ? 'text-slate-900 font-bold' : 'text-slate-400'}>
+                      {content.title || 'Selecione a finalidade...'}
+                    </span>
+                    <ChevronDown className="w-4 h-4 text-slate-400" />
+                  </div>
                 </div>
-              </div>
 
-              <div className="pt-2 border-t border-slate-100">
-                <label className={labelClass}>Prioridade</label>
-                <div className="flex bg-slate-100 p-1 rounded-full gap-1">
-                  {PRIORITY_OPTIONS.map((opt) => {
-                    const Icon = opt.icon;
-                    const isSelected = content.priority === opt.value;
-                    const selectedColors = {
-                      slate: 'bg-white text-slate-700 shadow-sm ring-1 ring-black/5',
-                      indigo: 'bg-indigo-600 text-white shadow-md shadow-indigo-500/30',
-                      amber: 'bg-amber-500 text-white shadow-md shadow-amber-500/30',
-                      rose: 'bg-rose-500 text-white shadow-md shadow-rose-500/30',
-                    };
+                <div>
+                  <label className={labelClass}>Prioridade</label>
+                  <div className="flex bg-slate-100 p-1 rounded-lg gap-1">
+                    {PRIORITY_OPTIONS.map((opt) => {
+                      const Icon = opt.icon;
+                      const isSelected = content.priority === opt.value;
+                      const selectedColors = {
+                        slate: 'bg-white text-slate-700 shadow-sm ring-1 ring-black/5',
+                        indigo: 'bg-indigo-600 text-white shadow-md shadow-indigo-500/30',
+                        amber: 'bg-amber-500 text-white shadow-md shadow-amber-500/30',
+                        rose: 'bg-rose-500 text-white shadow-md shadow-rose-500/30',
+                      };
 
-                    return (
-                      <button
-                        key={opt.value}
-                        onClick={() => handleUpdate('content', 'priority', opt.value)}
-                        className={`
-                          flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wide transition-all duration-300
-                          ${isSelected ? selectedColors[opt.color as keyof typeof selectedColors] : 'text-slate-400 hover:bg-white/50 hover:text-slate-600'}
-                        `}
-                      >
-                        <Icon className={`w-3.5 h-3.5 ${isSelected ? '' : 'opacity-70'}`} />
-                        <span className="hidden sm:inline">{opt.label}</span>
-                        <span className="sm:hidden">{opt.label.slice(0, 3)}</span>
-                      </button>
-                    );
-                  })}
+                      return (
+                        <button
+                          key={opt.value}
+                          onClick={() => handleUpdate('content', 'priority', opt.value)}
+                          className={`
+                            flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wide transition-all duration-300
+                            ${isSelected ? selectedColors[opt.color as keyof typeof selectedColors] : 'text-slate-400 hover:bg-white/50 hover:text-slate-600'}
+                          `}
+                        >
+                          <Icon className={`w-3.5 h-3.5 ${isSelected ? '' : 'opacity-70'}`} />
+                          <span className="hidden sm:inline">{opt.label}</span>
+                          <span className="sm:hidden">{opt.label.slice(0, 3)}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 
               {showPriorityJustification && (
-                <div className="pt-4 animate-slide-up">
+                <div className="animate-slide-up pt-2">
                   <label className={labelClass}>Justificativa da {content.priority}</label>
                   <div className="relative">
                     <textarea
                       value={content.priorityJustification || ''}
                       onChange={(e) => handleUpdate('content', 'priorityJustification', e.target.value)}
-                      className={`${inputClass} min-h-[100px] resize-none leading-relaxed p-4 border-rose-100 bg-rose-50/20`}
+                      className={`${inputClass} min-h-[60px] resize-none leading-relaxed p-3 border-rose-100 bg-rose-50/20`}
                       placeholder={`Por que este processo tem prioridade ${content.priority}?`}
                     />
                     <MessageSquare className="absolute right-3 top-3 w-4 h-4 text-rose-300 pointer-events-none" />
@@ -329,32 +332,33 @@ export const LicitacaoForm: React.FC<LicitacaoFormProps> = ({
             </div>
           </div>
 
-          <div className="space-y-4 border-t border-slate-200 pt-6">
-            <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+          {/* Sessão 2: Dados do Solicitante */}
+          <div className="space-y-3">
+            <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
               <UserIcon className="w-4 h-4 text-emerald-600" /> Dados do Solicitante
             </h3>
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-              <div>
-                <label className={labelClass}>NOME COMPLETO</label>
-                <div
-                  onClick={() => setIsRequesterModalOpen(true)}
-                  className={`${inputClass} flex items-center justify-between cursor-pointer`}
-                >
-                  <span className={content.requesterName ? 'text-slate-900 font-bold' : 'text-slate-400'}>
-                    {content.requesterName || 'Selecione o Solicitante...'}
-                  </span>
-                  <ChevronDown className="w-4 h-4 text-slate-400" />
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="md:col-span-2">
+                  <label className={labelClass}>NOME COMPLETO</label>
+                  <div
+                    onClick={() => setIsRequesterModalOpen(true)}
+                    className={`${inputClass} flex items-center justify-between cursor-pointer`}
+                  >
+                    <span className={content.requesterName ? 'text-slate-900 font-bold' : 'text-slate-400'}>
+                      {content.requesterName || 'Selecione o Solicitante...'}
+                    </span>
+                    <ChevronDown className="w-4 h-4 text-slate-400" />
+                  </div>
                 </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className={labelClass}>Cargo</label>
                   <input
                     type="text" value={content.requesterRole || ''}
                     readOnly
                     className={`${inputClass} bg-slate-100/50 cursor-not-allowed text-slate-500`}
-                    placeholder="Cargo automático"
+                    placeholder="Automático"
                   />
                 </div>
                 <div>
@@ -363,13 +367,13 @@ export const LicitacaoForm: React.FC<LicitacaoFormProps> = ({
                     type="text" value={content.requesterSector || ''}
                     readOnly
                     className={`${inputClass} bg-slate-100/50 cursor-not-allowed text-slate-500`}
-                    placeholder="Setor automático"
+                    placeholder="Automático"
                   />
                 </div>
               </div>
             </div>
           </div>
-        </>
+        </div>
       )}
 
       {/* STEP 2: ITENS DA REQUISIÇÃO (Manual Insert Only) */}
@@ -758,7 +762,19 @@ export const LicitacaoForm: React.FC<LicitacaoFormProps> = ({
         title="Selecionar Solicitante"
         subtitle="Escolha o responsável por esta solicitação"
         options={persons}
-        onSelect={(selected) => handleUpdate('content', 'requesterName', selected.name)}
+        onSelect={(selected) => {
+          const job = jobs.find(j => j.id === selected.jobId)?.name || '';
+          const sector = sectors.find(s => s.id === selected.sectorId)?.name || '';
+          onUpdate(prev => ({
+            ...prev,
+            content: {
+              ...prev.content,
+              requesterName: selected.name,
+              requesterRole: job,
+              requesterSector: sector
+            }
+          }));
+        }}
         getInternalId={(item) => item.id}
         renderItem={(item, isSelected) => {
           const jobTitle = jobs.find(j => j.id === item.jobId)?.name || 'Cargo não definido';
