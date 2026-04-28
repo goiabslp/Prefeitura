@@ -145,6 +145,16 @@ export const RHModule: React.FC<RHModuleProps> = ({
                                 </div>
                             </div>
                         </div>
+                    ) : activeTab === 'historico' ? (
+                        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 flex-1 flex flex-col w-full h-full">
+                            <HorasExtrasHistory
+                                userRole={userRole}
+                                currentUserSector={userRole === 'admin' ? 'Geral' : (users.find(u => u.id === userId)?.sector || 'Geral')}
+                                onDownloadPdf={handleDownloadPdf}
+                                onEdit={handleEdit}
+                                onBack={() => onNavigate('rh')}
+                            />
+                        </div>
                     ) : (
                         <div className="max-w-7xl mx-auto w-full">
                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
@@ -158,37 +168,28 @@ export const RHModule: React.FC<RHModuleProps> = ({
                             </div>
 
                             <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                                {activeTab === 'novo' ? (
-                                    <HorasExtrasForm
-                                        users={users}
-                                        persons={persons}
-                                        jobs={jobs}
-                                        sectors={sectors}
-                                        userRole={userRole}
-                                        currentUserId={userId}
-                                        editingRecord={editingRecord}
-                                        onSave={(data) => {
-                                            onSaveForm(data);
+                                <HorasExtrasForm
+                                    users={users}
+                                    persons={persons}
+                                    jobs={jobs}
+                                    sectors={sectors}
+                                    userRole={userRole}
+                                    currentUserId={userId}
+                                    editingRecord={editingRecord}
+                                    onSave={(data) => {
+                                        onSaveForm(data);
+                                        setEditingRecord(null);
+                                    }}
+                                    onCancel={() => {
+                                        if (editingRecord) {
                                             setEditingRecord(null);
-                                        }}
-                                        onCancel={() => {
-                                            if (editingRecord) {
-                                                setEditingRecord(null);
-                                                setActiveTab('historico');
-                                            } else {
-                                                onNavigate('rh');
-                                            }
-                                        }}
-                                        appState={appState}
-                                    />
-                                ) : (
-                                    <HorasExtrasHistory
-                                        userRole={userRole}
-                                        currentUserSector={userRole === 'admin' ? 'Geral' : (users.find(u => u.id === userId)?.sector || 'Geral')}
-                                        onDownloadPdf={handleDownloadPdf}
-                                        onEdit={handleEdit}
-                                    />
-                                )}
+                                            setActiveTab('historico');
+                                        } else {
+                                            onNavigate('rh');
+                                        }
+                                    }}
+                                    appState={appState}
+                                />
                             </div>
                         </div>
                     )}

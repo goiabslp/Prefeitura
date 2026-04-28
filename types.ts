@@ -194,7 +194,7 @@ export interface AppState {
 
 export type UserRole = 'admin' | 'collaborator' | 'licitacao' | 'compras' | 'marketing';
 
-export type AppPermission = 'parent_criar_oficio' | 'parent_admin' | 'parent_compras' | 'parent_licitacao' | 'parent_diarias' | 'parent_frotas' | 'parent_agendamento_veiculo' | 'parent_licitacao_triagem' | 'parent_licitacao_processos' | 'parent_abastecimento' | 'parent_abastecimento_novo' | 'parent_abastecimento_gestao' | 'parent_abastecimento_dashboard' | 'parent_agricultura' | 'parent_obras' | 'parent_tarefas' | 'parent_calendario' | 'parent_rh' | 'parent_projetos' | 'parent_marketing' | 'parent_compras_itens' | 'parent_compras_dados';
+export type AppPermission = 'parent_criar_oficio' | 'parent_admin' | 'parent_compras' | 'parent_licitacao' | 'parent_diarias' | 'parent_diarias_novo_evento' | 'parent_diarias_lancamentos' | 'parent_frotas' | 'parent_agendamento_veiculo' | 'parent_licitacao_triagem' | 'parent_licitacao_processos' | 'parent_abastecimento' | 'parent_abastecimento_novo' | 'parent_abastecimento_gestao' | 'parent_abastecimento_dashboard' | 'parent_agricultura' | 'parent_obras' | 'parent_tarefas' | 'parent_calendario' | 'parent_rh' | 'parent_projetos' | 'parent_marketing' | 'parent_compras_itens' | 'parent_compras_dados';
 
 export type BlockType = 'oficio' | 'compras' | 'licitacao' | 'diarias' | 'agendamento' | 'abastecimento' | 'vs_calendar' | 'vs_history' | 'vs_approvals' | 'dashboard' | 'licitacao_screening' | 'agricultura' | 'obras' | 'tarefas' | 'calendario' | 'rh' | 'projetos' | 'marketing';
 

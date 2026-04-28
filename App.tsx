@@ -93,6 +93,7 @@ import { MarketingModule } from './components/marketing/MarketingModule';
 import { SystemUpdateScreen } from './components/SystemUpdateScreen';
 import { NovoEventoScreen } from './components/diarias/NovoEventoScreen';
 import { LancamentosScreen } from './components/diarias/LancamentosScreen';
+import { OficiosHistory } from './components/oficios/OficiosHistory';
 
 const VIEW_TO_PATH: Record<string, string> = {
   'login': '/Login',

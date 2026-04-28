@@ -903,7 +903,11 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                       },
                       {
                         title: 'Diárias e Custeio',
-                        permissions: [{ id: 'parent_diarias', label: 'Módulo: Diárias' }],
+                        permissions: [
+                          { id: 'parent_diarias', label: 'Módulo: Diárias' },
+                          { id: 'parent_diarias_novo_evento', label: 'Novo Evento' },
+                          { id: 'parent_diarias_lancamentos', label: 'Lançamentos' }
+                        ],
                         color: 'amber'
                       },
                       {
