@@ -107,6 +107,7 @@ const VIEW_TO_PATH: Record<string, string> = {
   'licitacao-tracking': '/Licitacao/MeusProcessos',
   'licitacao-screening': '/Licitacao/Triagem',
   'licitacao-all': '/Licitacao/Processos',
+  'licitacao-details': '/Licitacao/MeusProcessos/Visualizar',
   'admin:dashboard': '/Admin/Dashboard',
   'admin:users': '/Admin/Usuarios',
   'admin:entities': '/Admin/Entidades',
@@ -746,6 +747,9 @@ const App: React.FC = () => {
         } else if (state.view === 'licitacao-tracking') {
           setCurrentView('tracking');
           setActiveBlock('licitacao');
+        } else if (state.view === 'licitacao-details') {
+          setCurrentView('order-details');
+          setActiveBlock('licitacao');
         } else {
           setCurrentView(state.view as any);
         }
@@ -829,6 +833,7 @@ const App: React.FC = () => {
       else if (currentView === 'licitacao-all') stateKey = 'licitacao-all';
       else if (currentView === 'licitacao-screening') stateKey = 'licitacao-screening';
       else if (currentView === 'home') stateKey = 'home:licitacao';
+      else if (currentView === 'order-details' && viewingOrder) stateKey = 'licitacao-details';
     } else if (currentView === 'abastecimento') {
       stateKey = `abastecimento:${appState.view || 'management'}`;
     } else {
@@ -1610,6 +1615,12 @@ const App: React.FC = () => {
 
         try {
           await licitacaoService.saveLicitacaoProcess(finalOrder);
+
+          setAppState(finalSnapshot);
+          clearDraft();
+          setCurrentView('licitacao-all');
+          setIsAdminSidebarOpen(false);
+          return true;
         } catch (err) {
           console.error("Failed to save Licitacao:", err);
           // Rollback
