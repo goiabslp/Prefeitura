@@ -12,6 +12,7 @@ import { ComprasForm } from './forms/ComprasForm';
 import { LicitacaoForm } from './forms/LicitacaoForm';
 import { ComprasStepWizard } from './compras/ComprasStepWizard';
 import { DiariasStepWizard } from './diarias/DiariasStepWizard';
+import { LicitacaoStepWizard } from './licitacao/LicitacaoStepWizard';
 import { AccountManagementTab } from './compras/AccountManagementTab';
 import { updateSystemUpdateTarget } from '../services/settingsService';
 
@@ -188,14 +189,19 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
         );
       case 'licitacao':
         return (
-          <LicitacaoForm
-            state={state} content={content}
-            allowedSignatures={allowedSignatures} handleUpdate={handleUpdate} onUpdate={onUpdate}
-            onFinish={onFinish ? handleFinishWithAnimation : undefined}
-            isReadOnly={isReadOnly}
-            currentUser={currentUser}
+          <LicitacaoStepWizard
+            state={state}
+            content={content}
+            allowedSignatures={allowedSignatures}
+            handleUpdate={handleUpdate}
+            onUpdate={onUpdate}
+            persons={persons}
             sectors={sectors}
-            orderStatus={orderStatus}
+            jobs={jobs}
+            currentUser={currentUser}
+            onFinish={onFinish ? handleFinishWithAnimation : async () => { }}
+            onBack={onBack}
+            isLoading={isDownloading || finishStatus === 'loading'}
           />
         );
       default:
@@ -226,13 +232,13 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       {/* Sidebar - relative no desktop para permitir lado-a-lado com o preview */}
       <div className={`
         fixed desktop:relative inset-y-0 left-0 h-full
-        ${(activeBlock === 'compras' || activeBlock === 'diarias') ? 'w-full' : 'w-full desktop:w-[500px] lg:w-[550px] xl:w-[600px]'}
+        ${(activeBlock === 'compras' || activeBlock === 'diarias' || activeBlock === 'licitacao') ? 'w-full' : 'w-full desktop:w-[500px] lg:w-[550px] xl:w-[600px]'}
         bg-white shadow-2xl desktop:shadow-none border-r border-slate-200
         transform transition-all duration-300 ease-in-out z-50 shrink-0
         flex flex-col 
         ${isOpen ? 'translate-x-0 opacity-100 visible' : '-translate-x-full opacity-0 invisible absolute desktop:w-0'}
       `}>
-        {(activeBlock !== 'compras' && activeBlock !== 'diarias') && (
+        {(activeBlock !== 'compras' && activeBlock !== 'diarias' && activeBlock !== 'licitacao') && (
           <div className="flex items-center justify-between p-6 border-b border-gray-100 bg-white z-10 shrink-0">
             <div className="flex items-center gap-3">
               {(mode !== 'admin' && onBack) ? (

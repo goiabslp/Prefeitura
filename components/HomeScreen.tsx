@@ -239,13 +239,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 color: config.color
             });
             // "Track" Button
-            actionButtons.push({
-                label: activeBlock === 'licitacao' ? 'Meus Processos' : 'Histórico',
-                desc: `Consulte registros de ${activeBlock?.toUpperCase()}`,
-                icon: History,
-                onClick: onTrackOrder,
-                color: 'purple'
-            });
+            if (activeBlock !== 'licitacao') {
+                actionButtons.push({
+                    label: 'Histórico',
+                    desc: `Consulte registros de ${activeBlock?.toUpperCase()}`,
+                    icon: History,
+                    onClick: onTrackOrder,
+                    color: 'purple'
+                });
+            }
         }
 
         // Diárias Specific Buttons
@@ -307,8 +309,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             }
         }
         if (activeBlock === 'licitacao') {
-            if (canAccessLicitacaoTriagem) actionButtons.push({ label: 'Triagem', desc: 'Triagem de Processos', icon: Inbox, onClick: onManageLicitacaoScreening, color: 'amber' });
-            if (canAccessLicitacaoProcessos) actionButtons.push({ label: 'Processos', desc: 'Todos os Processos', icon: FileSearch, onClick: onViewAllLicitacao, color: 'sky' });
+            if (permissions.includes('parent_licitacao_processos') || userRole === 'admin') {
+                actionButtons.push({ label: 'Processos', desc: 'Todos os Processos', icon: FileSearch, onClick: onTrackOrder, color: 'sky' });
+            }
         }
         if (activeBlock === 'abastecimento') {
             if (isModuleActive('parent_abastecimento_novo') && permissions.includes('parent_abastecimento_novo')) {

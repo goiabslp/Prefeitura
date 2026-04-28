@@ -265,6 +265,8 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
 
     const isAdmin = currentUser.role === 'admin';
     const isComprasUser = currentUser.role === 'compras';
+    const isLicitacaoUser = currentUser.role === 'licitacao';
+    const isCompras = activeBlock === 'compras' || activeBlock === 'licitacao';
 
     const getStatusBadge = (status: Order['status']) => {
         switch (status) {
@@ -282,7 +284,6 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
         }
     };
     const isDiarias = activeBlock === 'diarias';
-    const isCompras = activeBlock === 'compras';
     const isLicitacao = activeBlock === 'licitacao';
 
     const getSourceOrders = () => {
@@ -335,54 +336,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
         setDownloadingId(order.id);
         let snapshotToDownload = order.documentSnapshot;
 
-        if (order.blockType === 'licitacao' && snapshotToDownload) {
-            const content = snapshotToDownload.content;
-            const stages = content.licitacaoStages || [];
-            const currentIdx = content.currentStageIndex || 0;
-
-            // Determine 'Início' (Stage 0) data
-            let inicioData;
-
-            if (currentIdx === 0) {
-                inicioData = {
-                    body: content.body,
-                    signatureName: content.signatureName,
-                    signatureRole: content.signatureRole,
-                    signatureSector: content.signatureSector,
-                    signatures: content.signatures
-                };
-            } else {
-                const historicStage0 = stages[0];
-                inicioData = {
-                    body: historicStage0?.body || '',
-                    signatureName: historicStage0?.signatureName,
-                    signatureRole: historicStage0?.signatureRole,
-                    signatureSector: historicStage0?.signatureSector,
-                    signatures: historicStage0?.signatures
-                };
-            }
-
-            snapshotToDownload = {
-                ...snapshotToDownload,
-                content: {
-                    ...content,
-                    currentStageIndex: 0,
-                    viewingStageIndex: 0,
-                    body: inicioData.body,
-                    signatureName: inicioData.signatureName || '',
-                    signatureRole: inicioData.signatureRole || '',
-                    signatureSector: inicioData.signatureSector || '',
-                    signatures: inicioData.signatures,
-                    licitacaoStages: [
-                        {
-                            id: 'stage-0',
-                            title: 'Início',
-                            body: inicioData.body,
-                        }
-                    ]
-                }
-            };
-        }
+        // O PDF da Licitação agora é gerado com os dados completos do wizard, semelhante ao Compras
 
         onDownloadPdf(snapshotToDownload!, order.blockType, order);
         setTimeout(() => setDownloadingId(null), 2000);
@@ -711,8 +665,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                 <p className="text-slate-400 font-medium text-sm animate-pulse">Carregando histórico...</p>
                             </div>
                         ) : filteredOrders.length > 0 ? (
-                            <div className={`min-w-full ${isLicitacao ? 'px-8 py-4 space-y-4' : ''}`}>
-                                {!isLicitacao && (
+                            <div className="min-w-full">
                                     <div className="border-b border-slate-100 bg-slate-50 hidden desktop:grid desktop:grid-cols-12 gap-4 px-8 py-4 sticky top-0 z-10">
                                         {isCompras && (
                                             <div className="desktop:col-span-1 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-center gap-2 whitespace-nowrap">
@@ -764,9 +717,8 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                         )}
                                         <div className={`${isCompras ? 'md:col-span-3' : 'md:col-span-2'} text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-center whitespace-nowrap`}>Ações</div>
                                     </div>
-                                )}
 
-                                <div className={`${isLicitacao ? 'space-y-4' : 'divide-y divide-slate-100'}`}>
+                                <div className="divide-y divide-slate-100">
                                     {filteredOrders.map((order) => {
                                         const content = order.documentSnapshot?.content;
                                         const isPaid = order.paymentStatus === 'paid';
@@ -774,184 +726,10 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                         // Standard pStatus for Compras
                                         let pStatus = purchaseStatus ? purchaseStatusMap[purchaseStatus as keyof typeof purchaseStatusMap] : null;
 
-                                        // Licitacao Logic OVERRIDE
-                                        if (isLicitacao) {
-                                            const statusConfig = {
-                                                pending: { label: 'Em Elaboração', class: 'bg-slate-100 text-slate-600 border-slate-200' },
-                                                completed: { label: 'Concluído', class: 'bg-emerald-50 text-emerald-700 border-emerald-100' },
-                                                awaiting_approval: { label: 'Em Aprovação', class: 'bg-amber-50 text-amber-700 border-amber-100' },
-                                                approved: { label: 'Aprovado', class: 'bg-indigo-50 text-indigo-700 border-indigo-100' },
-                                                in_progress: { label: 'Em Andamento', class: 'bg-blue-50 text-blue-700 border-blue-100' },
-                                                finishing: { label: 'Finalizando', class: 'bg-purple-50 text-purple-700 border-purple-100 animate-pulse' }
-                                            };
-                                            const sConf = statusConfig[order.status as keyof typeof statusConfig] || statusConfig.pending;
-                                            // For Licitacao map loop, we handle it separately visually below in the if(isLicitacao) block
-                                        }
-
                                         const isOverdue = order.completionForecast && new Date(order.completionForecast) < new Date();
                                         const priority = content?.priority || 'Normal';
                                         const pStyle = priorityStyles[priority as keyof typeof priorityStyles] || priorityStyles['Normal'];
 
-                                        if (isLicitacao) {
-                                            const statusConfig = {
-                                                pending: { label: 'Em Elaboração', class: 'bg-slate-100 text-slate-600 border-slate-200' },
-                                                completed: { label: 'Concluído', class: 'bg-emerald-50 text-emerald-700 border-emerald-100' },
-                                                awaiting_approval: { label: 'Em Aprovação', class: 'bg-amber-50 text-amber-700 border-amber-100' },
-                                                approved: { label: 'Aprovado', class: 'bg-indigo-50 text-indigo-700 border-indigo-100' },
-                                                in_progress: { label: 'Em Andamento', class: 'bg-blue-50 text-blue-700 border-blue-100' },
-                                                finishing: { label: 'Finalizando', class: 'bg-purple-50 text-purple-700 border-purple-100 animate-pulse' }
-                                            };
-                                            const sConf = statusConfig[order.status as keyof typeof statusConfig] || statusConfig.pending;
-                                            const orderDate = new Date(order.createdAt).toLocaleString('pt-BR');
-
-                                            let forecastDisplay = '---';
-                                            if (content?.completionForecast) {
-                                                const match = content.completionForecast.match(/(\d+)/);
-                                                if (match) {
-                                                    const totalDays = parseInt(match[1], 10);
-                                                    const createdAt = new Date(order.createdAt);
-                                                    const now = new Date();
-                                                    const diffTime = Math.abs(now.getTime() - createdAt.getTime());
-                                                    const daysPassed = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-                                                    const remaining = totalDays - daysPassed;
-
-                                                    if (remaining < 0) {
-                                                        forecastDisplay = `Atrasado (${Math.abs(remaining)}d)`;
-                                                    } else {
-                                                        const remainingPadded = remaining.toString().padStart(2, '0');
-                                                        forecastDisplay = `${remainingPadded} Dias`;
-                                                    }
-                                                } else {
-                                                    forecastDisplay = content.completionForecast;
-                                                }
-                                            }
-                                            const oficioMatch = content?.leftBlockText?.match(/Ofício nº\s*([^\n]+)/i);
-                                            const oficioNumber = oficioMatch ? oficioMatch[1] : '---';
-
-                                            return (
-                                                <div key={order.id} className="bg-white rounded-2xl border border-slate-200/60 p-5 flex flex-col gap-5 shadow-sm hover:shadow-xl hover:border-blue-200/50 hover:-translate-y-0.5 transition-all duration-300 relative overflow-hidden group">
-                                                    <div className="absolute top-0 left-0 w-1 rounded-l-2xl h-full bg-gradient-to-b from-blue-500 to-indigo-600 opacity-80 group-hover:opacity-100 transition-opacity" />
-
-                                                    <div className="grid grid-cols-1 desktop:grid-cols-7 gap-4 items-center">
-                                                        <div className="flex flex-col gap-1">
-                                                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
-                                                                <HashIcon className="w-3 h-3 text-slate-300" /> ID
-                                                            </span>
-                                                            <span className="font-mono text-xs font-bold text-slate-700 bg-slate-50 px-2 py-1 rounded-lg border border-slate-100 w-fit group-hover:bg-blue-50/50 group-hover:border-blue-100 group-hover:text-blue-700 transition-colors">
-                                                                {content?.protocolId || '---'}
-                                                            </span>
-                                                        </div>
-
-                                                        <div className="flex flex-col gap-1 desktop:col-span-2">
-                                                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Objeto</span>
-                                                            <span className="text-xs font-bold text-slate-800 line-clamp-1" title={order.title}>{order.title || 'Sem Título'}</span>
-                                                        </div>
-
-                                                        <div className="flex flex-col gap-1">
-                                                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
-                                                                <FileText className="w-3 h-3 text-slate-300" /> Forma
-                                                            </span>
-                                                            <span className="text-xs font-semibold text-slate-700 truncate" title={content?.processType}>
-                                                                {content?.processType || '---'}
-                                                            </span>
-                                                        </div>
-
-                                                        <div className="flex flex-col gap-1">
-                                                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Processo</span>
-                                                            <span className="font-mono text-xs font-medium text-slate-600">
-                                                                {content?.protocol || '---'}
-                                                            </span>
-                                                        </div>
-
-                                                        <div className="flex flex-col min-w-0">
-                                                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Status / Etapa</span>
-                                                            <div className="flex items-center gap-2 flex-nowrap">
-                                                                {order.status === 'pending' ? (
-                                                                    <button
-                                                                        onClick={() => onUpdateOrderStatus?.(order, 'awaiting_approval')}
-                                                                        className={`inline-flex px-2.5 py-1 rounded-md text-[9px] font-bold uppercase tracking-wide border shadow-sm whitespace-nowrap transition-all hover:scale-105 active:scale-95 cursor-pointer ${sConf.class}`}
-                                                                        title="Clique para enviar para aprovação"
-                                                                    >
-                                                                        {sConf.label}
-                                                                    </button>
-                                                                ) : (
-                                                                    <span className={`inline-flex px-2.5 py-1 rounded-md text-[9px] font-bold uppercase tracking-wide border shadow-sm whitespace-nowrap ${sConf.class}`}>
-                                                                        {sConf.label}
-                                                                    </span>
-                                                                )}
-                                                                <span className="inline-flex px-2.5 py-1 rounded-md text-[9px] font-bold uppercase tracking-wide border bg-blue-50 text-blue-700 border-blue-100 shadow-sm whitespace-nowrap">
-                                                                    {order.stage || 'Início'}
-                                                                </span>
-                                                            </div>
-                                                        </div>
-
-                                                        <div className="flex flex-col items-start justify-self-end">
-                                                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Ações</span>
-                                                            <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
-                                                                <button onClick={() => onEditOrder(order)} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all active:scale-95" title={order.status === 'approved' || order.status === 'completed' || order.status === 'rejected' ? "Visualizar" : "Editar"}>
-                                                                    {order.status === 'approved' || order.status === 'completed' || order.status === 'rejected' ? <Eye className="w-4 h-4" /> : <Edit3 className="w-4 h-4" />}
-                                                                </button>
-                                                                <button onClick={() => handleDownload(order)} disabled={downloadingId === order.id} className={`p-1.5 rounded-lg transition-all active:scale-95 ${downloadingId === order.id ? 'text-indigo-400 bg-indigo-50' : 'text-slate-400 hover:bg-indigo-600 hover:text-white'}`} title="Download">
-                                                                    {downloadingId === order.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
-                                                                </button>
-                                                                <button onClick={() => setConfirmModal({ isOpen: true, title: "Excluir Registro", message: `Deseja remover "${order.protocol}"?`, type: 'danger', onConfirm: () => { onDeleteOrder(order.id); setConfirmModal({ ...confirmModal, isOpen: false }); } })} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all active:scale-95" title="Excluir">
-                                                                    <Trash2 className="w-4 h-4" />
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent w-full" />
-
-                                                    <div className="grid grid-cols-2 desktop:grid-cols-5 gap-4">
-                                                        <div className="flex flex-col">
-                                                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
-                                                                <Calendar className="w-3 h-3 text-slate-300" /> Data do Pedido
-                                                            </span>
-                                                            <span className="text-xs font-medium text-slate-600">
-                                                                {orderDate}
-                                                            </span>
-                                                        </div>
-
-                                                        <div className="flex flex-col">
-                                                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
-                                                                <Clock className="w-3 h-3 text-slate-300" /> Previsão de Conclusão
-                                                            </span>
-                                                            <span className={`text-xs font-bold ${forecastDisplay.includes('Atrasado') ? 'text-rose-500' : 'text-emerald-600'}`}>
-                                                                {forecastDisplay}
-                                                            </span>
-                                                        </div>
-
-                                                        <div className="flex flex-col">
-                                                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
-                                                                <User className="w-3 h-3 text-slate-300" /> Solicitante
-                                                            </span>
-                                                            <span className="text-xs font-semibold text-slate-700" title={content?.requesterName}>
-                                                                {content?.requesterName || '---'}
-                                                            </span>
-                                                        </div>
-
-                                                        <div className="flex flex-col">
-                                                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
-                                                                <Network className="w-3 h-3 text-slate-300" /> Setor Solicitante
-                                                            </span>
-                                                            <span className="text-xs font-medium text-slate-600 truncate" title={content?.requesterSector || order.requestingSector}>
-                                                                {content?.requesterSector || order.requestingSector || '---'}
-                                                            </span>
-                                                        </div>
-
-                                                        <div className="flex flex-col">
-                                                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
-                                                                <FileText className="w-3 h-3 text-slate-300" /> Ofício do Solicitante
-                                                            </span>
-                                                            <span className="text-xs font-medium text-slate-600 truncate">
-                                                                {oficioNumber !== '---' ? `Nº ${oficioNumber}` : '---'}
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            );
-                                        }
 
                                         return (
                                             <div key={order.id} className="grid grid-cols-1 desktop:grid-cols-12 gap-4 px-8 py-5 hover:bg-slate-50/80 transition-colors items-center">
