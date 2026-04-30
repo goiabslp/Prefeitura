@@ -3,7 +3,7 @@ import {
   Gavel, FileText, PenTool, CheckCircle2, Columns,
   Plus, Trash2, Hash, Layers, MessageSquare, AlignLeft,
   Minus, ChevronDown, Package, Archive, Scale, Briefcase, ShoppingCart, Box, Lock, Key,
-  AlertTriangle, ShieldAlert, Zap, Info, User as UserIcon, Search, Check, UserCheck, Paperclip, Upload, ShieldCheck, QrCode, CreditCard, Loader2, Landmark, X
+  AlertTriangle, ShieldAlert, Zap, Info, User as UserIcon, Search, Check, UserCheck, Paperclip, Upload, ShieldCheck, QrCode, CreditCard, Loader2, Landmark, X, Eye
 } from 'lucide-react';
 import { AppState, ContentData, Signature, PurchaseItem, Person, Sector, Job, Attachment } from '../../types';
 import { uploadFile } from '../../services/storageService';
@@ -730,6 +730,77 @@ export const LicitacaoForm: React.FC<LicitacaoFormProps> = ({
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* STEP 6: DOCUMENTO FINAL */}
+      {currentStep === 6 && (
+        <div className="space-y-4 border-t border-slate-200 pt-6">
+          <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+            <FileText className="w-4 h-4 text-emerald-600" /> Documento Final do Processo
+          </h3>
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+            <p className="text-sm text-slate-500 mb-6">
+              Esta área é restrita para anexar o documento finalizado do processo licitatório.
+            </p>
+            <div className="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center hover:bg-slate-50 transition-colors cursor-pointer relative">
+              <input
+                type="file" accept=".pdf,.doc,.docx" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  setIsUploading(true);
+                  try {
+                    const publicUrl = await uploadFile(file, 'attachments', `final_doc_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`);
+                    if (publicUrl) {
+                      handleUpdate('content', 'finalDocumentUrl', publicUrl);
+                      handleUpdate('content', 'finalDocumentName', file.name);
+                    }
+                  } catch (error) {
+                    console.error("Upload error:", error);
+                    alert("Erro ao enviar o documento.");
+                  } finally {
+                    setIsUploading(false);
+                    e.target.value = '';
+                  }
+                }}
+              />
+              <div className="flex flex-col items-center justify-center gap-3">
+                <div className={`w-12 h-12 ${isUploading ? 'bg-slate-100' : 'bg-emerald-100'} rounded-full flex items-center justify-center transition-colors`}>
+                  {isUploading ? <div className="w-6 h-6 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" /> : <Upload className="w-6 h-6 text-emerald-600" />}
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-slate-900">{isUploading ? 'Enviando documento...' : 'Clique para enviar o Documento Final'}</p>
+                  <p className="text-xs text-slate-500">Documentos PDF ou Word (máx. 20MB)</p>
+                </div>
+              </div>
+            </div>
+
+            {content.finalDocumentUrl && (
+              <div className="mt-6 p-4 bg-emerald-50 rounded-xl border border-emerald-200 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-white border border-emerald-200 flex items-center justify-center text-emerald-600">
+                    <CheckCircle2 className="w-5 h-5" />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-sm font-bold text-emerald-900">Documento Anexado com Sucesso</span>
+                    <span className="text-xs text-emerald-600 truncate max-w-[250px]">{content.finalDocumentName || 'Documento Final'}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <a href={content.finalDocumentUrl} target="_blank" rel="noreferrer" className="p-2 text-emerald-600 hover:bg-emerald-100 rounded-lg transition-colors" title="Visualizar">
+                    <Eye className="w-5 h-5" />
+                  </a>
+                  <button onClick={() => {
+                    handleUpdate('content', 'finalDocumentUrl', '');
+                    handleUpdate('content', 'finalDocumentName', '');
+                  }} className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors" title="Remover">
+                    <Trash2 className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
       {/* Modals for Selection */}

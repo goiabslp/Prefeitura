@@ -177,28 +177,31 @@ export const HorasExtrasForm: React.FC<HorasExtrasFormProps> = ({
                 {/* Left Column - Form & Inclusion */}
                 <div className="lg:col-span-2 bg-white rounded-3xl shadow-sm border border-slate-100 p-6 desktop:p-10 flex flex-col min-h-[600px] relative">
 
-                    {/* Header */}
-                    <div className="flex items-center gap-4 mb-8 pb-6 border-b border-slate-100">
-                        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-fuchsia-500 to-indigo-600 text-white flex items-center justify-center shadow-lg shadow-fuchsia-500/30">
-                            <Calendar className="w-7 h-7" />
-                        </div>
-                        <div>
-                            <h1 className="text-2xl desktop:text-3xl font-bold text-slate-800 tracking-tight">LANÇAMENTO DE ROTINAS</h1>
-                            <p className="text-slate-500 font-medium flex items-center gap-2 mt-1">
-                                <span className="bg-slate-100 px-2 py-0.5 flex items-center rounded-md font-bold text-slate-700 text-xs uppercase tracking-wider">{userRole === 'admin' ? 'Acesso Total (Admin)' : currentUserSectorName}</span>
-                                Lançamento de horas extras
-                            </p>
-                        </div>
-                    </div>
-
-                    {/* Month Selection */}
-                    <div className="mb-8">
-                        <label className="block text-sm font-bold text-slate-700 mb-2 uppercase tracking-wider">Mês de Referência</label>
-                        <div className="relative">
-                            <div className={`w-full h-14 pl-12 pr-4 bg-slate-100 border-2 border-slate-200 text-slate-500 text-base rounded-2xl flex items-center font-bold ${editingRecord ? 'opacity-80' : 'cursor-not-allowed select-none'}`}>
-                                {selectedMonth} {selectedMonth === currentMonthName && !editingRecord ? '(Mês Atual)' : ''}
+                    {/* Header & Month Selection */}
+                    <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-6 pb-6 border-b border-slate-100">
+                        <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-fuchsia-500 to-indigo-600 text-white flex items-center justify-center shadow-md shadow-fuchsia-500/20 shrink-0">
+                                <Calendar className="w-6 h-6" />
                             </div>
-                            <Calendar className="w-6 h-6 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
+                            <div>
+                                <h1 className="text-xl font-bold text-slate-800 tracking-tight leading-tight">LANÇAMENTO DE ROTINAS</h1>
+                                <div className="flex items-center gap-2 mt-1">
+                                    <span className="bg-slate-100 px-2 py-0.5 rounded text-[10px] font-black text-slate-600 uppercase tracking-wider border border-slate-200">
+                                        {userRole === 'admin' ? 'Acesso Total (Admin)' : currentUserSectorName}
+                                    </span>
+                                    <p className="text-slate-500 text-xs font-medium">Horas extras</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-col items-start md:items-end w-full md:w-auto">
+                            <label className="block text-[10px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">Mês de Referência</label>
+                            <div className="relative w-full md:w-56">
+                                <div className={`w-full h-10 pl-9 pr-3 bg-slate-50 border border-slate-200 text-slate-600 text-sm rounded-xl flex items-center font-bold ${editingRecord ? 'opacity-80' : 'cursor-not-allowed select-none'} shadow-sm`}>
+                                    <span className="truncate">{selectedMonth} {selectedMonth === currentMonthName && !editingRecord ? '(Mês Atual)' : ''}</span>
+                                </div>
+                                <Calendar className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                            </div>
                         </div>
                     </div>
 

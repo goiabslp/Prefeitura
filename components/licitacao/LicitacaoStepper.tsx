@@ -7,9 +7,10 @@ interface LicitacaoStepperProps {
     currentStep: number;
     stepsStatus: Record<number, StepStatus>;
     onStepClick?: (step: number) => void;
+    showDocumentTab?: boolean;
 }
 
-export const LicitacaoStepper: React.FC<LicitacaoStepperProps> = ({ currentStep, stepsStatus, onStepClick }) => {
+export const LicitacaoStepper: React.FC<LicitacaoStepperProps> = ({ currentStep, stepsStatus, onStepClick, showDocumentTab }) => {
     const steps = [
         { id: 1, label: 'Detalhes', icon: FileText },
         { id: 2, label: 'Itens', icon: Package },
@@ -17,6 +18,10 @@ export const LicitacaoStepper: React.FC<LicitacaoStepperProps> = ({ currentStep,
         { id: 4, label: 'Anexos', icon: Paperclip },
         { id: 5, label: 'Assinar', icon: ShieldCheck },
     ];
+
+    if (showDocumentTab) {
+        steps.push({ id: 6, label: 'Documento', icon: FileText });
+    }
 
     return (
         <div className="w-full py-4">

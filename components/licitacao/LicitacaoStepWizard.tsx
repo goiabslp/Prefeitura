@@ -24,6 +24,10 @@ export const LicitacaoStepWizard: React.FC<LicitacaoStepWizardProps> = ({
 }) => {
     const [currentStep, setCurrentStep] = useState(1);
 
+    const isAdmin = currentUser?.role === 'admin';
+    const isLicitacao = currentUser?.role === 'licitacao';
+    const showDocumentTab = isAdmin || isLicitacao;
+
     // --- Status Calculation Logic ---
     const stepsStatus = useMemo(() => {
         const statuses: Record<number, StepStatus> = {};
@@ -54,8 +58,13 @@ export const LicitacaoStepWizard: React.FC<LicitacaoStepWizardProps> = ({
         statuses[4] = currentStep === 4 ? 'current' : (content.attachments && content.attachments.length > 0 ? 'completed' : 'empty');
         statuses[5] = getStatus(5, s5Valid, s5Started);
 
+        if (showDocumentTab) {
+            const s6Valid = !!content.finalDocumentUrl;
+            statuses[6] = getStatus(6, s6Valid, false);
+        }
+
         return statuses;
-    }, [content, currentStep]);
+    }, [content, currentStep, showDocumentTab]);
 
     // Check Global Completion for "Finalizar" button
     const isAllMandatoryCompleted = useMemo(() => {
@@ -69,7 +78,10 @@ export const LicitacaoStepWizard: React.FC<LicitacaoStepWizardProps> = ({
 
     const nextStep = () => {
         if (validateStep(currentStep)) {
-            setCurrentStep(prev => Math.min(prev + 1, 5));
+            setCurrentStep(prev => {
+                const maxStep = showDocumentTab ? 6 : 5;
+                return Math.min(prev + 1, maxStep);
+            });
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
     };
@@ -120,13 +132,13 @@ export const LicitacaoStepWizard: React.FC<LicitacaoStepWizardProps> = ({
                 {/* 2. Stepper */}
                 <div className="flex-1 flex justify-center">
                     <div className="w-full max-w-3xl">
-                        <LicitacaoStepper currentStep={currentStep} stepsStatus={stepsStatus} onStepClick={handleStepClick} />
+                        <LicitacaoStepper currentStep={currentStep} stepsStatus={stepsStatus} onStepClick={handleStepClick} showDocumentTab={showDocumentTab} />
                     </div>
                 </div>
 
                 {/* 3. Botão de Ação */}
                 <div className="min-w-[140px] flex justify-end">
-                    {currentStep !== 5 && (
+                    {currentStep !== (showDocumentTab ? 6 : 5) && (
                         !isAllMandatoryCompleted ? (
                             <button
                                 onClick={nextStep}
@@ -151,8 +163,8 @@ export const LicitacaoStepWizard: React.FC<LicitacaoStepWizardProps> = ({
             </div>
 
             {/* CONTENT AREA */}
-            <div className={`flex-1 ${currentStep === 5 ? 'overflow-hidden flex flex-col justify-center' : 'overflow-y-auto'} p-4 md:p-8 bg-slate-50 relative`}>
-                <div className={`max-w-7xl mx-auto ${currentStep === 5 ? 'w-full h-full flex flex-col justify-center' : 'space-y-8'} animate-fade-in`}>
+            <div className={`flex-1 ${(currentStep === 5 || currentStep === 6) ? 'overflow-hidden flex flex-col justify-center' : 'overflow-y-auto'} p-4 md:p-8 bg-slate-50 relative`}>
+                <div className={`max-w-7xl mx-auto ${(currentStep === 5 || currentStep === 6) ? 'w-full h-full flex flex-col justify-center' : 'space-y-8'} animate-fade-in`}>
                     <LicitacaoForm
                         state={state}
                         content={content}

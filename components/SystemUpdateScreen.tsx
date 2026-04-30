@@ -3,6 +3,8 @@ import { RefreshCw, Play, ArrowLeft, ShieldAlert, CheckCircle2 } from 'lucide-re
 import { updateSystemUpdateTarget } from '../services/settingsService';
 import { supabase } from '../services/supabaseClient';
 
+declare const __LATEST_COMMIT__: string | undefined;
+
 interface SystemUpdateScreenProps {
   onBack: () => void;
 }
@@ -104,13 +106,35 @@ export const SystemUpdateScreen: React.FC<SystemUpdateScreenProps> = ({ onBack }
             {!isSuccess ? (
               <>
                 <div className="absolute top-0 left-0 right-0 h-2 bg-amber-500"></div>
-                <div className="w-20 h-20 bg-amber-50 rounded-3xl flex items-center justify-center mx-auto mb-8 text-amber-500 ring-8 ring-amber-50">
+                <div className="w-20 h-20 bg-amber-50 rounded-3xl flex items-center justify-center mx-auto mb-6 text-amber-500 ring-8 ring-amber-50">
                   <ShieldAlert className="w-10 h-10" />
                 </div>
-                <h3 className="text-2xl font-black text-slate-900 mb-4 uppercase tracking-tighter">Atenção!</h3>
-                <p className="text-sm text-slate-500 font-medium mb-10 leading-relaxed px-4">
-                  Esta ação afetará **todos os usuários ativos**. O sistema será forçado a reiniciar em 60 segundos. Deseja continuar?
+                <h3 className="text-2xl font-black text-slate-900 mb-2 uppercase tracking-tighter">Atenção!</h3>
+                <p className="text-sm text-slate-500 font-medium mb-6 leading-relaxed px-2">
+                  Esta ação afetará todos os usuários ativos. O sistema será forçado a reiniciar em 60 segundos. Deseja continuar com a atualização?
                 </p>
+                
+                {/* Último Commit Box */}
+                <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5 mb-8 text-left">
+                   <h4 className="text-sm font-black text-slate-800 mb-2 flex items-center gap-2">
+                      📦 Atualizações do sistema
+                   </h4>
+                   <p className="text-sm text-slate-600 font-medium leading-relaxed italic">
+                      {(() => {
+                        const rawMsg = typeof __LATEST_COMMIT__ !== 'undefined' ? __LATEST_COMMIT__ : 'Atualizações de estabilidade e melhorias gerais.';
+                        let formatted = rawMsg;
+                        formatted = formatted.replace(/^feat(\([^)]+\))?:/i, '✨ Nova funcionalidade:');
+                        formatted = formatted.replace(/^fix(\([^)]+\))?:/i, '🐛 Correção:');
+                        formatted = formatted.replace(/^chore(\([^)]+\))?:/i, '🔧 Manutenção:');
+                        formatted = formatted.replace(/^refactor(\([^)]+\))?:/i, '♻️ Refatoração:');
+                        formatted = formatted.replace(/^docs(\([^)]+\))?:/i, '📝 Documentação:');
+                        formatted = formatted.replace(/^style(\([^)]+\))?:/i, '🎨 Estilos:');
+                        formatted = formatted.replace(/^perf(\([^)]+\))?:/i, '🚀 Performance:');
+                        return formatted;
+                      })()}
+                   </p>
+                </div>
+
                 <div className="flex flex-col gap-3">
                   <button
                     onClick={handleStartUpdate}

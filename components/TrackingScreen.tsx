@@ -1024,6 +1024,17 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                             {downloadingId === order.id ? <Loader2 className="w-5 h-5 animate-spin" /> : <FileDown className="w-5 h-5" />}
                                                         </button>
                                                     )}
+                                                    {activeBlock === 'licitacao' && (order.documentSnapshot?.content as any)?.finalDocumentUrl && (
+                                                        <a
+                                                            href={(order.documentSnapshot?.content as any)?.finalDocumentUrl}
+                                                            target="_blank"
+                                                            rel="noreferrer"
+                                                            className="p-2 rounded-xl text-emerald-600 hover:bg-emerald-600 hover:text-white transition-all border border-transparent hover:border-emerald-600"
+                                                            title="Baixar Documento Final"
+                                                        >
+                                                            <Download className="w-5 h-5" />
+                                                        </a>
+                                                    )}
                                                     <button
                                                         onClick={() => setConfirmModal({
                                                             isOpen: true,

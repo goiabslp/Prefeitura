@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { User, Lock, ArrowRight, FileText, ShieldCheck, CheckCircle2, Eye, EyeOff } from 'lucide-react';
+import { User, Lock, ArrowRight, FileText, ShieldCheck, CheckCircle2, Eye, EyeOff, ShoppingCart, Truck, Users, Leaf, HardHat } from 'lucide-react';
 import { UIConfig } from '../types';
 import { getCachedImage, IMAGE_KEYS } from '../services/cacheService';
 import { supabase } from '../services/supabaseClient';
@@ -8,9 +8,10 @@ import { supabase } from '../services/supabaseClient';
 interface LoginScreenProps {
   onLogin: (username: string, password: string) => Promise<{ error?: any; data?: any }>;
   uiConfig: UIConfig;
+  onLoginSuccess?: () => void;
 }
 
-export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, uiConfig }) => {
+export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, uiConfig, onLoginSuccess }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
@@ -19,6 +20,24 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, uiConfig }) =
   const [isVisible, setIsVisible] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [isUpdatingSystem, setIsUpdatingSystem] = useState(false);
+  const [currentModuleIdx, setCurrentModuleIdx] = useState(0);
+
+  const systemModules = [
+    { name: 'Licitação e Contratos', desc: 'Gestão transparente de processos e aditivos.', icon: ShoppingCart, color: 'text-indigo-600', bg: 'bg-indigo-100', border: 'border-indigo-200' },
+    { name: 'Recursos Humanos', desc: 'Controle de folha, diárias, e horas extras.', icon: Users, color: 'text-emerald-600', bg: 'bg-emerald-100', border: 'border-emerald-200' },
+    { name: 'Gestão de Frotas', desc: 'Controle rigoroso de veículos e abastecimentos.', icon: Truck, color: 'text-amber-600', bg: 'bg-amber-100', border: 'border-amber-200' },
+    { name: 'Obras Públicas', desc: 'Acompanhamento de medições e execuções.', icon: HardHat, color: 'text-orange-600', bg: 'bg-orange-100', border: 'border-orange-200' },
+    { name: 'Agricultura e Serviços', desc: 'Agendamento e controle de patrulha rural.', icon: Leaf, color: 'text-green-600', bg: 'bg-green-100', border: 'border-green-200' },
+  ];
+
+  useEffect(() => {
+    if (isUpdatingSystem) {
+      const interval = setInterval(() => {
+        setCurrentModuleIdx(prev => (prev + 1) % systemModules.length);
+      }, 1000); // Mudar a cada 1s para o carrossel ser mais dinâmico
+      return () => clearInterval(interval);
+    }
+  }, [isUpdatingSystem]);
 
   // Carrega credenciais salvas ao montar o componente
   useEffect(() => {
@@ -43,72 +62,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, uiConfig }) =
     setLoading(true);
 
     try {
-      let needsRefreshedAssets = false;
-      try {
-        const DEPLOY_EPOCH = new Date('2026-04-07T09:20:00-03:00').getTime();
-        const REFRESH_INTERVAL_MS = 120 * 60 * 1000;
-        const WINDOW_KEY = 'sys_refresh_window_v1';
-        const FORCED_WINDOW_KEY = 'sys_forced_refresh_target_v1';
-
-        const now = Date.now();
-        const currentWindow = Math.floor((now - DEPLOY_EPOCH) / REFRESH_INTERVAL_MS);
-        const storedWindow = localStorage.getItem(WINDOW_KEY);
-        
-        const { data: orgData } = await supabase.from('organization_settings').select('system_update_target').eq('id', 'global_config').single();
-        const systemUpdateTarget = orgData?.system_update_target;
-
-        let needsForcedUpdate = false;
-        if (systemUpdateTarget && now >= systemUpdateTarget) {
-          const storedForcedTarget = localStorage.getItem(FORCED_WINDOW_KEY);
-          if (!storedForcedTarget || parseInt(storedForcedTarget) < systemUpdateTarget) {
-            needsForcedUpdate = true;
-          }
-        }
-
-        const needsUpdate = (!storedWindow || parseInt(storedWindow) < currentWindow) || needsForcedUpdate;
-
-        if (needsUpdate) {
-            setIsUpdatingSystem(true);
-            needsRefreshedAssets = true;
-            
-            const preservedKeys = [WINDOW_KEY, FORCED_WINDOW_KEY, 'has_seen_update_info_v1', 'remember_user', 'remember_pass'];
-            const preservedData: Record<string, string | null> = {};
-            
-            for (let i = 0; i < localStorage.length; i++) {
-              const key = localStorage.key(i);
-              if (key && (key.startsWith('sb-') || preservedKeys.includes(key))) {
-                preservedData[key] = localStorage.getItem(key);
-              }
-            }
-
-            localStorage.clear();
-            sessionStorage.clear();
-            
-            if ('caches' in window) {
-              try {
-                const keys = await caches.keys();
-                await Promise.all(keys.map(k => caches.delete(k)));
-              } catch(e) {}
-            }
-            
-            Object.entries(preservedData).forEach(([key, val]) => {
-              if (val !== null) localStorage.setItem(key, val);
-            });
-            
-            if (needsForcedUpdate) {
-                localStorage.setItem(FORCED_WINDOW_KEY, systemUpdateTarget!.toString());
-            } else {
-                localStorage.setItem(WINDOW_KEY, currentWindow.toString());
-            }
-
-            await new Promise(resolve => setTimeout(resolve, 2000)); 
-            setIsUpdatingSystem(false);
-        }
-      } catch (checkErr) { 
-        console.error("System update check failed", checkErr);
-        setIsUpdatingSystem(false);
-      }
-
       const emailToUse = username.includes('@') ? username : `${username}@projeto.local`;
       const { error } = await onLogin(emailToUse, password);
 
@@ -121,10 +74,44 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, uiConfig }) =
           localStorage.removeItem('remember_pass');
         }
 
-        if (needsRefreshedAssets) {
-            window.location.reload();
-            return;
+        // Show modern loading screen upon successful login
+        setIsUpdatingSystem(true);
+        
+        try {
+          const WINDOW_KEY = 'sys_refresh_window_v1';
+          const FORCED_WINDOW_KEY = 'sys_forced_refresh_target_v1';
+          const now = Date.now();
+          const d = new Date(now);
+          const hour = d.getHours();
+          let logicalDate = d;
+          let block = "18";
+          if (hour >= 7 && hour < 12) block = "07";
+          else if (hour >= 12 && hour < 18) block = "12";
+          else if (hour < 7) logicalDate = new Date(now - 7 * 60 * 60 * 1000);
+          
+          const currentWindow = `${logicalDate.getFullYear()}-${logicalDate.getMonth()}-${logicalDate.getDate()}-${block}`;
+          
+          if ('caches' in window) {
+             const keys = await caches.keys();
+             await Promise.all(keys.map(k => caches.delete(k)));
+          }
+          localStorage.setItem(WINDOW_KEY, currentWindow);
+          
+          const { data: orgData } = await supabase.from('organization_settings').select('system_update_target').eq('id', 'global_config').single();
+          if (orgData?.system_update_target) {
+              localStorage.setItem(FORCED_WINDOW_KEY, orgData.system_update_target.toString());
+          }
+        } catch(e) {
+          console.error("Silent cache clear failed", e);
         }
+
+        // Delay to show the beautiful loading modal
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        
+        if (onLoginSuccess) {
+            onLoginSuccess();
+        }
+        return;
       } else {
         setError('Credenciais inválidas. Tente novamente.');
         setLoading(false);
@@ -314,17 +301,56 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, uiConfig }) =
       `}} />
 
       {isUpdatingSystem && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-[#0a0c10]/90 backdrop-blur-xl animate-fade-in" style={{ animation: 'fadeIn 0.3s forwards' }}>
-           <div className="w-full max-w-sm bg-[#161b22] rounded-[2rem] shadow-[0_0_50px_rgba(79,70,229,0.3)] border border-indigo-500/20 p-10 text-center relative overflow-hidden flex flex-col items-center">
-             <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-blue-500"></div>
-             <div className="text-indigo-400 mb-6 relative">
-                 <div className="absolute inset-0 bg-indigo-500/20 rounded-full blur-xl animate-pulse"></div>
-                 <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="animate-spin relative z-10" style={{ animation: 'spin 2s linear infinite' }}>
-                   <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.92-5.23l.1.09"/>
-                 </svg>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-[#0a0c10]/80 backdrop-blur-md animate-fade-in" style={{ animation: 'fadeIn 0.3s forwards' }}>
+           <div className="w-full max-w-2xl bg-white rounded-[2rem] shadow-[0_20px_80px_rgba(0,0,0,0.6)] border border-slate-200 p-12 text-center relative overflow-hidden flex flex-col items-center">
+             
+             {/* Decorators */}
+             <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-indigo-500 via-purple-500 to-blue-500"></div>
+             <div className="absolute -top-32 -right-32 w-64 h-64 bg-indigo-50 rounded-full blur-3xl"></div>
+             <div className="absolute -bottom-32 -left-32 w-64 h-64 bg-emerald-50 rounded-full blur-3xl"></div>
+
+             {/* Header */}
+             <div className="relative z-10 flex flex-col items-center mb-10">
+                <div className="w-20 h-20 mb-6 relative flex items-center justify-center">
+                    <div className="absolute inset-0 border-4 border-slate-100 rounded-full"></div>
+                    <div className="absolute inset-0 border-4 border-indigo-600 rounded-full border-t-transparent animate-spin"></div>
+                    <div className="w-10 h-10 bg-indigo-50 rounded-full flex items-center justify-center animate-pulse">
+                      <CheckCircle2 className="w-5 h-5 text-indigo-600" />
+                    </div>
+                </div>
+                <h3 className="text-3xl font-black text-slate-800 mb-3 tracking-tight">Preparando Ambiente</h3>
+                <p className="text-slate-500 font-medium text-lg">Carregando e otimizando módulos do sistema...</p>
              </div>
-             <h3 className="text-xl font-black text-white mb-2 uppercase tracking-widest">Atualizando</h3>
-             <p className="text-sm text-slate-400 font-medium">Aplicando patches e limpando cache antes de iniciar a sessão...</p>
+
+             {/* Carousel */}
+             <div className="w-full relative z-10 h-[120px] flex items-center justify-center">
+               {systemModules.map((mod, idx) => {
+                 const isActive = idx === currentModuleIdx;
+                 return (
+                   <div 
+                     key={idx}
+                     className={`absolute transition-all duration-700 ease-in-out w-full max-w-md bg-white rounded-2xl p-6 border shadow-sm flex items-center gap-5
+                        ${isActive ? 'opacity-100 translate-y-0 scale-100 z-20 ' + mod.border : 'opacity-0 translate-y-8 scale-90 z-0 border-slate-100'}`}
+                   >
+                      <div className={`w-14 h-14 rounded-2xl flex-shrink-0 flex items-center justify-center ${mod.bg} ${mod.color}`}>
+                        <mod.icon className="w-7 h-7" />
+                      </div>
+                      <div className="text-left flex-1">
+                        <h4 className="text-lg font-bold text-slate-800 mb-1 leading-tight">{mod.name}</h4>
+                        <p className="text-sm text-slate-500 font-medium leading-tight">{mod.desc}</p>
+                      </div>
+                   </div>
+                 );
+               })}
+             </div>
+
+             {/* Progress indicator */}
+             <div className="mt-8 flex gap-2 z-10">
+                {systemModules.map((_, idx) => (
+                  <div key={idx} className={`h-1.5 rounded-full transition-all duration-500 ${idx === currentModuleIdx ? 'w-8 bg-indigo-600' : 'w-2 bg-slate-200'}`}></div>
+                ))}
+             </div>
+             
            </div>
         </div>
       )}

@@ -25,6 +25,10 @@ export const HorasExtrasHistory: React.FC<HorasExtrasHistoryProps> = ({
     const [history, setHistory] = useState<RhHorasExtras[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
+    const [selectedMonth, setSelectedMonth] = useState(() => {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    });
     const [isDeleting, setIsDeleting] = useState<string | null>(null);
     const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -71,6 +75,34 @@ export const HorasExtrasHistory: React.FC<HorasExtrasHistoryProps> = ({
         // First filter by sector if not admin
         if (userRole !== 'admin' && item.sector !== currentUserSector) {
             return false;
+        }
+
+        // Filter by selected month
+        if (selectedMonth) {
+            const [selYear, selMonth] = selectedMonth.split('-');
+            const monthsMap: Record<string, string> = {
+                '01': 'Janeiro', '02': 'Fevereiro', '03': 'Março', '04': 'Abril',
+                '05': 'Maio', '06': 'Junho', '07': 'Julho', '08': 'Agosto',
+                '09': 'Setembro', '10': 'Outubro', '11': 'Novembro', '12': 'Dezembro'
+            };
+            const selMonthName = monthsMap[selMonth];
+            const selFormatted = `${selMonth}/${selYear}`;
+
+            let itemYear = item.created_at ? new Date(item.created_at).getFullYear().toString() : new Date().getFullYear().toString();
+            let itemMonth = item.month;
+
+            if (item.month.includes('/')) {
+                const parts = item.month.split('/');
+                itemMonth = parts[0];
+                itemYear = parts[1];
+            }
+
+            const matchNameAndYear = itemMonth.toLowerCase() === selMonthName.toLowerCase() && itemYear === selYear;
+            const matchFormatted = item.month === selFormatted;
+
+            if (!matchNameAndYear && !matchFormatted) {
+                return false;
+            }
         }
 
         const searchPrefix = searchTerm.toLowerCase();
@@ -121,6 +153,16 @@ export const HorasExtrasHistory: React.FC<HorasExtrasHistoryProps> = ({
 
                         {/* Search & Actions */}
                         <div className="flex flex-col sm:flex-row items-center gap-3 desktop:w-auto w-full shrink-0">
+                            <div className="relative w-full sm:w-auto group">
+                                <input
+                                    type="month"
+                                    value={selectedMonth}
+                                    onChange={(e) => setSelectedMonth(e.target.value)}
+                                    className="w-full px-4 py-2 bg-slate-50/50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all text-slate-700 font-medium"
+                                    title="Filtrar por Mês"
+                                />
+                            </div>
+
                             <div className="relative w-full sm:w-64 group">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
                                 <input
@@ -183,7 +225,16 @@ export const HorasExtrasHistory: React.FC<HorasExtrasHistoryProps> = ({
                                 const isRecordDeleting = isDeleting === record.id;
                                 
                                 // Parse month to visually display as Mês / Ano
-                                const [mesStr, anoStr] = record.month.split('/');
+                                let mesStr = record.month;
+                                let anoStr = record.created_at ? new Date(record.created_at).getFullYear().toString() : new Date().getFullYear().toString();
+
+                                if (record.month.includes('/')) {
+                                    const parts = record.month.split('/');
+                                    mesStr = parts[0];
+                                    anoStr = parts[1];
+                                }
+
+                                const displayAno = anoStr.length === 4 ? anoStr.substring(2) : anoStr;
 
                                 return (
                                     <div
@@ -197,7 +248,7 @@ export const HorasExtrasHistory: React.FC<HorasExtrasHistoryProps> = ({
                                         <div className="desktop:col-span-2 flex items-center gap-4 w-full">
                                             <div className="flex flex-col items-center justify-center bg-white border-2 border-slate-100 rounded-xl p-2 w-16 h-16 shrink-0 shadow-sm group-hover:border-indigo-100 group-hover:shadow-indigo-100 transition-all">
                                                 <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">{mesStr?.substring(0, 3)}</span>
-                                                <span className="text-lg font-black text-slate-700 leading-none mt-0.5">{anoStr?.substring(2) || '24'}</span>
+                                                <span className="text-lg font-black text-slate-700 leading-none mt-0.5">{displayAno}</span>
                                             </div>
                                             <div className="flex-1 desktop:hidden">
                                                 <div className="flex flex-wrap items-center gap-2 mb-1">
