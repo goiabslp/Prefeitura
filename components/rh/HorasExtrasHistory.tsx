@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { RhHorasExtras } from '../../types';
 import { getRhHorasExtrasHistory, deleteRhHorasExtras } from '../../services/rhService';
 import { FileDown, Calendar, Users, Signature, Search, Trash2, Edit2, ArrowLeft, History, RefreshCcw, User, FileText } from 'lucide-react';
-
+import { ModernMonthPicker } from '../common/ModernMonthPicker';
 interface HorasExtrasHistoryProps {
     onDownloadPdf: (record: RhHorasExtras) => void;
     onEdit: (record: RhHorasExtras) => void;
@@ -154,12 +154,10 @@ export const HorasExtrasHistory: React.FC<HorasExtrasHistoryProps> = ({
                         {/* Search & Actions */}
                         <div className="flex flex-col sm:flex-row items-center gap-3 desktop:w-auto w-full shrink-0">
                             <div className="relative w-full sm:w-auto group">
-                                <input
-                                    type="month"
+                                <ModernMonthPicker
                                     value={selectedMonth}
-                                    onChange={(e) => setSelectedMonth(e.target.value)}
-                                    className="w-full px-4 py-2 bg-slate-50/50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all text-slate-700 font-medium"
-                                    title="Filtrar por Mês"
+                                    onChange={setSelectedMonth}
+                                    className="w-full sm:w-48"
                                 />
                             </div>
 
