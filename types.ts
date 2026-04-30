@@ -472,5 +472,4 @@ export interface DiariaEvento {
   user_name: string;
   created_at?: string;
 }
-d e c l a r e   c o n s t   _ _ L A T E S T _ C O M M I T _ _ :   s t r i n g ;  
- 
+declare const __LATEST_COMMIT__: string;
