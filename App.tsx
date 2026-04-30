@@ -14,6 +14,9 @@ import {
 } from './types';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
+
+declare const __LATEST_COMMIT__: string | undefined;
+
 import { supabase } from './services/supabaseClient';
 import * as entityService from './services/entityService';
 import * as oficiosService from './services/oficiosService';
@@ -4007,9 +4010,31 @@ const App: React.FC = () => {
                 ⚠️ O sistema será atualizado em {systemUpdateCountdown}s
             </h2>
             
-            <p className="text-sm text-slate-500 font-medium leading-relaxed mb-10 px-4">
+            <p className="text-sm text-slate-500 font-medium leading-relaxed mb-6 px-4">
                 Um administrador iniciou uma atualização crítica. Você pode fechar este aviso para terminar o que está fazendo, mas salve seu trabalho.
             </p>
+
+            {/* Commit Message Box */}
+            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5 mb-6 text-left mx-4 relative overflow-hidden group shadow-sm transition-all hover:shadow-md">
+               <div className="absolute top-0 left-0 bottom-0 w-1.5 bg-gradient-to-b from-amber-400 to-amber-600 rounded-l-2xl"></div>
+               <h4 className="text-xs font-black text-slate-800 mb-1.5 flex items-center gap-2 uppercase tracking-widest pl-2">
+                  ✨ O que há de novo:
+               </h4>
+               <p className="text-sm text-slate-600 font-medium leading-relaxed italic pl-2">
+                  {(() => {
+                    const rawMsg = typeof __LATEST_COMMIT__ !== 'undefined' ? __LATEST_COMMIT__ : 'Atualizações de estabilidade e melhorias gerais.';
+                    let formatted = rawMsg;
+                    formatted = formatted.replace(/^feat(\([^)]+\))?:/i, '✨ Nova funcionalidade:');
+                    formatted = formatted.replace(/^fix(\([^)]+\))?:/i, '🐛 Correção:');
+                    formatted = formatted.replace(/^chore(\([^)]+\))?:/i, '🔧 Manutenção:');
+                    formatted = formatted.replace(/^refactor(\([^)]+\))?:/i, '♻️ Refatoração:');
+                    formatted = formatted.replace(/^docs(\([^)]+\))?:/i, '📝 Documentação:');
+                    formatted = formatted.replace(/^style(\([^)]+\))?:/i, '🎨 Estilos:');
+                    formatted = formatted.replace(/^perf(\([^)]+\))?:/i, '🚀 Performance:');
+                    return formatted;
+                  })()}
+               </p>
+            </div>
 
             <div className="mt-8 pt-8 border-t border-slate-50 flex items-center justify-center">
                <div className="flex items-center gap-3 text-xs font-black text-amber-600 bg-amber-50 py-4 rounded-2xl px-8 uppercase tracking-widest shadow-inner">
