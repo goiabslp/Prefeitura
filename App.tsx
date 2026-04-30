@@ -920,21 +920,37 @@ const App: React.FC = () => {
     }
   }, [currentUser, currentView, authLoading]);
 
-  // --- SYSTEM AUTO-REFRESH ROUTINE (120 MIN) ---
+  // --- SYSTEM AUTO-REFRESH ROUTINE (07:00, 12:00, 18:00) ---
   const initialMountCheck = useRef(true);
   const pendingWarningShown = useRef(false);
 
   useEffect(() => {
-    const DEPLOY_EPOCH = new Date('2026-04-07T09:20:00-03:00').getTime();
-    const REFRESH_INTERVAL_MS = 120 * 60 * 1000; // 120 minutes
     const WINDOW_KEY = 'sys_refresh_window_v1';
     const FORCED_WINDOW_KEY = 'sys_forced_refresh_target_v1';
 
     const checkSystemRoutine = async () => {
       const now = Date.now();
       
-      // 1. Regular Routine
-      const currentWindow = Math.floor((now - DEPLOY_EPOCH) / REFRESH_INTERVAL_MS);
+      // 1. Regular Routine: 07:00, 12:00, 18:00
+      const d = new Date(now);
+      const hour = d.getHours();
+      
+      let logicalDate = d;
+      let block = "";
+      
+      if (hour >= 7 && hour < 12) {
+        block = "07";
+      } else if (hour >= 12 && hour < 18) {
+        block = "12";
+      } else {
+        block = "18";
+        if (hour < 7) {
+          // Belongs to the previous day's 18:00 block
+          logicalDate = new Date(now - 7 * 60 * 60 * 1000);
+        }
+      }
+      
+      const currentWindow = `${logicalDate.getFullYear()}-${logicalDate.getMonth()}-${logicalDate.getDate()}-${block}`;
       const storedWindow = localStorage.getItem(WINDOW_KEY);
       
       // 2. Forced Update Target
@@ -946,7 +962,17 @@ const App: React.FC = () => {
         }
       }
 
-      const needsUpdate = (!storedWindow || parseInt(storedWindow) < currentWindow) || needsForcedUpdate;
+      // Se é o primeiro acesso ou cache limpo, inicia silenciosamente já "atualizado"
+      if (!storedWindow) {
+        localStorage.setItem(WINDOW_KEY, currentWindow);
+        if (needsForcedUpdate && systemUpdateTarget) {
+           localStorage.setItem(FORCED_WINDOW_KEY, systemUpdateTarget.toString());
+        }
+        initialMountCheck.current = false;
+        return;
+      }
+
+      const needsUpdate = (storedWindow !== currentWindow) || needsForcedUpdate;
 
       if (!currentUser) {
         initialMountCheck.current = false;
@@ -1027,9 +1053,8 @@ const App: React.FC = () => {
             
             if (needsForcedUpdate) {
                 localStorage.setItem(FORCED_WINDOW_KEY, systemUpdateTarget!.toString());
-            } else {
-                localStorage.setItem(WINDOW_KEY, currentWindow.toString());
             }
+            localStorage.setItem(WINDOW_KEY, currentWindow);
             
             // Recarrega a página mantendo a rota atual (em vez de ir para /login)
             window.location.reload();
