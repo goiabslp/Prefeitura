@@ -307,7 +307,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
             const isSameSector = userSector !== '' && orderSector.trim().toLowerCase() === userSector.trim().toLowerCase();
             const isCreator = order.userId === currentUser.id || order.userName === currentUser.name;
 
-            if (isPurchasingManager) {
+            if (isPurchasingManager || (activeBlock === 'licitacao' && isLicitacaoUser)) {
                 hasPermission = true;
             } else {
                 hasPermission = isSameSector || isCreator;
