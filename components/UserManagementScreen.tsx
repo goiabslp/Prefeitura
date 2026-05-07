@@ -394,7 +394,7 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                     {/* Avatar Moderno */}
                     <div className={`relative w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-black shadow-inner overflow-hidden shrink-0 group-hover:scale-105 transition-transform duration-300
                       ${user.role === 'admin' ? 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white' :
-                        user.role === 'licitacao' ? 'bg-gradient-to-br from-blue-500 to-cyan-500 text-white' :
+                        
                           user.role === 'compras' ? 'bg-gradient-to-br from-emerald-500 to-teal-500 text-white' :
                             user.role === 'marketing' ? 'bg-gradient-to-br from-fuchsia-500 to-pink-500 text-white' :
                               'bg-gradient-to-br from-slate-200 to-slate-300 text-slate-500'
@@ -420,13 +420,12 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                       <div className="flex flex-wrap items-center gap-2">
                         <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider border backdrop-blur-sm
                           ${user.role === 'admin' ? 'bg-indigo-50/50 text-indigo-700 border-indigo-100' :
-                            user.role === 'licitacao' ? 'bg-blue-50/50 text-blue-700 border-blue-100' :
+                            
                               user.role === 'compras' ? 'bg-emerald-50/50 text-emerald-700 border-emerald-100' :
                                 user.role === 'marketing' ? 'bg-fuchsia-50/50 text-fuchsia-700 border-fuchsia-100' :
                                   'bg-slate-50/50 text-slate-600 border-slate-200'
                           }`}>
                           {user.role === 'admin' && <ShieldCheck className="w-3 h-3" />}
-                          {user.role === 'licitacao' && <Gavel className="w-3 h-3" />}
                           {user.role === 'compras' && <ShoppingCart className="w-3 h-3" />}
                           {user.role === 'marketing' && <Megaphone className="w-3 h-3" />}
                           {user.role === 'collaborator' && <UserIcon className="w-3 h-3" />}
@@ -492,7 +491,6 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                     {[
                       { id: 'admin', label: 'Admin', desc: 'Acesso total.', icon: <ShieldCheck className="w-5 h-5" />, color: 'indigo' },
-                      { id: 'licitacao', label: 'Licitação', desc: 'Módulos sem Admin.', icon: <Gavel className="w-5 h-5" />, color: 'blue' },
                       { id: 'compras', label: 'Compras', desc: 'Módulos + Visão.', icon: <ShoppingCart className="w-5 h-5" />, color: 'emerald' },
                       { id: 'marketing', label: 'Marketing', desc: 'Gestão de mídia.', icon: <Megaphone className="w-5 h-5" />, color: 'fuchsia' },
                       { id: 'collaborator', label: 'Colaborador', desc: 'Operação básica.', icon: <UserIcon className="w-5 h-5" />, color: 'slate' }
@@ -923,9 +921,6 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                       {
                         title: 'Licitação',
                         permissions: [
-                          { id: 'parent_licitacao', label: 'Módulo Geral' },
-                          { id: 'parent_licitacao_processos', label: 'Processos' },
-                          { id: 'parent_licitacao_triagem', label: 'Triagem' }
                         ],
                         color: 'purple'
                       },

@@ -3,7 +3,7 @@ import React, { forwardRef } from 'react';
 import { AppState, BlockType } from '../types';
 import { OficioPreview } from './OficioPreview';
 import { ComprasPreview } from './ComprasPreview';
-import { LicitacaoPreview } from './LicitacaoPreview';
+
 import { DiariasPreview } from './DiariasPreview';
 
 interface DocumentPreviewProps {
@@ -42,8 +42,7 @@ export const DocumentPreview = forwardRef<HTMLDivElement, DocumentPreviewProps>(
         return <DiariasPreview state={state} isGenerating={isGenerating} />;
       case 'compras':
         return <ComprasPreview state={state} isGenerating={isGenerating} />;
-      case 'licitacao':
-        return <LicitacaoPreview state={state} isGenerating={isGenerating} />;
+
       case 'oficio':
       default:
         return <OficioPreview state={state} isGenerating={isGenerating} onRemoveImage={onRemoveImage} />;

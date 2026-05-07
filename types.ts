@@ -151,16 +151,7 @@ export interface ContentData {
     signerRole?: string;
   };
   signatures?: { name: string; role: string; sector: string; id?: string }[];
-  licitacaoStages?: {
-    id: string;
-    title?: string; // Retained existing property
-    body?: string; // Retained existing property
-    signatureName?: string;
-    signatureRole?: string;
-    signatureSector?: string;
-    signatures?: { name: string; role: string; sector: string; id?: string }[];
-  }[];
-  licitacaoActiveDraft?: { body: string; signatureName?: string; signatureRole?: string; signatureSector?: string; signatures?: { name: string; role: string; sector: string; id?: string }[] };
+
   currentStageIndex?: number;
   viewingStageIndex?: number;
   images?: {
@@ -174,6 +165,7 @@ export interface ContentData {
   attachments?: Attachment[];
   finalDocumentUrl?: string;
   finalDocumentName?: string;
+  licitacaoStages?: any[];
 }
 
 export interface UIConfig {
@@ -194,11 +186,11 @@ export interface AppState {
   selectedId?: string;
 }
 
-export type UserRole = 'admin' | 'collaborator' | 'licitacao' | 'compras' | 'marketing';
+export type UserRole = 'admin' | 'collaborator' | 'compras' | 'marketing' | 'licitacao';
 
-export type AppPermission = 'parent_criar_oficio' | 'parent_admin' | 'parent_compras' | 'parent_licitacao' | 'parent_diarias' | 'parent_diarias_novo_evento' | 'parent_diarias_lancamentos' | 'parent_frotas' | 'parent_agendamento_veiculo' | 'parent_licitacao_triagem' | 'parent_licitacao_processos' | 'parent_abastecimento' | 'parent_abastecimento_novo' | 'parent_abastecimento_gestao' | 'parent_abastecimento_dashboard' | 'parent_agricultura' | 'parent_obras' | 'parent_tarefas' | 'parent_calendario' | 'parent_rh' | 'parent_projetos' | 'parent_marketing' | 'parent_compras_itens' | 'parent_compras_dados';
+export type AppPermission = 'parent_criar_oficio' | 'parent_admin' | 'parent_compras' | 'parent_diarias' | 'parent_diarias_novo_evento' | 'parent_diarias_lancamentos' | 'parent_frotas' | 'parent_agendamento_veiculo' | 'parent_abastecimento' | 'parent_abastecimento_novo' | 'parent_abastecimento_gestao' | 'parent_abastecimento_dashboard' | 'parent_agricultura' | 'parent_obras' | 'parent_tarefas' | 'parent_calendario' | 'parent_rh' | 'parent_projetos' | 'parent_marketing' | 'parent_compras_itens' | 'parent_compras_dados' | 'parent_licitacao';
 
-export type BlockType = 'oficio' | 'compras' | 'licitacao' | 'diarias' | 'agendamento' | 'abastecimento' | 'vs_calendar' | 'vs_history' | 'vs_approvals' | 'dashboard' | 'licitacao_screening' | 'agricultura' | 'obras' | 'tarefas' | 'calendario' | 'rh' | 'projetos' | 'marketing';
+export type BlockType = 'oficio' | 'compras' | 'diarias' | 'agendamento' | 'abastecimento' | 'vs_calendar' | 'vs_history' | 'vs_approvals' | 'dashboard' | 'agricultura' | 'obras' | 'tarefas' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'licitacao';
 
 export interface User {
   id: string;
@@ -261,6 +253,7 @@ export interface Order {
   paymentDate?: string | null;
   budgetFileUrl?: string;
   attachments?: Attachment[];
+  documentos?: any[];
   completionForecast?: string;
   stage?: string;
   requestingSector?: string;

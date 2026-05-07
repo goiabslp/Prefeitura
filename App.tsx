@@ -6,7 +6,8 @@ import {
   oficioKeys
 } from './hooks/useOficios';
 import { serviceRequestKeys } from './hooks/useServiceRequests';
-import { licitacaoKeys } from './hooks/useLicitacao';
+import { licitacaoKeys } from './hooks/useLicitacaoModule';
+
 
 import {
   User, Order, AppState, BlockType, Attachment, Person, Sector, Job,
@@ -34,9 +35,10 @@ import * as comprasService from './services/comprasService';
 import * as diariasService from './services/diariasService';
 import * as counterService from './services/counterService';
 import * as signatureService from './services/signatureService';
+import * as licitacaoService from './services/licitacaoService';
 
 import * as vehicleSchedulingService from './services/vehicleSchedulingService';
-import * as licitacaoService from './services/licitacaoService';
+
 import { AbastecimentoService } from './services/abastecimentoService';
 import * as taskService from './services/taskService';
 import { marketingSyncService } from './services/marketingSyncService';
@@ -64,10 +66,10 @@ import { TwoFactorModal } from './components/TwoFactorModal';
 import { OficioNumberingModal } from './components/modals/OficioNumberingModal';
 import { ProcessStepper } from './components/common/ProcessStepper';
 import { ActionProcessingModal, ProcessingStage } from './components/modals/ActionProcessingModal';
-import { LicitacaoScreeningScreen } from './components/LicitacaoScreeningScreen';
+
 import { SystemAccessControl } from './components/admin/SystemAccessControl';
 import { GlobalLoading } from './components/common/GlobalLoading';
-import { LicitacaoSettingsModal } from './components/LicitacaoSettingsModal';
+
 import { ToastNotification, ToastType } from './components/common/ToastNotification';
 import { AbastecimentoForm } from './components/abastecimento/AbastecimentoForm';
 import { AbastecimentoList } from './components/abastecimento/AbastecimentoList';
@@ -97,6 +99,10 @@ import { SystemUpdateScreen } from './components/SystemUpdateScreen';
 import { NovoEventoScreen } from './components/diarias/NovoEventoScreen';
 import { LancamentosScreen } from './components/diarias/LancamentosScreen';
 import { OficiosHistory } from './components/oficios/OficiosHistory';
+import { LicitacaoDashboard } from './components/licitacao/LicitacaoDashboard';
+import { LicitacaoWizard } from './components/licitacao/LicitacaoWizard';
+import { LicitacaoList } from './components/licitacao/LicitacaoList';
+import { useLicitacaoProcesses, useUpdateLicitacaoProcess } from './hooks/useLicitacaoModule';
 
 const VIEW_TO_PATH: Record<string, string> = {
   'login': '/Login',
@@ -104,13 +110,7 @@ const VIEW_TO_PATH: Record<string, string> = {
   'home:oficio': '/Oficios',
   'home:compras': '/Compras',
   'home:diarias': '/Diarias',
-  'home:licitacao': '/Licitacao',
   'home:abastecimento': '/Abastecimento',
-  'licitacao-new': '/Licitacao/NovoProcesso',
-  'licitacao-tracking': '/Licitacao/MeusProcessos',
-  'licitacao-screening': '/Licitacao/Triagem',
-  'licitacao-all': '/Licitacao/Processos',
-  'licitacao-details': '/Licitacao/MeusProcessos/Visualizar',
   'admin:dashboard': '/Admin/Dashboard',
   'admin:users': '/Admin/Usuarios',
   'admin:entities': '/Admin/Entidades',
@@ -155,7 +155,10 @@ const VIEW_TO_PATH: Record<string, string> = {
   'projetos:details': '/Projetos/Detalhes',
   'marketing': '/Marketing',
   'marketing:new': '/Marketing/Novo',
-  'marketing:details': '/Marketing/Detalhes'
+  'marketing:details': '/Marketing/Detalhes',
+  'licitacao': '/Licitação',
+  'licitacao:new': '/Licitação/NovoPedido',
+  'licitacao:details': '/Licitação/MeusProcessos'
 };
 
 const PATH_TO_STATE: Record<string, any> = Object.fromEntries(
@@ -166,8 +169,57 @@ const PATH_TO_STATE: Record<string, any> = Object.fromEntries(
 );
 
 const App: React.FC = () => {
-  const [currentView, setCurrentView] = useState<'login' | 'home' | 'admin' | 'tracking' | 'editor' | 'vehicle-scheduling' | 'licitacao-screening' | 'licitacao-all' | 'abastecimento' | 'agricultura' | 'obras' | 'order-details' | 'tasks-dashboard' | 'purchase-inventory' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'diarias-novo-evento' | 'diarias-lancamentos'>('login');
+  const [currentView, setCurrentView] = useState<'login' | 'home' | 'admin' | 'tracking' | 'editor' | 'vehicle-scheduling' | 'abastecimento' | 'agricultura' | 'obras' | 'order-details' | 'tasks-dashboard' | 'purchase-inventory' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'diarias-novo-evento' | 'diarias-lancamentos' | 'licitacao' | 'licitacao:new' | 'licitacao:view' | 'licitacao:details' | 'licitacao-all' | 'licitacao-screening'>('login');
   const queryClient = useQueryClient();
+  const { data: licitacaoProcessesData } = useLicitacaoProcesses();
+
+  const mappedLicitacaoOrders: Order[] = React.useMemo(() => {
+    if (!licitacaoProcessesData) return [];
+    return licitacaoProcessesData.map((process: any) => {
+      let mappedStatus: any = 'pending';
+      if (process.status === 'Rascunho') mappedStatus = 'pending';
+      else if (process.status === 'Aguardando Assinatura' || process.status === 'Assinado') mappedStatus = 'awaiting_approval';
+      else if (process.status === 'Em Análise') mappedStatus = 'in_progress';
+      else if (process.status === 'Concluído') mappedStatus = 'completed';
+      else if (process.status === 'Rejeitado') mappedStatus = 'rejected';
+
+      return {
+        id: process.id,
+        protocol: process.protocolo || process.id,
+        title: process.finalidade,
+        status: mappedStatus,
+        createdAt: process.criado_em || new Date().toISOString(),
+        userId: process.criado_por,
+        userName: process.solicitante_nome,
+        blockType: 'licitacao',
+        documentos: process.documentos || process.licitacao_documentos || [],
+        documentSnapshot: {
+          content: {
+            objeto: process.finalidade,
+            prioridade: process.prioridade,
+            requesterName: process.solicitante_nome,
+            requesterSector: process.solicitante_setor,
+            justificativa: process.justificativa?.texto || (process.licitacao_justificativas ? (Array.isArray(process.licitacao_justificativas) ? process.licitacao_justificativas[0]?.texto : process.licitacao_justificativas.texto) : undefined),
+            itens: process.itens || process.licitacao_itens || [],
+            finalDocumentUrl: process.assinatura ? 'true' : null
+          }
+        }
+      } as unknown as Order;
+    });
+  }, [licitacaoProcessesData]);
+
+  const updateLicitacaoProcessMutation = useUpdateLicitacaoProcess();
+
+  const handleUpdateLicitacaoPhase = async (orderId: string, phase: string) => {
+    try {
+      await updateLicitacaoProcessMutation.mutateAsync({ id: orderId, updates: { fase: phase } });
+      setOrders(orders.map(o => o.id === orderId ? { ...o, documentSnapshot: { ...(o.documentSnapshot || {}), content: { ...(o.documentSnapshot?.content || {}), fase: phase } } } as unknown as Order : o));
+    } catch (error) {
+      console.error('Failed to update phase', error);
+      throw error;
+    }
+  };
+
   const { user: currentUser, signIn, signOut, refreshUser, loading: authLoading } = useAuth();
   const { moduleStatus } = useSystemSettings();
   const isModuleActive = (key: string) => moduleStatus[key] !== false;
@@ -175,19 +227,36 @@ const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(INITIAL_STATE);
   const [activeBlock, setActiveBlock] = useState<BlockType | null>(null);
   const [viewingOrder, setViewingOrder] = useState<Order | null>(null);
+
+  // Keep viewingOrder in sync with the latest data from queries
+  React.useEffect(() => {
+    if (viewingOrder && viewingOrder.blockType === 'licitacao') {
+      const updatedOrder = mappedLicitacaoOrders.find(o => o.id === viewingOrder.id);
+      if (updatedOrder) {
+        // Only update if there are changes (like new documentos) to avoid infinite loops if references change
+        if (JSON.stringify(updatedOrder.documentos) !== JSON.stringify(viewingOrder.documentos)) {
+           setViewingOrder(updatedOrder);
+        }
+      }
+    }
+  }, [mappedLicitacaoOrders, viewingOrder]);
+
   // purchaseOrders is now derived to enforce single source of truth
   const [orders, setOrders] = useState<Order[]>([]);
   const purchaseOrders = React.useMemo(() => orders.filter(o => o.blockType === 'compras'), [orders]);
 
+  const [licitacaoProcesses, setLicitacaoProcesses] = useState<any[]>([]);
+  const [licitacaoNextProtocol, setLicitacaoNextProtocol] = useState<any>(null);
+
   const [oficios, setOficios] = useState<Order[]>([]);
   const [serviceRequests, setServiceRequests] = useState<Order[]>([]);
-  const [licitacaoProcesses, setLicitacaoProcesses] = useState<Order[]>([]);
+
   const [tasks, setTasks] = useState<Order[]>([]);
 
   const [users, setUsers] = useState<User[]>(DEFAULT_USERS);
   // const [signatures, setSignatures] = useState<Signature[]>([]); // DEPRECATED: Signatures are now derived from Users
   const [globalCounter, setGlobalCounter] = useState(0);
-  const [licitacaoNextProtocol, setLicitacaoNextProtocol] = useState<number | null>(null);
+
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [isStepperLocked, setIsStepperLocked] = useState(false);
   const [lastListView, setLastListView] = useState<string>('tracking'); // Default to tracking
@@ -335,8 +404,8 @@ const App: React.FC = () => {
         // Also check if there's a forced update target active on load
         const { data } = await supabase.from('organization_settings').select('system_update_target').eq('id', 'global_config').single();
         if (data?.system_update_target) {
-            setSystemUpdateTarget(data.system_update_target);
-            setIsUpdateModalDismissed(false);
+          setSystemUpdateTarget(data.system_update_target);
+          setIsUpdateModalDismissed(false);
         }
       }
     };
@@ -376,7 +445,7 @@ const App: React.FC = () => {
   const [pendingSignatureMetadata, setPendingSignatureMetadata] = useState<any | null>(null);
 
   // Routing logic
-  const [isLicitacaoSettingsOpen, setIsLicitacaoSettingsOpen] = useState(false);
+
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Track active state securely without causing infinite renders on useCallback deps
@@ -392,7 +461,7 @@ const App: React.FC = () => {
       const isFormScreen = () => {
         const cv = appStateRef.current.currentView as string;
         const ab = appStateRef.current.activeBlock as string;
-        if (cv === 'editor' || cv === 'licitacao-new') return true;
+        if (cv === 'editor') return true;
         if (ab === 'new' || ab === 'vs_calendar') return true;
         if (cv === 'abastecimento' && ab === 'new') return true;
         if (cv === 'tarefas' && ab === 'new') return true;
@@ -402,10 +471,10 @@ const App: React.FC = () => {
         return false;
       };
 
-      
+
       if (isFormScreen()) {
         console.log("Auto-refresh bloqueado: Usuário está em uma tela de preenchimento (prevenção de perda de dados).");
-        return; 
+        return;
       }
     }
 
@@ -418,7 +487,7 @@ const App: React.FC = () => {
       const fetchTransactions = !scope || scope === 'transactions'; // Generic transactions
       const fetchVehicleSchedules = !scope || scope === 'vehicle-scheduling';
       const fetchAbastecimento = !scope || scope === 'abastecimento';
-      const fetchLicitacao = !scope || scope === 'licitacao';
+
       const fetchCompras = !scope || scope === 'compras';
       const fetchDiarias = !scope || scope === 'diarias';
       const fetchOficios = !scope || scope === 'oficio';
@@ -427,6 +496,7 @@ const App: React.FC = () => {
       const fetchAgriculture = !scope || scope === 'agriculture';
       const fetchObras = !scope || scope === 'obras';
       const fetchProjetos = !scope || scope === 'projetos';
+      const fetchLicitacao = !scope || scope === 'licitacao';
       const fetchCalendar = !scope || scope === 'calendar';
       const fetchTasks = true; // Always fetch tasks for now or optimize later
 
@@ -518,7 +588,7 @@ const App: React.FC = () => {
 
       // Batch 3: Transactional Data
       let savedPurchaseOrders = purchaseOrders; // Preserve existing
-      let savedLicitacaoProcesses = licitacaoProcesses;
+
       let savedSchedules = schedules;
       let savedTasks = tasks;
 
@@ -527,8 +597,8 @@ const App: React.FC = () => {
       if (fetchCompras || fetchTransactions) {
         promises.push(comprasService.getAllPurchaseOrders().then(d => { savedPurchaseOrders = d; }));
       }
-      if (fetchLicitacao || fetchTransactions) {
-        promises.push(licitacaoService.getAllLicitacaoProcesses().then(d => { savedLicitacaoProcesses = d; }));
+      if (fetchTransactions) {
+
       }
       if (fetchVehicleSchedules || fetchTransactions) {
         promises.push(vehicleSchedulingService.getSchedules().then(d => { savedSchedules = d; }));
@@ -550,17 +620,16 @@ const App: React.FC = () => {
       if (fetchCompras || fetchTransactions) {
         // setPurchaseOrders(savedPurchaseOrders); // Derived
       }
-      if (fetchLicitacao || fetchTransactions) setLicitacaoProcesses(savedLicitacaoProcesses);
+
       if (fetchVehicleSchedules || fetchTransactions) setSchedules(savedSchedules);
       if (fetchTasks || fetchTransactions) setTasks(savedTasks);
 
       // Update Consolidated Orders only if meaningful changes could have happened
-      if (fetchCompras || fetchLicitacao || fetchOficios || fetchDiarias || fetchTransactions) {
+      if (fetchCompras || fetchOficios || fetchDiarias || fetchTransactions) {
         // Note: Generic Transactions covers all.
         // Re-merging with existing state for components not fetched
         const allOrders = [
           ...savedPurchaseOrders,
-          ...savedLicitacaoProcesses,
           ...savedTasks
           // ... others (managed by RQ or not fetched here)
         ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -575,7 +644,7 @@ const App: React.FC = () => {
     } finally {
       setIsRefreshing(false);
     }
-  }, [purchaseOrders, licitacaoProcesses, schedules, tasks]);
+  }, [purchaseOrders, schedules, tasks]);
 
   // Realtime Listeners for Abastecimento Entities
   useEffect(() => {
@@ -882,7 +951,7 @@ const App: React.FC = () => {
     const interval = setInterval(() => {
       const now = Date.now();
       const diff = Math.floor((systemUpdateTarget - now) / 1000);
-      
+
       if (diff > 0) {
         setSystemUpdateCountdown(diff);
       } else {
@@ -935,14 +1004,14 @@ const App: React.FC = () => {
 
     const checkSystemRoutine = async () => {
       const now = Date.now();
-      
+
       // 1. Regular Routine: 07:00, 12:00, 18:00
       const d = new Date(now);
       const hour = d.getHours();
-      
+
       let logicalDate = d;
       let block = "";
-      
+
       if (hour >= 7 && hour < 12) {
         block = "07";
       } else if (hour >= 12 && hour < 18) {
@@ -954,10 +1023,10 @@ const App: React.FC = () => {
           logicalDate = new Date(now - 7 * 60 * 60 * 1000);
         }
       }
-      
+
       const currentWindow = `${logicalDate.getFullYear()}-${logicalDate.getMonth()}-${logicalDate.getDate()}-${block}`;
       const storedWindow = localStorage.getItem(WINDOW_KEY);
-      
+
       // 2. Forced Update Target
       let needsForcedUpdate = false;
       if (systemUpdateTarget && now >= systemUpdateTarget) {
@@ -971,7 +1040,7 @@ const App: React.FC = () => {
       if (!storedWindow) {
         localStorage.setItem(WINDOW_KEY, currentWindow);
         if (needsForcedUpdate && systemUpdateTarget) {
-           localStorage.setItem(FORCED_WINDOW_KEY, systemUpdateTarget.toString());
+          localStorage.setItem(FORCED_WINDOW_KEY, systemUpdateTarget.toString());
         }
         initialMountCheck.current = false;
         return;
@@ -988,19 +1057,19 @@ const App: React.FC = () => {
         // Atualização debaixo dos panos: limpa cache e atualiza a flag silenciosamente
         localStorage.setItem(WINDOW_KEY, currentWindow);
         if (needsForcedUpdate && systemUpdateTarget) {
-           localStorage.setItem(FORCED_WINDOW_KEY, systemUpdateTarget.toString());
+          localStorage.setItem(FORCED_WINDOW_KEY, systemUpdateTarget.toString());
         }
-        
+
         if ('caches' in window) {
-           caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k)))).catch(()=>{});
+          caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k)))).catch(() => { });
         }
-        
+
         if ('serviceWorker' in navigator) {
-             navigator.serviceWorker.getRegistrations().then(regs => {
-                 for (let reg of regs) { reg.update(); }
-             });
+          navigator.serviceWorker.getRegistrations().then(regs => {
+            for (let reg of regs) { reg.update(); }
+          });
         }
-        
+
         // Remove faixa de aviso pendente caso exista (legacy)
         const banner = document.getElementById('sys-pending-update-banner');
         if (banner) banner.remove();
@@ -1023,7 +1092,7 @@ const App: React.FC = () => {
   // --- INFO MODAL: ATUALIZAÇÃO INTELIGENTE ---
   useEffect(() => {
     if (!currentUser) return;
-    
+
     const INFO_KEY = 'has_seen_update_info_v1';
     if (localStorage.getItem(INFO_KEY)) return;
 
@@ -1095,7 +1164,7 @@ const App: React.FC = () => {
         if (e.key === 'Escape') closeModal();
       };
       document.addEventListener('keydown', handleEsc);
-      
+
       btn?.addEventListener('click', closeModal);
       overlay.addEventListener('click', (e) => {
         if (e.target === overlay) closeModal();
@@ -1608,7 +1677,6 @@ const App: React.FC = () => {
         compras: purchaseOrderKeys.all,
         oficio: oficioKeys.all,
         diarias: serviceRequestKeys.all,
-        licitacao: licitacaoKeys.all
       };
 
       if (keys[targetBlock]) {
@@ -1705,7 +1773,7 @@ const App: React.FC = () => {
       // 4. Success UI Update (After confirm)
       setOrders(p => p.filter(o => o.id !== id));
       if (activeBlock === 'diarias') setServiceRequests(p => p.filter(o => o.id !== id));
-      else if (activeBlock === 'licitacao') setLicitacaoProcesses(p => p.filter(o => o.id !== id));
+
       else if (activeBlock !== 'compras') setOficios(p => p.filter(o => o.id !== id));
 
       // 5. Force React Query Update (Immediate + Refetch)
@@ -1852,7 +1920,7 @@ const App: React.FC = () => {
       try {
         const fetched = await licitacaoService.getLicitacaoProcessById(order.id);
         if (fetched) {
-          fullOrder = fetched;
+          fullOrder = fetched as any;
           // Update local cache
           setLicitacaoProcesses(prev => prev.map(o => o.id === fullOrder.id ? fullOrder : o));
         } else {
@@ -2115,7 +2183,7 @@ const App: React.FC = () => {
 
       showToast("Erro ao atualizar status. As alterações foram desfeitas.", "error");
     } finally {
-        // Overlay removed
+      // Overlay removed
     }
   };
 
@@ -2202,7 +2270,7 @@ const App: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: purchaseOrderKeys.lists() });
       showToast("Erro ao atualizar status de compra: " + (error.message || "Unknown"), "error");
     } finally {
-        // Overlay removed
+      // Overlay removed
     }
   };
 
@@ -2377,7 +2445,7 @@ const App: React.FC = () => {
         } else if (order.blockType === 'licitacao') {
           const fetched = await licitacaoService.getLicitacaoProcessById(order.id);
           if (fetched) {
-            fullOrder = fetched;
+            fullOrder = fetched as any;
             setLicitacaoProcesses(prev => prev.map(o => o.id === fullOrder.id ? fullOrder : o));
           }
         }
@@ -2523,7 +2591,7 @@ const App: React.FC = () => {
         } else if (order.blockType === 'licitacao') {
           const fetched = await licitacaoService.getLicitacaoProcessById(order.id);
           if (fetched) {
-            fullOrder = fetched;
+            fullOrder = fetched as any;
             setLicitacaoProcesses(prev => prev.map(o => o.id === fullOrder.id ? fullOrder : o));
           }
         }
@@ -2537,7 +2605,11 @@ const App: React.FC = () => {
     }
 
     setViewingOrder(fullOrder);
-    setCurrentView('order-details');
+    if (order.blockType === 'licitacao') {
+      setCurrentView('licitacao:view');
+    } else {
+      setCurrentView('order-details');
+    }
   };
 
   const handleFetchOrderDetails = async (order: Order): Promise<Order | null> => {
@@ -2564,7 +2636,7 @@ const App: React.FC = () => {
         const fetched = await licitacaoService.getLicitacaoProcessById(order.id);
         if (fetched) {
           setLicitacaoProcesses(prev => prev.map(o => o.id === fetched.id ? fetched : o));
-          return fetched;
+          return fetched as any;
         }
       }
       return null;
@@ -2841,7 +2913,6 @@ const App: React.FC = () => {
 
     if (currentBlock === 'licitacao') {
       setEditingOrder(null);
-      setIsLicitacaoSettingsOpen(true);
     } else {
       setEditingOrder(null);
     }
@@ -2966,11 +3037,11 @@ const App: React.FC = () => {
   if (authLoading) {
     return (
       <div className="min-h-screen bg-[#0a0c10] flex items-center justify-center">
-         <GlobalLoading 
-            type="overlay" 
-            message="Verificando Acesso" 
-            description="Preparando sua área de trabalho municipal segura..." 
-         />
+        <GlobalLoading
+          type="overlay"
+          message="Verificando Acesso"
+          description="Preparando sua área de trabalho municipal segura..."
+        />
       </div>
     );
   }
@@ -3016,17 +3087,17 @@ const App: React.FC = () => {
           )}
 
           <div className="hidden md:block">
-            {currentUser && <AppHeader 
-              currentUser={currentUser} 
-              uiConfig={appState.ui} 
-              activeBlock={activeBlock} 
-              onLogout={handleLogout} 
-              onOpenAdmin={handleOpenAdmin} 
-              onGoHome={handleGoHome} 
-              currentView={currentView} 
-              isRefreshing={isRefreshing} 
-              onRefresh={refreshData} 
-              currentSubView={appState.view} 
+            {currentUser && <AppHeader
+              currentUser={currentUser}
+              uiConfig={appState.ui}
+              activeBlock={activeBlock}
+              onLogout={handleLogout}
+              onOpenAdmin={handleOpenAdmin}
+              onGoHome={handleGoHome}
+              currentView={currentView}
+              isRefreshing={isRefreshing}
+              onRefresh={refreshData}
+              currentSubView={appState.view}
               systemUpdateCountdown={systemUpdateCountdown}
             />}
           </div>
@@ -3388,6 +3459,12 @@ const App: React.FC = () => {
                 onMarketing={() => setCurrentView('marketing')}
                 activeBlock={activeBlock}
                 setActiveBlock={(block) => {
+                  if (block === 'licitacao') {
+                    setCurrentView('licitacao');
+                    setActiveBlock(null);
+                    window.history.pushState({}, '', '/Licitação');
+                    return;
+                  }
                   setActiveBlock(block);
                   if (block === 'tarefas') {
                     window.history.pushState({}, '', '/Tarefas');
@@ -3613,6 +3690,81 @@ const App: React.FC = () => {
               />
             )}
 
+            {currentView === 'licitacao' && (
+              <LicitacaoDashboard
+                onNavigate={(view) => {
+                  setCurrentView(view as any);
+                  const path = view === 'licitacao:new' ? '/Licitação/NovoPedido' : '/Licitação/MeusProcessos';
+                  window.history.pushState({}, '', path);
+                }}
+                onBack={() => {
+                  setCurrentView('home');
+                  setActiveBlock(null);
+                  window.history.pushState({}, '', '/PaginaInicial');
+                }}
+              />
+            )}
+
+            {currentView === 'licitacao:new' && (
+              <LicitacaoWizard
+                currentUser={currentUser!}
+                onBack={() => {
+                  setCurrentView('licitacao');
+                  window.history.pushState({}, '', '/Licitação');
+                }}
+              />
+            )}
+
+            {currentView === 'licitacao:view' && viewingOrder && (
+              <LicitacaoWizard
+                currentUser={currentUser!}
+                initialData={viewingOrder}
+                readOnly={true}
+                onBack={() => {
+                  setCurrentView('licitacao');
+                  window.history.pushState({}, '', '/Licitação/MeusProcessos');
+                }}
+              />
+            )}
+
+            {currentView === 'licitacao:details' && currentUser && (
+              <TrackingScreen
+                onBack={() => {
+                  setCurrentView('licitacao');
+                  window.history.pushState({}, '', '/Licitação');
+                }}
+                currentUser={currentUser}
+                activeBlock="licitacao"
+                orders={mappedLicitacaoOrders}
+                onDownloadPdf={(snapshot, forcedBlockType, order) => { const target = order || orders.find(o => o.documentSnapshot === snapshot); if (target) handleDownloadFromHistory(target, forcedBlockType, snapshot); }}
+                onClearAll={() => setOrders([])}
+                onEditOrder={handleEditOrder}
+                onDeleteOrder={handleDeleteOrder}
+                onUpdateAttachments={handleUpdateOrderAttachments}
+                totalCounter={globalCounter}
+                onUpdatePaymentStatus={handleUpdatePaymentStatus}
+                onUpdateOrderStatus={async (order, status, justification) => {
+                  const targetOrder = typeof order === 'string' ? orders.find(o => o.id === order) || mappedLicitacaoOrders.find(o => o.id === order) : order;
+                  if (!targetOrder) return;
+                  if (activeBlock === 'licitacao') {
+                    let mappedBackendStatus: any = status;
+                    if (status === 'pending') mappedBackendStatus = 'Rascunho';
+                    else if (status === 'awaiting_approval') mappedBackendStatus = 'Aguardando Assinatura';
+                    else if (status === 'in_progress') mappedBackendStatus = 'Em Análise';
+                    else if (status === 'completed') mappedBackendStatus = 'Concluído';
+                    else if (status === 'rejected') mappedBackendStatus = 'Rejeitado';
+                    await updateLicitacaoProcessMutation.mutateAsync({ id: targetOrder.id, updates: { status: mappedBackendStatus as any } });
+                  } else {
+                    await handleUpdateOrderStatus(order, status, justification);
+                  }
+                }}
+                onUpdatePurchaseStatus={handleUpdatePurchaseStatus}
+                onViewOrder={handleViewOrder}
+                sectors={sectors}
+                onUpdateLicitacaoPhase={handleUpdateLicitacaoPhase}
+              />
+            )}
+
             {currentView === 'projetos' && (
               <ProjetosModule
                 currentView={currentView}
@@ -3713,22 +3865,22 @@ const App: React.FC = () => {
                       setActionProcessing({ isOpen: true, stage: 'sending' });
                       await advanceActionStep('sending', 500);
 
-                      const savedRecord = data.id 
+                      const savedRecord = data.id
                         ? await updateRhHorasExtras(data.id, {
-                            month: data.month,
-                            entries: data.entries,
-                            updated_at: new Date().toISOString()
-                          })
+                          month: data.month,
+                          entries: data.entries,
+                          updated_at: new Date().toISOString()
+                        })
                         : await saveRhHorasExtras({
-                            month: data.month,
-                            sector: currentUser?.sector || 'Geral',
-                            entries: data.entries,
-                            user_id: currentUser?.id || '',
-                            user_name: currentUser?.name || 'Sistema',
-                            signature_name: currentUser?.name || 'Sistema',
-                            signature_role: currentUser?.jobTitle || '',
-                            signature_sector: currentUser?.sector || ''
-                          });
+                          month: data.month,
+                          sector: currentUser?.sector || 'Geral',
+                          entries: data.entries,
+                          user_id: currentUser?.id || '',
+                          user_name: currentUser?.name || 'Sistema',
+                          signature_name: currentUser?.name || 'Sistema',
+                          signature_role: currentUser?.jobTitle || '',
+                          signature_sector: currentUser?.sector || ''
+                        });
 
                       await advanceActionStep('validating', 1000); // Use 'validating' instead of 'processing'
                       await advanceActionStep('confirming', 500); // Use 'confirming' instead of 'finalizing'
@@ -3784,7 +3936,7 @@ const App: React.FC = () => {
                 onBack={handleBackToModule}
                 currentUser={currentUser}
                 activeBlock={activeBlock}
-                orders={orders}
+                orders={mappedLicitacaoOrders}
                 showAllProcesses={true}
                 onDownloadPdf={(snapshot, forcedBlockType, order) => { const target = order || orders.find(o => o.documentSnapshot === snapshot); if (target) handleDownloadFromHistory(target, forcedBlockType, snapshot); }}
                 onClearAll={() => setOrders([])}
@@ -3793,20 +3945,25 @@ const App: React.FC = () => {
                 onUpdateAttachments={handleUpdateOrderAttachments}
                 totalCounter={globalCounter}
                 onUpdatePaymentStatus={handleUpdatePaymentStatus}
-                onUpdateOrderStatus={handleUpdateOrderStatus}
+                onUpdateOrderStatus={async (order, status, justification) => {
+                  const targetOrder = typeof order === 'string' ? orders.find(o => o.id === order) || mappedLicitacaoOrders.find(o => o.id === order) : order;
+                  if (!targetOrder) return;
+                  if (activeBlock === 'licitacao') {
+                    let mappedBackendStatus: any = status;
+                    if (status === 'pending') mappedBackendStatus = 'Rascunho';
+                    else if (status === 'awaiting_approval') mappedBackendStatus = 'Aguardando Assinatura';
+                    else if (status === 'in_progress') mappedBackendStatus = 'Em Análise';
+                    else if (status === 'completed') mappedBackendStatus = 'Concluído';
+                    else if (status === 'rejected') mappedBackendStatus = 'Rejeitado';
+                    await updateLicitacaoProcessMutation.mutateAsync({ id: targetOrder.id, updates: { status: mappedBackendStatus as any } });
+                  } else {
+                    await handleUpdateOrderStatus(order, status, justification);
+                  }
+                }}
                 onUpdatePurchaseStatus={handleUpdatePurchaseStatus}
                 onViewOrder={handleViewOrder}
                 sectors={sectors}
-              />
-            )}
-            {currentView === 'licitacao-screening' && currentUser && (
-              <LicitacaoScreeningScreen
-                onBack={handleBackToModule}
-                currentUser={currentUser}
-                orders={licitacaoProcesses}
-                onEditOrder={handleEditOrder}
-                onDeleteOrder={handleDeleteOrder}
-                onUpdateOrderStatus={handleUpdateOrderStatus}
+                onUpdateLicitacaoPhase={handleUpdateLicitacaoPhase}
               />
             )}
 
@@ -3993,58 +4150,59 @@ const App: React.FC = () => {
           <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-100 p-10 text-center transform scale-in-center overflow-hidden relative pointer-events-auto shadow-amber-500/10 active:scale-95 transition-all">
             {/* Background Accent */}
             <div className="absolute top-0 left-0 right-0 h-3 bg-gradient-to-r from-amber-400 via-orange-500 to-amber-600"></div>
-            
-            <button 
-                onClick={() => setIsUpdateModalDismissed(true)}
-                className="absolute top-4 right-4 p-2 text-slate-300 hover:text-slate-500 hover:bg-slate-50 rounded-full transition-all"
-                title="Fechar Aviso"
+
+            <button
+              onClick={() => setIsUpdateModalDismissed(true)}
+              className="absolute top-4 right-4 p-2 text-slate-300 hover:text-slate-500 hover:bg-slate-50 rounded-full transition-all"
+              title="Fechar Aviso"
             >
-                <X className="w-6 h-6" />
+              <X className="w-6 h-6" />
             </button>
 
             <div className="w-20 h-20 bg-amber-50 rounded-2xl flex items-center justify-center mx-auto mb-8 text-amber-500 ring-8 ring-amber-500/5">
-                <Settings className="w-10 h-10 animate-spin-slow" />
+              <Settings className="w-10 h-10 animate-spin-slow" />
             </div>
 
             <h2 className="text-2xl font-black text-slate-900 mb-4 tracking-tighter uppercase leading-tight">
-                ⚠️ O sistema será atualizado em {systemUpdateCountdown}s
+              ⚠️ O sistema será atualizado em {systemUpdateCountdown}s
             </h2>
-            
+
             <p className="text-sm text-slate-500 font-medium leading-relaxed mb-6 px-4">
-                Um administrador iniciou uma atualização crítica. Você pode fechar este aviso para terminar o que está fazendo, mas salve seu trabalho.
+              Um administrador iniciou uma atualização crítica. Você pode fechar este aviso para terminar o que está fazendo, mas salve seu trabalho.
             </p>
 
             {/* Commit Message Box */}
             <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5 mb-6 text-left mx-4 relative overflow-hidden group shadow-sm transition-all hover:shadow-md">
-               <div className="absolute top-0 left-0 bottom-0 w-1.5 bg-gradient-to-b from-amber-400 to-amber-600 rounded-l-2xl"></div>
-               <h4 className="text-xs font-black text-slate-800 mb-1.5 flex items-center gap-2 uppercase tracking-widest pl-2">
-                  ✨ O que há de novo:
-               </h4>
-               <p className="text-sm text-slate-600 font-medium leading-relaxed italic pl-2">
-                  {(() => {
-                    const rawMsg = typeof __LATEST_COMMIT__ !== 'undefined' ? __LATEST_COMMIT__ : 'Atualizações de estabilidade e melhorias gerais.';
-                    let formatted = rawMsg;
-                    formatted = formatted.replace(/^feat(\([^)]+\))?:/i, '✨ Nova funcionalidade:');
-                    formatted = formatted.replace(/^fix(\([^)]+\))?:/i, '🐛 Correção:');
-                    formatted = formatted.replace(/^chore(\([^)]+\))?:/i, '🔧 Manutenção:');
-                    formatted = formatted.replace(/^refactor(\([^)]+\))?:/i, '♻️ Refatoração:');
-                    formatted = formatted.replace(/^docs(\([^)]+\))?:/i, '📝 Documentação:');
-                    formatted = formatted.replace(/^style(\([^)]+\))?:/i, '🎨 Estilos:');
-                    formatted = formatted.replace(/^perf(\([^)]+\))?:/i, '🚀 Performance:');
-                    return formatted;
-                  })()}
-               </p>
+              <div className="absolute top-0 left-0 bottom-0 w-1.5 bg-gradient-to-b from-amber-400 to-amber-600 rounded-l-2xl"></div>
+              <h4 className="text-xs font-black text-slate-800 mb-1.5 flex items-center gap-2 uppercase tracking-widest pl-2">
+                ✨ O que há de novo:
+              </h4>
+              <p className="text-sm text-slate-600 font-medium leading-relaxed italic pl-2">
+                {(() => {
+                  const rawMsg = typeof __LATEST_COMMIT__ !== 'undefined' ? __LATEST_COMMIT__ : 'Atualizações de estabilidade e melhorias gerais.';
+                  let formatted = rawMsg;
+                  formatted = formatted.replace(/^feat(\([^)]+\))?:/i, '✨ Nova funcionalidade:');
+                  formatted = formatted.replace(/^fix(\([^)]+\))?:/i, '🐛 Correção:');
+                  formatted = formatted.replace(/^chore(\([^)]+\))?:/i, '🔧 Manutenção:');
+                  formatted = formatted.replace(/^refactor(\([^)]+\))?:/i, '♻️ Refatoração:');
+                  formatted = formatted.replace(/^docs(\([^)]+\))?:/i, '📝 Documentação:');
+                  formatted = formatted.replace(/^style(\([^)]+\))?:/i, '🎨 Estilos:');
+                  formatted = formatted.replace(/^perf(\([^)]+\))?:/i, '🚀 Performance:');
+                  return formatted;
+                })()}
+              </p>
             </div>
 
             <div className="mt-8 pt-8 border-t border-slate-50 flex items-center justify-center">
-               <div className="flex items-center gap-3 text-xs font-black text-amber-600 bg-amber-50 py-4 rounded-2xl px-8 uppercase tracking-widest shadow-inner">
-                  <span className="w-2.5 h-2.5 bg-amber-500 rounded-full animate-ping"></span>
-                  Confira o tempo no topo da tela
-               </div>
+              <div className="flex items-center gap-3 text-xs font-black text-amber-600 bg-amber-50 py-4 rounded-2xl px-8 uppercase tracking-widest shadow-inner">
+                <span className="w-2.5 h-2.5 bg-amber-500 rounded-full animate-ping"></span>
+                Confira o tempo no topo da tela
+              </div>
             </div>
           </div>
 
-          <style dangerouslySetInnerHTML={{ __html: `
+          <style dangerouslySetInnerHTML={{
+            __html: `
             @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
             @keyframes scale-in-center { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
             .animate-fade-in { animation: fade-in 0.3s ease-out forwards; }

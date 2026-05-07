@@ -662,7 +662,7 @@ export const OrderDetailsScreen: React.FC<OrderDetailsScreenProps> = ({
 
     // Helper to render Items Tab Content
     const renderItems = () => {
-        const canViewFullDetails = ['admin', 'compras', 'licitacao'].includes(currentUser?.role as string) || !!currentUser?.permissions?.includes('parent_compras') || !!currentUser?.permissions?.includes('parent_licitacao');
+        const canViewFullDetails = ['admin', 'compras'].includes(currentUser?.role as string) || !!currentUser?.permissions?.includes('parent_compras');
 
         return (
         <div className="p-8 w-full animate-fade-in">

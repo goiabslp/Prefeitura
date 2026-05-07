@@ -232,7 +232,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         // "New" Button
         if (activeBlock !== 'abastecimento' && activeBlock !== 'tarefas') {
             actionButtons.push({
-                label: activeBlock === 'compras' ? 'Novo Pedido' : activeBlock === 'oficio' ? 'Novo Ofício' : activeBlock === 'diarias' ? 'Nova Solicitação' : activeBlock === 'licitacao' ? 'Novo Processo' : 'Novo Registro',
+                label: activeBlock === 'compras' ? 'Novo Pedido' : activeBlock === 'oficio' ? 'Novo Ofício' : activeBlock === 'diarias' ? 'Nova Solicitação' : 'Novo Registro',
                 desc: "Criar novo registro",
                 icon: FilePlus,
                 onClick: () => onNewOrder(activeBlock || 'oficio', true), // Force state reset always when starting a new flow

@@ -19,7 +19,7 @@ import { formatLocalDate } from '../utils/dateUtils';
 import { useOficios, useOficio, useUpdateOficioDescription, useInfiniteOficios } from '../hooks/useOficios';
 import { usePurchaseOrders, usePurchaseOrder, useInfinitePurchaseOrders, useUpdatePurchaseOrderAccount, purchaseOrderKeys } from '../hooks/usePurchaseOrders';
 import { useServiceRequests, useServiceRequest, useInfiniteServiceRequests } from '../hooks/useServiceRequests';
-import { useInfiniteLicitacao } from '../hooks/useLicitacao';
+
 
 const HashIcon = ({ className }: { className?: string }) => (
     <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -44,6 +44,7 @@ interface TrackingScreenProps {
     onUpdatePaymentStatus?: (orderOrId: string | Order, status: 'pending' | 'contabilidade' | 'paid') => void;
     onUpdateOrderStatus?: (orderOrId: string | Order, status: Order['status'], justification?: string) => Promise<void>;
     onUpdatePurchaseStatus?: (orderOrId: string | Order, status: string, justification?: string, budgetFileUrl?: string, completionForecast?: string) => Promise<void>;
+    onUpdateLicitacaoPhase?: (orderId: string, phase: string) => Promise<void>;
     showAllProcesses?: boolean;
     onViewOrder?: (order: Order) => void;
     sectors?: Sector[];
@@ -63,6 +64,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
     onUpdatePaymentStatus,
     onUpdateOrderStatus,
     onUpdatePurchaseStatus,
+    onUpdateLicitacaoPhase,
     showAllProcesses = false,
     onViewOrder,
     sectors = []
@@ -177,24 +179,6 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
         });
     }, [infinitePurchaseOrders, orders, localOptimisticUpdates]);
 
-    // LICITACAO
-    const {
-        data: infiniteLicitacao,
-        fetchNextPage: fetchNextLicitacao,
-        hasNextPage: hasNextLicitacao,
-        isFetchingNextPage: isFetchingNextLicitacao,
-        isLoading: isLoadingLicitacao,
-        isError: isLicitacaoError
-    } = useInfiniteLicitacao(20, searchTerm);
-
-    const licitacaoData = React.useMemo(() => {
-        const remote = infiniteLicitacao?.pages.flat() || [];
-        if (!orders || orders.length === 0) return remote;
-        return remote.map(order => {
-            const local = orders.find(o => o.id === order.id);
-            return local ? { ...order, ...local } : order;
-        });
-    }, [infiniteLicitacao, orders]);
 
     // DIARIAS
     const {
@@ -215,7 +199,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
         });
     }, [infiniteServiceRequests, orders]);
 
-    const isInfiniteLoading = isOficiosLoading || isLoadingPurchaseOrders || isLoadingLicitacao || isLoadingServiceRequests;
+    const isInfiniteLoading = isOficiosLoading || isLoadingPurchaseOrders || isLoadingServiceRequests;
 
     const [downloadingId, setDownloadingId] = useState<string | null>(null);
     const [previewOrder, setPreviewOrder] = useState<Order | null>(null);
@@ -245,6 +229,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
     const [adminRejectionOrder, setAdminRejectionOrder] = useState<Order | null>(null);
     const [rejectionReason, setRejectionReason] = useState('');
     const [statusSelectionOrder, setStatusSelectionOrder] = useState<Order | null>(null);
+    const [licitacaoPhaseOrder, setLicitacaoPhaseOrder] = useState<Order | null>(null);
     const [accountSelectionOrder, setAccountSelectionOrder] = useState<Order | null>(null);
     const [forecastDate, setForecastDate] = useState('');
     const [pendingStatus, setPendingStatus] = useState<string | null>(null);
@@ -266,7 +251,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
     const isAdmin = currentUser.role === 'admin';
     const isComprasUser = currentUser.role === 'compras';
     const isLicitacaoUser = currentUser.role === 'licitacao';
-    const isCompras = activeBlock === 'compras' || activeBlock === 'licitacao';
+    const isCompras = activeBlock === 'compras';
 
     const getStatusBadge = (status: Order['status']) => {
         switch (status) {
@@ -290,7 +275,6 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
         if (activeBlock === 'oficio') return oficiosData;
         if (activeBlock === 'compras') return purchaseOrdersData;
         if (activeBlock === 'diarias') return serviceRequestsData;
-        if (activeBlock === 'licitacao') return licitacaoData;
         return orders;
     };
 
@@ -307,7 +291,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
             const isSameSector = userSector !== '' && orderSector.trim().toLowerCase() === userSector.trim().toLowerCase();
             const isCreator = order.userId === currentUser.id || order.userName === currentUser.name;
 
-            if (isPurchasingManager || (activeBlock === 'licitacao' && isLicitacaoUser)) {
+            if (isPurchasingManager) {
                 hasPermission = true;
             } else {
                 hasPermission = isSameSector || isCreator;
@@ -315,7 +299,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
         } else if (activeBlock === 'oficio') {
             hasPermission = true; // Oficios are visible to all users
         } else {
-            hasPermission = isAdmin || currentUser.role === 'licitacao' || order.userId === currentUser.id;
+            hasPermission = isAdmin || order.userId === currentUser.id;
         }
 
         if (!hasPermission && !showAllProcesses) return false;
@@ -401,6 +385,17 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
         realizado: { label: 'Pedido Realizado', icon: ShoppingCart, color: 'text-emerald-600 bg-emerald-50 border-emerald-100' },
         concluido: { label: 'Concluído', icon: CheckCircle, color: 'text-slate-600 bg-slate-50 border-slate-100' },
         cancelado: { label: 'Cancelado', icon: XCircle, color: 'text-rose-600 bg-rose-50 border-rose-100' },
+    };
+
+    const licitacaoFasesMap = {
+        'preparatoria': { label: 'Preparatória', desc: 'está realizando planejamento, estudo técnico e definição do objeto e edital.' },
+        'divulgacao': { label: 'Divulgação do edital', desc: 'está publicando para dar publicidade.' },
+        'propostas': { label: 'Propostas/lances', desc: 'as empresas estão enviando preços/ofertas.' },
+        'julgamento': { label: 'Julgamento', desc: 'está fazendo análise e classificação das propostas.' },
+        'habilitacao': { label: 'Habilitação', desc: 'está verificando a documentação da vencedora.' },
+        'recursos': { label: 'Recursos', desc: 'está abrindo prazo para contestação.' },
+        'homologacao': { label: 'Homologação', desc: 'a autoridade está aprovando o resultado.' },
+        'adjudicacao': { label: 'Adjudicação', desc: 'está atribuindo o objeto ao vencedor.' }
     };
 
     const PurchaseStatusSelector = ({ order }: { order: Order }) => {
@@ -540,7 +535,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                             <FileText className={`${(isDiarias || isCompras || (activeBlock as any) === 'oficio') ? 'w-4 h-4' : 'w-6 h-6'} text-white`} />
                                         </div>
                                         <span className="truncate">
-                                            {(activeBlock as any) === 'oficio' ? 'Histórico de Ofícios' : ((activeBlock as any) === 'licitacao' && !showAllProcesses) ? 'Meus Processos' : ((activeBlock as any) === 'licitacao' && showAllProcesses) ? 'Processos' : `Histórico: ${activeBlock?.toUpperCase()}`}
+                                            {(activeBlock as any) === 'oficio' ? 'Histórico de Ofícios' : `Histórico: ${activeBlock?.toUpperCase()}`}
                                         </span>
                                     </h2>
                                 </div>
@@ -667,7 +662,30 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                         ) : filteredOrders.length > 0 ? (
                             <div className="min-w-full">
                                     <div className="border-b border-slate-100 bg-slate-50 hidden desktop:grid desktop:grid-cols-12 gap-4 px-8 py-4 sticky top-0 z-10">
-                                        {isCompras && (
+                                        {isLicitacao ? (
+                                            <>
+                                                <div className="md:col-span-2 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 whitespace-nowrap">
+                                                    <HashIcon className="w-3 h-3" /> Protocolo
+                                                </div>
+                                                <div className="md:col-span-2 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 whitespace-nowrap">
+                                                    <Edit2 className="w-3 h-3" /> Objeto / Descrição
+                                                </div>
+                                                <div className="md:col-span-3 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 whitespace-nowrap">
+                                                    <Network className="w-3 h-3" /> Solicitante / Setor
+                                                </div>
+                                                <div className="md:col-span-2 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 whitespace-nowrap">
+                                                    <Info className="w-3 h-3" /> Fase
+                                                </div>
+                                                <div className="md:col-span-2 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 whitespace-nowrap">
+                                                    <RotateCcw className="w-3 h-3" /> Status
+                                                </div>
+                                                <div className="md:col-span-1 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-center whitespace-nowrap">
+                                                    Ações
+                                                </div>
+                                            </>
+                                        ) : (
+                                            <>
+                                                {isCompras && (
                                             <div className="desktop:col-span-1 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-center gap-2 whitespace-nowrap">
                                                 <Calendar className="w-3 h-3" /> Pedido
                                             </div>
@@ -715,7 +733,9 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                 {isDiarias ? <><RotateCcw className="w-3 h-3" /> Pagamento</> : <><Calendar className="w-3 h-3" /> Criação</>}
                                             </div>
                                         )}
-                                        <div className={`${isCompras ? 'md:col-span-3' : 'md:col-span-2'} text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-center whitespace-nowrap`}>Ações</div>
+                                                <div className={`${isCompras ? 'md:col-span-3' : 'md:col-span-2'} text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-center whitespace-nowrap`}>Ações</div>
+                                            </>
+                                        )}
                                     </div>
 
                                 <div className="divide-y divide-slate-100">
@@ -733,7 +753,76 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
 
                                         return (
                                             <div key={order.id} className="grid grid-cols-1 desktop:grid-cols-12 gap-4 px-8 py-5 hover:bg-slate-50/80 transition-colors items-center">
-                                                {isCompras && (
+                                                {isLicitacao ? (
+                                                    <>
+                                                        <div className="md:col-span-2 flex flex-col justify-center gap-1">
+                                                            <span className="font-mono text-[10px] font-bold text-indigo-600 bg-indigo-50/50 px-2 py-1.5 rounded border border-indigo-100/50 w-fit">
+                                                                {order.protocol || '---'}
+                                                            </span>
+                                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                                                                <Calendar className="w-3 h-3" />
+                                                                {new Date(order.createdAt).toLocaleDateString('pt-BR')}
+                                                            </span>
+                                                        </div>
+                                                        <div className="md:col-span-2 pr-4 flex items-center">
+                                                            <span className="text-xs font-bold text-slate-600 line-clamp-2" title={(content as any)?.objeto || content?.description || 'Objeto não especificado'}>
+                                                                {(content as any)?.objeto || content?.description || <span className="italic text-slate-400">Objeto não especificado</span>}
+                                                            </span>
+                                                        </div>
+                                                        <div className="md:col-span-3 flex flex-col justify-center pr-4">
+                                                            <span className="text-xs font-bold text-slate-700 truncate">{content?.requesterName || order.userName || 'Sem Solicitante'}</span>
+                                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate flex items-center gap-1 mt-0.5">
+                                                                <Network className="w-3 h-3" /> {content?.requesterSector || order.requestingSector || 'Sem Setor'}
+                                                            </span>
+                                                        </div>
+                                                        <div className="md:col-span-2 flex flex-col justify-center gap-1 relative group cursor-pointer" onClick={() => isLicitacaoUser && setLicitacaoPhaseOrder(order)}>
+                                                            <span className={`inline-flex items-center w-fit gap-1 px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider ${licitacaoFasesMap[((content as any)?.fase) as keyof typeof licitacaoFasesMap] ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' : 'bg-slate-50 text-slate-500 border border-slate-200'}`} title={licitacaoFasesMap[((content as any)?.fase) as keyof typeof licitacaoFasesMap]?.desc || 'Fase não definida'}>
+                                                                <Info className="w-3 h-3" /> 
+                                                                {licitacaoFasesMap[((content as any)?.fase) as keyof typeof licitacaoFasesMap]?.label || 'Sem Fase'}
+                                                            </span>
+                                                        </div>
+                                                        <div className="md:col-span-2 flex items-center justify-start cursor-pointer" onClick={() => isAdmin && setStatusSelectionOrder(order)}>
+                                                            {getStatusBadge(order.status)}
+                                                        </div>
+                                                        <div className="md:col-span-1 flex items-center justify-center gap-1">
+                                                            <button
+                                                                onClick={() => onViewOrder?.(order)}
+                                                                className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all shadow-sm group"
+                                                                title="Visualizar Processo"
+                                                            >
+                                                                <Eye className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                                                            </button>
+                                                            {(order.documentSnapshot?.content as any)?.finalDocumentUrl && (
+                                                                <a
+                                                                    href={(order.documentSnapshot?.content as any)?.finalDocumentUrl}
+                                                                    target="_blank"
+                                                                    rel="noreferrer"
+                                                                    className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all shadow-sm group"
+                                                                    title="Baixar Documento Final"
+                                                                >
+                                                                    <Download className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                                                                </a>
+                                                            )}
+                                                            <button
+                                                                onClick={() => setConfirmModal({
+                                                                    isOpen: true,
+                                                                    title: "Excluir Registro",
+                                                                    message: `Deseja realmente remover o processo "${order.protocol}" do histórico?`,
+                                                                    type: 'danger',
+                                                                    onConfirm: () => {
+                                                                        onDeleteOrder(order.id);
+                                                                        setConfirmModal({ ...confirmModal, isOpen: false });
+                                                                    }
+                                                                })}
+                                                                className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all shadow-sm group" title="Excluir"
+                                                            >
+                                                                <Trash2 className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                                                            </button>
+                                                        </div>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        {isCompras && (
                                                     <div className="md:col-span-1 flex justify-center">
                                                         <div className="w-11 h-11 bg-white rounded-xl border border-slate-200 flex flex-col items-center justify-center shadow-sm shrink-0">
                                                             <span className="text-[7px] font-black text-slate-400 uppercase">
@@ -943,7 +1032,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                     </div>
                                                 ) : null}
 
-                                                {!isCompras && !isDiarias && !isLicitacao && (
+                                                {!isCompras && !isDiarias && (
                                                     <div className="desktop:col-span-2 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 whitespace-nowrap">
                                                         <Calendar className="w-3 h-3" />
                                                         {new Date(order.createdAt).toLocaleDateString('pt-BR')}
@@ -1024,17 +1113,6 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                             {downloadingId === order.id ? <Loader2 className="w-5 h-5 animate-spin" /> : <FileDown className="w-5 h-5" />}
                                                         </button>
                                                     )}
-                                                    {activeBlock === 'licitacao' && (order.documentSnapshot?.content as any)?.finalDocumentUrl && (
-                                                        <a
-                                                            href={(order.documentSnapshot?.content as any)?.finalDocumentUrl}
-                                                            target="_blank"
-                                                            rel="noreferrer"
-                                                            className="p-2 rounded-xl text-emerald-600 hover:bg-emerald-600 hover:text-white transition-all border border-transparent hover:border-emerald-600"
-                                                            title="Baixar Documento Final"
-                                                        >
-                                                            <Download className="w-5 h-5" />
-                                                        </a>
-                                                    )}
                                                     <button
                                                         onClick={() => setConfirmModal({
                                                             isOpen: true,
@@ -1051,27 +1129,28 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                         <Trash2 className="w-5 h-5" />
                                                     </button>
                                                 </div>
-                                            </div>
-                                        );
-                                    })}
+                                            </>
+                                        )}
+                                    </div>
+                                );
+                            })}
 
                                     {/* CONSOLIDATED LOAD MORE BUTTON */}
                                     {(hasNextOficios && activeBlock === 'oficio' ||
                                         hasNextPurchaseOrders && activeBlock === 'compras' ||
-                                        hasNextLicitacao && activeBlock === 'licitacao' ||
+                                        
                                         hasNextServiceRequests && activeBlock === 'diarias') && (
                                             <div className="py-8 flex justify-center border-t border-slate-100 bg-slate-50/30">
                                                 <button
                                                     onClick={() => {
                                                         if (activeBlock === 'oficio') fetchNextOficios();
                                                         else if (activeBlock === 'compras') fetchNextPurchaseOrders();
-                                                        else if (activeBlock === 'licitacao') fetchNextLicitacao();
                                                         else if (activeBlock === 'diarias') fetchNextServiceRequests();
                                                     }}
-                                                    disabled={isFetchingStrictOficios || isFetchingNextPurchaseOrders || isFetchingNextLicitacao || isFetchingNextServiceRequests}
+                                                    disabled={isFetchingStrictOficios || isFetchingNextPurchaseOrders || isFetchingNextServiceRequests}
                                                     className="px-8 py-3 bg-white border border-slate-200 rounded-2xl text-slate-600 font-black text-[10px] uppercase tracking-[0.2em] hover:bg-slate-900 hover:text-white hover:border-slate-900 transition-all shadow-sm flex items-center gap-3 group disabled:opacity-50 active:scale-95"
                                                 >
-                                                    {(isFetchingStrictOficios || isFetchingNextPurchaseOrders || isFetchingNextLicitacao || isFetchingNextServiceRequests) ? (
+                                                    {(isFetchingStrictOficios || isFetchingNextPurchaseOrders || isFetchingNextServiceRequests) ? (
                                                         <>
                                                             <Loader2 className="w-4 h-4 animate-spin" />
                                                             Carregando...
@@ -1363,7 +1442,52 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                         </motion.div>
                                     ) : (
                                         <motion.div key="list" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="p-8">
-                                            {!pendingStatus ? (
+                                            {activeBlock === 'licitacao' ? (
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    {[
+                                                        { key: 'pending', label: 'Rascunho', icon: Edit3, color: 'text-slate-600 bg-slate-50 border-slate-100' },
+                                                        { key: 'awaiting_approval', label: 'Aguardando Assinatura', icon: Clock, color: 'text-amber-600 bg-amber-50 border-amber-100' },
+                                                        { key: 'in_progress', label: 'Em Análise', icon: Search, color: 'text-blue-600 bg-blue-50 border-blue-100' },
+                                                        { key: 'completed', label: 'Concluído', icon: CheckCircle, color: 'text-emerald-600 bg-emerald-50 border-emerald-100' },
+                                                        { key: 'rejected', label: 'Rejeitado', icon: XCircle, color: 'text-rose-600 bg-rose-50 border-rose-100' }
+                                                    ].map((cfg) => {
+                                                        const isActive = statusSelectionOrder.status === cfg.key;
+                                                        return (
+                                                            <button
+                                                                key={cfg.key}
+                                                                onClick={() => {
+                                                                    const id = statusSelectionOrder.id;
+                                                                    setLocalOptimisticUpdates(prev => ({ ...prev, [id]: { status: cfg.key as any } }));
+                                                                    setSuccessOrderId(id);
+
+                                                                    onUpdateOrderStatus?.(statusSelectionOrder, cfg.key as any, `Alteração de Status via Painel Admin por ${currentUser.name}`);
+                                                                    
+                                                                    setTimeout(() => {
+                                                                        setStatusSelectionOrder(null);
+                                                                        setSuccessOrderId(null);
+                                                                    }, 1500);
+                                                                }}
+                                                                className={`p-6 rounded-[1.5rem] border-2 text-left transition-all relative group overflow-hidden ${isActive ? 'bg-indigo-50 border-indigo-600 text-indigo-900' : 'bg-white border-slate-100 text-slate-600 hover:border-indigo-300 hover:bg-slate-50 active:scale-[0.98]'}`}
+                                                            >
+                                                                <div className="flex items-start gap-4 h-full relative z-10">
+                                                                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 transition-colors ${isActive ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30' : 'bg-slate-100 text-slate-400 group-hover:bg-indigo-100 group-hover:text-indigo-600'}`}>
+                                                                        <cfg.icon className="w-6 h-6" />
+                                                                    </div>
+                                                                    <div>
+                                                                        <div className="flex items-center gap-2">
+                                                                            <span className="font-black uppercase tracking-widest text-[11px] leading-none mb-1">{cfg.label}</span>
+                                                                            {isActive && <div className="w-2 h-2 bg-indigo-600 rounded-full animate-pulse" />}
+                                                                        </div>
+                                                                        <p className="text-xs font-medium leading-relaxed opacity-70">
+                                                                            {cfg.key === statusSelectionOrder.status ? 'Status atual deste processo licitatório.' : 'Clique para atualizar o processo para este status.'}
+                                                                        </p>
+                                                                    </div>
+                                                                </div>
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            ) : !pendingStatus ? (
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                     {(Object.keys(purchaseStatusMap) as Array<keyof typeof purchaseStatusMap>).map((key) => {
                                                         const cfg = purchaseStatusMap[key];
@@ -1653,6 +1777,61 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
 
             </div>
 
+                {/* MODAL DE SELEÇÃO DE FASE DA LICITAÇÃO */}
+                {licitacaoPhaseOrder && createPortal(
+                    <div className="fixed inset-0 z-[1100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-fade-in">
+                        <div className="w-full max-w-3xl bg-white rounded-[2rem] shadow-2xl border border-white/20 overflow-hidden flex flex-col animate-slide-up max-h-[90vh]">
+                            <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-600/20">
+                                        <Info className="w-6 h-6 text-white" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-xl font-black text-slate-900 tracking-tight uppercase leading-none">Atualizar Fase</h3>
+                                        <p className="text-xs font-bold text-indigo-600 font-mono mt-1 tracking-wider">{licitacaoPhaseOrder.protocol}</p>
+                                    </div>
+                                </div>
+                                <button onClick={() => setLicitacaoPhaseOrder(null)} className="p-3 hover:bg-white hover:shadow-sm rounded-2xl text-slate-400 hover:text-slate-900 transition-all active:scale-90"><X className="w-6 h-6" /></button>
+                            </div>
+                            <div className="flex-1 overflow-y-auto custom-scrollbar relative p-8">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {(Object.keys(licitacaoFasesMap) as Array<keyof typeof licitacaoFasesMap>).map((key) => {
+                                        const cfg = licitacaoFasesMap[key];
+                                        const isActive = (licitacaoPhaseOrder.documentSnapshot?.content as any)?.fase === key;
+
+                                        return (
+                                            <button
+                                                key={key}
+                                                disabled={isActive}
+                                                onClick={() => {
+                                                    onUpdateLicitacaoPhase?.(licitacaoPhaseOrder.id, key);
+                                                    setLicitacaoPhaseOrder(null);
+                                                }}
+                                                className={`group flex items-start gap-4 p-5 rounded-[1.5rem] border-2 text-left transition-all active:scale-[0.98] ${isActive ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-slate-100 hover:border-indigo-200 hover:shadow-md'}`}
+                                            >
+                                                <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 transition-colors ${isActive ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-600'}`}>
+                                                    <Info className="w-6 h-6" />
+                                                </div>
+                                                <div className="flex flex-col gap-1">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className={`font-black text-[10px] uppercase tracking-widest ${isActive ? 'text-indigo-900' : 'text-slate-700'}`}>{cfg.label}</span>
+                                                        {isActive && <span className="px-2 py-0.5 rounded-full bg-indigo-200/50 text-indigo-700 text-[8px] font-black uppercase">Atual</span>}
+                                                    </div>
+                                                    <span className={`text-[10px] font-bold leading-relaxed ${isActive ? 'text-indigo-600/70' : 'text-slate-400'}`}>{cfg.desc}</span>
+                                                </div>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                            <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-center">
+                                <button onClick={() => setLicitacaoPhaseOrder(null)} className="px-8 py-3 bg-white text-slate-400 font-black text-xs uppercase tracking-[0.2em] rounded-xl border border-slate-200 hover:bg-slate-100 transition-all">Cancelar</button>
+                            </div>
+                        </div>
+                    </div>,
+                    document.body
+                )}
+
             {accountSelectionOrder && createPortal(
                 <AccountSelectionModal
                     isOpen={!!accountSelectionOrder}
@@ -1660,9 +1839,9 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                     onSelect={handleSelectAccount}
                     currentUser={currentUser}
                     sectors={sectors}
-                    order={accountSelectionOrder}
+                    order={accountSelectionOrder || undefined}
                     isAdmin={isAdmin}
-                    isSuccess={successOrderId === accountSelectionOrder.id}
+                    isSuccess={successOrderId === accountSelectionOrder?.id}
                 />,
                 document.body
             )}

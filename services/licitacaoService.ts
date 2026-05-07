@@ -1,153 +1,297 @@
-
 import { supabase } from './supabaseClient';
-import { Order } from '../types';
+import { LicitacaoProcesso, LicitacaoItem, LicitacaoJustificativa, LicitacaoAssinatura, LicitacaoPermissao, LicitacaoDocumento } from '../types/licitacao';
 
-export const getAllLicitacaoProcesses = async (lightweight = true, page = 0, limit = 1000, searchTerm = '', status?: string): Promise<Order[]> => {
-    const columns = lightweight
-        ? 'id, protocol, title, status, stage, requesting_sector, created_at, user_id, user_name'
-        : '*';
+// Processos
+export const createLicitacaoProcess = async (process: Partial<LicitacaoProcesso>): Promise<LicitacaoProcesso | null> => {
+    try {
+        const { data, error } = await supabase
+            .from('licitacao_processos')
+            .insert([process])
+            .select()
+            .single();
 
-    let query = supabase
-        .from('licitacao_processes')
-        .select(columns)
-        .order('created_at', { ascending: false });
-
-    if (searchTerm) {
-        query = query.or(`protocol.ilike.%${searchTerm}%,title.ilike.%${searchTerm}%,user_name.ilike.%${searchTerm}%`);
+        if (error) throw error;
+        return data as LicitacaoProcesso;
+    } catch (error) {
+        console.error("Error creating licitacao process:", error);
+        throw error;
     }
+};
 
-    if (status) {
-        query = query.eq('status', status);
+export const createLicitacaoProcessCompleto = async (payload: {
+    processo: Partial<LicitacaoProcesso>;
+    itens: Partial<LicitacaoItem>[];
+    justificativa: Partial<LicitacaoJustificativa>;
+    assinatura?: Partial<LicitacaoAssinatura>;
+}): Promise<LicitacaoProcesso | null> => {
+    try {
+        // 1. Create process
+        const processo = await createLicitacaoProcess({
+            ...payload.processo,
+            protocolo: await generateLicitacaoProtocol()
+        });
+        
+        if (!processo) throw new Error("Failed to create process");
+
+        // 2. Create items
+        if (payload.itens.length > 0) {
+            const itemsToCreate = payload.itens.map(item => ({
+                ...item,
+                processo_id: processo.id
+            }));
+            await createLicitacaoItems(itemsToCreate);
+        }
+
+        // 3. Create justificativa
+        await upsertLicitacaoJustificativa({
+            ...payload.justificativa,
+            processo_id: processo.id
+        });
+
+        // 4. Create assinatura if provided
+        if (payload.assinatura) {
+            await signLicitacaoProcess({
+                ...payload.assinatura,
+                processo_id: processo.id
+            });
+        }
+
+        return processo;
+    } catch (error) {
+        console.error("Error in createLicitacaoProcessCompleto:", error);
+        throw error;
     }
+};
 
-    if (lightweight) {
-        const from = page * limit;
-        const to = from + limit - 1;
-        query = query.range(from, to);
+export const updateLicitacaoProcess = async (id: string, updates: Partial<LicitacaoProcesso>): Promise<LicitacaoProcesso | null> => {
+    try {
+        const { data, error } = await supabase
+            .from('licitacao_processos')
+            .update(updates)
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) throw error;
+        return data as LicitacaoProcesso;
+    } catch (error) {
+        console.error("Error updating licitacao process:", error);
+        throw error;
     }
+};
 
-    const { data, error } = await query;
+export const getLicitacaoProcesses = async (): Promise<LicitacaoProcesso[]> => {
+    try {
+        const { data, error } = await supabase
+            .from('licitacao_processos')
+            .select(`
+                *,
+                licitacao_itens (*),
+                licitacao_justificativas (*),
+                licitacao_assinaturas (*),
+                licitacao_documentos (*)
+            `)
+            .order('criado_em', { ascending: false });
 
-    if (error) {
-        console.error('Error fetching licitacao processes:', error);
+        if (error) throw error;
+        return data as unknown as LicitacaoProcesso[];
+    } catch (error) {
+        console.error("Error fetching licitacao processes:", error);
         return [];
     }
-
-    return data.map((item: any) => ({
-        id: item.id,
-        protocol: item.protocol,
-        title: item.title,
-        status: item.status,
-        stage: item.stage,
-        requestingSector: item.requesting_sector,
-        createdAt: item.created_at,
-        userId: item.user_id,
-        userName: item.user_name,
-        blockType: 'licitacao',
-        documentSnapshot: lightweight ? {
-            branding: {
-                logoUrl: null,
-                primaryColor: '#4f46e5',
-                secondaryColor: '#0f172a',
-                fontFamily: 'font-sans' as any,
-                logoWidth: 76,
-                logoAlignment: 'left' as any,
-                watermark: {
-                    enabled: false,
-                    imageUrl: null,
-                    opacity: 20,
-                    size: 55,
-                    grayscale: true
-                }
-            },
-            document: {
-                headerText: '',
-                footerText: '',
-                city: '',
-                showDate: true,
-                showPageNumbers: true,
-                showSignature: false,
-                showLeftBlock: true,
-                showRightBlock: true,
-                titleStyle: { size: 12, color: '#000000', alignment: 'left' as any },
-                leftBlockStyle: { size: 10, color: '#000000' },
-                rightBlockStyle: { size: 10, color: '#000000' }
-            },
-            ui: {
-                loginLogoUrl: null,
-                loginLogoHeight: 80,
-                headerLogoUrl: null,
-                headerLogoHeight: 40,
-                homeLogoPosition: 'left' as any
-            },
-            content: {
-                requesterSector: item.requesting_sector
-            }
-        } as any : item.document_snapshot,
-        statusHistory: item.status_history || []
-    }));
 };
 
-export const getLicitacaoProcessById = async (id: string): Promise<Order> => {
-    const { data, error } = await supabase
-        .from('licitacao_processes')
-        .select('*')
-        .eq('id', id)
-        .single();
+export const getLicitacaoProcessById = async (id: string): Promise<LicitacaoProcesso | null> => {
+    try {
+        const { data, error } = await supabase
+            .from('licitacao_processos')
+            .select(`
+                *,
+                licitacao_itens (*),
+                licitacao_justificativas (*),
+                licitacao_assinaturas (*),
+                licitacao_documentos (*)
+            `)
+            .eq('id', id)
+            .single();
 
-    if (error) throw error;
-
-    return {
-        id: data.id,
-        protocol: data.protocol,
-        title: data.title,
-        status: data.status,
-        stage: data.stage,
-        requestingSector: data.requesting_sector,
-        createdAt: data.created_at,
-        userId: data.user_id,
-        userName: data.user_name,
-        blockType: 'licitacao',
-        documentSnapshot: data.document_snapshot,
-        statusHistory: data.status_history || []
-    };
-};
-
-export const saveLicitacaoProcess = async (order: Order): Promise<void> => {
-    // Basic mapping, assuming extra fields are in documentSnapshot or we extract them
-    const currentStageIndex = order.documentSnapshot?.content.currentStageIndex || 0;
-    const STAGES = ['Início', 'Etapa 01', 'Etapa 02', 'Etapa 03', 'Etapa 04', 'Etapa 05', 'Etapa 06'];
-
-    // Logic: If we are at index 1 (meaning Início finished) but status is NOT approved,
-    // we should still display 'Início' in the list.
-    let currentStageTitle = STAGES[currentStageIndex] || 'Início';
-
-    if (currentStageIndex === 1 && order.status !== 'approved' && order.status !== 'completed') {
-        currentStageTitle = 'Início';
+        if (error) throw error;
+        return data as unknown as LicitacaoProcesso;
+    } catch (error) {
+        console.error("Error fetching licitacao process by id:", error);
+        return null;
     }
-    const requesterSector = order.documentSnapshot?.content.requesterSector || '';
+};
 
-    // We might need to ensure 'licitacao_processes' has these columns.
-    // If not, we rely on document_snapshot for detailed data, but 'stage' and 'requesting_sector' are good for columns.
+// Itens
+export const createLicitacaoItems = async (items: Partial<LicitacaoItem>[]): Promise<LicitacaoItem[]> => {
+    try {
+        const { data, error } = await supabase
+            .from('licitacao_itens')
+            .insert(items)
+            .select();
 
-    const dbOrder = {
-        id: order.id,
-        protocol: order.documentSnapshot?.content.protocolId || order.protocol,
-        title: order.title,
-        status: order.status,
-        stage: currentStageTitle,
-        requesting_sector: requesterSector,
-        created_at: order.createdAt,
-        user_id: order.userId,
-        user_name: order.userName,
-        document_snapshot: order.documentSnapshot
-    };
+        if (error) throw error;
+        return data as LicitacaoItem[];
+    } catch (error) {
+        console.error("Error creating licitacao items:", error);
+        throw error;
+    }
+};
 
-    const { error } = await supabase.from('licitacao_processes').upsert(dbOrder);
-    if (error) throw error;
+export const deleteLicitacaoItem = async (id: string): Promise<void> => {
+    try {
+        const { error } = await supabase
+            .from('licitacao_itens')
+            .delete()
+            .eq('id', id);
+
+        if (error) throw error;
+    } catch (error) {
+        console.error("Error deleting licitacao item:", error);
+        throw error;
+    }
+};
+
+// Justificativa
+export const upsertLicitacaoJustificativa = async (justificativa: Partial<LicitacaoJustificativa>): Promise<LicitacaoJustificativa | null> => {
+    try {
+        const { data, error } = await supabase
+            .from('licitacao_justificativas')
+            .upsert(justificativa, { onConflict: 'processo_id' })
+            .select()
+            .single();
+
+        if (error) throw error;
+        return data as LicitacaoJustificativa;
+    } catch (error) {
+        console.error("Error upserting licitacao justificativa:", error);
+        throw error;
+    }
+};
+
+// Assinatura
+export const signLicitacaoProcess = async (assinatura: Partial<LicitacaoAssinatura>): Promise<LicitacaoAssinatura | null> => {
+    try {
+        const { data, error } = await supabase
+            .from('licitacao_assinaturas')
+            .insert([assinatura])
+            .select()
+            .single();
+
+        if (error) throw error;
+        
+        // Atualiza status do processo
+        await updateLicitacaoProcess(assinatura.processo_id!, { status: 'Assinado' });
+
+        return data as LicitacaoAssinatura;
+    } catch (error) {
+        console.error("Error signing licitacao process:", error);
+        throw error;
+    }
+};
+
+// Permissoes
+export const getUserLicitacaoPermission = async (userId: string): Promise<LicitacaoPermissao | null> => {
+    try {
+        const { data, error } = await supabase
+            .from('licitacao_permissoes')
+            .select('*')
+            .eq('usuario_id', userId)
+            .maybeSingle();
+
+        if (error) throw error;
+        return data as LicitacaoPermissao;
+    } catch (error) {
+        console.error("Error fetching licitacao permission:", error);
+        return null;
+    }
+};
+
+// Documentos
+export const addLicitacaoDocument = async (document: Partial<LicitacaoDocumento>): Promise<LicitacaoDocumento | null> => {
+    try {
+        const { data, error } = await supabase
+            .from('licitacao_documentos')
+            .insert([document])
+            .select()
+            .single();
+
+        if (error) throw error;
+        return data as LicitacaoDocumento;
+    } catch (error) {
+        console.error("Error adding licitacao document:", error);
+        throw error;
+    }
+};
+
+export const deleteLicitacaoDocument = async (id: string, url?: string): Promise<void> => {
+    try {
+        const { error, count } = await supabase
+            .from('licitacao_documentos')
+            .delete({ count: 'exact' })
+            .eq('id', id);
+
+        if (error) throw error;
+        if (count === 0) {
+            throw new Error('Você não tem permissão para excluir este documento ou ele não existe.');
+        }
+
+        // Try to delete the physical file if url is provided
+        if (url) {
+            try {
+                // Extract path from public URL
+                // e.g. "https://xxxx.supabase.co/storage/v1/object/public/attachments/1778158614521_PNG.png"
+                const parts = url.split('/attachments/');
+                if (parts.length > 1) {
+                    const filePath = parts[1];
+                    await supabase.storage.from('attachments').remove([filePath]);
+                }
+            } catch (storageErr) {
+                console.error("Failed to delete physical file from storage:", storageErr);
+            }
+        }
+    } catch (error) {
+        console.error("Error deleting licitacao document:", error);
+        throw error;
+    }
+};
+
+// Funcao auxiliar para o contador do protocolo no estilo "LIC-0001/2026"
+export const generateLicitacaoProtocol = async (): Promise<string> => {
+    try {
+        const year = new Date().getFullYear();
+        // Forma simples (usando contagem local da tabela)
+        const { count, error } = await supabase
+            .from('licitacao_processos')
+            .select('*', { count: 'exact', head: true })
+            .gte('criado_em', `${year}-01-01T00:00:00Z`);
+            
+        if (error) throw error;
+        
+        const nextNumber = (count || 0) + 1;
+        return `LIC-${nextNumber.toString().padStart(4, '0')}/${year}`;
+    } catch (error) {
+        console.error("Error generating protocol:", error);
+        return `LIC-${Date.now()}`;
+    }
+};
+
+// --- Backwards Compatibility Shims for App.tsx ---
+
+export const saveLicitacaoProcess = async (process: any): Promise<any> => {
+    if (process.id) {
+        return updateLicitacaoProcess(process.id, process) as any;
+    }
+    return createLicitacaoProcess(process) as any;
 };
 
 export const deleteLicitacaoProcess = async (id: string): Promise<void> => {
-    const { error } = await supabase.from('licitacao_processes').delete().eq('id', id);
+    const { error } = await supabase.from('licitacao_processos').delete().eq('id', id);
     if (error) throw error;
 };
+
+export const getAllLicitacaoProcesses = async (): Promise<any[]> => {
+    return getLicitacaoProcesses() as any;
+};
+

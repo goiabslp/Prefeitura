@@ -95,7 +95,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                 hasPermission = userSector !== '' && orderSector.trim().toLowerCase() === userSector.trim().toLowerCase();
             }
         } else {
-            hasPermission = isAdmin || currentUser.role === 'licitacao' || order.userId === currentUser.id;
+            hasPermission = isAdmin || order.userId === currentUser.id;
         }
 
         if (!hasPermission && !showAllProcesses) return false;
@@ -307,8 +307,8 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                             })()
                         }
                         {filteredOrders.length > 0 ? (
-                            <div className={`min-w-full ${isLicitacao ? 'px-8 py-4 space-y-4' : ''}`}>
-                                {!isLicitacao && (
+                            <div className={`min-w-full `}>
+                                {(
                                     <div className="border-b border-slate-100 bg-slate-50/50 hidden md:grid md:grid-cols-12 gap-4 px-8 py-4 sticky top-0 z-10">
                                         {isCompras && (
                                             <div className="md:col-span-1 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-center gap-2 whitespace-nowrap">
@@ -355,7 +355,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                     </div>
                                 )}
 
-                                <div className={`${isLicitacao ? 'space-y-4' : 'divide-y divide-slate-100'}`}>
+                                <div className={`divide-y divide-slate-100`}>
                                     {filteredOrders.map((order) => {
                                         const content = order.documentSnapshot?.content;
                                         const isPaid = order.paymentStatus === 'paid';
@@ -607,7 +607,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                 </div>
 
                                                 {/* Description (Oficio/Diaria/Others) */}
-                                                {!isDiarias && !isCompras && !isLicitacao && (
+                                                {!isDiarias && !isCompras && (
                                                     <div className="md:col-span-3">
                                                         <p className="text-[11px] text-slate-600 font-medium leading-relaxed line-clamp-2 italic" title={order.description}>
                                                             {order.description || <span className="text-slate-300 opacity-50">Sem descrição</span>}
@@ -756,7 +756,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                 })()}
 
                                                 {/* Creation Date for others */}
-                                                {!isCompras && !isDiarias && !isLicitacao && (
+                                                {!isCompras && !isDiarias && (
                                                     <div className="md:col-span-2 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 whitespace-nowrap">
                                                         <Calendar className="w-3 h-3" />
                                                         {new Date(order.createdAt).toLocaleDateString('pt-BR')}
