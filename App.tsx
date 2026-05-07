@@ -1113,6 +1113,9 @@ const App: React.FC = () => {
 
       if (needsUpdate) {
         // Atualização debaixo dos panos: limpa cache e atualiza a flag silenciosamente
+        localStorage.clear();
+        sessionStorage.clear();
+        
         localStorage.setItem(WINDOW_KEY, currentWindow);
         if (needsForcedUpdate && systemUpdateTarget) {
           localStorage.setItem(FORCED_WINDOW_KEY, systemUpdateTarget.toString());
@@ -1124,7 +1127,7 @@ const App: React.FC = () => {
 
         if ('serviceWorker' in navigator) {
           navigator.serviceWorker.getRegistrations().then(regs => {
-            for (let reg of regs) { reg.update(); }
+            for (let reg of regs) { reg.unregister(); }
           });
         }
 
@@ -1133,6 +1136,13 @@ const App: React.FC = () => {
         if (banner) banner.remove();
         const warningDiv = document.getElementById('sys-refresh-warning');
         if (warningDiv) warningDiv.remove();
+
+        // Forçar desconexão
+        signOut();
+        
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
       }
 
       initialMountCheck.current = false;
