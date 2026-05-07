@@ -256,6 +256,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
     const getStatusBadge = (status: Order['status']) => {
         switch (status) {
             case 'approved':
+            case 'completed':
                 return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-100 text-[9px] font-black uppercase tracking-wider"><CheckCircle2 className="w-3 h-3" /> Aprovado</span>;
             case 'payment_account':
                 return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-100 text-[9px] font-black uppercase tracking-wider"><RotateCcw className="w-3 h-3 animate-spin-slow" /> Conta de Pagamento</span>;
@@ -304,11 +305,12 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
 
         if (!hasPermission && !showAllProcesses) return false;
 
-        // LICITACAO: Filter Logic for "Processos" (showAllProcesses=true)
-        if (isLicitacao && showAllProcesses) {
-            // Only show Approved, In Progress, Finishing, Completed
-            const allowed = ['approved', 'in_progress', 'finishing', 'completed'];
-            if (!allowed.includes(order.status)) return false;
+        // LICITACAO: Filter Logic for "Processos"
+        if (isLicitacao) {
+            if (isLicitacaoUser && !isAdmin) {
+                // Usuários do setor de Licitação (não admins) só vêem pedidos aprovados ('completed'/'Concluído')
+                if (order.status !== 'completed') return false;
+            }
         }
 
         const matchesSearch = true; // Handled Server-Side
@@ -1445,10 +1447,8 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                             {activeBlock === 'licitacao' ? (
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                     {[
-                                                        { key: 'pending', label: 'Rascunho', icon: Edit3, color: 'text-slate-600 bg-slate-50 border-slate-100' },
-                                                        { key: 'awaiting_approval', label: 'Aguardando Assinatura', icon: Clock, color: 'text-amber-600 bg-amber-50 border-amber-100' },
-                                                        { key: 'in_progress', label: 'Em Análise', icon: Search, color: 'text-blue-600 bg-blue-50 border-blue-100' },
-                                                        { key: 'completed', label: 'Concluído', icon: CheckCircle, color: 'text-emerald-600 bg-emerald-50 border-emerald-100' },
+                                                        { key: 'awaiting_approval', label: 'Em Aprovação', icon: Clock, color: 'text-amber-600 bg-amber-50 border-amber-100' },
+                                                        { key: 'completed', label: 'Aprovado', icon: CheckCircle2, color: 'text-emerald-600 bg-emerald-50 border-emerald-100' },
                                                         { key: 'rejected', label: 'Rejeitado', icon: XCircle, color: 'text-rose-600 bg-rose-50 border-rose-100' }
                                                     ].map((cfg) => {
                                                         const isActive = statusSelectionOrder.status === cfg.key;

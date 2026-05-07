@@ -180,8 +180,8 @@ const App: React.FC = () => {
       if (process.status === 'Rascunho') mappedStatus = 'pending';
       else if (process.status === 'Aguardando Assinatura' || process.status === 'Assinado') mappedStatus = 'awaiting_approval';
       else if (process.status === 'Em Análise') mappedStatus = 'in_progress';
-      else if (process.status === 'Concluído') mappedStatus = 'completed';
-      else if (process.status === 'Rejeitado') mappedStatus = 'rejected';
+      else if (process.status === 'Concluído' || process.status === 'completed') mappedStatus = 'completed';
+      else if (process.status === 'Rejeitado' || process.status === 'rejected') mappedStatus = 'rejected';
 
       return {
         id: process.id,

@@ -13,7 +13,7 @@ export const licitacaoKeys = {
 
 export const useLicitacaoProcesses = () => {
     return useQuery({
-        queryKey: licitacaoKeys.all,
+        queryKey: licitacaoKeys.lists(),
         queryFn: licitacaoService.getLicitacaoProcesses
     });
 };

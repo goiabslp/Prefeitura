@@ -280,10 +280,26 @@ export const generateLicitacaoProtocol = async (): Promise<string> => {
 // --- Backwards Compatibility Shims for App.tsx ---
 
 export const saveLicitacaoProcess = async (process: any): Promise<any> => {
+    // Map generic 'Order' status back to 'LicitacaoProcesso' status if needed
+    let dbStatus = process.status;
+    if (process.status === 'pending') dbStatus = 'Rascunho';
+    if (process.status === 'awaiting_approval') dbStatus = 'Aguardando Assinatura';
+    if (process.status === 'in_progress') dbStatus = 'Em Análise';
+    if (process.status === 'completed') dbStatus = 'Concluído';
+    if (process.status === 'rejected') dbStatus = 'Rejeitado';
+
+    // Sanitize the payload to only include columns from licitacao_processos
+    const sanitizedProcess = {
+        solicitante_nome: process.documentSnapshot?.content?.requesterName || process.userName,
+        solicitante_setor: process.documentSnapshot?.content?.requesterSector || process.requestingSector,
+        finalidade: process.documentSnapshot?.content?.objeto || process.documentSnapshot?.content?.description || process.title,
+        status: dbStatus,
+    };
+
     if (process.id) {
-        return updateLicitacaoProcess(process.id, process) as any;
+        return updateLicitacaoProcess(process.id, sanitizedProcess) as any;
     }
-    return createLicitacaoProcess(process) as any;
+    return createLicitacaoProcess(sanitizedProcess) as any;
 };
 
 export const deleteLicitacaoProcess = async (id: string): Promise<void> => {
