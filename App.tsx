@@ -201,7 +201,8 @@ const App: React.FC = () => {
             requesterSector: process.solicitante_setor,
             justificativa: process.justificativa?.texto || (process.licitacao_justificativas ? (Array.isArray(process.licitacao_justificativas) ? process.licitacao_justificativas[0]?.texto : process.licitacao_justificativas.texto) : undefined),
             itens: process.itens || process.licitacao_itens || [],
-            finalDocumentUrl: process.assinatura ? 'true' : null
+            finalDocumentUrl: process.assinatura ? 'true' : null,
+            fase: process.fase
           }
         }
       } as unknown as Order;
@@ -351,6 +352,48 @@ const App: React.FC = () => {
   const [systemUpdateTarget, setSystemUpdateTarget] = useState<number | null>(null);
   const [systemUpdateCountdown, setSystemUpdateCountdown] = useState<number | null>(null);
   const [isUpdateModalDismissed, setIsUpdateModalDismissed] = useState(false);
+  const [translatedCommitMessage, setTranslatedCommitMessage] = useState<string>('Carregando atualizações...');
+
+  useEffect(() => {
+    const translateCommit = async () => {
+      const rawMsg = typeof __LATEST_COMMIT__ !== 'undefined' ? __LATEST_COMMIT__ : 'Atualizações de estabilidade e melhorias gerais.';
+      
+      const match = rawMsg.match(/^(feat|fix|chore|refactor|docs|style|perf)(?:\([^)]+\))?:\s*(.*)/i);
+      
+      let prefixText = '';
+      let textToTranslate = rawMsg;
+      
+      if (match) {
+        const type = match[1].toLowerCase();
+        const prefixes: Record<string, string> = {
+          feat: '✨ Nova funcionalidade:',
+          fix: '🐛 Correção:',
+          chore: '🔧 Manutenção:',
+          refactor: '♻️ Refatoração:',
+          docs: '📝 Documentação:',
+          style: '🎨 Estilos:',
+          perf: '🚀 Performance:'
+        };
+        prefixText = prefixes[type] || '📦 Atualização:';
+        textToTranslate = match[2];
+      }
+      
+      try {
+        const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=pt&dt=t&q=${encodeURI(textToTranslate)}`);
+        const data = await res.json();
+        const translated = data[0].map((item: any) => item[0]).join('');
+        setTranslatedCommitMessage(prefixText ? `${prefixText} ${translated}` : translated);
+      } catch (err) {
+        let formatted = rawMsg;
+        if (prefixText) {
+          formatted = `${prefixText} ${textToTranslate}`;
+        }
+        setTranslatedCommitMessage(formatted);
+      }
+    };
+    
+    translateCommit();
+  }, []);
   const [actionProcessing, setActionProcessing] = useState<{
     isOpen: boolean;
     stage: ProcessingStage;
@@ -4178,18 +4221,7 @@ const App: React.FC = () => {
                 ✨ O que há de novo:
               </h4>
               <p className="text-sm text-slate-600 font-medium leading-relaxed italic pl-2">
-                {(() => {
-                  const rawMsg = typeof __LATEST_COMMIT__ !== 'undefined' ? __LATEST_COMMIT__ : 'Atualizações de estabilidade e melhorias gerais.';
-                  let formatted = rawMsg;
-                  formatted = formatted.replace(/^feat(\([^)]+\))?:/i, '✨ Nova funcionalidade:');
-                  formatted = formatted.replace(/^fix(\([^)]+\))?:/i, '🐛 Correção:');
-                  formatted = formatted.replace(/^chore(\([^)]+\))?:/i, '🔧 Manutenção:');
-                  formatted = formatted.replace(/^refactor(\([^)]+\))?:/i, '♻️ Refatoração:');
-                  formatted = formatted.replace(/^docs(\([^)]+\))?:/i, '📝 Documentação:');
-                  formatted = formatted.replace(/^style(\([^)]+\))?:/i, '🎨 Estilos:');
-                  formatted = formatted.replace(/^perf(\([^)]+\))?:/i, '🚀 Performance:');
-                  return formatted;
-                })()}
+                {translatedCommitMessage}
               </p>
             </div>
 
