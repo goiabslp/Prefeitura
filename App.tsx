@@ -994,10 +994,12 @@ const App: React.FC = () => {
     // Auto-refresh on route change (Debounced to prevent timeout floods)
     const timeoutId = setTimeout(() => {
       refreshData(true);
+      // Invalida todos os caches do react-query para forçar o fetch dos dados mais recentes da nova rota
+      queryClient.invalidateQueries();
     }, 500);
 
     return () => clearTimeout(timeoutId);
-  }, [currentView, activeBlock, adminTab, editingOrder]);
+  }, [currentView, activeBlock, adminTab, editingOrder, queryClient, refreshData]);
 
   // System Update Countdown Logic
   useEffect(() => {
