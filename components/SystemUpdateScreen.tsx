@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { RefreshCw, Play, ArrowLeft, ShieldAlert, CheckCircle2 } from 'lucide-react';
 import { updateSystemUpdateTarget } from '../services/settingsService';
 import { supabase } from '../services/supabaseClient';
@@ -13,6 +13,48 @@ export const SystemUpdateScreen: React.FC<SystemUpdateScreenProps> = ({ onBack }
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [isInitiating, setIsInitiating] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [translatedCommit, setTranslatedCommit] = useState<string>('Carregando atualizações...');
+
+  useEffect(() => {
+    const translateCommit = async () => {
+      const rawMsg = typeof __LATEST_COMMIT__ !== 'undefined' ? __LATEST_COMMIT__ : 'Atualizações de estabilidade e melhorias gerais.';
+      
+      const match = rawMsg.match(/^(feat|fix|chore|refactor|docs|style|perf)(?:\([^)]+\))?:\s*(.*)/i);
+      
+      let prefixText = '';
+      let textToTranslate = rawMsg;
+      
+      if (match) {
+        const type = match[1].toLowerCase();
+        const prefixes: Record<string, string> = {
+          feat: '✨ Nova funcionalidade:',
+          fix: '🐛 Correção:',
+          chore: '🔧 Manutenção:',
+          refactor: '♻️ Refatoração:',
+          docs: '📝 Documentação:',
+          style: '🎨 Estilos:',
+          perf: '🚀 Performance:'
+        };
+        prefixText = prefixes[type] || '📦 Atualização:';
+        textToTranslate = match[2];
+      }
+      
+      try {
+        const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=pt&dt=t&q=${encodeURI(textToTranslate)}`);
+        const data = await res.json();
+        const translated = data[0].map((item: any) => item[0]).join('');
+        setTranslatedCommit(prefixText ? `${prefixText} ${translated}` : translated);
+      } catch (err) {
+        let formatted = rawMsg;
+        if (prefixText) {
+          formatted = `${prefixText} ${textToTranslate}`;
+        }
+        setTranslatedCommit(formatted);
+      }
+    };
+    
+    translateCommit();
+  }, []);
 
   const handleStartUpdate = async () => {
     setIsInitiating(true);
@@ -120,18 +162,7 @@ export const SystemUpdateScreen: React.FC<SystemUpdateScreenProps> = ({ onBack }
                       📦 Atualizações do sistema
                    </h4>
                    <p className="text-sm text-slate-600 font-medium leading-relaxed italic">
-                      {(() => {
-                        const rawMsg = typeof __LATEST_COMMIT__ !== 'undefined' ? __LATEST_COMMIT__ : 'Atualizações de estabilidade e melhorias gerais.';
-                        let formatted = rawMsg;
-                        formatted = formatted.replace(/^feat(\([^)]+\))?:/i, '✨ Nova funcionalidade:');
-                        formatted = formatted.replace(/^fix(\([^)]+\))?:/i, '🐛 Correção:');
-                        formatted = formatted.replace(/^chore(\([^)]+\))?:/i, '🔧 Manutenção:');
-                        formatted = formatted.replace(/^refactor(\([^)]+\))?:/i, '♻️ Refatoração:');
-                        formatted = formatted.replace(/^docs(\([^)]+\))?:/i, '📝 Documentação:');
-                        formatted = formatted.replace(/^style(\([^)]+\))?:/i, '🎨 Estilos:');
-                        formatted = formatted.replace(/^perf(\([^)]+\))?:/i, '🚀 Performance:');
-                        return formatted;
-                      })()}
+                      {translatedCommit}
                    </p>
                 </div>
 

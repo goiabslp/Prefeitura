@@ -299,6 +299,8 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
             }
         } else if (activeBlock === 'oficio') {
             hasPermission = true; // Oficios are visible to all users
+        } else if (isLicitacao) {
+            hasPermission = isAdmin || isLicitacaoUser || order.userId === currentUser.id;
         } else {
             hasPermission = isAdmin || order.userId === currentUser.id;
         }
@@ -307,9 +309,10 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
 
         // LICITACAO: Filter Logic for "Processos"
         if (isLicitacao) {
-            if (isLicitacaoUser && !isAdmin) {
-                // Usuários do setor de Licitação (não admins) só vêem pedidos aprovados ('completed'/'Concluído')
-                if (order.status !== 'completed') return false;
+            const isCreator = order.userId === currentUser.id;
+            if (isLicitacaoUser && !isAdmin && !isCreator) {
+                // Usuários do setor de Licitação (não admins) só vêem pedidos aprovados dos outros
+                if (order.status !== 'approved' && order.status !== 'completed') return false;
             }
         }
 
