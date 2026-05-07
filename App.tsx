@@ -351,49 +351,52 @@ const App: React.FC = () => {
   const [lastRefresh, setLastRefresh] = useState(0);
   const [systemUpdateTarget, setSystemUpdateTarget] = useState<number | null>(null);
   const [systemUpdateCountdown, setSystemUpdateCountdown] = useState<number | null>(null);
+  const [translatedCommitMsg, setTranslatedCommitMsg] = useState<string>('Carregando atualizações...');
   const [isUpdateModalDismissed, setIsUpdateModalDismissed] = useState(false);
-  const [translatedCommitMessage, setTranslatedCommitMessage] = useState<string>('Carregando atualizações...');
 
   useEffect(() => {
-    const translateCommit = async () => {
-      const rawMsg = typeof __LATEST_COMMIT__ !== 'undefined' ? __LATEST_COMMIT__ : 'Atualizações de estabilidade e melhorias gerais.';
-      
-      const match = rawMsg.match(/^(feat|fix|chore|refactor|docs|style|perf)(?:\([^)]+\))?:\s*(.*)/i);
-      
-      let prefixText = '';
-      let textToTranslate = rawMsg;
-      
-      if (match) {
-        const type = match[1].toLowerCase();
-        const prefixes: Record<string, string> = {
-          feat: '✨ Nova funcionalidade:',
-          fix: '🐛 Correção:',
-          chore: '🔧 Manutenção:',
-          refactor: '♻️ Refatoração:',
-          docs: '📝 Documentação:',
-          style: '🎨 Estilos:',
-          perf: '🚀 Performance:'
-        };
-        prefixText = prefixes[type] || '📦 Atualização:';
-        textToTranslate = match[2];
-      }
-      
-      try {
-        const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=pt&dt=t&q=${encodeURI(textToTranslate)}`);
-        const data = await res.json();
-        const translated = data[0].map((item: any) => item[0]).join('');
-        setTranslatedCommitMessage(prefixText ? `${prefixText} ${translated}` : translated);
-      } catch (err) {
-        let formatted = rawMsg;
-        if (prefixText) {
-          formatted = `${prefixText} ${textToTranslate}`;
+    if (systemUpdateCountdown !== null && systemUpdateCountdown > 0) {
+      const translateCommit = async () => {
+        const rawMsg = typeof __LATEST_COMMIT__ !== 'undefined' ? __LATEST_COMMIT__ : 'Atualizações de estabilidade e melhorias gerais.';
+        
+        const match = rawMsg.match(/^(feat|fix|chore|refactor|docs|style|perf)(?:\([^)]+\))?:\s*(.*)/i);
+        
+        let prefixText = '';
+        let textToTranslate = rawMsg;
+        
+        if (match) {
+          const type = match[1].toLowerCase();
+          const prefixes: Record<string, string> = {
+            feat: '✨ Nova funcionalidade:',
+            fix: '🐛 Correção:',
+            chore: '🔧 Manutenção:',
+            refactor: '♻️ Refatoração:',
+            docs: '📝 Documentação:',
+            style: '🎨 Estilos:',
+            perf: '🚀 Performance:'
+          };
+          prefixText = prefixes[type] || '📦 Atualização:';
+          textToTranslate = match[2];
         }
-        setTranslatedCommitMessage(formatted);
-      }
-    };
-    
-    translateCommit();
-  }, []);
+        
+        try {
+          const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=pt&dt=t&q=${encodeURI(textToTranslate)}`);
+          const data = await res.json();
+          const translated = data[0].map((item: any) => item[0]).join('');
+          setTranslatedCommitMsg(prefixText ? `${prefixText} ${translated}` : translated);
+        } catch (err) {
+          let formatted = rawMsg;
+          if (prefixText) {
+            formatted = `${prefixText} ${textToTranslate}`;
+          }
+          setTranslatedCommitMsg(formatted);
+        }
+      };
+      
+      translateCommit();
+    }
+  }, [systemUpdateCountdown]);
+
   const [actionProcessing, setActionProcessing] = useState<{
     isOpen: boolean;
     stage: ProcessingStage;
@@ -4221,7 +4224,7 @@ const App: React.FC = () => {
                 ✨ O que há de novo:
               </h4>
               <p className="text-sm text-slate-600 font-medium leading-relaxed italic pl-2">
-                {translatedCommitMessage}
+                {translatedCommitMsg}
               </p>
             </div>
 
