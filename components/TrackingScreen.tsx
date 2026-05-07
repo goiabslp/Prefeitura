@@ -780,7 +780,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                                 <Network className="w-3 h-3" /> {content?.requesterSector || order.requestingSector || 'Sem Setor'}
                                                             </span>
                                                         </div>
-                                                        <div className="md:col-span-2 flex flex-col justify-center gap-1 relative group cursor-pointer" onClick={() => isLicitacaoUser && setLicitacaoPhaseOrder(order)}>
+                                                        <div className="md:col-span-2 flex flex-col justify-center gap-1 relative group cursor-pointer" onClick={() => (isLicitacaoUser || isAdmin) && setLicitacaoPhaseOrder(order)}>
                                                             <span className={`inline-flex items-center w-fit gap-1 px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider ${licitacaoFasesMap[((content as any)?.fase) as keyof typeof licitacaoFasesMap] ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' : 'bg-slate-50 text-slate-500 border border-slate-200'}`} title={licitacaoFasesMap[((content as any)?.fase) as keyof typeof licitacaoFasesMap]?.desc || 'Fase não definida'}>
                                                                 <Info className="w-3 h-3" /> 
                                                                 {licitacaoFasesMap[((content as any)?.fase) as keyof typeof licitacaoFasesMap]?.label || 'Sem Fase'}

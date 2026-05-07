@@ -809,6 +809,17 @@ const App: React.FC = () => {
       )
       .subscribe();
 
+    // Licitacao Channel (NEW)
+    const licitacaoChannel = supabase.channel('public:licitacao_processos')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'licitacao_processos' },
+        () => {
+          queryClient.invalidateQueries({ queryKey: licitacaoKeys.all });
+        }
+      )
+      .subscribe();
+
     // System Update Channel (NEW) - Enhanced with Broadcast for true Realtime
     const settingsChannel = supabase.channel('global-updates')
       .on(
@@ -845,9 +856,10 @@ const App: React.FC = () => {
       supabase.removeChannel(purchaseChannel);
       supabase.removeChannel(tasksChannel);
       supabase.removeChannel(schedulesChannel);
+      supabase.removeChannel(licitacaoChannel);
       supabase.removeChannel(settingsChannel);
     };
-  }, []);
+  }, [queryClient]);
 
   // --- PERSISTENT ROUTING LOGIC ---
   useEffect(() => {
