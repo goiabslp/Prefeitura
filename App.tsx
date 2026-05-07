@@ -1789,6 +1789,13 @@ const App: React.FC = () => {
     if (isDeleting === id) return; // Prevent duplicate actions
     setIsDeleting(id);
 
+    // Resolve target block since global activeBlock might be null
+    const targetOrder = orders.find(o => o.id === id) || 
+                        mappedLicitacaoOrders.find(o => o.id === id) || 
+                        serviceRequests.find(o => o.id === id) || 
+                        oficios.find(o => o.id === id);
+    const resolvedBlockType = targetOrder?.blockType || activeBlock || 'oficio';
+
     // 1. Snapshot previous state for rollback
     const prevOrders = orders;
     const prevServiceRequests = serviceRequests;
@@ -1796,7 +1803,7 @@ const App: React.FC = () => {
     const prevOficios = oficios;
 
     // 2. Optimistic Update
-    const isPurchaseAction = activeBlock === 'compras';
+    const isPurchaseAction = resolvedBlockType === 'compras';
 
     if (isPurchaseAction) {
       setActionProcessing({
@@ -1818,11 +1825,11 @@ const App: React.FC = () => {
         await advanceActionStep('confirming', 1500);
       }
       // 3. API Call
-      if (activeBlock === 'compras') {
+      if (resolvedBlockType === 'compras') {
         await comprasService.deletePurchaseOrder(id);
-      } else if (activeBlock === 'diarias') {
+      } else if (resolvedBlockType === 'diarias') {
         await diariasService.deleteServiceRequest(id);
-      } else if (activeBlock === 'licitacao') {
+      } else if (resolvedBlockType === 'licitacao') {
         await licitacaoService.deleteLicitacaoProcess(id);
       } else {
         await deleteOficioMutation.mutateAsync(id);
@@ -1830,9 +1837,9 @@ const App: React.FC = () => {
 
       // 4. Success UI Update (After confirm)
       setOrders(p => p.filter(o => o.id !== id));
-      if (activeBlock === 'diarias') setServiceRequests(p => p.filter(o => o.id !== id));
-
-      else if (activeBlock !== 'compras') setOficios(p => p.filter(o => o.id !== id));
+      if (resolvedBlockType === 'diarias') setServiceRequests(p => p.filter(o => o.id !== id));
+      else if (resolvedBlockType === 'licitacao') setLicitacaoProcesses(p => p.filter(o => o.id !== id));
+      else if (resolvedBlockType !== 'compras') setOficios(p => p.filter(o => o.id !== id));
 
       // 5. Force React Query Update (Immediate + Refetch)
       const queryKeyMap: Record<string, any> = {
@@ -1842,16 +1849,21 @@ const App: React.FC = () => {
         'licitacao': licitacaoKeys.lists()
       };
 
-      const targetKey = queryKeyMap[activeBlock || 'oficio'];
+      const targetKey = queryKeyMap[resolvedBlockType || 'oficio'];
 
       if (targetKey) {
-        // Manually remove from infinite query cache for immediate UI feedback
+        // Manually remove from query cache for immediate UI feedback
         queryClient.setQueriesData({ queryKey: targetKey }, (oldData: any) => {
-          if (!oldData || !oldData.pages) return oldData;
-          return {
-            ...oldData,
-            pages: oldData.pages.map((page: any[]) => page.filter(o => o.id !== id))
-          };
+          if (!oldData) return oldData;
+          if (oldData.pages) {
+            return {
+              ...oldData,
+              pages: oldData.pages.map((page: any[]) => page.filter(o => o.id !== id))
+            };
+          } else if (Array.isArray(oldData)) {
+            return oldData.filter(o => o.id !== id);
+          }
+          return oldData;
         });
 
         // Final invalidation to ensure sync with DB
@@ -1859,7 +1871,7 @@ const App: React.FC = () => {
       }
 
       showToast("Item excluído com sucesso", "success");
-      syncOrders(activeBlock || 'oficio');
+      syncOrders(resolvedBlockType || 'oficio');
 
       if (isPurchaseAction) {
         await advanceActionStep('success', 2000);
@@ -1869,12 +1881,11 @@ const App: React.FC = () => {
       console.error("Error deleting order:", error);
       // 4. Rollback on Error
       setOrders(prevOrders);
-      if (activeBlock === 'compras') { /* Derived rollback */ }
-      else if (activeBlock === 'diarias') setServiceRequests(prevServiceRequests);
-      else if (activeBlock === 'licitacao') setLicitacaoProcesses(prevLicitacaoProcesses);
+      if (resolvedBlockType === 'compras') { /* Derived rollback */ }
+      else if (resolvedBlockType === 'diarias') setServiceRequests(prevServiceRequests);
+      else if (resolvedBlockType === 'licitacao') setLicitacaoProcesses(prevLicitacaoProcesses);
       else setOficios(prevOficios);
-
-      showToast("Erro ao excluir item. As alterações foram desfeitas.", "error");
+      showToast(error instanceof Error ? error.message : "Erro ao excluir item. As alterações foram desfeitas.", "error");
     } finally {
       setIsDeleting(null);
       if (isPurchaseAction) {

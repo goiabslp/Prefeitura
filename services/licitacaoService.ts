@@ -303,8 +303,9 @@ export const saveLicitacaoProcess = async (process: any): Promise<any> => {
 };
 
 export const deleteLicitacaoProcess = async (id: string): Promise<void> => {
-    const { error } = await supabase.from('licitacao_processos').delete().eq('id', id);
+    const { error, count } = await supabase.from('licitacao_processos').delete({ count: 'exact' }).eq('id', id);
     if (error) throw error;
+    if (count === 0) throw new Error("Aviso: Falha ao excluir. Verifique se você executou a instrução SQL no banco de dados para adicionar a permissão de exclusão (DELETE).");
 };
 
 export const getAllLicitacaoProcesses = async (): Promise<any[]> => {
