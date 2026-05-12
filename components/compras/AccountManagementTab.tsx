@@ -26,6 +26,8 @@ export const AccountManagementTab: React.FC<AccountManagementTabProps> = ({ curr
         agency: '',
         account_number: '',
         description: '',
+        ficha: '',
+        resolucao: '',
         sector: currentUser.sector || ''
     });
 
@@ -58,7 +60,7 @@ export const AccountManagementTab: React.FC<AccountManagementTabProps> = ({ curr
         if (result) {
             setAccounts(prev => [...prev, result]);
             setIsModalOpen(false);
-            setNewAccount({ agency: '', account_number: '', description: '', sector: currentUser.sector || '' });
+            setNewAccount({ agency: '', account_number: '', description: '', ficha: '', resolucao: '', sector: currentUser.sector || '' });
         } else {
             alert('Erro ao solicitar cadastro de conta.');
         }
@@ -146,7 +148,9 @@ export const AccountManagementTab: React.FC<AccountManagementTabProps> = ({ curr
                             <div key={acc.id} className="bg-white p-4 rounded-2xl border border-amber-200 flex items-center justify-between shadow-sm">
                                 <div className="flex flex-col">
                                     <span className="text-xs font-black text-slate-900">Ag: {acc.agency} | CC: {acc.account_number} — {acc.description}</span>
-                                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Setor: {acc.sector}</span>
+                                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                                        Setor: {acc.sector} {acc.ficha && ` | Ficha: ${acc.ficha}`} {acc.resolucao && ` | Resolução: ${acc.resolucao}`}
+                                    </span>
                                 </div>
                                 <div className="flex gap-2">
                                     <button
@@ -221,6 +225,7 @@ export const AccountManagementTab: React.FC<AccountManagementTabProps> = ({ curr
                                 <tr>
                                     <th className="px-8 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Conta</th>
                                     <th className="px-8 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Descrição</th>
+                                    <th className="px-8 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Ficha / Resolução</th>
                                     <th className="px-8 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Setor</th>
                                     <th className="px-8 py-4 text-center text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Status</th>
                                     {isAdmin && <th className="px-8 py-4 text-right text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Ações</th>}
@@ -234,6 +239,13 @@ export const AccountManagementTab: React.FC<AccountManagementTabProps> = ({ curr
                                         </td>
                                         <td className="px-8 py-5">
                                             <span className="text-sm font-bold text-slate-700">{acc.description}</span>
+                                        </td>
+                                        <td className="px-8 py-5">
+                                            <div className="flex flex-col">
+                                                {acc.ficha && <span className="text-[11px] font-bold text-slate-500">Ficha: {acc.ficha}</span>}
+                                                {acc.resolucao && <span className="text-[11px] font-bold text-slate-500">Res.: {acc.resolucao}</span>}
+                                                {!acc.ficha && !acc.resolucao && <span className="text-[11px] font-medium text-slate-400">-</span>}
+                                            </div>
                                         </td>
                                         <td className="px-8 py-5">
                                             <div className="flex items-center gap-2">
@@ -320,6 +332,29 @@ export const AccountManagementTab: React.FC<AccountManagementTabProps> = ({ curr
                                     placeholder="Ex: Recurso Próprio, Convênio Federal..."
                                     className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-indigo-500 transition-all font-bold"
                                 />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Ficha</label>
+                                    <input
+                                        type="text"
+                                        value={newAccount.ficha}
+                                        onChange={(e) => setNewAccount({ ...newAccount, ficha: e.target.value })}
+                                        placeholder="EX: 12345"
+                                        className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-indigo-500 transition-all font-mono font-bold"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Resolução</label>
+                                    <input
+                                        type="text"
+                                        value={newAccount.resolucao}
+                                        onChange={(e) => setNewAccount({ ...newAccount, resolucao: e.target.value })}
+                                        placeholder="EX: Resolução 123/2024"
+                                        className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-indigo-500 transition-all font-bold"
+                                    />
+                                </div>
                             </div>
 
                             <div>

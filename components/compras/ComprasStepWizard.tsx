@@ -36,15 +36,17 @@ export const ComprasStepWizard: React.FC<ComprasStepWizardProps> = ({
         const s2Valid = !!(content.purchaseItems && content.purchaseItems.length > 0);
         const s3Valid = !!(content.body && content.body.length > 0);
         const s4Valid = true; // Optional (Anexos)
-        const s5Valid = !!(content.selectedAccount); // Conta - used for status, but not mandatory to advance
-        const s6Valid = !!(content.signatureName); // Assinar
+        const s5Valid = !!(content.fichaOrcamentaria); // Ficha Orçamentária
+        const s6Valid = !!(content.resolucaoDescricao && content.resolucaoNumero); // Resolução
+        const s7Valid = !!(content.signatureName); // Assinar
 
         // Helper to check "started" (partial) - simple check if ANY field is filled
         const s1Started = !!(content.title || content.requesterName || content.priority);
         const s2Started = false; // Hard to be "partial" on items list, either have items or not
         const s3Started = !!(content.body && content.body.length > 0);
-        const s5Started = !!(content.selectedAccount);
-        const s6Started = false;
+        const s5Started = !!(content.fichaOrcamentaria);
+        const s6Started = !!(content.resolucaoDescricao || content.resolucaoNumero);
+        const s7Started = false;
 
         const getStatus = (id: number, isValid: boolean, isStarted: boolean): StepStatus => {
             if (currentStep === id) return 'current';
@@ -59,6 +61,7 @@ export const ComprasStepWizard: React.FC<ComprasStepWizardProps> = ({
         statuses[4] = currentStep === 4 ? 'current' : (content.attachments && content.attachments.length > 0 ? 'completed' : 'empty'); // Anexos: Green if has files, else empty
         statuses[5] = getStatus(5, s5Valid, s5Started);
         statuses[6] = getStatus(6, s6Valid, s6Started);
+        statuses[7] = getStatus(7, s7Valid, s7Started);
 
         return statuses;
     }, [content, currentStep]);
@@ -69,20 +72,25 @@ export const ComprasStepWizard: React.FC<ComprasStepWizardProps> = ({
             content.title && content.requesterName && content.priority && // Step 1
             content.purchaseItems && content.purchaseItems.length > 0 && // Step 2
             content.body && // Step 3
-            content.selectedAccount && // Step 5 - NOW MANDATORY
-            content.signatureName // Step 6
+            content.fichaOrcamentaria && // Step 5
+            content.resolucaoDescricao && content.resolucaoNumero && // Step 6
+            content.signatureName // Step 7
         );
     }, [content]);
 
 
     const nextStep = () => {
-        if (currentStep === 5 && !content.selectedAccount) {
-            setShowAccountWarning(true);
+        if (currentStep === 5 && !content.fichaOrcamentaria) {
+            alert('A Ficha Orçamentária é obrigatória.');
+            return;
+        }
+        if (currentStep === 6 && (!content.resolucaoDescricao || !content.resolucaoNumero)) {
+            alert('A Resolução (Descrição e Número) é obrigatória.');
             return;
         }
 
         if (validateStep(currentStep)) {
-            setCurrentStep(prev => Math.min(prev + 1, 6));
+            setCurrentStep(prev => Math.min(prev + 1, 7));
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
     };
@@ -140,8 +148,8 @@ export const ComprasStepWizard: React.FC<ComprasStepWizardProps> = ({
 
                 {/* 3. Botão de Ação (Avançar/Finalizar) */}
                 <div className="min-w-[140px] flex justify-end">
-                    {/* Hide Button in Step 6 (Assinar) - Form handles it */}
-                    {currentStep !== 6 && (
+                    {/* Hide Button in Step 7 (Assinar) - Form handles it */}
+                    {currentStep !== 7 && (
                         !isAllMandatoryCompleted ? (
                             <button
                                 onClick={nextStep}
@@ -166,8 +174,8 @@ export const ComprasStepWizard: React.FC<ComprasStepWizardProps> = ({
             </div>
 
             {/* CONTENT AREA */}
-            <div className={`flex-1 ${currentStep === 6 ? 'overflow-hidden flex flex-col justify-center' : 'overflow-y-auto'} p-4 md:p-8 bg-slate-50 relative`}>
-                <div className={`max-w-7xl mx-auto ${currentStep === 6 ? 'w-full h-full flex flex-col justify-center' : 'space-y-8'} animate-fade-in`}>
+            <div className={`flex-1 ${currentStep === 7 ? 'overflow-hidden flex flex-col justify-center' : 'overflow-y-auto'} p-4 md:p-8 bg-slate-50 relative`}>
+                <div className={`max-w-7xl mx-auto ${currentStep === 7 ? 'w-full h-full flex flex-col justify-center' : 'space-y-8'} animate-fade-in`}>
                     <ComprasForm
                         state={state}
                         content={content}
@@ -187,37 +195,7 @@ export const ComprasStepWizard: React.FC<ComprasStepWizardProps> = ({
                 </div>
             </div>
 
-            {/* ACCOUNT REQUIRED BLOCKING MODAL */}
-            {showAccountWarning && (
-                <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-fade-in">
-                    <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden animate-scale-in flex flex-col p-10 border border-slate-100">
-                        <div className="w-20 h-20 bg-rose-50 rounded-3xl flex items-center justify-center mx-auto mb-8">
-                            <DollarSign className="w-10 h-10 text-rose-500" />
-                        </div>
 
-                        <div className="text-center space-y-4 mb-10">
-                            <h3 className="text-2xl font-black text-slate-900 tracking-tight">Conta Obrigatória</h3>
-                            <div className="space-y-4 text-slate-500 font-medium leading-relaxed">
-                                <p>
-                                    É obrigatório informar ou cadastrar a destinação de recurso (Conta) para avançar com o pedido.
-                                </p>
-                                <p className="text-sm bg-rose-50/50 text-rose-700 p-4 rounded-2xl border border-rose-100 font-bold">
-                                    Atenção: Em caso de dúvidas sobre qual conta selecionar, entre em contato imediatamente com o setor de Contabilidade para orientação correta.
-                                </p>
-                            </div>
-                        </div>
-
-                        <div className="flex flex-col gap-3">
-                            <button
-                                onClick={() => setShowAccountWarning(false)}
-                                className="w-full py-4 bg-slate-900 text-white font-bold rounded-2xl hover:bg-slate-800 transition-all shadow-xl shadow-slate-900/20 active:scale-95"
-                            >
-                                Selecionar Conta Agora
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 };

@@ -42,6 +42,8 @@ export const AccountSelectionModal: React.FC<AccountSelectionModalProps> = ({
         agency: '',
         account_number: '',
         description: '',
+        ficha: '',
+        resolucao: '',
         sector: currentUser.sector || ''
     });
 
@@ -75,7 +77,7 @@ export const AccountSelectionModal: React.FC<AccountSelectionModalProps> = ({
         if (result) {
             alert('Solicitação enviada! A conta aparecerá na lista assim que for aprovada por um administrador.');
             setIsCreating(false);
-            setNewAccount({ agency: '', account_number: '', description: '', sector: currentUser.sector || '' });
+            setNewAccount({ agency: '', account_number: '', description: '', ficha: '', resolucao: '', sector: currentUser.sector || '' });
             // Optionally re-fetch, but it will be "Pendente" so it won't show in the selector anyway
         } else {
             alert('Erro ao solicitar cadastro de conta.');
@@ -223,9 +225,11 @@ export const AccountSelectionModal: React.FC<AccountSelectionModalProps> = ({
                                                             <span className="text-[10px] font-black text-slate-800 uppercase tracking-widest">{acc.description}</span>
                                                         </div>
                                                         <h4 className="text-base font-black text-slate-700 group-hover:text-slate-900 transition-colors">{acc.sector}</h4>
-                                                        <span className="text-xs font-medium text-slate-500 flex items-center gap-2">
+                                                        <span className="text-xs font-medium text-slate-500 flex flex-wrap items-center gap-2">
                                                             <span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
                                                             Ag: <span className="font-mono">{acc.agency}</span> / CC: <span className="font-mono">{acc.account_number}</span>
+                                                            {acc.ficha && <><span className="w-1 h-1 rounded-full bg-slate-300"></span>Ficha: <span className="font-mono">{acc.ficha}</span></>}
+                                                            {acc.resolucao && <><span className="w-1 h-1 rounded-full bg-slate-300"></span>Res.: <span className="font-mono">{acc.resolucao}</span></>}
                                                         </span>
                                                     </div>
                                                 </div>
@@ -278,6 +282,29 @@ export const AccountSelectionModal: React.FC<AccountSelectionModalProps> = ({
                                             onChange={(e) => setNewAccount({ ...newAccount, account_number: e.target.value })}
                                             placeholder="EX: 100, 110, 200..."
                                             className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-indigo-500 transition-all font-mono font-bold"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Ficha</label>
+                                        <input
+                                            type="text"
+                                            value={newAccount.ficha}
+                                            onChange={(e) => setNewAccount({ ...newAccount, ficha: e.target.value })}
+                                            placeholder="EX: 12345"
+                                            className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-indigo-500 transition-all font-mono font-bold"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Resolução</label>
+                                        <input
+                                            type="text"
+                                            value={newAccount.resolucao}
+                                            onChange={(e) => setNewAccount({ ...newAccount, resolucao: e.target.value })}
+                                            placeholder="EX: Resolução 123/2024"
+                                            className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-indigo-500 transition-all font-bold"
                                         />
                                     </div>
                                 </div>

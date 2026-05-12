@@ -140,6 +140,9 @@ export interface ContentData {
   description?: string; // Add description
   paymentForecast?: string;
   selectedAccount?: string;
+  fichaOrcamentaria?: string;
+  resolucaoDescricao?: string;
+  resolucaoNumero?: string;
   useDigitalSignature?: boolean;
   digitalSignature?: {
     enabled: boolean;
@@ -322,6 +325,8 @@ export interface PurchaseAccount {
   description: string;
   sector: string;
   status: AccountStatus;
+  ficha?: string;
+  resolucao?: string;
   created_at: string;
   created_by?: string;
 }

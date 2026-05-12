@@ -15,8 +15,9 @@ export const ComprasStepper: React.FC<ComprasStepperProps> = ({ currentStep, ste
         { id: 2, label: 'Itens', icon: Package },
         { id: 3, label: 'Justificativa', icon: MessageSquare },
         { id: 4, label: 'Anexos', icon: Paperclip },
-        { id: 5, label: 'Conta', icon: CreditCard },
-        { id: 6, label: 'Assinar', icon: ShieldCheck },
+        { id: 5, label: 'Ficha', icon: CreditCard },
+        { id: 6, label: 'Resolução', icon: FileText },
+        { id: 7, label: 'Assinar', icon: ShieldCheck },
     ];
 
     return (

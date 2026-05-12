@@ -8,11 +8,9 @@ import {
 } from 'lucide-react';
 import { AppState, ContentData, DocumentConfig, Signature, PurchaseItem, Person, Sector, Job, Attachment } from '../../types';
 import { uploadFile } from '../../services/storageService';
-import { purchaseAccountService } from '../../services/purchaseAccountService';
-import { PurchaseAccount, User as UserType } from '../../types';
-import { AccountManagementTab } from '../compras/AccountManagementTab';
+import { User as UserType } from '../../types';
 import { ItemSelectionModal } from '../compras/ItemSelectionModal';
-import { Landmark, X } from 'lucide-react';
+import { X } from 'lucide-react';
 
 interface ComprasFormProps {
   state: AppState;
@@ -47,104 +45,6 @@ const PRIORITY_OPTIONS = [
   { value: 'Urgência', label: 'Urgência', icon: ShieldAlert, color: 'rose' },
 ] as const;
 
-
-const AccountSelectionEmbedded: React.FC<{
-  selectedAccount: string;
-  onSelect: (account: string) => void;
-}> = ({ selectedAccount, onSelect }) => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [accounts, setAccounts] = useState<PurchaseAccount[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    loadAccounts();
-  }, []);
-
-  const loadAccounts = async () => {
-    setLoading(true);
-    const data = await purchaseAccountService.getAccounts();
-    setAccounts(data.filter(acc => acc.status === 'Ativa'));
-    setLoading(false);
-  };
-
-  const filtered = accounts.filter(acc => {
-    const label = `${acc.account_number} – ${acc.description}`;
-    return label.toLowerCase().includes(searchTerm.toLowerCase());
-  });
-
-  return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[380px]">
-      <div className="p-4 border-b border-slate-100 bg-slate-50/30">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Buscar conta..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 outline-none transition-all placeholder:text-slate-300"
-          />
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-3 space-y-1.5 custom-scrollbar">
-        {loading ? (
-          <div className="py-12 flex flex-col items-center gap-2">
-            <Loader2 className="w-6 h-6 animate-spin text-emerald-600" />
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Carregando...</p>
-          </div>
-        ) : filtered.length > 0 ? (
-          filtered.map((acc) => {
-            const label = `${acc.account_number} – ${acc.description}`;
-            const isSelected = selectedAccount === label;
-            return (
-              <button
-                key={acc.id}
-                type="button"
-                onClick={() => {
-                  if (isSelected) {
-                    onSelect('');
-                  } else {
-                    onSelect(label);
-                  }
-                }}
-                className={`
-                  w-full flex items-center justify-between p-3 rounded-lg border-2 transition-all group
-                  ${isSelected
-                    ? 'border-emerald-500 bg-emerald-50/50 shadow-sm'
-                    : 'border-slate-50 bg-slate-50/30 hover:border-emerald-200 hover:bg-white'
-                  }
-                `}
-              >
-                <div className="flex flex-col items-start gap-0.5">
-                  <span className={`text-[9px] font-black uppercase tracking-wider ${isSelected ? 'text-emerald-600' : 'text-slate-400'}`}>
-                    {acc.account_number}
-                  </span>
-                  <span className={`text-[13px] font-bold tracking-tight text-left leading-tight ${isSelected ? 'text-emerald-900' : 'text-slate-700'}`}>
-                    {acc.description}
-                  </span>
-                </div>
-                <div className={`
-                  w-5 h-5 rounded-full flex items-center justify-center transition-all shrink-0
-                  ${isSelected ? 'bg-emerald-500 text-white scale-110 shadow-lg shadow-emerald-500/20' : 'bg-white text-slate-200 border border-slate-100'}
-                `}>
-                  <Check className="w-3.5 h-3.5" />
-                </div>
-              </button>
-            );
-          })
-        ) : (
-          <div className="py-12 text-center">
-            <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-3">
-              <Search className="w-5 h-5 text-slate-300" />
-            </div>
-            <p className="text-xs font-bold text-slate-400">Nenhuma conta encontrada</p>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
 
 export const ComprasForm: React.FC<ComprasFormProps> = ({
   state,
@@ -181,8 +81,6 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
   const [showTwoFactor, setShowTwoFactor] = useState(false);
   const [isSigned, setIsSigned] = useState(!!content.digitalSignature?.enabled);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
-  const [isManagementModalOpen, setIsManagementModalOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isItemSelectionOpen, setIsItemSelectionOpen] = useState(false);
 
@@ -830,124 +728,81 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
         </div>
       )}
 
-      {/* STEP 5: CONTA */}
+      {/* STEP 5: FICHA */}
       {currentStep === 5 && (
-        <div className="space-y-8 animate-fade-in pt-6">
-          {/* HEADER LINE */}
-          <div className="flex items-center justify-between gap-4">
-            <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-              <CreditCard className="w-4 h-4 text-emerald-600" /> Destinação do Recurso
-            </h3>
-
-            <button
-              type="button"
-              onClick={() => setIsManagementModalOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-100 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 transition-all font-bold text-[10px] uppercase tracking-widest border border-transparent hover:border-indigo-100"
-            >
-              <Landmark className="w-3.5 h-3.5" />
-              Gerenciar Contas
-            </button>
-          </div>
-
-          {/* MAIN 50/50 GRID */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-start">
-
-            {/* LEFT SIDE: Information & Current Selection */}
-            <div className="space-y-6 py-2">
-              <div>
-                <h4 className="text-2xl font-black text-slate-800 mb-2 tracking-tight leading-none">Conta do Pedido</h4>
-                <p className="text-sm text-slate-500 font-medium leading-relaxed max-w-sm">
-                  O valor desta compra será debitado da conta selecionada ao lado para fins de controle orçamentário.
-                </p>
-              </div>
-
-              <div className="space-y-3">
-                <span className="text-[9px] font-black uppercase tracking-[0.2em] text-emerald-600">Conta Selecionada</span>
-                <div className="bg-white p-6 rounded-[1.5rem] border-2 border-emerald-500 shadow-xl shadow-emerald-500/5 flex flex-col items-start gap-4">
-                  <div className="flex items-center gap-4 w-full">
-                    <div className="w-12 h-12 bg-emerald-50 rounded-xl flex items-center justify-center shrink-0">
-                      <CreditCard className="w-6 h-6 text-emerald-600" />
-                    </div>
-                    <div className={`space-y-0.5 ${!content.selectedAccount ? 'opacity-60 grayscale' : ''}`}>
-                      <span className="text-[16px] sm:text-lg font-black text-slate-900 tracking-tight leading-tight block max-w-full truncate">
-                        {content.selectedAccount || 'Nenhuma Conta Selecionada'}
-                      </span>
-                      <p className="text-[10px] sm:text-[11px] text-slate-400 font-bold uppercase tracking-wider">Vinculação Orçamentária (Opcional)</p>
-                    </div>
-                  </div>
-                  {content.selectedAccount ? (
-                    <div className="px-2.5 sm:px-3 py-1 bg-emerald-500 text-white text-[8px] sm:text-[9px] font-black uppercase tracking-widest rounded-full shadow-md shadow-emerald-500/10 flex items-center gap-1.5 self-start sm:self-center shrink-0">
-                      <CheckCircle2 className="w-3 h-3" />
-                      Confirmada
-                    </div>
-                  ) : (
-                    <div className="px-2.5 sm:px-3 py-1 bg-slate-100 text-slate-400 text-[8px] sm:text-[9px] font-black uppercase tracking-widest rounded-full border border-slate-200 flex items-center gap-1.5 self-start sm:self-center shrink-0">
-                      Vazio
-                    </div>
-                  )}
-                </div>
-              </div>
+        <div className="space-y-8 animate-fade-in pt-6 flex flex-col items-center justify-center min-h-[40vh]">
+          <div className="w-full max-w-md text-center space-y-6">
+            <div className="space-y-2">
+              <h3 className="text-2xl font-black text-slate-900 tracking-tight flex items-center justify-center gap-3">
+                <CreditCard className="w-8 h-8 text-emerald-600" /> Ficha Orçamentária
+              </h3>
+              <p className="text-sm text-slate-500 font-medium">
+                Informe a Ficha Orçamentária para a destinação do recurso.
+              </p>
             </div>
-
-            {/* RIGHT SIDE: Embedded Selection List */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between px-1">
-                <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">
-                  {content.selectedAccount ? 'Clique para Alterar ou Desmarcar' : 'Clique para Selecionar'}
-                </span>
-                <span className="text-[9px] font-black uppercase tracking-[0.2em] text-emerald-600 flex items-center gap-1">
-                  <Layers className="w-2.5 h-2.5" /> Contas Ativas
-                </span>
-              </div>
-              <AccountSelectionEmbedded
-                selectedAccount={content.selectedAccount || ''}
-                onSelect={(acc) => handleUpdate('content', 'selectedAccount', acc)}
+            
+            <div className="bg-white p-6 rounded-2xl border-2 border-slate-200 shadow-sm focus-within:border-emerald-500 focus-within:ring-4 focus-within:ring-emerald-500/20 transition-all text-left">
+              <label className="block text-xs font-black uppercase tracking-wider text-slate-500 mb-2">
+                Ficha Orçamentária
+              </label>
+              <input
+                type="text"
+                value={content.fichaOrcamentaria || ''}
+                onChange={(e) => handleUpdate('content', 'fichaOrcamentaria', e.target.value)}
+                placeholder="Ex: 12345-6"
+                className="w-full text-xl font-bold text-slate-900 placeholder:text-slate-300 border-none p-0 focus:ring-0 bg-transparent outline-none"
               />
             </div>
           </div>
-
-          {/* ACCOUNT MANAGEMENT MODAL - Kept here but logic is same */}
-          {isManagementModalOpen && (
-            <div
-              className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-fade-in cursor-pointer"
-              onClick={() => setIsManagementModalOpen(false)}
-            >
-              <div
-                className="bg-slate-50 w-full max-w-6xl h-[85vh] rounded-[3rem] shadow-2xl border border-slate-200 overflow-hidden animate-scale-in flex flex-col cursor-default"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="px-8 py-6 bg-white border-b border-slate-200 flex items-center justify-between shrink-0">
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 bg-indigo-50 rounded-2xl">
-                      <Landmark className="w-6 h-6 text-indigo-600" />
-                    </div>
-                    <div>
-                      <h3 className="text-xl font-black text-slate-900 tracking-tight">Gestão de Contas</h3>
-                      <p className="text-xs font-medium text-slate-400">Visualize, solicite e aprove cadastros de contas</p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setIsManagementModalOpen(false)}
-                    className="p-3 hover:bg-slate-100 rounded-full text-slate-400 transition-colors"
-                  >
-                    <X className="w-6 h-6" />
-                  </button>
-                </div>
-                <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
-                  <AccountManagementTab
-                    sectors={sectors}
-                    currentUser={currentUser}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       )}
 
-      {/* STEP 6: ASSINAR (Formerly Conclusão) */}
+      {/* STEP 6: RESOLUÇÃO */}
       {currentStep === 6 && (
+        <div className="space-y-8 animate-fade-in pt-6 flex flex-col items-center justify-center min-h-[40vh]">
+          <div className="w-full max-w-lg text-center space-y-6">
+            <div className="space-y-2">
+              <h3 className="text-2xl font-black text-slate-900 tracking-tight flex items-center justify-center gap-3">
+                <FileText className="w-8 h-8 text-indigo-600" /> Resolução
+              </h3>
+              <p className="text-sm text-slate-500 font-medium">
+                Informe os detalhes da Resolução.
+              </p>
+            </div>
+            
+            <div className="space-y-4">
+              <div className="bg-white p-6 rounded-2xl border-2 border-slate-200 shadow-sm focus-within:border-indigo-500 focus-within:ring-4 focus-within:ring-indigo-500/20 transition-all text-left">
+                <label className="block text-xs font-black uppercase tracking-wider text-slate-500 mb-2">
+                  Descrição (Texto)
+                </label>
+                <input
+                  type="text"
+                  value={content.resolucaoDescricao || ''}
+                  onChange={(e) => handleUpdate('content', 'resolucaoDescricao', e.target.value)}
+                  placeholder="Descrição da resolução"
+                  className="w-full text-lg font-bold text-slate-900 placeholder:text-slate-300 border-none p-0 focus:ring-0 bg-transparent outline-none"
+                />
+              </div>
+
+              <div className="bg-white p-6 rounded-2xl border-2 border-slate-200 shadow-sm focus-within:border-indigo-500 focus-within:ring-4 focus-within:ring-indigo-500/20 transition-all text-left">
+                <label className="block text-xs font-black uppercase tracking-wider text-slate-500 mb-2">
+                  Número (Numérico)
+                </label>
+                <input
+                  type="number"
+                  value={content.resolucaoNumero || ''}
+                  onChange={(e) => handleUpdate('content', 'resolucaoNumero', e.target.value)}
+                  placeholder="Número da resolução"
+                  className="w-full text-xl font-bold text-slate-900 placeholder:text-slate-300 border-none p-0 focus:ring-0 bg-transparent outline-none"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* STEP 7: ASSINAR (Formerly Conclusão) */}
+      {currentStep === 7 && (
         <div className="space-y-4 border-t border-slate-200 pt-6">
           <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
             <ShieldCheck className="w-4 h-4 text-emerald-600" /> Assinatura Digital
