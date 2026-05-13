@@ -1,5 +1,5 @@
 import React from 'react';
-import { Wallet, MapPin, MessageSquare, Camera, ShieldCheck } from 'lucide-react';
+import { Wallet, MapPin, MessageSquare, Camera, ShieldCheck, Sparkles } from 'lucide-react';
 
 export type StepStatus = 'completed' | 'in_progress' | 'empty' | 'current';
 
@@ -11,11 +11,12 @@ interface DiariasStepperProps {
 
 export const DiariasStepper: React.FC<DiariasStepperProps> = ({ currentStep, stepsStatus, onStepClick }) => {
     const steps = [
-        { id: 1, label: 'Modalidade', icon: Wallet },
-        { id: 2, label: 'Logística', icon: MapPin },
-        { id: 3, label: 'Justificativa', icon: MessageSquare },
-        { id: 4, label: 'Comprovantes', icon: Camera },
-        { id: 5, label: 'Assinar', icon: ShieldCheck },
+        { id: 1, label: 'Prompt', icon: Sparkles },
+        { id: 2, label: 'Modalidade', icon: Wallet },
+        { id: 3, label: 'Logística', icon: MapPin },
+        { id: 4, label: 'Justificativa', icon: MessageSquare },
+        { id: 5, label: 'Comprovantes', icon: Camera },
+        { id: 6, label: 'Assinar', icon: ShieldCheck },
     ];
 
     return (

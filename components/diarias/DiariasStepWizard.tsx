@@ -31,29 +31,35 @@ export const DiariasStepWizard: React.FC<DiariasStepWizardProps> = ({
         const statuses: Record<number, StepStatus> = {};
 
         // Helper to check validity
-        // Step 1: Modalidade & Solicitante (subType and requesterName required)
-        const s1Valid = !!(content.subType && content.requesterName);
-        const s1Started = !!(content.subType || content.requesterName);
+        // Step 1: Prompt (Optional context for AI)
+        const s1Valid = true; 
+        const s1Started = !!(content.promptText && content.promptText.trim().length > 0);
 
-        // Step 2: Logística & Custos (Destination, Dates, Auth Required)
-        const s2Valid = !!(content.destination && content.departureDateTime && content.returnDateTime && content.authorizedBy);
-        const s2Started = !!(content.destination || content.departureDateTime || content.returnDateTime || content.authorizedBy || content.lodgingCount || content.distanceKm || content.requestedValue);
+        // Step 2: Modalidade & Solicitante (subType and requesterName required)
+        const s2Valid = !!(content.subType && content.requesterName);
+        const s2Started = !!(content.subType || content.requesterName);
 
-        // Step 3: Justificativa (descriptionReason required)
-        const s3Valid = !!(content.descriptionReason && content.descriptionReason.trim().length > 0);
-        const s3Started = !!(content.descriptionReason || content.extraFieldText);
+        // Step 3: Logística & Custos (Destination, Dates, Auth Required)
+        const s3Valid = !!(content.destination && content.departureDateTime && content.returnDateTime && content.authorizedBy);
+        const s3Started = !!(content.destination || content.departureDateTime || content.returnDateTime || content.authorizedBy || content.lodgingCount || content.distanceKm || content.requestedValue);
 
-        // Step 4: Comprovantes (Optional)
-        const s4Valid = true; // Optional step, green if items > 0 or when current
-        const s4Started = !!(content.evidenceItems && content.evidenceItems.length > 0);
+        // Step 4: Justificativa (descriptionReason required)
+        const s4Valid = !!(content.descriptionReason && content.descriptionReason.trim().length > 0);
+        const s4Started = !!(content.descriptionReason || content.extraFieldText);
 
-        // Step 5: Assinar
-        const s5Valid = !!(content.signatureName);
-        const s5Started = false;
+        // Step 5: Comprovantes (Optional)
+        const s5Valid = true; // Optional step, green if items > 0 or when current
+        const s5Started = !!(content.evidenceItems && content.evidenceItems.length > 0);
+
+        // Step 6: Assinar
+        const s6Valid = !!(content.signatureName);
+        const s6Started = false;
 
         const getStatus = (id: number, isValid: boolean, isStarted: boolean): StepStatus => {
             if (currentStep === id) return 'current';
-            if (isValid) return 'completed';
+            if (isValid && isStarted) return 'completed';
+            if (isValid && id === 1) return s1Started ? 'completed' : 'empty'; // specific for optional Prompt
+            if (isValid && id === 5) return s5Started ? 'completed' : 'empty'; // specific for optional Comprovantes
             if (isStarted) return 'in_progress';
             return 'empty';
         };
@@ -61,8 +67,9 @@ export const DiariasStepWizard: React.FC<DiariasStepWizardProps> = ({
         statuses[1] = getStatus(1, s1Valid, s1Started);
         statuses[2] = getStatus(2, s2Valid, s2Started);
         statuses[3] = getStatus(3, s3Valid, s3Started);
-        statuses[4] = currentStep === 4 ? 'current' : (s4Started ? 'completed' : 'empty');
-        statuses[5] = getStatus(5, s5Valid, s5Started);
+        statuses[4] = getStatus(4, s4Valid, s4Started);
+        statuses[5] = currentStep === 5 ? 'current' : (s5Started ? 'completed' : 'empty');
+        statuses[6] = getStatus(6, s6Valid, s6Started);
 
         return statuses;
     }, [content, currentStep]);
@@ -70,16 +77,16 @@ export const DiariasStepWizard: React.FC<DiariasStepWizardProps> = ({
     // Check Global Completion for "Finalizar" button
     const isAllMandatoryCompleted = useMemo(() => {
         return !!(
-            content.subType && content.requesterName && // Step 1
-            content.destination && content.departureDateTime && content.returnDateTime && content.authorizedBy && // Step 2
-            content.descriptionReason && content.descriptionReason.trim().length > 0 && // Step 3
-            content.signatureName // Step 5
+            content.subType && content.requesterName && // Step 2
+            content.destination && content.departureDateTime && content.returnDateTime && content.authorizedBy && // Step 3
+            content.descriptionReason && content.descriptionReason.trim().length > 0 && // Step 4
+            content.signatureName // Step 6
         );
     }, [content]);
 
     const nextStep = () => {
         if (validateStep(currentStep)) {
-            setCurrentStep(prev => Math.min(prev + 1, 5));
+            setCurrentStep(prev => Math.min(prev + 1, 6));
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
     };
@@ -90,17 +97,17 @@ export const DiariasStepWizard: React.FC<DiariasStepWizardProps> = ({
     };
 
     const validateStep = (step: number): boolean => {
-        if (step === 1) {
+        if (step === 2) {
             if (!content.subType) { alert('Selecione a Modalidade (Diária ou Custeio)'); return false; }
             if (!content.requesterName) { alert('Selecione o Solicitante'); return false; }
         }
-        if (step === 2) {
+        if (step === 3) {
             if (!content.destination) { alert('Informe a Cidade de Destino'); return false; }
             if (!content.departureDateTime) { alert('Informe a Data/Hora de Saída'); return false; }
             if (!content.returnDateTime) { alert('Informe a Data/Hora de Retorno'); return false; }
             if (!content.authorizedBy) { alert('Selecione quem autorizou a viagem'); return false; }
         }
-        if (step === 3) {
+        if (step === 4) {
             if (!content.descriptionReason || content.descriptionReason.trim().length === 0) { 
                 alert('Preencha a Justificativa Resumida'); 
                 return false; 
@@ -147,8 +154,8 @@ export const DiariasStepWizard: React.FC<DiariasStepWizardProps> = ({
                         <Eye className="w-4 h-4" />
                         <span className="hidden sm:inline">Visualizar</span>
                     </button>
-                    {/* Hide Button in Step 5 - Form might handle it, or we leave it here. Let's do like Compras */}
-                    {currentStep !== 5 && (
+                    {/* Hide Button in Step 6 - Form might handle it, or we leave it here. Let's do like Compras */}
+                    {currentStep !== 6 && (
                         !isAllMandatoryCompleted ? (
                             <button
                                 onClick={nextStep}

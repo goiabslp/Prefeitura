@@ -138,6 +138,7 @@ export interface ContentData {
   requestedValue?: string;
   descriptionReason?: string;
   description?: string; // Add description
+  promptText?: string;
   paymentForecast?: string;
   selectedAccount?: string;
   fichaOrcamentaria?: string;

@@ -4,7 +4,7 @@ import {
   User, Briefcase, MapPin, Calendar, Clock, Bed, ShieldCheck, Route,
   DollarSign, MessageSquare, CreditCard, Eye, EyeOff, PlusCircle, Columns,
   Plus, Trash2, Camera, Image as ImageIcon, Search, ChevronDown, Loader2, X, Check,
-  UserCheck
+  UserCheck, Sparkles, Wand2
 } from 'lucide-react';
 import { AppState, ContentData, Signature, EvidenceItem, Person, Sector, Job, BlockType } from '../../types';
 import { getDiariasProtocolCount, incrementDiariasProtocolCount } from '../../services/counterService';
@@ -80,6 +80,104 @@ export const DiariaForm: React.FC<DiariaFormProps> = ({
   const cityDropdownRef = useRef<HTMLDivElement>(null);
   const authorizerDropdownRef = useRef<HTMLDivElement>(null);
   const requesterDropdownRef = useRef<HTMLDivElement>(null);
+
+  const [isGeneratingIA, setIsGeneratingIA] = useState<{ justificativa: boolean; detalhamento: boolean }>({
+    justificativa: false,
+    detalhamento: false
+  });
+
+  const [isIAPromptModalOpen, setIsIAPromptModalOpen] = useState<{ isOpen: boolean; type: 'justificativa' | 'detalhamento' | null }>({
+    isOpen: false,
+    type: null
+  });
+
+  const [isIADetalhamentoModalOpen, setIsIADetalhamentoModalOpen] = useState(false);
+  const [detalhamentoIAState, setDetalhamentoIAState] = useState({
+    adiantamento: 'nao' as 'sim' | 'nao',
+    valorAdiantamento: '',
+    reembolso: 'nao' as 'sim' | 'nao',
+    reembolsos: [] as { descricao: string, valor: string }[],
+    novaDescricaoReembolso: '',
+    novoValorReembolso: ''
+  });
+
+  const handleGenerateDetalhamento = () => {
+    let detalhamentoContext = content.promptText ? `Motivo/Contexto Base: ${content.promptText}\n\n` : '';
+    
+    detalhamentoContext += `Houve adiantamento? ${detalhamentoIAState.adiantamento === 'sim' ? `Sim, no valor de R$ ${detalhamentoIAState.valorAdiantamento}` : 'Não'}.\n`;
+    
+    if (detalhamentoIAState.reembolso === 'sim' && detalhamentoIAState.reembolsos.length > 0) {
+      detalhamentoContext += `Houve reembolso? Sim. Itens para reembolso:\n`;
+      detalhamentoIAState.reembolsos.forEach(r => {
+        detalhamentoContext += `- ${r.descricao}: R$ ${r.valor}\n`;
+      });
+      // Adiciona um em edição, caso o usuário tenha esquecido de clicar no botão "Mais"
+      if (detalhamentoIAState.novaDescricaoReembolso && detalhamentoIAState.novoValorReembolso) {
+        detalhamentoContext += `- ${detalhamentoIAState.novaDescricaoReembolso}: R$ ${detalhamentoIAState.novoValorReembolso}\n`;
+      }
+    } else if (detalhamentoIAState.reembolso === 'sim' && detalhamentoIAState.novaDescricaoReembolso && detalhamentoIAState.novoValorReembolso) {
+      detalhamentoContext += `Houve reembolso? Sim. Itens para reembolso:\n- ${detalhamentoIAState.novaDescricaoReembolso}: R$ ${detalhamentoIAState.novoValorReembolso}\n`;
+    } else {
+      detalhamentoContext += `Houve reembolso? Não.\n`;
+    }
+
+    generateAI('detalhamento', detalhamentoContext);
+    setIsIADetalhamentoModalOpen(false);
+  };
+
+  const generateAI = async (type: 'justificativa' | 'detalhamento', customPromptText?: string) => {
+    const textToUse = customPromptText || content.promptText;
+
+    if (!textToUse || textToUse.trim().length === 0) {
+      alert("Preencha as informações necessárias antes de utilizar a Inteligência Artificial.");
+      return;
+    }
+    
+    setIsGeneratingIA(prev => ({ ...prev, [type]: true }));
+    try {
+      const payload = {
+        tipo: type,
+        dados: {
+          promptText: textToUse,
+          requesterName: content.requesterName || 'Não informado',
+          cargo: content.requesterRole || 'Não informado',
+          setor: content.requesterSector || 'Não informado',
+          modalidade: content.subType || 'Não informado',
+          destino: content.destination || 'Não informado',
+          saida: content.departureDateTime || 'Não informado',
+          retorno: content.returnDateTime || 'Não informado',
+          hospedagens: content.lodgingCount || 0,
+          distancia: content.distanceKm || 0,
+          pagamento: content.paymentForecast || 'Não informado',
+          autorizador: content.authorizedBy || 'Não informado',
+          justificativa: content.descriptionReason || 'Não informada'
+        }
+      };
+      
+      const res = await fetch('/api/gemini', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      
+      if (!res.ok) throw new Error("Erro ao gerar conteúdo.");
+      const data = await res.json();
+      
+      if (type === 'justificativa') {
+        handleUpdate('content', 'descriptionReason', data.text);
+      } else {
+        handleUpdate('content', 'extraFieldText', data.text);
+        if (!content.showExtraField) {
+          handleUpdate('content', 'showExtraField', true);
+        }
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao gerar conteúdo com IA. Tente novamente.");
+    } finally {
+      setIsGeneratingIA(prev => ({ ...prev, [type]: false }));
+    }
+  };
 
   // Carregar cidades do IBGE com Tratamento de Erro e Fallback
   useEffect(() => {
@@ -304,6 +402,27 @@ export const DiariaForm: React.FC<DiariaFormProps> = ({
         <>
           <div className="space-y-4">
             <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-indigo-600" /> Contexto para Inteligência Artificial
+            </h3>
+            <p className="text-xs text-slate-500 font-medium">
+              Descreva em linguagem natural os detalhes da viagem, motivo, atividades e justificativas. Este texto será utilizado pela IA para gerar automaticamente a Justificativa e o Detalhamento Técnico nos próximos passos.
+            </p>
+            <div className={inputGroupClass}>
+              <textarea
+                value={content.promptText || ''}
+                onChange={(e) => handleUpdate('content', 'promptText', e.target.value)}
+                className={`${inputClass} min-h-[250px] resize-y leading-relaxed`}
+                placeholder="Exemplo: Preciso viajar para Belo Horizonte no dia 15/10 às 08h e retorno dia 17/10 às 18h. O motivo é participar do Congresso de Educação, onde apresentarei um projeto sobre inovação tecnológica nas escolas municipais..."
+              />
+            </div>
+          </div>
+        </>
+      )}
+
+      {currentStep === 2 && (
+        <>
+          <div className="space-y-4">
+            <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
           <Wallet className="w-4 h-4 text-indigo-600" /> Modalidade de Requisição
         </h3>
         <div className="grid grid-cols-2 gap-3">
@@ -339,7 +458,7 @@ export const DiariaForm: React.FC<DiariaFormProps> = ({
         </div>
       </div>
 
-      {currentStep === 1 && content.subType && (
+      {currentStep === 2 && content.subType && (
           <div className="space-y-4 animate-fade-in">
             <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
               <User className="w-4 h-4 text-indigo-600" /> Dados do Solicitante
@@ -413,7 +532,7 @@ export const DiariaForm: React.FC<DiariaFormProps> = ({
         </>
       )}
 
-      {currentStep === 2 && (
+      {currentStep === 3 && (
         <>
           <div className="space-y-4 animate-fade-in">
             <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
@@ -596,7 +715,7 @@ export const DiariaForm: React.FC<DiariaFormProps> = ({
         </>
       )}
 
-      {currentStep === 3 && (
+      {currentStep === 4 && (
         <>
           <div className="space-y-4 animate-fade-in">
             <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
@@ -605,16 +724,27 @@ export const DiariaForm: React.FC<DiariaFormProps> = ({
             <div className={inputGroupClass}>
               <div className="flex justify-between items-center mb-1.5">
                 <label className={labelClass}><FileText className="w-3 h-3" /> Justificativa Resumida</label>
-                <span className={`text-[9px] font-bold ${(content.descriptionReason?.length || 0) >= 365 ? 'text-red-500' : 'text-slate-400'}`}>
-                  {(content.descriptionReason?.length || 0)}/365
-                </span>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setIsIAPromptModalOpen({ isOpen: true, type: 'justificativa' })}
+                    disabled={isGeneratingIA.justificativa}
+                    className="flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-sm hover:shadow-md hover:scale-105 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Gerar Justificativa com IA"
+                  >
+                    {isGeneratingIA.justificativa ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
+                    Gerar com IA
+                  </button>
+                  <span className={`text-[9px] font-bold ${(content.descriptionReason?.length || 0) >= 500 ? 'text-red-500' : 'text-slate-400'}`}>
+                    {(content.descriptionReason?.length || 0)}/500
+                  </span>
+                </div>
               </div>
               <textarea
                 value={content.descriptionReason || ''}
                 onChange={(e) => handleUpdate('content', 'descriptionReason', e.target.value)}
-                maxLength={365}
+                maxLength={500}
                 className={`${inputClass} min-h-[120px] resize-none leading-relaxed`}
-                placeholder="Descreva o objetivo da viagem (máximo 365 caracteres)..."
+                placeholder="Descreva o objetivo da viagem (máximo 500 caracteres)..."
               />
             </div>
           </div>
@@ -637,7 +767,18 @@ export const DiariaForm: React.FC<DiariaFormProps> = ({
 
             {content.showExtraField && (
               <div className={`${inputGroupClass} animate-fade-in`}>
-                <label className={labelClass}><FileText className="w-3 h-3" /> Detalhamento</label>
+                <div className="flex justify-between items-center mb-1.5">
+                  <label className={labelClass}><FileText className="w-3 h-3" /> Detalhamento</label>
+                  <button
+                    onClick={() => setIsIADetalhamentoModalOpen(true)}
+                    disabled={isGeneratingIA.detalhamento}
+                    className="flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-sm hover:shadow-md hover:scale-105 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Gerar Detalhamento com IA"
+                  >
+                    {isGeneratingIA.detalhamento ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
+                    Gerar com IA
+                  </button>
+                </div>
                 <textarea
                   value={content.extraFieldText || ''}
                   onChange={(e) => handleUpdate('content', 'extraFieldText', e.target.value)}
@@ -651,7 +792,7 @@ export const DiariaForm: React.FC<DiariaFormProps> = ({
         </>
       )}
 
-      {currentStep === 4 && (
+      {currentStep === 5 && (
         <>
           <div className="space-y-4 animate-fade-in">
             <div className="flex items-center justify-between">
@@ -720,7 +861,7 @@ export const DiariaForm: React.FC<DiariaFormProps> = ({
         </>
       )}
 
-      {currentStep === 5 && (
+      {currentStep === 6 && (
         <>
           <div className="space-y-4 pt-4 animate-fade-in">
             <div className="flex items-center justify-between">
@@ -785,12 +926,197 @@ export const DiariaForm: React.FC<DiariaFormProps> = ({
         </>
       )}
 
-      {!content.subType && currentStep !== 1 && (
+      {!content.subType && currentStep !== 2 && (
         <div className="p-12 border-2 border-dashed border-slate-200 rounded-[2rem] flex flex-col items-center justify-center text-center space-y-4 bg-white/50">
           <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center text-slate-300"><ClipboardList className="w-8 h-8" /></div>
           <p className="font-bold text-slate-600">Selecione a Modalidade no Passo 1 para continuar.</p>
         </div>
       )}
+
+      {/* IA Prompt Modal */}
+      {isIAPromptModalOpen.isOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setIsIAPromptModalOpen({ isOpen: false, type: null })} />
+          <div className="relative bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-6">
+              <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 mb-2">
+                <Sparkles className="w-5 h-5 text-indigo-600" />
+                Motivo da Viagem
+              </h3>
+              <p className="text-sm text-slate-500 mb-6">
+                Informe detalhadamente o motivo, atividades e justificativas da sua viagem. A Inteligência Artificial usará essas informações para redigir o documento no formato correto.
+              </p>
+              
+              <textarea
+                value={content.promptText || ''}
+                onChange={(e) => handleUpdate('content', 'promptText', e.target.value)}
+                className={`${inputClass} min-h-[150px] resize-y mb-6`}
+                placeholder="Exemplo: Viagem para Belo Horizonte no dia 15/10 às 08h e retorno dia 17/10 às 18h. O motivo é participar do Congresso de Educação, onde apresentarei um projeto sobre inovação tecnológica..."
+                autoFocus
+              />
+              
+              <div className="flex gap-3 justify-end">
+                <button 
+                  onClick={() => setIsIAPromptModalOpen({ isOpen: false, type: null })}
+                  className="px-5 py-2.5 text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={() => {
+                    if (isIAPromptModalOpen.type) {
+                      generateAI(isIAPromptModalOpen.type);
+                      setIsIAPromptModalOpen({ isOpen: false, type: null });
+                    }
+                  }}
+                  disabled={!content.promptText || content.promptText.trim().length === 0}
+                  className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-all shadow-md hover:shadow-lg"
+                >
+                  <Wand2 className="w-4 h-4" />
+                  Gerar Texto
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* IA Detalhamento Modal */}
+      {isIADetalhamentoModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setIsIADetalhamentoModalOpen(false)} />
+          <div className="relative bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-6">
+              <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 mb-2">
+                <Sparkles className="w-5 h-5 text-indigo-600" />
+                Dados do Detalhamento
+              </h3>
+              <p className="text-sm text-slate-500 mb-6">
+                A Inteligência Artificial precisa de algumas informações adicionais para criar um detalhamento administrativo completo.
+              </p>
+              
+              <div className="space-y-6">
+                {/* Adiantamento */}
+                <div className="space-y-3">
+                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Houve Adiantamento?</label>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => setDetalhamentoIAState(prev => ({ ...prev, adiantamento: 'sim' }))}
+                      className={`flex-1 py-2 rounded-xl text-sm font-bold border-2 transition-all ${detalhamentoIAState.adiantamento === 'sim' ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}
+                    >
+                      Sim
+                    </button>
+                    <button
+                      onClick={() => setDetalhamentoIAState(prev => ({ ...prev, adiantamento: 'nao' }))}
+                      className={`flex-1 py-2 rounded-xl text-sm font-bold border-2 transition-all ${detalhamentoIAState.adiantamento === 'nao' ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}
+                    >
+                      Não
+                    </button>
+                  </div>
+                  {detalhamentoIAState.adiantamento === 'sim' && (
+                    <div className="animate-in fade-in slide-in-from-top-2">
+                      <input
+                        type="text"
+                        placeholder="Valor do Adiantamento (R$)"
+                        value={detalhamentoIAState.valorAdiantamento}
+                        onChange={(e) => setDetalhamentoIAState(prev => ({ ...prev, valorAdiantamento: e.target.value }))}
+                        className={`${inputClass}`}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Reembolso */}
+                <div className="space-y-3">
+                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Houve Reembolso?</label>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => setDetalhamentoIAState(prev => ({ ...prev, reembolso: 'sim' }))}
+                      className={`flex-1 py-2 rounded-xl text-sm font-bold border-2 transition-all ${detalhamentoIAState.reembolso === 'sim' ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}
+                    >
+                      Sim
+                    </button>
+                    <button
+                      onClick={() => setDetalhamentoIAState(prev => ({ ...prev, reembolso: 'nao' }))}
+                      className={`flex-1 py-2 rounded-xl text-sm font-bold border-2 transition-all ${detalhamentoIAState.reembolso === 'nao' ? 'border-indigo-600 bg-indigo-50 text-indigo-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}
+                    >
+                      Não
+                    </button>
+                  </div>
+                  {detalhamentoIAState.reembolso === 'sim' && (
+                    <div className="animate-in fade-in slide-in-from-top-2 space-y-3 p-4 bg-slate-50 rounded-xl border border-slate-100">
+                      {detalhamentoIAState.reembolsos.map((r, idx) => (
+                        <div key={idx} className="flex gap-2 items-center text-sm p-2 bg-white rounded-lg border border-slate-200">
+                          <div className="flex-1 font-medium text-slate-700">{r.descricao}</div>
+                          <div className="font-bold text-slate-900">R$ {r.valor}</div>
+                          <button 
+                            onClick={() => {
+                              const newR = [...detalhamentoIAState.reembolsos];
+                              newR.splice(idx, 1);
+                              setDetalhamentoIAState(prev => ({ ...prev, reembolsos: newR }));
+                            }}
+                            className="p-1.5 text-red-500 hover:bg-red-50 rounded-md"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                      
+                      <div className="flex gap-2 items-start">
+                        <input
+                          type="text"
+                          placeholder="Descrição (Ex: Uber)"
+                          value={detalhamentoIAState.novaDescricaoReembolso}
+                          onChange={(e) => setDetalhamentoIAState(prev => ({ ...prev, novaDescricaoReembolso: e.target.value }))}
+                          className={`${inputClass} flex-1`}
+                        />
+                        <input
+                          type="text"
+                          placeholder="Valor R$"
+                          value={detalhamentoIAState.novoValorReembolso}
+                          onChange={(e) => setDetalhamentoIAState(prev => ({ ...prev, novoValorReembolso: e.target.value }))}
+                          className={`${inputClass} w-28`}
+                        />
+                        <button
+                          disabled={!detalhamentoIAState.novaDescricaoReembolso || !detalhamentoIAState.novoValorReembolso}
+                          onClick={() => {
+                            setDetalhamentoIAState(prev => ({
+                              ...prev,
+                              reembolsos: [...prev.reembolsos, { descricao: prev.novaDescricaoReembolso, valor: prev.novoValorReembolso }],
+                              novaDescricaoReembolso: '',
+                              novoValorReembolso: ''
+                            }));
+                          }}
+                          className="p-3 bg-slate-800 hover:bg-slate-900 text-white rounded-xl disabled:opacity-50 transition-colors"
+                        >
+                          <Plus className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              <div className="flex gap-3 justify-end mt-8">
+                <button 
+                  onClick={() => setIsIADetalhamentoModalOpen(false)}
+                  className="px-5 py-2.5 text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={handleGenerateDetalhamento}
+                  className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-all shadow-md hover:shadow-lg"
+                >
+                  <Wand2 className="w-4 h-4" />
+                  Gerar Texto
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
