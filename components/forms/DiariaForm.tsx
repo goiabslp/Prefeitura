@@ -326,6 +326,66 @@ export const DiariaForm: React.FC<DiariaFormProps> = ({
     return `10/${month.toString().padStart(2, '0')}/${year}`;
   };
 
+  const calculateDistance = async (destinationCity: string) => {
+    try {
+      if (!destinationCity) return;
+      
+      const destName = destinationCity.split(' - ')[0].toUpperCase();
+      const originName = "SÃO JOSÉ DO GOIABAL";
+      
+      if (destName === originName) {
+         handleUpdate('content', 'distanceKm', 0);
+         return;
+      }
+      
+      const predefined: Record<string, number> = {
+        'JOÃO MONLEVADE': 45,
+        'BELO HORIZONTE': 160,
+        'IPATINGA': 110,
+        'ITABIRA': 85,
+        'ALVINÓPOLIS': 40,
+        'RIO PIRACICABA': 25,
+        'PONTE NOVA': 75,
+        'DOM SILVÉRIO': 35,
+        'DIONÍSIO': 15,
+        'SÃO DOMINGOS DO PRATA': 30,
+        'RAUL SOARES': 45,
+        'NOVA ERA': 60,
+        'CARATINGA': 130,
+        'TIMÓTEO': 90
+      };
+
+      if (predefined[destName]) {
+         handleUpdate('content', 'distanceKm', predefined[destName]);
+         return;
+      }
+
+      const fetchCoords = async (cityStr: string) => {
+         const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cityStr + ', Minas Gerais, Brazil')}`);
+         const data = await res.json();
+         if (data && data.length > 0) {
+            return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+         }
+         return null;
+      };
+
+      const originCoords = await fetchCoords(originName);
+      const destCoords = await fetchCoords(destName);
+
+      if (originCoords && destCoords) {
+         const osrmRes = await fetch(`https://router.project-osrm.org/route/v1/driving/${originCoords.lon},${originCoords.lat};${destCoords.lon},${destCoords.lat}?overview=false`);
+         const osrmData = await osrmRes.json();
+         if (osrmData.routes && osrmData.routes.length > 0) {
+            const distanceMeters = osrmData.routes[0].distance;
+            const distanceKm = Math.round(distanceMeters / 1000);
+            handleUpdate('content', 'distanceKm', distanceKm);
+         }
+      }
+    } catch (e) {
+      console.warn('Failed to calculate distance automatically:', e);
+    }
+  };
+
   useEffect(() => {
     if (!content.subType) {
       handleUpdate('content', 'subType', 'diaria');
@@ -656,6 +716,7 @@ export const DiariaForm: React.FC<DiariaFormProps> = ({
                   onSelect={(city) => {
                     handleUpdate('content', 'destination', city);
                     setIsCityOpen(false);
+                    calculateDistance(city);
                   }}
                   renderItem={(city, isSelected) => (
                     <div className="flex items-center justify-between px-4 py-3">
