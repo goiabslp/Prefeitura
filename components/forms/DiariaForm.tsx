@@ -46,6 +46,85 @@ const FALLBACK_CITIES = [
   'RAUL SOARES - MG', 'NOVA ERA - MG', 'CARATINGA - MG', 'TIMÓTEO - MG'
 ];
 
+const defaultPromptText = `Instruções para elaboração de parecer de viagem a serviço
+Perguntar e registrar:
+
+Nome Completo do Funcionário?
+Setor em que está atendendo?
+Qual a data de saída?
+Qual a data de retorno?
+Qual o destino?
+Quantos km de distância?
+Hora de saída?
+Hora de retorno?
+Motivo da viagem? (Reservar espaço exclusivo)
+Quem autorizou a viagem?
+Houve adiantamento?
+Quantas noites de hotel?
+
+Analisar a viagem com base na Lei nº 1.084/2017 e Decreto nº 0064/2017:
+
+Verificar período de afastamento (Art. 6º e 7º) para cálculo da diária (integral ou parcial).
+Conferir valor da diária conforme Anexo I, considerando cargo, distância e hospedagem.
+Para os dias com hospedagem (conforme número de noites), aplicar valor com hospedagem.
+Para os dias sem hospedagem, aplicar valor sem hospedagem.
+Somar valores separados para obter valor total.
+Para motoristas e demais cargos, aplicar Anexo II - Valor Custeio Alimentação e/ou Hospedagem (art.17):
+
+Anexo I — Valores Diárias (Lei 1084/2017, Art. 4º, §1º):
+1 – Prefeito e Vice-Prefeito:
+Diária Integral (sem hospedagem) = R$350,00
+Diária Integral (com hospedagem) = R$600,00
+Diária Integral Fora Estado (sem hospedagem) = R$700,00
+Diária Integral Fora Estado (com hospedagem) = R$950,00
+
+2 – Secretário Municipal, Órgão Jurídico e Chefes de Departamento:
+Diária Integral (sem hospedagem) = R$200,00
+Diária Integral (com hospedagem) = R$350,00
+Diária Integral Fora Estado (sem hospedagem) = R$400,00
+Diária Integral Fora Estado (com hospedagem) = R$550,00
+
+3 – Demais Servidores Públicos Efetivos, Comissionados Contratados, Funções Públicas e Conselheiros Municipais:
+Diária Integral (sem hospedagem) = R$80,00
+Diária Integral (com hospedagem) = R$120,00
+Diária Integral Fora Estado (sem hospedagem) = R$300,00
+Diária Integral Fora Estado (com hospedagem) = R$400,00
+
+Anexo II — Valor Custeio Alimentação e/ou Hospedagem (art.17):
+1 - Motorista e demais cargos, mínimo de 06 horas e de 30 a 99 km (*)
+Custeio Integral (sem hospedagem) = R$40,00
+Custeio Integral (com hospedagem) = R$180,00
+Custeio Integral fora Estado (sem hospedagem) = NÃO APLICÁVEL
+Custeio Integral fora Estado (com hospedagem) = NÃO APLICÁVEL
+
+2 - Motorista e demais cargos acima de 06 horas e acima de 100 km
+Custeio Integral (sem hospedagem) = R$80,00
+Custeio Integral (com hospedagem) = R$180,00
+Custeio Integral fora Estado (sem hospedagem) = NÃO APLICÁVEL
+Custeio Integral fora Estado (com hospedagem) = NÃO APLICÁVEL
+
+3 - Motorista e demais cargos em viagem fora do estado
+Custeio Integral (sem hospedagem) = NÃO APLICÁVEL
+Custeio Integral (com hospedagem) = NÃO APLICÁVEL
+Custeio Integral fora Estado (sem hospedagem) = R$300,00
+Custeio Integral fora Estado (com hospedagem) = R$450,00
+
+Justificar o valor da diária ou custeio conforme o anexo aplicável.
+Confirmar necessidade e oficialidade da viagem com base na solicitação.
+
+Estruturar o parecer com:
+Dados da viagem (respostas às perguntas).
+Espaço exclusivo para o motivo da viagem.
+Análise e justificativa do valor da diária ou custeio.
+Referência ao pedido oficial
+Informação sobre adiantamento, se houve.
+Espaço exclusivo para concluir sobre o valor devido
+Espaço exclusivo para o valor devido..
+
+Analise os dados acima e guarde as informações.
+Deve montar um relatório de viagem baseado nas respostas e nos dados salvos.
+Quero um relatório detalhado e forte.`;
+
 const normalizeText = (text: string) => {
   if (!text) return '';
   return text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -246,6 +325,15 @@ export const DiariaForm: React.FC<DiariaFormProps> = ({
     }
     return `10/${month.toString().padStart(2, '0')}/${year}`;
   };
+
+  useEffect(() => {
+    if (!content.subType) {
+      handleUpdate('content', 'subType', 'diaria');
+    }
+    if (!content.promptText) {
+      handleUpdate('content', 'promptText', defaultPromptText);
+    }
+  }, []);
 
   useEffect(() => {
     if (content.subType && activeBlock === 'diarias') {
