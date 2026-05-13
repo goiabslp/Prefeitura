@@ -171,6 +171,8 @@ export const DiariaForm: React.FC<DiariaFormProps> = ({
     type: null
   });
 
+  const [supplementaryPromptText, setSupplementaryPromptText] = useState('');
+
   const [isIADetalhamentoModalOpen, setIsIADetalhamentoModalOpen] = useState(false);
   const [detalhamentoIAState, setDetalhamentoIAState] = useState({
     adiantamento: 'nao' as 'sim' | 'nao',
@@ -1096,28 +1098,31 @@ export const DiariaForm: React.FC<DiariaFormProps> = ({
       {/* IA Prompt Modal */}
       {isIAPromptModalOpen.isOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setIsIAPromptModalOpen({ isOpen: false, type: null })} />
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => { setIsIAPromptModalOpen({ isOpen: false, type: null }); setSupplementaryPromptText(''); }} />
           <div className="relative bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             <div className="p-6">
               <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 mb-2">
                 <Sparkles className="w-5 h-5 text-indigo-600" />
-                Motivo da Viagem
+                Informações Adicionais para IA
               </h3>
               <p className="text-sm text-slate-500 mb-6">
-                Informe detalhadamente o motivo, atividades e justificativas da sua viagem. A Inteligência Artificial usará essas informações para redigir o documento no formato correto.
+                (Opcional) Adicione informações extras específicas para a geração deste texto. O contexto base da viagem (cadastrado no Passo 1) já será utilizado automaticamente.
               </p>
               
               <textarea
-                value={content.promptText || ''}
-                onChange={(e) => handleUpdate('content', 'promptText', e.target.value)}
+                value={supplementaryPromptText}
+                onChange={(e) => setSupplementaryPromptText(e.target.value)}
                 className={`${inputClass} min-h-[150px] resize-y mb-6`}
-                placeholder="Exemplo: Viagem para Belo Horizonte no dia 15/10 às 08h e retorno dia 17/10 às 18h. O motivo é participar do Congresso de Educação, onde apresentarei um projeto sobre inovação tecnológica..."
+                placeholder="Exemplo: Focar na necessidade urgente de participar das palestras sobre tecnologia para as escolas..."
                 autoFocus
               />
               
               <div className="flex gap-3 justify-end">
                 <button 
-                  onClick={() => setIsIAPromptModalOpen({ isOpen: false, type: null })}
+                  onClick={() => {
+                    setIsIAPromptModalOpen({ isOpen: false, type: null });
+                    setSupplementaryPromptText('');
+                  }}
                   className="px-5 py-2.5 text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
                 >
                   Cancelar
@@ -1125,11 +1130,15 @@ export const DiariaForm: React.FC<DiariaFormProps> = ({
                 <button 
                   onClick={() => {
                     if (isIAPromptModalOpen.type) {
-                      generateAI(isIAPromptModalOpen.type);
+                      const finalPrompt = supplementaryPromptText.trim() 
+                        ? `${content.promptText}\n\nInformações suplementares: ${supplementaryPromptText}` 
+                        : content.promptText;
+                      generateAI(isIAPromptModalOpen.type, finalPrompt);
                       setIsIAPromptModalOpen({ isOpen: false, type: null });
+                      setSupplementaryPromptText('');
                     }
                   }}
-                  disabled={!content.promptText || content.promptText.trim().length === 0}
+                  disabled={!content.promptText || content.promptText.trim().length === 0 || isGeneratingIA.justificativa}
                   className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-all shadow-md hover:shadow-lg"
                 >
                   <Wand2 className="w-4 h-4" />
