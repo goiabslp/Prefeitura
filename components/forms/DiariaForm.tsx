@@ -47,11 +47,8 @@ const FALLBACK_CITIES = [
   'RAUL SOARES - MG', 'NOVA ERA - MG', 'CARATINGA - MG', 'TIMÓTEO - MG'
 ];
 
-const defaultPromptText = `Instruções para elaboração de parecer de viagem a serviço
-Perguntar e registrar:
+const defaultPromptText = `Coletar Informações e Registrar
 
-Nome Completo do Funcionário?
-Setor em que está atendendo?
 Qual a data de saída?
 Qual a data de retorno?
 Qual o destino?
@@ -59,72 +56,89 @@ Quantos km de distância?
 Hora de saída?
 Hora de retorno?
 Motivo da viagem? (Reservar espaço exclusivo)
-Quem autorizou a viagem?
+Quem solicitou a viagem?
 Houve adiantamento?
-Quantas noites de hotel?
+Base Legal
+LEI Nº 1.084/2017, de 18 de Maio de 2017.
 
-Analisar a viagem com base na Lei nº 1.084/2017 e Decreto nº 0064/2017:
+“DISPÕE SOBRE VIAGENS A SERVIÇO E CONCESSÃO DE DIÁRIAS A SERVIDOR DOS ÓRGÃOS DA ADMINISTRAÇÃO E DÁ OUTRA PROVIDÊNCIAS.”
 
-Verificar período de afastamento (Art. 6º e 7º) para cálculo da diária (integral ou parcial).
-Conferir valor da diária conforme Anexo I, considerando cargo, distância e hospedagem.
-Para os dias com hospedagem (conforme número de noites), aplicar valor com hospedagem.
-Para os dias sem hospedagem, aplicar valor sem hospedagem.
-Somar valores separados para obter valor total.
-Para motoristas e demais cargos, aplicar Anexo II - Valor Custeio Alimentação e/ou Hospedagem (art.17):
+Art. 6º
 
-Anexo I — Valores Diárias (Lei 1084/2017, Art. 4º, §1º):
-1 – Prefeito e Vice-Prefeito:
+“A diária é devida a cada período de 24 (vinte e quatro) horas de afastamento, tomando-se como termo inicial e final para contagem dos dias, respectivamente, à hora da partida e da chegada na sede.”
+
+Art. 7º
+
+“Quando o servidor se afastar por período igual ou superior a 12 (doze) horas e inferior a 24 (vinte e quatro) horas, será devida diária integral.”
+
+Parágrafo único do Art. 7º
+
+“Ocorrendo afastamento por período inferior a 12 (doze) horas, serão devidos 50% (cinquenta por cento) da diária integral.”
+
+Art. 8º
+
+“A diária não será devida.”
+
+Parágrafo único do Art. 8º
+
+“É vedado:”
+
+Inciso I
+
+“O pagamento de diária de forma concomitante e/ou cumulativa com outra retribuição de caráter indenizatório de despesas com alimentação e/ou hospedagem.”
+
+Contudo, excepcionalmente, caso o valor total das despesas comprovadas com hospedagem e/ou alimentação ultrapasse o valor da diária concedida ao servidor, poderá ser realizado o pagamento complementar correspondente às despesas efetivamente comprovadas, limitado aos valores devidamente justificados e autorizados. 
+
+Anexo I
+Valores Diárias (Lei 1084/2017, Art. 4º, §1º)
+1 – Prefeito e Vice-Prefeito
 Diária Integral (sem hospedagem) = R$350,00
 Diária Integral (com hospedagem) = R$600,00
 Diária Integral Fora Estado (sem hospedagem) = R$700,00
 Diária Integral Fora Estado (com hospedagem) = R$950,00
-
-2 – Secretário Municipal, Órgão Jurídico e Chefes de Departamento:
+2 – Secretário Municipal, Órgão Jurídico e Chefes de Departamento
 Diária Integral (sem hospedagem) = R$200,00
 Diária Integral (com hospedagem) = R$350,00
 Diária Integral Fora Estado (sem hospedagem) = R$400,00
 Diária Integral Fora Estado (com hospedagem) = R$550,00
-
-3 – Demais Servidores Públicos Efetivos, Comissionados Contratados, Funções Públicas e Conselheiros Municipais:
+3 – Demais Servidores Públicos Efetivos, Comissionados Contratados, Funções Públicas e Conselheiros Municipais
 Diária Integral (sem hospedagem) = R$80,00
 Diária Integral (com hospedagem) = R$120,00
 Diária Integral Fora Estado (sem hospedagem) = R$300,00
 Diária Integral Fora Estado (com hospedagem) = R$400,00
-
-Anexo II — Valor Custeio Alimentação e/ou Hospedagem (art.17):
+Anexo II
+Valor Custeio Alimentação e/ou Hospedagem (Art.17)
 1 - Motorista e demais cargos, mínimo de 06 horas e de 30 a 99 km (*)
 Custeio Integral (sem hospedagem) = R$40,00
 Custeio Integral (com hospedagem) = R$180,00
 Custeio Integral fora Estado (sem hospedagem) = NÃO APLICÁVEL
 Custeio Integral fora Estado (com hospedagem) = NÃO APLICÁVEL
-
 2 - Motorista e demais cargos acima de 06 horas e acima de 100 km
 Custeio Integral (sem hospedagem) = R$80,00
 Custeio Integral (com hospedagem) = R$180,00
 Custeio Integral fora Estado (sem hospedagem) = NÃO APLICÁVEL
 Custeio Integral fora Estado (com hospedagem) = NÃO APLICÁVEL
-
-3 - Motorista e demais cargos em viagem fora do estado
+3 - Motorista e demais cargos
 Custeio Integral (sem hospedagem) = NÃO APLICÁVEL
 Custeio Integral (com hospedagem) = NÃO APLICÁVEL
 Custeio Integral fora Estado (sem hospedagem) = R$300,00
 Custeio Integral fora Estado (com hospedagem) = R$450,00
+Decreto Nº 0064/2017, de 19 de Setembro de 2017
 
-Justificar o valor da diária ou custeio conforme o anexo aplicável.
-Confirmar necessidade e oficialidade da viagem com base na solicitação.
+“REGULAMENTA A LEI MUNICIPAL Nº 1084/2017, DE 18/05/2017, QUE DISPÕE SOBRE CONCESSÃO DE DIÁRIAS A SERVIDOR DOS ÓRGÃOS DA ADMINISTRAÇÃO MUNICIPAL.”
 
-Estruturar o parecer com:
-Dados da viagem (respostas às perguntas).
-Espaço exclusivo para o motivo da viagem.
-Análise e justificativa do valor da diária ou custeio.
-Referência ao pedido oficial
-Informação sobre adiantamento, se houve.
-Espaço exclusivo para concluir sobre o valor devido
-Espaço exclusivo para o valor devido..
+Art. 18
 
-Analise os dados acima e guarde as informações.
-Deve montar um relatório de viagem baseado nas respostas e nos dados salvos.
-Quero um relatório detalhado e forte.`;
+“As despesas realizadas a serem reembolsadas na forma deste Capítulo deverão ser comprovadas através de nota fiscal, cupom fiscal ou recibo, vias originais, inadmitidas contra vias, fotocópias ou qualquer outra espécie de reprodução.”
+
+Regras para elaboração do parecer
+Verificar o período de afastamento conforme Art. 6º e Art. 7º.
+Identificar se o valor será calculado pelo Anexo I ou Anexo II.
+Verificar se houve hospedagem.
+Verificar se a viagem foi dentro ou fora do estado.
+O valor do adiantamento deverá ser descontado do valor total da diária.
+O uso do adiantamento deverá ser comprovado mediante documentos fiscais.
+Toda resposta deve conter justificativa legal e cálculo detalhado.`;
 
 const normalizeText = (text: string) => {
   if (!text) return '';
