@@ -10,6 +10,7 @@ import { AppState, ContentData, Signature, EvidenceItem, Person, Sector, Job, Bl
 import { getDiariasProtocolCount, incrementDiariasProtocolCount } from '../../services/counterService';
 import { SelectionModal } from '../SelectionModal';
 import { DateTimePickerModal } from '../DateTimePickerModal';
+import { ConfirmModal } from '../modals/ConfirmModal';
 
 interface DiariaFormProps {
   state: AppState;
@@ -180,6 +181,8 @@ export const DiariaForm: React.FC<DiariaFormProps> = ({
     novoValorReembolso: ''
   });
 
+  const [errorModal, setErrorModal] = useState<{isOpen: boolean, title: string, message: string}>({ isOpen: false, title: '', message: '' });
+
   const handleGenerateDetalhamento = () => {
     let detalhamentoContext = content.promptText ? `Motivo/Contexto Base: ${content.promptText}\n\n` : '';
     
@@ -208,7 +211,7 @@ export const DiariaForm: React.FC<DiariaFormProps> = ({
     const textToUse = customPromptText || content.promptText;
 
     if (!textToUse || textToUse.trim().length === 0) {
-      alert("Preencha as informações necessárias antes de utilizar a Inteligência Artificial.");
+      setErrorModal({ isOpen: true, title: "Atenção", message: "Preencha as informações necessárias antes de utilizar a Inteligência Artificial." });
       return;
     }
     
@@ -239,8 +242,16 @@ export const DiariaForm: React.FC<DiariaFormProps> = ({
         body: JSON.stringify(payload)
       });
       
-      if (!res.ok) throw new Error("Erro ao gerar conteúdo.");
-      const data = await res.json();
+      let data;
+      try {
+        data = await res.json();
+      } catch (err) {
+        throw new Error(`Erro na comunicação com o servidor (${res.status}).`);
+      }
+
+      if (!res.ok) {
+        throw new Error(data.error + (data.details ? ` Detalhes: ${data.details}` : ""));
+      }
       
       if (type === 'justificativa') {
         handleUpdate('content', 'descriptionReason', data.text);
@@ -250,9 +261,9 @@ export const DiariaForm: React.FC<DiariaFormProps> = ({
           handleUpdate('content', 'showExtraField', true);
         }
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      alert("Erro ao gerar conteúdo com IA. Tente novamente.");
+      setErrorModal({ isOpen: true, title: "Erro na Geração", message: e.message || "Erro desconhecido ao gerar conteúdo." });
     } finally {
       setIsGeneratingIA(prev => ({ ...prev, [type]: false }));
     }
@@ -1265,6 +1276,17 @@ export const DiariaForm: React.FC<DiariaFormProps> = ({
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={errorModal.isOpen}
+        onClose={() => setErrorModal({ ...errorModal, isOpen: false })}
+        onConfirm={() => setErrorModal({ ...errorModal, isOpen: false })}
+        title={errorModal.title}
+        description={errorModal.message}
+        confirmText="Entendi"
+        cancelText="Fechar"
+        type="warning"
+      />
 
     </div>
   );

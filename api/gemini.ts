@@ -15,6 +15,13 @@ export default async function handler(req: Request) {
   try {
     const { tipo, dados } = await req.json();
     
+    if (!process.env.GEMINI_API_KEY) {
+      return new Response(JSON.stringify({ error: 'Falha de configuração', details: 'A variável de ambiente GEMINI_API_KEY não está configurada no servidor Vercel.' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
     
     let promptText = '';
@@ -84,9 +91,12 @@ export default async function handler(req: Request) {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Erro na chamada ao Gemini:', error);
-    return new Response(JSON.stringify({ error: 'Falha ao processar a requisição no servidor.' }), {
+    return new Response(JSON.stringify({ 
+      error: 'Falha ao processar a requisição no servidor.',
+      details: error?.message || String(error)
+    }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     });
