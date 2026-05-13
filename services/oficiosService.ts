@@ -2,7 +2,7 @@
 import { supabase } from './supabaseClient';
 import { Order } from '../types';
 
-export const getAllOficios = async (lightweight = true, page = 0, limit = 1000, searchTerm = ''): Promise<Order[]> => {
+export const getAllOficios = async (lightweight = true, page = 0, limit = 50, searchTerm = ''): Promise<Order[]> => {
     const columns = lightweight
         ? `id, protocol, title, status, status_history, created_at, user_id, user_name, description,
            requester_sector:document_snapshot->content->>requesterSector`

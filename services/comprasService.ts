@@ -4,7 +4,7 @@ import { notificationService } from './notificationService';
 
 import { handleSupabaseError } from '../utils/errorUtils';
 
-export const getAllPurchaseOrders = async (lightweight = true, page = 0, limit = 1000, searchTerm = '', status?: string, purchaseStatus?: string): Promise<Order[]> => {
+export const getAllPurchaseOrders = async (lightweight = true, page = 0, limit = 50, searchTerm = '', status?: string, purchaseStatus?: string): Promise<Order[]> => {
     // ... select specific columns
     const columns = lightweight
         ? `id, protocol, title, status, purchase_status, status_history, created_at, user_id, user_name, completion_forecast, budget_file_url,

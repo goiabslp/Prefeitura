@@ -20,6 +20,8 @@ export interface LicitacaoProcesso {
     criado_em: string;
     atualizado_em: string;
     fase?: string;
+    resolucao_descricao?: string;
+    resolucao_numero?: string;
     itens?: LicitacaoItem[];
     justificativa?: LicitacaoJustificativa;
     assinatura?: LicitacaoAssinatura;
