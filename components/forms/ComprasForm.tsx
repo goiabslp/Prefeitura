@@ -309,65 +309,81 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
               <User className="w-4 h-4 text-emerald-600" /> Dados do Solicitante
             </h3>
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-              <div className="relative" ref={requesterDropdownRef}>
+              <div>
                 <label className={labelClass}>NOME COMPLETO</label>
                 <div
-                  onClick={() => setIsRequesterOpen(!isRequesterOpen)}
-                  className={`${inputClass} flex items-center justify-between cursor-pointer py-3 ${isRequesterOpen ? 'border-emerald-500 ring-4 ring-emerald-500/5 bg-white' : ''}`}
+                  onClick={() => setIsRequesterOpen(true)}
+                  className={`${inputClass} flex items-center justify-between cursor-pointer py-3 hover:border-emerald-500 transition-colors bg-white`}
                 >
                   <span className={content.requesterName ? 'text-slate-900 font-bold' : 'text-slate-400'}>
                     {content.requesterName || 'Selecione o Solicitante...'}
                   </span>
-                  <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isRequesterOpen ? 'rotate-180' : ''}`} />
+                  <ChevronDown className="w-4 h-4 text-slate-400" />
                 </div>
 
                 {isRequesterOpen && (
-                  <div className={`
-                    absolute z-50 left-0 right-0 bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden
-                    ${dropdownDirection === 'up'
-                      ? 'bottom-full mb-2 animate-slide-up'
-                      : 'mt-2 animate-slide-up'}
-                  `}>
-                    <div className="p-3 border-b border-slate-100 bg-slate-50">
-                      <div className="relative">
-                        <input
-                          type="text"
-                          value={requesterSearch}
-                          onChange={(e) => setRequesterSearch(e.target.value)}
-                          placeholder="Pesquisar pessoa na lista..."
-                          autoFocus
-                          onClick={(e) => e.stopPropagation()}
-                          className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:border-emerald-500 transition-all"
-                        />
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
+                    <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity" onClick={() => setIsRequesterOpen(false)} />
+                    <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200">
+                      <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                        <h3 className="font-black text-slate-800 text-lg flex items-center gap-2">
+                          <User className="w-5 h-5 text-emerald-600" />
+                          Selecionar Solicitante
+                        </h3>
+                        <button
+                          onClick={() => setIsRequesterOpen(false)}
+                          className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-200 text-slate-500 hover:bg-slate-300 hover:text-slate-700 transition-colors"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
                       </div>
-                    </div>
-                    <div className="max-h-60 overflow-y-auto custom-scrollbar p-1">
-                      {filteredRequesters.length > 0 ? (
-                        filteredRequesters.map((person, idx) => (
-                          <button
-                            key={idx}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handlePersonSelect(person.id);
-                            }}
-                            className="w-full flex items-center justify-between px-4 py-2.5 rounded-lg hover:bg-emerald-50 text-left text-sm font-medium text-slate-700 transition-colors group"
-                          >
-                            <div className="flex flex-col">
-                              <span className="group-hover:text-emerald-700">{person.name}</span>
-                              <span className="text-[10px] text-slate-400 font-normal">
-                                {jobs.find(j => j.id === person.jobId)?.name || 'N/A'} • {sectors.find(s => s.id === person.sectorId)?.name || 'N/A'}
-                              </span>
-                            </div>
-                            {content.requesterName === person.name && <Check className="w-4 h-4 text-emerald-600" />}
-                          </button>
-                        ))
-                      ) : (
-                        <div className="p-8 text-center">
-                          <User className="w-8 h-8 text-slate-200 mx-auto mb-2" />
-                          <p className="text-xs text-slate-400 font-medium">Nenhuma pessoa encontrada.</p>
+                      <div className="p-4 border-b border-slate-100 bg-white">
+                        <div className="relative">
+                          <input
+                            type="text"
+                            value={requesterSearch}
+                            onChange={(e) => setRequesterSearch(e.target.value)}
+                            placeholder="Pesquisar pessoa na lista..."
+                            autoFocus
+                            className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10 transition-all"
+                          />
+                          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                         </div>
-                      )}
+                      </div>
+                      <div className="flex-1 overflow-y-auto p-2 custom-scrollbar">
+                        {filteredRequesters.length > 0 ? (
+                          filteredRequesters.map((person, idx) => (
+                            <button
+                              key={idx}
+                              onClick={() => {
+                                handlePersonSelect(person.id);
+                                setIsRequesterOpen(false);
+                              }}
+                              className="w-full flex items-center justify-between px-4 py-3 rounded-xl hover:bg-emerald-50 text-left transition-colors group mb-1"
+                            >
+                              <div className="flex flex-col">
+                                <span className="font-bold text-slate-700 group-hover:text-emerald-700">{person.name}</span>
+                                <span className="text-[11px] text-slate-500 font-medium mt-0.5">
+                                  {jobs.find(j => j.id === person.jobId)?.name || 'N/A'} • {sectors.find(s => s.id === person.sectorId)?.name || 'N/A'}
+                                </span>
+                              </div>
+                              {content.requesterName === person.name && (
+                                <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center">
+                                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                </div>
+                              )}
+                            </button>
+                          ))
+                        ) : (
+                          <div className="p-12 text-center flex flex-col items-center">
+                            <div className="w-16 h-16 rounded-2xl bg-slate-50 flex items-center justify-center mb-4 border border-slate-100">
+                              <User className="w-8 h-8 text-slate-300" />
+                            </div>
+                            <p className="text-sm text-slate-500 font-bold">Nenhuma pessoa encontrada.</p>
+                            <p className="text-xs text-slate-400 mt-1">Tente buscar por outro nome.</p>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )}
@@ -741,61 +757,97 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
               </p>
             </div>
             
-            <div className="bg-white p-6 rounded-2xl border-2 border-slate-200 shadow-sm focus-within:border-emerald-500 focus-within:ring-4 focus-within:ring-emerald-500/20 transition-all text-left">
-              <label className="block text-xs font-black uppercase tracking-wider text-slate-500 mb-2">
-                Ficha Orçamentária
-              </label>
-              <input
-                type="text"
-                value={content.fichaOrcamentaria || ''}
-                onChange={(e) => handleUpdate('content', 'fichaOrcamentaria', e.target.value)}
-                placeholder="Ex: 12345-6"
-                className="w-full text-xl font-bold text-slate-900 placeholder:text-slate-300 border-none p-0 focus:ring-0 bg-transparent outline-none"
-              />
+            <div className="space-y-4">
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleUpdate('content', 'fichaOrcamentaria', content.fichaOrcamentaria === 'N/A' ? '' : 'N/A')}
+                  className={`flex-1 py-2 px-4 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 border-2 ${content.fichaOrcamentaria === 'N/A' ? 'bg-slate-900 border-slate-900 text-white shadow-md' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}
+                >
+                  <Minus className="w-4 h-4" /> Não se Aplica
+                </button>
+              </div>
+
+              <div className={`bg-white p-6 rounded-2xl border-2 shadow-sm transition-all text-left ${content.fichaOrcamentaria === 'N/A' ? 'border-slate-100 opacity-50' : 'border-slate-200 focus-within:border-emerald-500 focus-within:ring-4 focus-within:ring-emerald-500/20'}`}>
+                <label className="block text-xs font-black uppercase tracking-wider text-slate-500 mb-2">
+                  Número da Ficha
+                </label>
+                <input
+                  type="text"
+                  disabled={content.fichaOrcamentaria === 'N/A'}
+                  value={content.fichaOrcamentaria === 'N/A' ? 'N/A' : (content.fichaOrcamentaria || '')}
+                  onChange={(e) => handleUpdate('content', 'fichaOrcamentaria', e.target.value)}
+                  placeholder="Ex: 12345-6"
+                  className="w-full text-xl font-bold text-slate-900 placeholder:text-slate-300 border-none p-0 focus:ring-0 bg-transparent outline-none disabled:bg-transparent"
+                />
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* STEP 6: RESOLUÇÃO */}
+      {/* STEP 6: ORIGEM */}
       {currentStep === 6 && (
         <div className="space-y-8 animate-fade-in pt-6 flex flex-col items-center justify-center min-h-[40vh]">
           <div className="w-full max-w-lg text-center space-y-6">
             <div className="space-y-2">
               <h3 className="text-2xl font-black text-slate-900 tracking-tight flex items-center justify-center gap-3">
-                <FileText className="w-8 h-8 text-indigo-600" /> Resolução
+                <FileText className="w-8 h-8 text-indigo-600" /> Origem
               </h3>
               <p className="text-sm text-slate-500 font-medium">
-                Informe os detalhes da Resolução.
+                Selecione a origem e informe o número correspondente.
               </p>
             </div>
             
             <div className="space-y-4">
-              <div className="bg-white p-6 rounded-2xl border-2 border-slate-200 shadow-sm focus-within:border-indigo-500 focus-within:ring-4 focus-within:ring-indigo-500/20 transition-all text-left">
-                <label className="block text-xs font-black uppercase tracking-wider text-slate-500 mb-2">
-                  Descrição (Texto)
-                </label>
-                <input
-                  type="text"
-                  value={content.resolucaoDescricao || ''}
-                  onChange={(e) => handleUpdate('content', 'resolucaoDescricao', e.target.value)}
-                  placeholder="Descrição da resolução"
-                  className="w-full text-lg font-bold text-slate-900 placeholder:text-slate-300 border-none p-0 focus:ring-0 bg-transparent outline-none"
-                />
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleUpdate('content', 'resolucaoDescricao', 'Emenda');
+                    if (content.resolucaoDescricao === 'N/A') handleUpdate('content', 'resolucaoNumero', '');
+                  }}
+                  className={`py-3 px-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-1.5 border-2 ${content.resolucaoDescricao === 'Emenda' ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}
+                >
+                  <FileText className="w-4 h-4" /> Emenda
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleUpdate('content', 'resolucaoDescricao', 'Resolução');
+                    if (content.resolucaoDescricao === 'N/A') handleUpdate('content', 'resolucaoNumero', '');
+                  }}
+                  className={`py-3 px-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-1.5 border-2 ${content.resolucaoDescricao === 'Resolução' ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}
+                >
+                  <FileText className="w-4 h-4" /> Resolução
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleUpdate('content', 'resolucaoDescricao', 'N/A');
+                    handleUpdate('content', 'resolucaoNumero', '');
+                  }}
+                  className={`py-3 px-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-1.5 border-2 ${content.resolucaoDescricao === 'N/A' ? 'bg-slate-900 border-slate-900 text-white shadow-md' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}
+                >
+                  <Minus className="w-4 h-4" /> N/A
+                </button>
               </div>
 
-              <div className="bg-white p-6 rounded-2xl border-2 border-slate-200 shadow-sm focus-within:border-indigo-500 focus-within:ring-4 focus-within:ring-indigo-500/20 transition-all text-left">
-                <label className="block text-xs font-black uppercase tracking-wider text-slate-500 mb-2">
-                  Número (Numérico)
-                </label>
-                <input
-                  type="number"
-                  value={content.resolucaoNumero || ''}
-                  onChange={(e) => handleUpdate('content', 'resolucaoNumero', e.target.value)}
-                  placeholder="Número da resolução"
-                  className="w-full text-xl font-bold text-slate-900 placeholder:text-slate-300 border-none p-0 focus:ring-0 bg-transparent outline-none"
-                />
-              </div>
+              {content.resolucaoDescricao && content.resolucaoDescricao !== 'N/A' && (
+                <div className="bg-white p-6 rounded-2xl border-2 border-slate-200 shadow-sm focus-within:border-indigo-500 focus-within:ring-4 focus-within:ring-indigo-500/20 transition-all text-left animate-in fade-in slide-in-from-top-4">
+                  <label className="block text-xs font-black uppercase tracking-wider text-slate-500 mb-2">
+                    Número da {content.resolucaoDescricao}
+                  </label>
+                  <input
+                    type="number"
+                    value={content.resolucaoNumero || ''}
+                    onChange={(e) => handleUpdate('content', 'resolucaoNumero', e.target.value)}
+                    placeholder={`Número da ${content.resolucaoDescricao}`}
+                    className="w-full text-xl font-bold text-slate-900 placeholder:text-slate-300 border-none p-0 focus:ring-0 bg-transparent outline-none"
+                    autoFocus
+                  />
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -236,7 +236,7 @@ const App: React.FC = () => {
       if (updatedOrder) {
         // Only update if there are changes (like new documentos) to avoid infinite loops if references change
         if (JSON.stringify(updatedOrder.documentos) !== JSON.stringify(viewingOrder.documentos)) {
-           setViewingOrder(updatedOrder);
+          setViewingOrder(updatedOrder);
         }
       }
     }
@@ -358,12 +358,12 @@ const App: React.FC = () => {
     if (systemUpdateCountdown !== null && systemUpdateCountdown > 0) {
       const translateCommit = async () => {
         const rawMsg = typeof __LATEST_COMMIT__ !== 'undefined' ? __LATEST_COMMIT__ : 'Atualizações de estabilidade e melhorias gerais.';
-        
+
         const match = rawMsg.match(/^(feat|fix|chore|refactor|docs|style|perf)(?:\([^)]+\))?:\s*(.*)/i);
-        
+
         let prefixText = '';
         let textToTranslate = rawMsg;
-        
+
         if (match) {
           const type = match[1].toLowerCase();
           const prefixes: Record<string, string> = {
@@ -378,7 +378,7 @@ const App: React.FC = () => {
           prefixText = prefixes[type] || '📦 Atualização:';
           textToTranslate = match[2];
         }
-        
+
         try {
           const res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=pt&dt=t&q=${encodeURI(textToTranslate)}`);
           const data = await res.json();
@@ -392,7 +392,7 @@ const App: React.FC = () => {
           setTranslatedCommitMsg(formatted);
         }
       };
-      
+
       translateCommit();
     }
   }, [systemUpdateCountdown]);
@@ -1117,7 +1117,7 @@ const App: React.FC = () => {
         // Atualização debaixo dos panos: limpa cache e atualiza a flag silenciosamente
         localStorage.clear();
         sessionStorage.clear();
-        
+
         localStorage.setItem(WINDOW_KEY, currentWindow);
         if (needsForcedUpdate && systemUpdateTarget) {
           localStorage.setItem(FORCED_WINDOW_KEY, systemUpdateTarget.toString());
@@ -1141,7 +1141,7 @@ const App: React.FC = () => {
 
         // Forçar desconexão
         signOut();
-        
+
         setTimeout(() => {
           window.location.reload();
         }, 1000);
@@ -1802,10 +1802,10 @@ const App: React.FC = () => {
     setIsDeleting(id);
 
     // Resolve target block since global activeBlock might be null
-    const targetOrder = orders.find(o => o.id === id) || 
-                        mappedLicitacaoOrders.find(o => o.id === id) || 
-                        serviceRequests.find(o => o.id === id) || 
-                        oficios.find(o => o.id === id);
+    const targetOrder = orders.find(o => o.id === id) ||
+      mappedLicitacaoOrders.find(o => o.id === id) ||
+      serviceRequests.find(o => o.id === id) ||
+      oficios.find(o => o.id === id);
     const resolvedBlockType = targetOrder?.blockType || activeBlock || 'oficio';
 
     // 1. Snapshot previous state for rollback

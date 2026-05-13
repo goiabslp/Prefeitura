@@ -7,12 +7,7 @@ import { handleSupabaseError } from '../utils/errorUtils';
 export const getAllPurchaseOrders = async (lightweight = true, page = 0, limit = 50, searchTerm = '', status?: string, purchaseStatus?: string): Promise<Order[]> => {
     // ... select specific columns
     const columns = lightweight
-        ? `id, protocol, title, status, purchase_status, status_history, created_at, user_id, user_name, completion_forecast, budget_file_url,
-           requester_name:document_snapshot->content->>requesterName,
-           requester_sector:document_snapshot->content->>requesterSector,
-           priority:document_snapshot->content->>priority,
-           selected_account:document_snapshot->content->>selectedAccount,
-           profiles:user_id(sector)`
+        ? `id, protocol, title, status, purchase_status, status_history, created_at, user_id, user_name, completion_forecast, budget_file_url, document_snapshot, profiles:user_id(sector)`
         : '*, profiles:user_id(sector)';
 
     let query = supabase
@@ -113,10 +108,10 @@ export const getAllPurchaseOrders = async (lightweight = true, page = 0, limit =
             },
             content: {
                 title: item.title,
-                requesterName: item.requester_name,
-                requesterSector: item.requester_sector || item.profiles?.sector,
-                priority: item.priority,
-                selectedAccount: item.selected_account
+                requesterName: item.document_snapshot?.content?.requesterName,
+                requesterSector: item.document_snapshot?.content?.requesterSector || item.profiles?.sector,
+                priority: item.document_snapshot?.content?.priority,
+                selectedAccount: item.document_snapshot?.content?.selectedAccount
             }
         } as any : item.document_snapshot,
         budgetFileUrl: item.budget_file_url,
@@ -394,7 +389,7 @@ export const updatePurchaseStatus = async (id: string, status: string, historyEn
                     if (invItem) {
                         const currentQty = invItem.quantity || 0;
                         const currentRes = invItem.reserved_quantity || 0;
-                        
+
                         const newQty = Math.max(0, currentQty - item.quantity);
                         const newRes = Math.max(0, currentRes - item.quantity);
 

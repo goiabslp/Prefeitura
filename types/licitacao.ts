@@ -22,6 +22,7 @@ export interface LicitacaoProcesso {
     fase?: string;
     resolucao_descricao?: string;
     resolucao_numero?: string;
+    ficha_orcamentaria?: string;
     itens?: LicitacaoItem[];
     justificativa?: LicitacaoJustificativa;
     assinatura?: LicitacaoAssinatura;

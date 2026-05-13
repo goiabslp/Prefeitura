@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Check, ChevronRight, Gavel, Plus, Trash2, FileText, FileSignature, AlertCircle, Save, Loader2, CheckCircle2, ShoppingCart, Minus, ChevronDown, FolderOpen, Download } from 'lucide-react';
+import { ArrowLeft, Check, ChevronRight, Gavel, Plus, Trash2, FileText, FileSignature, AlertCircle, Save, Loader2, CheckCircle2, ShoppingCart, Minus, ChevronDown, FolderOpen, Download, CreditCard } from 'lucide-react';
 import { User } from '../../types';
 import { useCreateLicitacaoProcessCompleto, useDeleteLicitacaoDocument } from '../../hooks/useLicitacaoModule';
 import { TwoFactorModal } from '../TwoFactorModal';
@@ -50,9 +50,12 @@ export const LicitacaoWizard: React.FC<LicitacaoWizardProps> = ({ currentUser, o
     // Justificativa State
     const [justificativa, setJustificativa] = useState('');
 
-    // Resolução State
+    // Resolução / Origem State
     const [resolucaoDescricao, setResolucaoDescricao] = useState('');
     const [resolucaoNumero, setResolucaoNumero] = useState('');
+
+    // Ficha State
+    const [fichaOrcamentaria, setFichaOrcamentaria] = useState('');
 
     useEffect(() => {
         if (initialData) {
@@ -81,6 +84,7 @@ export const LicitacaoWizard: React.FC<LicitacaoWizardProps> = ({ currentUser, o
 
             setResolucaoDescricao(initialData.documentSnapshot?.content?.resolucaoDescricao || initialData.resolucao_descricao || '');
             setResolucaoNumero(initialData.documentSnapshot?.content?.resolucaoNumero || initialData.resolucao_numero || '');
+            setFichaOrcamentaria(initialData.documentSnapshot?.content?.fichaOrcamentaria || initialData.ficha_orcamentaria || '');
         }
     }, [initialData]);
 
@@ -94,7 +98,8 @@ export const LicitacaoWizard: React.FC<LicitacaoWizardProps> = ({ currentUser, o
         { id: 'detalhes', title: 'DETALHES', icon: FileText },
         { id: 'itens', title: 'ITENS', icon: Plus }, 
         { id: 'justificativa', title: 'JUSTIFICATIVA', icon: AlertCircle }, 
-        { id: 'resolucao', title: 'RESOLUÇÃO', icon: FileText },
+        { id: 'origem', title: 'ORIGEM', icon: FileText },
+        { id: 'ficha', title: 'FICHA', icon: CreditCard },
         { id: 'assinar', title: 'ASSINAR', icon: FileSignature },
     ];
 
@@ -141,7 +146,8 @@ export const LicitacaoWizard: React.FC<LicitacaoWizardProps> = ({ currentUser, o
         if (currentStep === 0) return finalidade.trim().length > 0;
         if (currentStep === 1) return itens.length > 0 && itens.every(i => i.descricao.trim().length > 0);
         if (currentStep === 2) return justificativa.trim().length > 0;
-        if (currentStep === 3) return resolucaoDescricao.trim().length > 0 && resolucaoNumero.toString().trim().length > 0;
+        if (currentStep === 3) return resolucaoDescricao.trim().length > 0 && (resolucaoDescricao === 'N/A' || resolucaoNumero.toString().trim().length > 0);
+        if (currentStep === 4) return fichaOrcamentaria.trim().length > 0;
         return true;
     };
 
@@ -149,8 +155,9 @@ export const LicitacaoWizard: React.FC<LicitacaoWizardProps> = ({ currentUser, o
         if (index === 0) return finalidade.trim().length > 0;
         if (index === 1) return itens.length > 0 && itens.every(i => i.descricao.trim().length > 0);
         if (index === 2) return justificativa.trim().length > 0;
-        if (index === 3) return resolucaoDescricao.trim().length > 0 && resolucaoNumero.toString().trim().length > 0;
-        if (index === 4) return isAllValid();
+        if (index === 3) return resolucaoDescricao.trim().length > 0 && (resolucaoDescricao === 'N/A' || resolucaoNumero.toString().trim().length > 0);
+        if (index === 4) return fichaOrcamentaria.trim().length > 0;
+        if (index === 5) return isAllValid();
         return true;
     };
 
@@ -159,8 +166,9 @@ export const LicitacaoWizard: React.FC<LicitacaoWizardProps> = ({ currentUser, o
         if (index === 1) return itens.length > 0 || newItem.descricao.length > 0;
         if (index === 2) return justificativa.length > 0;
         if (index === 3) return resolucaoDescricao.length > 0 || resolucaoNumero.toString().length > 0;
-        if (index === 4) return false;
+        if (index === 4) return fichaOrcamentaria.length > 0;
         if (index === 5) return false;
+        if (index === 6) return false;
         return false;
     };
 
@@ -168,7 +176,8 @@ export const LicitacaoWizard: React.FC<LicitacaoWizardProps> = ({ currentUser, o
         return finalidade.trim().length > 0 && 
                (itens.length > 0 && itens.every(i => i.descricao.trim().length > 0)) && 
                justificativa.trim().length > 0 &&
-               resolucaoDescricao.trim().length > 0 && resolucaoNumero.toString().trim().length > 0;
+               resolucaoDescricao.trim().length > 0 && (resolucaoDescricao === 'N/A' || resolucaoNumero.toString().trim().length > 0) &&
+               fichaOrcamentaria.trim().length > 0;
     };
 
     const handleSignAndSubmit = () => {
@@ -191,6 +200,9 @@ export const LicitacaoWizard: React.FC<LicitacaoWizardProps> = ({ currentUser, o
                     solicitante_setor: currentUser.sector || 'Geral',
                     finalidade,
                     prioridade,
+                    resolucao_descricao: resolucaoDescricao,
+                    resolucao_numero: resolucaoNumero,
+                    ficha_orcamentaria: fichaOrcamentaria,
                 },
                 itens: itens.map(({ descricao, quantidade, unidade }) => ({
                     descricao, quantidade, observacoes: unidade
@@ -198,8 +210,6 @@ export const LicitacaoWizard: React.FC<LicitacaoWizardProps> = ({ currentUser, o
                 justificativa: {
                     texto: justificativa
                 },
-                resolucao_descricao: resolucaoDescricao,
-                resolucao_numero: resolucaoNumero,
                 assinatura: {
                     usuario_id: currentUser.id!,
                     hash_assinatura: '2FA_VERIFIED',
@@ -564,45 +574,109 @@ export const LicitacaoWizard: React.FC<LicitacaoWizardProps> = ({ currentUser, o
                         </div>
                     )}
 
-                    {/* Step 4: Resolução */}
+                    {/* Step 4: Origem */}
                     {currentStep === 3 && (
                         <div className="space-y-8 animate-fade-in pt-6 flex flex-col items-center justify-center min-h-[40vh]">
                             <div className="w-full max-w-lg text-center space-y-6">
                                 <div className="space-y-2">
                                     <h3 className="text-2xl font-black text-slate-900 tracking-tight flex items-center justify-center gap-3">
-                                        <FileText className="w-8 h-8 text-indigo-600" /> Resolução
+                                        <FileText className="w-8 h-8 text-indigo-600" /> Origem
                                     </h3>
                                     <p className="text-sm text-slate-500 font-medium">
-                                        Informe os detalhes da Resolução.
+                                        Selecione a origem e informe o número correspondente.
                                     </p>
                                 </div>
                                 
                                 <div className="space-y-4">
-                                    <div className="bg-white p-6 rounded-2xl border-2 border-slate-200 shadow-sm focus-within:border-indigo-500 focus-within:ring-4 focus-within:ring-indigo-500/20 transition-all text-left">
+                                    <div className="grid grid-cols-3 gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setResolucaoDescricao('Emenda');
+                                                if (resolucaoDescricao === 'N/A') setResolucaoNumero('');
+                                            }}
+                                            className={`py-3 px-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-1.5 border-2 ${resolucaoDescricao === 'Emenda' ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}
+                                        >
+                                            <FileText className="w-4 h-4" /> Emenda
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setResolucaoDescricao('Resolução');
+                                                if (resolucaoDescricao === 'N/A') setResolucaoNumero('');
+                                            }}
+                                            className={`py-3 px-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-1.5 border-2 ${resolucaoDescricao === 'Resolução' ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}
+                                        >
+                                            <FileText className="w-4 h-4" /> Resolução
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setResolucaoDescricao('N/A');
+                                                setResolucaoNumero('');
+                                            }}
+                                            className={`py-3 px-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-1.5 border-2 ${resolucaoDescricao === 'N/A' ? 'bg-slate-900 border-slate-900 text-white shadow-md' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}
+                                        >
+                                            <Minus className="w-4 h-4" /> N/A
+                                        </button>
+                                    </div>
+
+                                    {resolucaoDescricao && resolucaoDescricao !== 'N/A' && (
+                                        <div className="bg-white p-6 rounded-2xl border-2 border-slate-200 shadow-sm focus-within:border-indigo-500 focus-within:ring-4 focus-within:ring-indigo-500/20 transition-all text-left animate-in fade-in slide-in-from-top-4">
+                                            <label className="block text-xs font-black uppercase tracking-wider text-slate-500 mb-2">
+                                                Número da {resolucaoDescricao}
+                                            </label>
+                                            <input
+                                                type="number"
+                                                value={resolucaoNumero}
+                                                disabled={readOnly}
+                                                onChange={(e) => setResolucaoNumero(e.target.value)}
+                                                placeholder={`Número da ${resolucaoDescricao}`}
+                                                className="w-full text-xl font-bold text-slate-900 placeholder:text-slate-300 border-none p-0 focus:ring-0 bg-transparent outline-none"
+                                                autoFocus
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Step 5: Ficha */}
+                    {currentStep === 4 && (
+                        <div className="space-y-8 animate-fade-in pt-6 flex flex-col items-center justify-center min-h-[40vh]">
+                            <div className="w-full max-w-md text-center space-y-6">
+                                <div className="space-y-2">
+                                    <h3 className="text-2xl font-black text-slate-900 tracking-tight flex items-center justify-center gap-3">
+                                        <CreditCard className="w-8 h-8 text-emerald-600" /> Ficha Orçamentária
+                                    </h3>
+                                    <p className="text-sm text-slate-500 font-medium">
+                                        Informe a Ficha Orçamentária para a destinação do recurso.
+                                    </p>
+                                </div>
+                                
+                                <div className="space-y-4">
+                                    <div className="flex gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setFichaOrcamentaria(fichaOrcamentaria === 'N/A' ? '' : 'N/A')}
+                                            className={`flex-1 py-2 px-4 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 border-2 ${fichaOrcamentaria === 'N/A' ? 'bg-slate-900 border-slate-900 text-white shadow-md' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}
+                                        >
+                                            <Minus className="w-4 h-4" /> Não se Aplica
+                                        </button>
+                                    </div>
+
+                                    <div className={`bg-white p-6 rounded-2xl border-2 shadow-sm transition-all text-left ${fichaOrcamentaria === 'N/A' ? 'border-slate-100 opacity-50' : 'border-slate-200 focus-within:border-emerald-500 focus-within:ring-4 focus-within:ring-emerald-500/20'}`}>
                                         <label className="block text-xs font-black uppercase tracking-wider text-slate-500 mb-2">
-                                            Descrição (Texto)
+                                            Número da Ficha
                                         </label>
                                         <input
                                             type="text"
-                                            value={resolucaoDescricao}
-                                            disabled={readOnly}
-                                            onChange={(e) => setResolucaoDescricao(e.target.value)}
-                                            placeholder="Descrição da resolução"
-                                            className="w-full text-lg font-bold text-slate-900 placeholder:text-slate-300 border-none p-0 focus:ring-0 bg-transparent outline-none"
-                                        />
-                                    </div>
-
-                                    <div className="bg-white p-6 rounded-2xl border-2 border-slate-200 shadow-sm focus-within:border-indigo-500 focus-within:ring-4 focus-within:ring-indigo-500/20 transition-all text-left">
-                                        <label className="block text-xs font-black uppercase tracking-wider text-slate-500 mb-2">
-                                            Número (Numérico)
-                                        </label>
-                                        <input
-                                            type="number"
-                                            value={resolucaoNumero}
-                                            disabled={readOnly}
-                                            onChange={(e) => setResolucaoNumero(e.target.value)}
-                                            placeholder="Número da resolução"
-                                            className="w-full text-xl font-bold text-slate-900 placeholder:text-slate-300 border-none p-0 focus:ring-0 bg-transparent outline-none"
+                                            disabled={fichaOrcamentaria === 'N/A' || readOnly}
+                                            value={fichaOrcamentaria === 'N/A' ? 'N/A' : (fichaOrcamentaria || '')}
+                                            onChange={(e) => setFichaOrcamentaria(e.target.value)}
+                                            placeholder="Ex: 12345-6"
+                                            className="w-full text-xl font-bold text-slate-900 placeholder:text-slate-300 border-none p-0 focus:ring-0 bg-transparent outline-none disabled:bg-transparent"
                                         />
                                     </div>
                                 </div>
@@ -610,8 +684,8 @@ export const LicitacaoWizard: React.FC<LicitacaoWizardProps> = ({ currentUser, o
                         </div>
                     )}
 
-                    {/* Step 5: Assinar */}
-                    {currentStep === 4 && (
+                    {/* Step 6: Assinar */}
+                    {currentStep === 5 && (
                         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 bg-white rounded-2xl shadow-sm border border-slate-100 p-8 text-center max-w-2xl mx-auto">
                             <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-inner border border-blue-100">
                                 <FileSignature className="w-8 h-8" />
@@ -632,6 +706,10 @@ export const LicitacaoWizard: React.FC<LicitacaoWizardProps> = ({ currentUser, o
                                     <span className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Prioridade</span>
                                     <span className={`font-bold px-2.5 py-0.5 rounded-full text-[10px] uppercase tracking-wider ${prioridade === 'Urgente' ? 'bg-red-100 text-red-600' : 'bg-slate-200 text-slate-700'}`}>{prioridade}</span>
                                 </div>
+                                <div className="flex justify-between items-center border-b border-slate-200 pb-2">
+                                    <span className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Ficha Orçamentária</span>
+                                    <span className="text-slate-800 font-medium text-sm">{fichaOrcamentaria || '-'}</span>
+                                </div>
                                 <div className="flex justify-between items-center">
                                     <span className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Total de Itens</span>
                                     <span className="text-slate-800 font-medium text-sm">{itens.length} registrados</span>
@@ -651,8 +729,8 @@ export const LicitacaoWizard: React.FC<LicitacaoWizardProps> = ({ currentUser, o
                         </div>
                     )}
 
-                    {/* Step 6: Processo (Apenas ReadOnly) */}
-                    {readOnly && currentStep === 5 && (
+                    {/* Step 7: Processo (Apenas ReadOnly) */}
+                    {readOnly && currentStep === 6 && (
                         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
                             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                                 <div>

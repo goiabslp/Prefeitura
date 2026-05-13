@@ -2,8 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { DiariasStepper, StepStatus } from './DiariasStepper';
 import { AppState, ContentData, Signature, Person, Sector, Job, BlockType, User } from '../../types';
 import { DiariaForm } from '../forms/DiariaForm';
-import { ChevronRight, ArrowLeft, CheckCircle2, Loader2 } from 'lucide-react';
-
+import { ChevronRight, ArrowLeft, CheckCircle2, Loader2, Eye, X } from 'lucide-react';
+import { DiariasPreview } from '../DiariasPreview';
 interface DiariasStepWizardProps {
     state: AppState;
     content: ContentData;
@@ -24,6 +24,7 @@ export const DiariasStepWizard: React.FC<DiariasStepWizardProps> = ({
     state, content, allowedSignatures, handleUpdate, onUpdate, persons, sectors, jobs, activeBlock, onFinish, onBack, isLoading = false, currentUser
 }) => {
     const [currentStep, setCurrentStep] = useState(1);
+    const [showPreview, setShowPreview] = useState(false);
 
     // --- Status Calculation Logic ---
     const stepsStatus = useMemo(() => {
@@ -137,7 +138,15 @@ export const DiariasStepWizard: React.FC<DiariasStepWizardProps> = ({
                 </div>
 
                 {/* 3. Botão de Ação */}
-                <div className="min-w-[140px] flex justify-end">
+                <div className="flex items-center justify-end gap-3">
+                    <button
+                        onClick={() => setShowPreview(true)}
+                        className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 font-bold rounded-xl hover:bg-slate-50 shadow-sm active:scale-95 transition-all text-sm"
+                        title="Visualizar Documento"
+                    >
+                        <Eye className="w-4 h-4" />
+                        <span className="hidden sm:inline">Visualizar</span>
+                    </button>
                     {/* Hide Button in Step 5 - Form might handle it, or we leave it here. Let's do like Compras */}
                     {currentStep !== 5 && (
                         !isAllMandatoryCompleted ? (
@@ -183,6 +192,30 @@ export const DiariasStepWizard: React.FC<DiariasStepWizardProps> = ({
                      />
                  </div>
             </div>
+            {/* Modal Preview */}
+            {showPreview && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+                    <div className="bg-white rounded-2xl w-full max-w-5xl h-[90vh] flex flex-col shadow-2xl overflow-hidden relative">
+                        <div className="flex items-center justify-between p-4 border-b border-slate-100">
+                            <h2 className="font-bold text-slate-800 flex items-center gap-2">
+                                <Eye className="w-5 h-5 text-indigo-500" />
+                                Visualização do Documento
+                            </h2>
+                            <button
+                                onClick={() => setShowPreview(false)}
+                                className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-500"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto bg-slate-100 p-8 custom-scrollbar">
+                            <div className="max-w-[800px] mx-auto min-h-full">
+                                <DiariasPreview state={{ ...state, content }} isGenerating={false} />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

@@ -37,7 +37,7 @@ export const ComprasStepWizard: React.FC<ComprasStepWizardProps> = ({
         const s3Valid = !!(content.body && content.body.length > 0);
         const s4Valid = true; // Optional (Anexos)
         const s5Valid = !!(content.fichaOrcamentaria); // Ficha Orçamentária
-        const s6Valid = !!(content.resolucaoDescricao && content.resolucaoNumero); // Resolução
+        const s6Valid = !!(content.resolucaoDescricao && (content.resolucaoDescricao === 'N/A' || content.resolucaoNumero)); // Origem
         const s7Valid = !!(content.signatureName); // Assinar
 
         // Helper to check "started" (partial) - simple check if ANY field is filled
@@ -73,7 +73,7 @@ export const ComprasStepWizard: React.FC<ComprasStepWizardProps> = ({
             content.purchaseItems && content.purchaseItems.length > 0 && // Step 2
             content.body && // Step 3
             content.fichaOrcamentaria && // Step 5
-            content.resolucaoDescricao && content.resolucaoNumero && // Step 6
+            content.resolucaoDescricao && (content.resolucaoDescricao === 'N/A' || content.resolucaoNumero) && // Step 6
             content.signatureName // Step 7
         );
     }, [content]);
@@ -84,8 +84,8 @@ export const ComprasStepWizard: React.FC<ComprasStepWizardProps> = ({
             alert('A Ficha Orçamentária é obrigatória.');
             return;
         }
-        if (currentStep === 6 && (!content.resolucaoDescricao || !content.resolucaoNumero)) {
-            alert('A Resolução (Descrição e Número) é obrigatória.');
+        if (currentStep === 6 && (!content.resolucaoDescricao || (content.resolucaoDescricao !== 'N/A' && !content.resolucaoNumero))) {
+            alert('A Origem (Tipo e Número) é obrigatória.');
             return;
         }
 
