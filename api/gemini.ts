@@ -1,5 +1,9 @@
 import { GoogleGenAI, Type } from '@google/genai';
 
+export const config = {
+  runtime: 'edge', // Using Edge runtime for fast, scalable execution on Vercel
+};
+
 export default async function handler(req: Request) {
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {

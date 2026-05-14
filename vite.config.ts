@@ -29,6 +29,11 @@ function geminiDevPlugin() {
             const data = JSON.parse(body);
             const { tipo, dados } = data;
             const env = loadEnv('', process.cwd(), '');
+            if (!env.GEMINI_API_KEY) {
+              res.statusCode = 500;
+              res.end(JSON.stringify({ error: 'GEMINI_API_KEY não configurada no ambiente local (.env).' }));
+              return;
+            }
             const ai = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
             
             let promptText = '';
