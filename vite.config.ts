@@ -111,7 +111,7 @@ function geminiDevPlugin() {
             let response;
             if (tipo === 'documento') {
               response = await ai.models.generateContent({
-                model: 'gemini-3-flash-preview',
+                model: 'gemini-2.5-flash',
                 contents: promptText,
                 config: {
                   responseMimeType: 'application/json',
