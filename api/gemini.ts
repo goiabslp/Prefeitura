@@ -118,8 +118,36 @@ export default async function handler(req: Request) {
     }
 
     let response;
+    
+    // Helper function for automatic retry on 503 (High Demand) or 429 (Rate Limit)
+    const generateWithRetry = async (config: any, maxRetries = 3) => {
+      let lastError;
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          return await ai.models.generateContent(config);
+        } catch (error: any) {
+          lastError = error;
+          const status = error?.status || error?.response?.status;
+          const message = error?.message || String(error);
+          
+          // Retry on 503 Service Unavailable or 429 Too Many Requests
+          if (status === 503 || status === 429 || message.includes('503') || message.includes('demand')) {
+            console.warn(`[Gemini API] High demand/Rate limit (Attempt ${attempt}/${maxRetries}). Retrying in ${attempt * 2}s...`);
+            if (attempt < maxRetries) {
+              // Exponential backoff: 2s, 4s
+              await new Promise(resolve => setTimeout(resolve, attempt * 2000));
+              continue;
+            }
+          }
+          // If not 503/429 or max retries reached, throw the error
+          throw lastError;
+        }
+      }
+      throw lastError;
+    };
+
     if (tipo === 'documento') {
-      response = await ai.models.generateContent({
+      response = await generateWithRetry({
         model: 'gemini-2.5-flash',
         contents: promptText,
         config: {
@@ -141,7 +169,7 @@ export default async function handler(req: Request) {
         }
       });
     } else {
-      response = await ai.models.generateContent({
+      response = await generateWithRetry({
         model: 'gemini-2.5-flash',
         contents: promptText,
       });
