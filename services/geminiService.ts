@@ -21,7 +21,7 @@ export const generateDocumentContent = async (
     
     if (!res.ok) {
       const errorData = await res.json().catch(() => ({}));
-      throw new Error(errorData.error || \`Erro na comunicação com o servidor (\${res.status}).\`);
+      throw new Error(errorData.error || `Erro na comunicação com o servidor (${res.status}).`);
     }
 
     const data = await res.json();
