@@ -252,6 +252,50 @@ export const DiariaForm: React.FC<DiariaFormProps> = ({
         }
       };
       
+      const fetchWithRetry = async (payloadData: any, retries = 3) => {
+        let lastError: any;
+        for (let attempt = 1; attempt <= retries; attempt++) {
+          try {
+            const res = await fetch('/api/gemini', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payloadData)
+            });
+            
+            let data;
+            try {
+              data = await res.json();
+            } catch (err) {
+              if ((res.status === 503 || res.status === 504) && attempt < retries) {
+                await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
+                continue;
+              }
+              throw new Error(`Erro na comunicação com o servidor (${res.status}).`);
+            }
+
+            if (!res.ok) {
+              const errorMessage = data.error + (data.details ? ` Detalhes: ${data.details}` : "");
+              if ((res.status === 503 || res.status === 504 || errorMessage.includes('503') || errorMessage.includes('demand')) && attempt < retries) {
+                await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
+                continue;
+              }
+              throw new Error(errorMessage);
+            }
+            
+            return data;
+          } catch (err: any) {
+            lastError = err;
+            if ((err.message?.includes('503') || err.message?.includes('504')) && attempt < retries) {
+              await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
+              continue;
+            } else if (attempt === retries) {
+              throw err;
+            }
+          }
+        }
+        throw lastError;
+      };
+
       if (type === 'detalhamento') {
         handleUpdate('content', 'extraFieldText', 'Iniciando geração por etapas para evitar instabilidade...\n');
         if (!content.showExtraField) {
@@ -274,44 +318,16 @@ export const DiariaForm: React.FC<DiariaFormProps> = ({
             dados: { ...payload.dados, etapa: etapa.id }
           };
           
-          const res = await fetch('/api/gemini', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payloadEtapa)
-          });
-          
-          let data;
           try {
-            data = await res.json();
-          } catch (err) {
-            throw new Error(`Erro na etapa ${etapa.label} (${res.status}).`);
+            const data = await fetchWithRetry(payloadEtapa);
+            textoCompleto += (textoCompleto ? '\n\n' : '') + data.text.trim();
+            handleUpdate('content', 'extraFieldText', textoCompleto);
+          } catch (err: any) {
+            throw new Error(`Erro na etapa ${etapa.label}: ${err.message}`);
           }
-
-          if (!res.ok) {
-            throw new Error(data.error + (data.details ? ` Detalhes: ${data.details}` : ""));
-          }
-          
-          textoCompleto += (textoCompleto ? '\n\n' : '') + data.text.trim();
-          handleUpdate('content', 'extraFieldText', textoCompleto);
         }
       } else {
-        const res = await fetch('/api/gemini', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        
-        let data;
-        try {
-          data = await res.json();
-        } catch (err) {
-          throw new Error(`Erro na comunicação com o servidor (${res.status}).`);
-        }
-
-        if (!res.ok) {
-          throw new Error(data.error + (data.details ? ` Detalhes: ${data.details}` : ""));
-        }
-        
+        const data = await fetchWithRetry(payload);
         handleUpdate('content', 'descriptionReason', data.text);
       }
     } catch (e: any) {
