@@ -252,30 +252,67 @@ export const DiariaForm: React.FC<DiariaFormProps> = ({
         }
       };
       
-      const res = await fetch('/api/gemini', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      
-      let data;
-      try {
-        data = await res.json();
-      } catch (err) {
-        throw new Error(`Erro na comunicação com o servidor (${res.status}).`);
-      }
-
-      if (!res.ok) {
-        throw new Error(data.error + (data.details ? ` Detalhes: ${data.details}` : ""));
-      }
-      
-      if (type === 'justificativa') {
-        handleUpdate('content', 'descriptionReason', data.text);
-      } else {
-        handleUpdate('content', 'extraFieldText', data.text);
+      if (type === 'detalhamento') {
+        handleUpdate('content', 'extraFieldText', 'Iniciando geração por etapas para evitar instabilidade...\n');
         if (!content.showExtraField) {
           handleUpdate('content', 'showExtraField', true);
         }
+        
+        const etapas = [
+          { id: 'introducao', label: 'Introdução' },
+          { id: 'desenvolvimento', label: 'Desenvolvimento' },
+          { id: 'conclusao', label: 'Conclusão' }
+        ];
+        
+        let textoCompleto = '';
+        
+        for (const etapa of etapas) {
+          handleUpdate('content', 'extraFieldText', textoCompleto + `\n\n[⏳ Gerando ${etapa.label}...]`);
+          
+          const payloadEtapa = {
+            ...payload,
+            dados: { ...payload.dados, etapa: etapa.id }
+          };
+          
+          const res = await fetch('/api/gemini', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payloadEtapa)
+          });
+          
+          let data;
+          try {
+            data = await res.json();
+          } catch (err) {
+            throw new Error(`Erro na etapa ${etapa.label} (${res.status}).`);
+          }
+
+          if (!res.ok) {
+            throw new Error(data.error + (data.details ? ` Detalhes: ${data.details}` : ""));
+          }
+          
+          textoCompleto += (textoCompleto ? '\n\n' : '') + data.text.trim();
+          handleUpdate('content', 'extraFieldText', textoCompleto);
+        }
+      } else {
+        const res = await fetch('/api/gemini', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        
+        let data;
+        try {
+          data = await res.json();
+        } catch (err) {
+          throw new Error(`Erro na comunicação com o servidor (${res.status}).`);
+        }
+
+        if (!res.ok) {
+          throw new Error(data.error + (data.details ? ` Detalhes: ${data.details}` : ""));
+        }
+        
+        handleUpdate('content', 'descriptionReason', data.text);
       }
     } catch (e: any) {
       console.error(e);

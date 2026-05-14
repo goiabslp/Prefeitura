@@ -14,7 +14,7 @@ export default async function handler(req: Request) {
 
   try {
     const { tipo, dados } = await req.json();
-    
+
     if (!process.env.GEMINI_API_KEY) {
       return new Response(JSON.stringify({ error: 'Falha de configuração', details: 'A variável de ambiente GEMINI_API_KEY não está configurada no servidor Vercel.' }), {
         status: 500,
@@ -23,7 +23,7 @@ export default async function handler(req: Request) {
     }
 
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-    
+
     let promptText = '';
 
     if (tipo === 'justificativa') {
@@ -56,10 +56,24 @@ export default async function handler(req: Request) {
            - Se a viagem JÁ OCORREU (datas no passado), escreva o texto obrigatoriamente no tempo PASSADO (ex: "viajou", "participou").
            - Se a viagem AINDA VAI OCORRER (datas no futuro), escreva o texto obrigatoriamente no tempo FUTURO ou PRESENTE DO INDICATIVO focado no futuro (ex: "viajará", "participará", "tem como objetivo participar").
         3. FORMATO TEXTUAL: NÃO utilize marcações ou formatações Markdown (não utilize asteriscos ** para negrito, nem hashtags # para títulos, etc). O retorno deve ser exclusivamente em formato de texto simples (plain text).
-      `;
+        4. Tamanho maximo de 300 caracteres. Explorando diretamente sobre o motivo, não sendo necessario repetir dados como data de retorno, deve ser mais objetivo.
+        `;
     } else if (tipo === 'detalhamento') {
+      const etapa = dados.etapa || 'completo';
+
+      let instrucaoEtapa = '';
+      if (etapa === 'introducao') {
+        instrucaoEtapa = 'Concentre-se APENAS em escrever a INTRODUÇÃO do documento, contextualizando quem viajou, para onde, quando e o propósito geral (1 a 2 parágrafos). Não escreva o desenvolvimento nem a conclusão.';
+      } else if (etapa === 'desenvolvimento') {
+        instrucaoEtapa = 'Concentre-se APENAS em escrever o DESENVOLVIMENTO do documento, detalhando as atividades, custos, justificativas técnicas e contexto fornecido pelo usuário. Não escreva introdução nem conclusão.';
+      } else if (etapa === 'conclusao') {
+        instrucaoEtapa = 'Concentre-se APENAS em escrever a CONCLUSÃO do documento, informando os resultados esperados, benefícios para a instituição e encerramento formal. Não escreva introdução nem desenvolvimento.';
+      } else {
+        instrucaoEtapa = 'Escreva o detalhamento completo (introdução, desenvolvimento e conclusão).';
+      }
+
       promptText = `
-        Crie um detalhamento formal, técnico, bem estruturado e com linguagem administrativa para um documento público de viagem/despesa, baseado nos seguintes dados e no prompt fornecido pelo usuário.
+        Crie uma parte de um detalhamento formal, técnico e com linguagem administrativa para um documento público de viagem/despesa, baseado nos seguintes dados.
         
         DADOS DA VIAGEM:
         - Solicitante: ${dados.requesterName}
@@ -76,12 +90,12 @@ export default async function handler(req: Request) {
         """
         
         REGRAS:
-        1. O detalhamento DEVE ser formatado com qualidade técnica e explicar claramente a natureza e o objetivo da viagem baseado primariamente no contexto livre fornecido. Mantenha tom impessoal e formal. Não adicione campos de assinatura nem local/data.
-        2. TEMPO VERBAL: Analise a "Data/Hora Saída" e "Data/Hora Retorno" em relação à "Data Atual do Sistema". 
-           - Se a viagem JÁ OCORREU (datas no passado), escreva o texto obrigatoriamente no tempo PASSADO.
-           - Se a viagem AINDA VAI OCORRER (datas no futuro), escreva o texto obrigatoriamente no tempo FUTURO.
-        3. FORMATO TEXTUAL: NÃO utilize marcações ou formatações Markdown (não utilize asteriscos ** para negrito, nem hashtags # para títulos, etc). O retorno deve ser exclusivamente em formato de texto simples (plain text).
-      `;
+        1. ${instrucaoEtapa}
+        2. Mantenha tom impessoal e formal. Não adicione campos de assinatura nem local/data. O detalhamento DEVE ser formatado com qualidade técnica e explicar claramente a natureza e o objetivo da viagem.
+        3. TEMPO VERBAL: Analise a "Data/Hora Saída" e "Data/Hora Retorno" em relação à "Data Atual do Sistema". Se JÁ OCORREU escreva no PASSADO. Se VAI OCORRER escreva no FUTURO.
+        4. FORMATO TEXTUAL: NÃO utilize marcações ou formatações Markdown (não utilize asteriscos ** para negrito, nem hashtags # para títulos, etc). O retorno deve ser exclusivamente em formato de texto simples (plain text).
+        5. Não é necessario repetir dados como justificativa da viagem, dados pessoais. Apenas faça o detalhamento do co calculo das despesas e sobre o dispositivel legal que embasa o calculo e regras.
+     `;
     } else if (tipo === 'documento') {
       promptText = `
         Atue como um redator profissional especializado em documentos corporativos e governamentais.
@@ -139,7 +153,7 @@ export default async function handler(req: Request) {
     });
   } catch (error: any) {
     console.error('Erro na chamada ao Gemini:', error);
-    return new Response(JSON.stringify({ 
+    return new Response(JSON.stringify({
       error: 'Falha ao processar a requisição no servidor.',
       details: error?.message || String(error)
     }), {
