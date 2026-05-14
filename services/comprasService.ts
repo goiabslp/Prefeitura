@@ -7,7 +7,7 @@ import { handleSupabaseError } from '../utils/errorUtils';
 export const getAllPurchaseOrders = async (lightweight = true, page = 0, limit = 50, searchTerm = '', status?: string, purchaseStatus?: string): Promise<Order[]> => {
     // ... select specific columns
     const columns = lightweight
-        ? `id, protocol, title, status, purchase_status, status_history, created_at, user_id, user_name, completion_forecast, budget_file_url, document_snapshot, profiles:user_id(sector)`
+        ? `id, protocol, title, status, purchase_status, status_history, created_at, user_id, user_name, completion_forecast, budget_file_url, reqName:document_snapshot->content->>requesterName, reqSector:document_snapshot->content->>requesterSector, reqPriority:document_snapshot->content->>priority, reqAccount:document_snapshot->content->>selectedAccount, profiles:user_id(sector)`
         : '*, profiles:user_id(sector)';
 
     let query = supabase
@@ -26,10 +26,10 @@ export const getAllPurchaseOrders = async (lightweight = true, page = 0, limit =
 
         if (normalizedTerm) {
             // First attempt to use the optimized search_index column (if applied via migration)
-            query = query.or(`search_index.ilike.% ${normalizedTerm}%, protocol.ilike.% ${searchTerm}%, title.ilike.% ${searchTerm}%, user_name.ilike.% ${searchTerm}% `);
+            query = query.or(`search_index.ilike.%${normalizedTerm}%, protocol.ilike.%${searchTerm}%, title.ilike.%${searchTerm}%, user_name.ilike.%${searchTerm}%`);
         } else {
             // Fallback for searches containing only special characters
-            query = query.or(`protocol.ilike.% ${searchTerm}%, title.ilike.% ${searchTerm}%, user_name.ilike.% ${searchTerm}% `);
+            query = query.or(`protocol.ilike.%${searchTerm}%, title.ilike.%${searchTerm}%, user_name.ilike.%${searchTerm}%`);
         }
     }
 
@@ -108,10 +108,10 @@ export const getAllPurchaseOrders = async (lightweight = true, page = 0, limit =
             },
             content: {
                 title: item.title,
-                requesterName: item.document_snapshot?.content?.requesterName,
-                requesterSector: item.document_snapshot?.content?.requesterSector || item.profiles?.sector,
-                priority: item.document_snapshot?.content?.priority,
-                selectedAccount: item.document_snapshot?.content?.selectedAccount
+                requesterName: item.reqName || item.document_snapshot?.content?.requesterName,
+                requesterSector: item.reqSector || item.document_snapshot?.content?.requesterSector || item.profiles?.sector,
+                priority: item.reqPriority || item.document_snapshot?.content?.priority,
+                selectedAccount: item.reqAccount || item.document_snapshot?.content?.selectedAccount
             }
         } as any : item.document_snapshot,
         budgetFileUrl: item.budget_file_url,
