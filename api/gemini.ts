@@ -1,4 +1,4 @@
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, Type } from '@google/genai';
 
 export const config = {
   runtime: 'edge', // Using Edge runtime for fast, scalable execution on Vercel
@@ -82,6 +82,20 @@ export default async function handler(req: Request) {
            - Se a viagem AINDA VAI OCORRER (datas no futuro), escreva o texto obrigatoriamente no tempo FUTURO.
         3. FORMATO TEXTUAL: NÃO utilize marcações ou formatações Markdown (não utilize asteriscos ** para negrito, nem hashtags # para títulos, etc). O retorno deve ser exclusivamente em formato de texto simples (plain text).
       `;
+    } else if (tipo === 'documento') {
+      promptText = `
+        Atue como um redator profissional especializado em documentos corporativos e governamentais.
+        
+        TAREFA:
+        Escreva um documento do tipo "${dados.docType}" sobre o seguinte contexto: "${dados.topic}".
+        
+        DIRETRIZES:
+        - Tom de voz: ${dados.tone}.
+        - Idioma: Português do Brasil.
+        - O texto deve ser bem estruturado, com introdução, desenvolvimento (pontos chave) e conclusão.
+        - NÃO use formatação Markdown complexa (como **negrito** ou # headers). Use apenas quebras de linha para separar parágrafos.
+        - Crie um Título Profissional e conciso para este documento baseado no contexto.
+      `;
     } else {
       return new Response(JSON.stringify({ error: 'Tipo de requisição inválido.' }), {
         status: 400,
@@ -89,10 +103,35 @@ export default async function handler(req: Request) {
       });
     }
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: promptText,
-    });
+    let response;
+    if (tipo === 'documento') {
+      response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: promptText,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              title: {
+                type: Type.STRING,
+                description: 'The professional and concise title of the document.',
+              },
+              body: {
+                type: Type.STRING,
+                description: 'The body text of the document, separated by line breaks.',
+              },
+            },
+            required: ['title', 'body'],
+          },
+        }
+      });
+    } else {
+      response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: promptText,
+      });
+    }
 
     return new Response(JSON.stringify({ text: response.text }), {
       status: 200,
