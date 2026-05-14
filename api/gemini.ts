@@ -106,7 +106,7 @@ export default async function handler(req: Request) {
     let response;
     if (tipo === 'documento') {
       response = await ai.models.generateContent({
-        model: 'gemini-3.0-flash',
+        model: 'gemini-1.5-flash',
         contents: promptText,
         config: {
           responseMimeType: 'application/json',
@@ -128,7 +128,7 @@ export default async function handler(req: Request) {
       });
     } else {
       response = await ai.models.generateContent({
-        model: 'gemini-3.0-flash',
+        model: 'gemini-1.5-flash',
         contents: promptText,
       });
     }
