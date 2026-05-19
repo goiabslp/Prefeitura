@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X, ChevronLeft, ChevronRight, Calendar, Clock, Check } from 'lucide-react';
 
@@ -29,16 +29,21 @@ export const DateTimePickerModal: React.FC<DateTimePickerModalProps> = ({
     const [viewDate, setViewDate] = useState(initialDate || new Date()); // For navigating months without changing selection
     const [activeView, setActiveView] = useState<'calendar' | 'time'>(mode === 'time' ? 'time' : 'calendar');
     const [isClosing, setIsClosing] = useState(false);
+    const hasInitializedRef = useRef(false);
 
     useEffect(() => {
         if (isOpen) {
-            const d = initialDate || new Date();
-            setSelectedDate(d);
-            setViewDate(d);
-            setActiveView(mode === 'time' ? 'time' : 'calendar');
-            setIsClosing(false);
+            if (!hasInitializedRef.current) {
+                const d = initialDate || new Date();
+                setSelectedDate(d);
+                setViewDate(d);
+                setActiveView(mode === 'time' ? 'time' : 'calendar');
+                setIsClosing(false);
+                hasInitializedRef.current = true;
+            }
             document.body.style.overflow = 'hidden';
         } else {
+            hasInitializedRef.current = false;
             document.body.style.overflow = 'unset';
         }
         return () => {
