@@ -50,6 +50,10 @@ export const OficioNumberingModal: React.FC<Props> = ({ isOpen, onClose, onConfi
                 }
             };
             fetchNext();
+        } else if (isOpen) {
+            // Handle case where sectorId is missing
+            setLoading(false);
+            setNextNumber(null);
         }
         return () => { isMounted = false; };
     }, [isOpen, sectorId]);
@@ -87,7 +91,7 @@ export const OficioNumberingModal: React.FC<Props> = ({ isOpen, onClose, onConfi
                                 <span className="animate-pulse text-slate-300">...</span>
                             ) : (
                                 <>
-                                    <span>{formattedNumber}</span>
+                                    <span>{formattedNumber === '...' ? 'Aleatório' : formattedNumber}</span>
                                     <span className="text-2xl text-slate-400 mb-1">/{year}</span>
                                 </>
                             )}
@@ -142,7 +146,7 @@ export const OficioNumberingModal: React.FC<Props> = ({ isOpen, onClose, onConfi
                                 }
                                 onConfirm(summary);
                             }}
-                            disabled={loading || !nextNumber}
+                            disabled={loading}
                             className="flex-1 py-3.5 bg-indigo-600 text-white font-bold text-xs uppercase tracking-widest rounded-xl shadow-lg shadow-indigo-500/30 hover:bg-indigo-700 hover:shadow-indigo-600/40 transition-all active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2"
                         >
                             {loading ? 'Calculando...' : (

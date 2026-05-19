@@ -180,11 +180,7 @@ export const savePurchaseOrder = async (order: Order): Promise<void> => {
         isNewOrder = true;
     }
 
-    // Rule: Mandatory account for ALL purchase orders (creation and update)
-    const hasAccount = order.documentSnapshot?.content?.selectedAccount;
-    if (!hasAccount) {
-        throw new Error("Validação de Segurança: A conta de pagamento é obrigatória para o pedido.");
-    }
+    // Account validation is now handled during state transitions in updateOrderStatus/updatePurchaseStatus
 
     const { error } = await supabase.from('purchase_orders').upsert(dbOrder);
     if (error) throw error;
