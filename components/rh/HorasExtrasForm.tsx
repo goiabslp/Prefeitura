@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Users, UserPlus, Save, Trash2, Calendar, FileText, Clock, ChevronRight, Search, Check, ChevronDown, X } from 'lucide-react';
+import { Users, UserPlus, Save, Trash2, Calendar, FileText, Clock, ChevronRight, Search, Check, ChevronDown, X, AlertCircle } from 'lucide-react';
 import { User, AppState, Person, Job, Sector, RhHorasExtras, HorasExtrasEntry, HorasExtrasEntryStatus } from '../../types';
 
 interface HorasExtrasFormProps {
@@ -48,6 +48,7 @@ export const HorasExtrasForm: React.FC<HorasExtrasFormProps> = ({
     const [userSearch, setUserSearch] = useState('');
     const [pendingCedido, setPendingCedido] = useState<any | null>(null);
     const [pendingExcesso, setPendingExcesso] = useState<{ person: any, forceCedido: boolean } | null>(null);
+    const [pendingBloqueio, setPendingBloqueio] = useState<{ person: any, hours: number } | null>(null);
     const [excessoJustificativa, setExcessoJustificativa] = useState('');
 
     const userDropdownRef = useRef<HTMLDivElement>(null);
@@ -105,14 +106,20 @@ export const HorasExtrasForm: React.FC<HorasExtrasFormProps> = ({
             return;
         }
 
-        // Check 16h limit for Motoristas/Operadores
+        // Check 16h and 20h limit for Motoristas/Operadores
         const jobTitleLower = (selectedPerson?.jobTitle || '').toLowerCase();
         const isRestrictedRole = jobTitleLower.includes('motorista') || jobTitleLower.includes('operador');
         
-        if (isRestrictedRole && selectedHours > 16 && !overrideExcesso) {
-            setPendingExcesso({ person: selectedPerson, forceCedido });
-            setExcessoJustificativa('');
-            return; // Interrupt normal flow
+        if (isRestrictedRole) {
+            if (selectedHours > 20) {
+                setPendingBloqueio({ person: selectedPerson, hours: selectedHours });
+                return; // Interrupt normal flow
+            }
+            if (selectedHours > 16 && !overrideExcesso) {
+                setPendingExcesso({ person: selectedPerson, forceCedido });
+                setExcessoJustificativa('');
+                return; // Interrupt normal flow
+            }
         }
 
         setEntries([...entries, {
@@ -132,6 +139,7 @@ export const HorasExtrasForm: React.FC<HorasExtrasFormProps> = ({
         setSelectedAdicionalNoturno(0);
         setPendingCedido(null);
         setPendingExcesso(null);
+        setPendingBloqueio(null);
         setExcessoJustificativa('');
     };
 
@@ -453,6 +461,36 @@ export const HorasExtrasForm: React.FC<HorasExtrasFormProps> = ({
                     </div>
                 </div>
             )}
+            {/* Modal de Bloqueio (> 20 horas) */}
+            {pendingBloqueio && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8 animate-scale-in border-t-8 border-rose-500">
+                        <div className="w-20 h-20 rounded-full bg-rose-50 text-rose-500 flex items-center justify-center mb-6 mx-auto relative">
+                            <div className="absolute inset-0 bg-rose-400 rounded-full animate-ping opacity-20"></div>
+                            <AlertCircle className="w-10 h-10 relative z-10" />
+                        </div>
+                        <h3 className="text-2xl font-black text-slate-800 text-center mb-2 uppercase tracking-tight">Limite Excedido</h3>
+                        <div className="bg-rose-50/50 rounded-2xl p-4 mb-6 border border-rose-100">
+                            <p className="text-slate-600 text-center text-sm font-medium leading-relaxed">
+                                O colaborador <span className="text-slate-800 font-bold">{pendingBloqueio.person.name}</span> (<span className="text-indigo-600 font-bold">{pendingBloqueio.person.jobTitle}</span>) não pode exceder o limite de <span className="text-rose-600 font-black">20 horas extras</span>.
+                                <br/><br/>
+                                Você tentou lançar <span className="text-rose-600 font-black text-lg">{pendingBloqueio.hours} horas</span>.
+                            </p>
+                        </div>
+                        
+                        <div className="flex justify-center">
+                            <button
+                                onClick={() => setPendingBloqueio(null)}
+                                className="w-full py-4 px-6 font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-2xl transition-all shadow-lg hover:shadow-slate-900/20 text-sm flex items-center justify-center gap-2"
+                            >
+                                <Check className="w-5 h-5" />
+                                Entendido
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Confirmation Modal for Excesso de Horas */}
             {pendingExcesso && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
