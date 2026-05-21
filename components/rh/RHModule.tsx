@@ -41,6 +41,7 @@ export const RHModule: React.FC<RHModuleProps> = ({
     const [highlightId, setHighlightId] = useState<string | null>(null);
     const [generatingPdfRecord, setGeneratingPdfRecord] = useState<RhHorasExtras | null>(null);
     const [editingRecord, setEditingRecord] = useState<RhHorasExtras | null>(null);
+    const [isViewMode, setIsViewMode] = useState(false);
 
     useEffect(() => {
         const handleForceHistory = (e: any) => {
@@ -69,6 +70,13 @@ export const RHModule: React.FC<RHModuleProps> = ({
 
     const handleEdit = (record: RhHorasExtras) => {
         setEditingRecord(record);
+        setIsViewMode(false);
+        setActiveTab('novo');
+    };
+
+    const handleView = (record: RhHorasExtras) => {
+        setEditingRecord(record);
+        setIsViewMode(true);
         setActiveTab('novo');
     };
 
@@ -152,6 +160,7 @@ export const RHModule: React.FC<RHModuleProps> = ({
                                 currentUserSector={userRole === 'admin' ? 'Geral' : (users.find(u => u.id === userId)?.sector || 'Geral')}
                                 onDownloadPdf={handleDownloadPdf}
                                 onEdit={handleEdit}
+                                onView={handleView}
                                 onBack={() => onNavigate('rh')}
                             />
                         </div>
@@ -176,13 +185,16 @@ export const RHModule: React.FC<RHModuleProps> = ({
                                     userRole={userRole}
                                     currentUserId={userId}
                                     editingRecord={editingRecord}
+                                    isViewMode={isViewMode}
                                     onSave={(data) => {
                                         onSaveForm(data);
                                         setEditingRecord(null);
+                                        setIsViewMode(false);
                                     }}
                                     onCancel={() => {
                                         if (editingRecord) {
                                             setEditingRecord(null);
+                                            setIsViewMode(false);
                                             setActiveTab('historico');
                                         } else {
                                             onNavigate('rh');

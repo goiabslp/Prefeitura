@@ -6,6 +6,7 @@ import { ModernMonthPicker } from '../common/ModernMonthPicker';
 interface HorasExtrasHistoryProps {
     onDownloadPdf: (record: RhHorasExtras) => void;
     onEdit: (record: RhHorasExtras) => void;
+    onView?: (record: RhHorasExtras) => void;
     highlightId?: string | null;
     userRole: string;
     currentUserSector: string;
@@ -16,6 +17,7 @@ interface HorasExtrasHistoryProps {
 export const HorasExtrasHistory: React.FC<HorasExtrasHistoryProps> = ({
     onDownloadPdf,
     onEdit,
+    onView,
     highlightId,
     userRole,
     currentUserSector,
@@ -323,6 +325,16 @@ export const HorasExtrasHistory: React.FC<HorasExtrasHistoryProps> = ({
                                             >
                                                 <Edit2 className="w-4 h-4" />
                                             </button>
+
+                                            {userRole === 'admin' && onView && (
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); onView(record); }}
+                                                    className="flex-1 desktop:flex-none flex items-center justify-center gap-1.5 px-3 py-2 bg-white border border-slate-200 hover:border-emerald-300 text-slate-600 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all shadow-sm"
+                                                    title="Visualizar"
+                                                >
+                                                    <Search className="w-4 h-4" />
+                                                </button>
+                                            )}
 
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); handleDelete(record.id!, record.month); }}

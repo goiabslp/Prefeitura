@@ -13,6 +13,7 @@ interface HorasExtrasFormProps {
     onCancel: () => void;
     editingRecord?: RhHorasExtras | null;
     appState?: AppState;
+    isViewMode?: boolean;
 }
 
 export const HorasExtrasForm: React.FC<HorasExtrasFormProps> = ({
@@ -25,7 +26,8 @@ export const HorasExtrasForm: React.FC<HorasExtrasFormProps> = ({
     onSave,
     onCancel,
     editingRecord,
-    appState
+    appState,
+    isViewMode
 }) => {
     const months = [
         'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -50,6 +52,7 @@ export const HorasExtrasForm: React.FC<HorasExtrasFormProps> = ({
     const [pendingExcesso, setPendingExcesso] = useState<{ person: any, forceCedido: boolean } | null>(null);
     const [pendingBloqueio, setPendingBloqueio] = useState<{ person: any, hours: number } | null>(null);
     const [excessoJustificativa, setExcessoJustificativa] = useState('');
+    const [showPendingModal, setShowPendingModal] = useState<boolean>(false);
 
     const userDropdownRef = useRef<HTMLDivElement>(null);
     const hoursDropdownRef = useRef<HTMLDivElement>(null);
@@ -62,15 +65,20 @@ export const HorasExtrasForm: React.FC<HorasExtrasFormProps> = ({
     useEffect(() => {
         if (editingRecord) {
             setSelectedMonth(editingRecord.month);
-            setEntries(editingRecord.entries.map(e => ({
+            const loadedEntries = editingRecord.entries.map(e => ({
                 ...e,
-                // Ensure isCedido and adicionalNoturno are correctly interpreted if it was stored
                 isCedido: e.isCedido || false,
                 adicionalNoturno: e.adicionalNoturno || 0
-            })));
+            }));
+            setEntries(loadedEntries);
+            
+            if (isViewMode && loadedEntries.some(e => e.status === 'Pendente')) {
+                setShowPendingModal(true);
+            }
         } else {
             setSelectedMonth(currentMonthName);
             setEntries([]);
+            setShowPendingModal(false);
         }
     }, [editingRecord, currentMonthName]);
 
@@ -197,6 +205,11 @@ export const HorasExtrasForm: React.FC<HorasExtrasFormProps> = ({
                                     <span className="bg-slate-100 px-2 py-0.5 rounded text-[10px] font-black text-slate-600 uppercase tracking-wider border border-slate-200">
                                         {userRole === 'admin' ? 'Acesso Total (Admin)' : currentUserSectorName}
                                     </span>
+                                    {isViewMode && (
+                                        <span className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider border border-emerald-200">
+                                            Modo Visualização
+                                        </span>
+                                    )}
                                     <p className="text-slate-500 text-xs font-medium">Horas extras</p>
                                 </div>
                             </div>
@@ -214,107 +227,103 @@ export const HorasExtrasForm: React.FC<HorasExtrasFormProps> = ({
                     </div>
 
                     {/* Inclusion Form */}
-                    <div className="transition-all duration-500 opacity-100 translate-y-0">
-                        <div className="bg-slate-50 p-6 rounded-3xl border-2 border-dashed border-slate-200">
-                            <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 mb-6">
-                                <UserPlus className="w-5 h-5 text-fuchsia-500" />
-                                Adicionar Colaborador
-                            </h3>
+                    {!isViewMode && (
+                        <div className="transition-all duration-500 opacity-100 translate-y-0">
+                            <div className="bg-slate-50 p-6 rounded-3xl border-2 border-dashed border-slate-200">
+                                <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 mb-6">
+                                    <UserPlus className="w-5 h-5 text-fuchsia-500" />
+                                    Adicionar Colaborador
+                                </h3>
 
-                            <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-                                {/* Custom Collaborator Select */}
-                                <div className="md:col-span-6 relative group" ref={userDropdownRef}>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Colaborador</label>
-                                    <div
-                                        onClick={() => {
-                                            if (availableUsersForAdd.length > 0) {
-                                                setIsUserOpen(!isUserOpen);
+                                <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                                    {/* Custom Collaborator Select */}
+                                    <div className="md:col-span-6 relative group" ref={userDropdownRef}>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Colaborador</label>
+                                        <div
+                                            onClick={() => {
+                                                if (availableUsersForAdd.length > 0) {
+                                                    setIsUserOpen(!isUserOpen);
+                                                    setIsHoursOpen(false);
+                                                }
+                                            }}
+                                            className={`w-full h-12 pl-10 pr-10 bg-white border ${isUserOpen ? 'border-fuchsia-400 ring-2 ring-fuchsia-100' : 'border-slate-200'} text-slate-700 text-sm rounded-xl transition-all font-medium shadow-sm hover:border-slate-300 cursor-pointer flex items-center justify-between ${availableUsersForAdd.length === 0 ? 'opacity-70 bg-slate-100 cursor-not-allowed' : ''}`}
+                                        >
+                                            <div className="flex items-center overflow-hidden">
+                                                <Users className={`w-4 h-4 absolute left-3.5 transition-colors ${isUserOpen || selectedUserId ? 'text-fuchsia-500' : 'text-slate-400 group-hover:text-fuchsia-500'}`} />
+                                                {selectedUserId ? (
+                                                    <span className="truncate">{allMappedPersons.find(p => p.id === selectedUserId)?.name}</span>
+                                                ) : (
+                                                    <span className="text-slate-400">Selecione um colaborador...</span>
+                                                )}
+                                            </div>
+                                            <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-300 ${isUserOpen ? 'rotate-180 text-fuchsia-500' : ''}`} />
+                                        </div>
+                                    </div>
+
+                                    <div className="md:col-span-3 relative group" ref={hoursDropdownRef}>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Quantidade</label>
+                                        <div
+                                            onClick={() => {
+                                                setIsHoursOpen(!isHoursOpen);
+                                                setIsUserOpen(false);
+                                            }}
+                                            className={`w-full h-12 pl-9 pr-7 bg-white border ${isHoursOpen ? 'border-fuchsia-400 ring-2 ring-fuchsia-100' : 'border-slate-200'} text-slate-700 text-sm rounded-xl transition-all font-medium shadow-sm hover:border-slate-300 cursor-pointer flex items-center justify-between`}
+                                        >
+                                            <div className="flex items-center">
+                                                <Clock className={`w-4 h-4 absolute left-3 transition-colors ${isHoursOpen || selectedHours ? 'text-fuchsia-500' : 'text-slate-400 group-hover:text-fuchsia-500'}`} />
+                                                <span>{selectedHours.toString().padStart(2, '0')} hrs</span>
+                                            </div>
+                                            <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-300 ${isHoursOpen ? 'rotate-180 text-fuchsia-500' : ''}`} />
+                                        </div>
+                                    </div>
+
+                                    {/* Adicional Noturno Select */}
+                                    <div className="md:col-span-3 relative group" id="adicional-dropdown">
+                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Adicional Noturno</label>
+                                        <div
+                                            onClick={() => {
+                                                setIsAdicionalOpen(!isAdicionalOpen);
+                                                setIsUserOpen(false);
                                                 setIsHoursOpen(false);
-                                            }
-                                        }}
-                                        className={`w-full h-12 pl-10 pr-10 bg-white border ${isUserOpen ? 'border-fuchsia-400 ring-2 ring-fuchsia-100' : 'border-slate-200'} text-slate-700 text-sm rounded-xl transition-all font-medium shadow-sm hover:border-slate-300 cursor-pointer flex items-center justify-between ${availableUsersForAdd.length === 0 ? 'opacity-70 bg-slate-100 cursor-not-allowed' : ''}`}
-                                    >
-                                        <div className="flex items-center overflow-hidden">
-                                            <Users className={`w-4 h-4 absolute left-3.5 transition-colors ${isUserOpen || selectedUserId ? 'text-fuchsia-500' : 'text-slate-400 group-hover:text-fuchsia-500'}`} />
-                                            {selectedUserId ? (
-                                                <span className="truncate">{allMappedPersons.find(p => p.id === selectedUserId)?.name}</span>
-                                            ) : (
-                                                <span className="text-slate-400">Selecione um colaborador...</span>
-                                            )}
+                                            }}
+                                            className={`w-full h-12 pl-9 pr-7 bg-white border ${isAdicionalOpen ? 'border-fuchsia-400 ring-2 ring-fuchsia-100' : 'border-slate-200'} text-slate-700 text-sm rounded-xl transition-all font-medium shadow-sm hover:border-slate-300 cursor-pointer flex items-center justify-between`}
+                                        >
+                                            <div className="flex items-center min-w-0 max-w-full overflow-hidden">
+                                                <Clock className={`w-4 h-4 absolute left-3 transition-colors ${isAdicionalOpen || selectedAdicionalNoturno ? 'text-indigo-500' : 'text-slate-400 group-hover:text-indigo-500'}`} />
+                                                <span className="truncate whitespace-nowrap">{selectedAdicionalNoturno > 0 ? `${selectedAdicionalNoturno}h` : 'Nenhum'}</span>
+                                            </div>
+                                            <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-300 ${isAdicionalOpen ? 'rotate-180 text-indigo-500' : ''}`} />
                                         </div>
-                                        <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-300 ${isUserOpen ? 'rotate-180 text-fuchsia-500' : ''}`} />
                                     </div>
-
-                                    {/* User Dropdown Menu -> Moved to Modal at bottom */}
                                 </div>
 
-                                <div className="md:col-span-3 relative group" ref={hoursDropdownRef}>
-                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Quantidade</label>
-                                    <div
-                                        onClick={() => {
-                                            setIsHoursOpen(!isHoursOpen);
-                                            setIsUserOpen(false);
-                                        }}
-                                        className={`w-full h-12 pl-9 pr-7 bg-white border ${isHoursOpen ? 'border-fuchsia-400 ring-2 ring-fuchsia-100' : 'border-slate-200'} text-slate-700 text-sm rounded-xl transition-all font-medium shadow-sm hover:border-slate-300 cursor-pointer flex items-center justify-between`}
-                                    >
-                                        <div className="flex items-center">
-                                            <Clock className={`w-4 h-4 absolute left-3 transition-colors ${isHoursOpen || selectedHours ? 'text-fuchsia-500' : 'text-slate-400 group-hover:text-fuchsia-500'}`} />
-                                            <span>{selectedHours.toString().padStart(2, '0')} hrs</span>
-                                        </div>
-                                        <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-300 ${isHoursOpen ? 'rotate-180 text-fuchsia-500' : ''}`} />
-                                    </div>
-
-                                    {/* Hours Dropdown Menu -> Moved to Modal at bottom */}
-                                </div>
-
-                                {/* Adicional Noturno Select */}
-                                <div className="md:col-span-3 relative group" id="adicional-dropdown">
-                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Adicional Noturno</label>
-                                    <div
-                                        onClick={() => {
-                                            setIsAdicionalOpen(!isAdicionalOpen);
-                                            setIsUserOpen(false);
-                                            setIsHoursOpen(false);
-                                        }}
-                                        className={`w-full h-12 pl-9 pr-7 bg-white border ${isAdicionalOpen ? 'border-fuchsia-400 ring-2 ring-fuchsia-100' : 'border-slate-200'} text-slate-700 text-sm rounded-xl transition-all font-medium shadow-sm hover:border-slate-300 cursor-pointer flex items-center justify-between`}
-                                    >
-                                        <div className="flex items-center min-w-0 max-w-full overflow-hidden">
-                                            <Clock className={`w-4 h-4 absolute left-3 transition-colors ${isAdicionalOpen || selectedAdicionalNoturno ? 'text-indigo-500' : 'text-slate-400 group-hover:text-indigo-500'}`} />
-                                            <span className="truncate whitespace-nowrap">{selectedAdicionalNoturno > 0 ? `${selectedAdicionalNoturno}h` : 'Nenhum'}</span>
-                                        </div>
-                                        <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-300 ${isAdicionalOpen ? 'rotate-180 text-indigo-500' : ''}`} />
-                                    </div>
-
-                                    {/* Adicional Noturno Modal -> Moved to bottom */}
-                                </div>
-                            </div>
-
-                            <button
-                                onClick={() => handleAddEntry()}
-                                disabled={!selectedUserId}
-                                className="w-full mt-6 py-3 bg-slate-800 text-white font-bold rounded-xl shadow-md hover:bg-slate-700 transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 group"
-                            >
-                                <UserPlus className="w-5 h-5 group-hover:scale-110 transition-transform" />
-                                Adicionar Colaborador
-                            </button>
-
-                            <div className="grid grid-cols-2 gap-4 mt-4">
                                 <button
-                                    onClick={onCancel}
-                                    className="py-3 px-4 font-bold text-slate-600 bg-white border-2 border-slate-200 hover:bg-slate-50 hover:border-slate-300 rounded-xl transition-all text-sm"
+                                    onClick={() => handleAddEntry()}
+                                    disabled={!selectedUserId}
+                                    className="w-full mt-6 py-3 bg-slate-800 text-white font-bold rounded-xl shadow-md hover:bg-slate-700 transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 group"
                                 >
-                                    Cancelar
-                                </button>
-                                <button
-                                    onClick={handleSave}
-                                    disabled={entries.length === 0 || !selectedMonth}
-                                    className="flex items-center justify-center gap-2 py-3 px-4 font-bold text-white bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 rounded-xl transition-all shadow-md hover:shadow-lg hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 text-sm"
-                                >
-                                    <Save className="w-4 h-4" />
-                                    Finalizar e Salvar
+                                    <UserPlus className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                                    Adicionar Colaborador
                                 </button>
                             </div>
                         </div>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-4 mt-4">
+                        <button
+                            onClick={onCancel}
+                            className="py-3 px-4 font-bold text-slate-600 bg-white border-2 border-slate-200 hover:bg-slate-50 hover:border-slate-300 rounded-xl transition-all text-sm"
+                        >
+                            {isViewMode ? 'Voltar' : 'Cancelar'}
+                        </button>
+                        <button
+                            onClick={handleSave}
+                            disabled={entries.length === 0 || !selectedMonth}
+                            className="flex items-center justify-center gap-2 py-3 px-4 font-bold text-white bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 rounded-xl transition-all shadow-md hover:shadow-lg hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 text-sm"
+                        >
+                            <Save className="w-4 h-4" />
+                            {isViewMode ? 'Salvar Aprovações' : 'Finalizar e Salvar'}
+                        </button>
                     </div>
 
                     <div className="flex-1"></div>
@@ -414,13 +423,15 @@ export const HorasExtrasForm: React.FC<HorasExtrasFormProps> = ({
                                                 )}
                                             </div>
 
-                                            <button
-                                                onClick={() => removeEntry(index)}
-                                                className={`absolute right-3 top-3 p-2 rounded-xl transition-all opacity-0 group-hover:opacity-100 ${entry.status === 'Pendente' ? 'text-amber-400 hover:text-amber-600 hover:bg-amber-100' : 'text-slate-300 hover:text-rose-500 hover:bg-rose-50'}`}
-                                                title="Remover"
-                                            >
-                                                <Trash2 className="w-4 h-4" />
-                                            </button>
+                                            {!isViewMode && (
+                                                <button
+                                                    onClick={() => removeEntry(index)}
+                                                    className={`absolute right-3 top-3 p-2 rounded-xl transition-all opacity-0 group-hover:opacity-100 ${entry.status === 'Pendente' ? 'text-amber-400 hover:text-amber-600 hover:bg-amber-100' : 'text-slate-300 hover:text-rose-500 hover:bg-rose-50'}`}
+                                                    title="Remover"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                            )}
                                         </div>
                                     );
                                 })}
@@ -456,6 +467,105 @@ export const HorasExtrasForm: React.FC<HorasExtrasFormProps> = ({
                             >
                                 <Check className="w-4 h-4" />
                                 Confirmar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal de Pendências (View Mode) */}
+            {showPendingModal && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full flex flex-col max-h-[85vh] overflow-hidden animate-scale-in">
+                        <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-amber-50">
+                            <div>
+                                <h3 className="text-xl font-black text-amber-800 flex items-center gap-2 uppercase tracking-tight">
+                                    <Clock className="w-6 h-6" />
+                                    Aprovação de Pendências
+                                </h3>
+                                <p className="text-amber-700 text-sm font-medium mt-1">
+                                    Este documento possui registros de horas excedentes que necessitam de aprovação.
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setShowPendingModal(false)}
+                                className="w-10 h-10 rounded-full bg-white/50 hover:bg-white border border-amber-200 flex items-center justify-center text-amber-700 transition-all"
+                                title="Fechar"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto p-6 bg-slate-50 space-y-4">
+                            {entries.filter(e => e.status === 'Pendente').length === 0 ? (
+                                <div className="p-8 text-center bg-emerald-50 rounded-2xl border border-emerald-100 animate-fade-in">
+                                    <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
+                                        <Check className="w-8 h-8" />
+                                    </div>
+                                    <h4 className="text-xl font-black text-emerald-800 tracking-tight">Pendências Aprovadas!</h4>
+                                    <p className="text-emerald-600 font-medium mt-2">Clique no botão abaixo para salvar as aprovações e liberar os registros no documento.</p>
+                                </div>
+                            ) : (
+                                entries.map((entry, index) => {
+                                    if (entry.status !== 'Pendente') return null;
+                                    return (
+                                        <div key={index} className="bg-white border border-amber-200 rounded-2xl p-5 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative overflow-hidden animate-slide-up">
+                                            <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-amber-400"></div>
+                                            
+                                            <div className="flex-1 pl-2">
+                                                <div className="flex items-center gap-3 mb-2">
+                                                    <div className="w-10 h-10 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center font-bold">
+                                                        {entry.name?.charAt(0) || 'U'}
+                                                    </div>
+                                                    <div>
+                                                        <h4 className="font-black text-slate-800 text-base">{entry.name}</h4>
+                                                        <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">{entry.jobTitle} • {entry.sector}</p>
+                                                    </div>
+                                                </div>
+                                                
+                                                <div className="mt-3 bg-amber-50 rounded-xl p-3 border border-amber-100/50">
+                                                    <div className="flex items-center gap-3 mb-2">
+                                                        <span className="text-rose-600 font-black text-sm">{entry.hours} Horas Lançadas</span>
+                                                        {entry.adicionalNoturno > 0 && (
+                                                            <span className="text-indigo-600 font-bold text-xs bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100">{entry.adicionalNoturno}h Noturno</span>
+                                                        )}
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-[10px] font-black text-amber-800 uppercase tracking-wider opacity-70 mb-1">Justificativa:</p>
+                                                        <p className="text-sm text-amber-900 italic">"{entry.justificativa}"</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="w-full sm:w-auto shrink-0 flex flex-col gap-2">
+                                                <button
+                                                    onClick={() => approveEntry(index)}
+                                                    className="w-full flex items-center justify-center gap-2 py-3 px-6 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold shadow-md transition-all hover:-translate-y-0.5"
+                                                >
+                                                    <Check className="w-5 h-5" />
+                                                    Aprovar Excesso
+                                                </button>
+                                            </div>
+                                        </div>
+                                    );
+                                })
+                            )}
+                        </div>
+                        
+                        <div className="p-6 border-t border-slate-100 bg-white flex justify-end gap-3 shadow-[0_-10px_20px_-10px_rgba(0,0,0,0.05)]">
+                            <button
+                                onClick={() => setShowPendingModal(false)}
+                                className="py-3 px-6 font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-200 transition-all text-sm"
+                            >
+                                Visualizar Documento Completo
+                            </button>
+                            <button
+                                onClick={handleSave}
+                                disabled={entries.length === 0}
+                                className="flex items-center justify-center gap-2 py-3 px-6 font-bold text-white bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 rounded-xl transition-all shadow-md hover:shadow-lg hover:-translate-y-0.5 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                <Save className="w-4 h-4" />
+                                Salvar Aprovações e Liberar
                             </button>
                         </div>
                     </div>

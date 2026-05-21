@@ -1259,10 +1259,10 @@ const App: React.FC = () => {
 
     // FRONTEND VALIDATION FOR COMPRAS (ACCOUNT MANDATORY)
     // Fallback block if somehow the UI step validation is bypassed
-    if (activeBlock === 'compras' && !appState.content.selectedAccount) {
-      // alert("A conta de pagamento é obrigatória para criar ou editar um pedido."); // Replaced by beautiful modal in ComprasStepWizard
-      return false;
-    }
+    // if (activeBlock === 'compras' && !appState.content.selectedAccount) {
+    //   // alert("A conta de pagamento é obrigatória para criar ou editar um pedido."); // Replaced by beautiful modal in ComprasStepWizard
+    //   return false;
+    // }
 
     // 2FA Interception Logic
     // Skip 2FA if we already have a valid digital signature stored (e.g. from ComprasForm Step 5)
