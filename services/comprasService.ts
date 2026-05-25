@@ -255,26 +255,8 @@ export const updateOrderStatus = async (id: string, status: string, historyEntry
         throw new Error("Validação de Segurança: Pedido rejeitado não pode ser alterado.");
     }
 
-    // NEW MANDATORY RULE: Admin approval always transitions to "Conta de Pagamento"
     let finalStatus = status;
-    const selectedAccount = current?.document_snapshot?.content?.selectedAccount;
 
-    if (status === 'approved') {
-        // Automatically route the true status to payment_account upon Admin Approval
-        finalStatus = 'payment_account';
-
-        // Adjust history entry to reflect it is awaiting the account confirmation
-        if (historyEntry.statusLabel === 'Aprovação Administrativa') {
-            historyEntry.statusLabel = 'Aprovação Administrativa (Aguardando Conta)';
-        }
-    }
-
-    // NEW MANDATORY RULE: Cannot progress beyond 'payment_account' or 'pending' without an account
-    // If the user tries to move to 'in_progress' or any other active status but there's no account
-    const activeStatuses = ['in_progress', 'finishing', 'completed'];
-    if (activeStatuses.includes(status) && !selectedAccount) {
-        throw new Error("Validação de Segurança: É obrigatório informar a conta para que o pedido possa avançar.");
-    }
 
     // RULE: Admin approval/rejection only allowed if current status is "Em Aprovação" (pending/awaiting_approval)
     if (status === 'approved' || status === 'rejected') {
@@ -343,10 +325,7 @@ export const updatePurchaseStatus = async (id: string, status: string, historyEn
         throw new Error("Validação de Segurança: Não é possível avançar etapas nem interagir com um pedido já rejeitado.");
     }
 
-    // NEW MANDATORY RULE: Must have an account to update purchase status
-    if (!current?.document_snapshot?.content?.selectedAccount) {
-        throw new Error("Validação de Segurança: É obrigatório informar a conta para que o pedido possa avançar para o próximo status.");
-    }
+
 
     // MANDATORY RULE: Pedido Realizado requires Previsão
     if (status === 'realizado' && !completionForecast) {

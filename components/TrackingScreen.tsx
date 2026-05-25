@@ -410,28 +410,21 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
         const isEmAprovacao = !order.status || order.status === 'pending' || order.status === 'awaiting_approval';
 
         const isLockedForUser = currentStatus === 'aprovacao_orcamento' && !isAdmin;
-        const isPaymentAccount = order.status === 'payment_account';
-        const canClick = (isAdmin && isEmAprovacao) || (isComprasUser && !isLockedForUser && isApproved) || isPaymentAccount;
+        const canClick = (isAdmin && isEmAprovacao) || (isComprasUser && !isLockedForUser && isApproved);
 
         const handleClick = (e: React.MouseEvent) => {
             if (!canClick) return;
             e.stopPropagation();
 
-            if (order.status === 'payment_account') {
-                setAccountSelectionOrder(order);
-            } else if (isAdmin) {
+            if (isAdmin && isEmAprovacao) {
                 setAdminApprovalOrder(order);
             } else if (isComprasUser && isApproved) {
                 setStatusSelectionOrder(order);
             }
         };
 
-        if (isApproved || isPaymentAccount) {
-            const displayConfig = isPaymentAccount ? {
-                label: 'Conta de Pagamento',
-                icon: RotateCcw,
-                color: 'text-blue-600 bg-blue-50 border-blue-100'
-            } : config;
+        if (isApproved) {
+            const displayConfig = config;
 
             return (
                 <button
@@ -443,7 +436,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                     `}
                 >
                     <div className="flex items-center gap-1.5 min-w-0">
-                        <displayConfig.icon className={`w-3.5 h-3.5 shrink-0 ${isLockedForUser ? 'animate-pulse' : ''} ${isPaymentAccount ? 'animate-spin-slow' : ''}`} />
+                        <displayConfig.icon className={`w-3.5 h-3.5 shrink-0 ${isLockedForUser ? 'animate-pulse' : ''}`} />
                         <span className="text-[9px] font-black uppercase tracking-wider whitespace-nowrap overflow-hidden text-ellipsis">{displayConfig.label}</span>
                     </div>
                     {isLockedForUser ? (
@@ -458,7 +451,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
         return (
             <button
                 onClick={handleClick}
-                className={`transition-all ${((isAdmin || order.status === 'payment_account') && order.status !== 'rejected') ? 'cursor-pointer hover:scale-105 active:scale-95' : 'cursor-default'}`}
+                className={`transition-all ${(isAdmin && order.status !== 'rejected') ? 'cursor-pointer hover:scale-105 active:scale-95' : 'cursor-default'}`}
             >
                 {getStatusBadge(order.status)}
             </button>
@@ -1677,7 +1670,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                         // 1. Optimistic status update
                                                         setLocalOptimisticUpdates(prev => ({
                                                             ...prev,
-                                                            [id]: { status: 'payment_account' }
+                                                            [id]: { status: 'approved' }
                                                         }));
                                                         // 2. Show Success
                                                         setSuccessOrderId(id);
