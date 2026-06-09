@@ -23,6 +23,7 @@ interface HomeScreenProps {
     onRH?: () => void;
     onProjetos?: () => void;
     onMarketing?: () => void;
+    onConsultas?: () => void;
     onViewTasksDashboard?: () => void;
     userRole: UserRole;
     userName: string;
@@ -66,6 +67,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     onRH,
     onProjetos,
     onMarketing,
+    onConsultas,
     onLogout,
     onViewTasksDashboard,
     orders = [], // Receive orders for Tasks Dashboard
@@ -109,6 +111,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     const canAccessRh = (permissions.includes('parent_rh') || userRole === 'admin') && isModuleActive('parent_rh');
     const canAccessProjetos = (permissions.includes('parent_projetos') || userRole === 'admin') && isModuleActive('parent_projetos');
     const canAccessMarketing = (permissions.includes('parent_marketing') || userRole === 'admin') && isModuleActive('parent_marketing');
+    const canAccessConsultas = (permissions.includes('parent_consultas') || userRole === 'admin') && isModuleActive('parent_consultas');
     const firstName = userName.split(' ')[0];
 
     // --- Helper Functions for Card Styling ---
@@ -420,6 +423,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                                 {canAccessRh && renderModuleButton(() => onRH?.(), 'fuchsia', Users, 'RH', 'Gestão', '240ms', false)}
                                 {canAccessProjetos && renderModuleButton(() => onProjetos?.(), 'teal', LayoutGrid, 'Projetos', 'Gestão', '245ms', false)}
                                 {canAccessMarketing && renderModuleButton(() => onMarketing?.(), 'teal', Megaphone, 'Marketing', 'Criativo', '248ms', false)}
+                                {canAccessConsultas && renderModuleButton(() => onConsultas?.(), 'sky', Activity, 'Consultas', 'Regulação e exames', '249ms', false)}
 
                                 {canAccessScheduling && renderModuleButton(() => { setActiveBlock('agendamento'); onVehicleScheduling?.(); }, 'violet', CalendarRange, 'Veículos', 'Agendamento', '250ms', false)}
                                 {canAccessAbastecimento && renderModuleButton(() => setActiveBlock('abastecimento'), 'cyan', Droplet, 'Abastecimento', 'Combustível', '300ms', false)}

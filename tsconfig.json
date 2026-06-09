@@ -25,5 +25,17 @@
     },
     "allowImportingTsExtensions": true,
     "noEmit": true
-  }
+  },
+  "exclude": [
+    "node_modules",
+    "dist",
+    "**/*.cjs",
+    "**/*.mjs",
+    "**/*.js",
+    "build_output.txt",
+    "tsc_error.log",
+    "tsc_fixed.log",
+    "tsc_output.txt",
+    "debug_output.log"
+  ]
 }

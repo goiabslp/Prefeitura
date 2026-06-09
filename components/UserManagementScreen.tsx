@@ -955,6 +955,16 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                         title: 'Gestão de Tarefas',
                         permissions: [{ id: 'parent_tarefas', label: 'Módulo: Tarefas' }],
                         color: 'pink'
+                      },
+                      {
+                        title: 'Regulação de Consultas',
+                        permissions: [
+                          { id: 'parent_consultas', label: 'Módulo: Consultas' },
+                          { id: 'parent_consultas_novo_agendamento', label: 'Novo Agendamento' },
+                          { id: 'parent_consultas_acompanhar', label: 'Acompanhar' },
+                          { id: 'parent_consultas_dados', label: 'Área de Dados' }
+                        ],
+                        color: 'sky'
                       }
                     ].map((category) => (
                       <div key={category.title} className="bg-slate-50/50 rounded-2xl p-5 border border-slate-100/60">

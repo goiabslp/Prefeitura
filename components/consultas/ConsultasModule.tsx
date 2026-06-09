@@ -1,0 +1,148 @@
+// Módulo de Consultas e Regulação Municipal
+import React from 'react';
+import { User, AppState } from '../../types';
+import { ArrowLeft, PlusCircle, Activity, History, Database } from 'lucide-react';
+import { NovoAgendamentoScreen } from './NovoAgendamentoScreen';
+import { AcompanharScreen } from './AcompanharScreen';
+import { DadosScreen } from './DadosScreen';
+
+interface ConsultasModuleProps {
+    currentView: string;
+    subView?: string;
+    currentUser: User;
+    onNavigate: (view: string) => void;
+    onLogout: () => void;
+    appState: AppState;
+}
+
+export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
+    currentView,
+    subView,
+    currentUser,
+    onNavigate,
+    onLogout,
+    appState
+}) => {
+    const isSubView = subView === 'novo-agendamento' || subView === 'acompanhar' || subView === 'dados';
+    
+    // Permission checks
+    const isAdmin = currentUser.role === 'admin';
+    const canAccessNovoAgendamento = currentUser.permissions?.includes('parent_consultas_novo_agendamento') || isAdmin;
+    const canAccessAcompanhar = currentUser.permissions?.includes('parent_consultas_acompanhar') || isAdmin;
+    const canAccessDados = currentUser.permissions?.includes('parent_consultas_dados') || isAdmin;
+
+    const renderMainScreen = () => {
+        return (
+            <div className="flex-1 flex flex-col items-center justify-center w-full h-full min-h-[80vh] container mx-auto p-4 relative">
+                {/* Back Button */}
+                <button
+                    onClick={() => onNavigate('home')}
+                    className="fixed top-24 left-4 md:top-28 md:left-8 z-[999] group flex items-center gap-2 text-slate-500 hover:text-sky-600 font-bold transition-all p-2 pr-4 rounded-full bg-white/90 backdrop-blur-md border border-slate-200/60 shadow-lg hover:shadow-xl hover:bg-white hover:-translate-y-0.5 hover:border-sky-100"
+                    title="Voltar ao Menu"
+                >
+                    <div className="w-8 h-8 rounded-full bg-white border border-slate-100 flex items-center justify-center group-hover:bg-sky-50 group-hover:border-sky-100 transition-colors">
+                        <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform text-slate-400 group-hover:text-sky-600" />
+                    </div>
+                    <span className="text-[10px] uppercase tracking-widest font-extrabold group-hover:text-sky-700">Voltar</span>
+                </button>
+
+                <div className="w-full flex-1 flex flex-col items-center justify-center max-h-full mt-16 md:mt-0">
+                    {/* Header */}
+                    <div className="flex flex-col items-center mb-6 md:mb-12 shrink-0 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                        <div className="p-4 rounded-[1.8rem] bg-gradient-to-br from-sky-50 to-sky-100/50 mb-4 shadow-sm ring-6 ring-white/50">
+                            <Activity className="w-10 h-10 text-sky-600 drop-shadow-sm animate-pulse" />
+                        </div>
+                        <h2 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight text-center drop-shadow-sm uppercase">Regulação & Consultas</h2>
+                        <p className="text-slate-500 text-[10px] font-bold uppercase tracking-[0.2em] mt-1 text-center">Agendamento de exames e consultas municipais</p>
+                    </div>
+
+                    {/* Cards Grid */}
+                    <div className="w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 max-w-5xl animate-in zoom-in duration-500 fill-mode-backwards p-2">
+                        {/* Novo Agendamento Card */}
+                        {canAccessNovoAgendamento && (
+                            <button
+                                onClick={() => onNavigate('consultas:novo-agendamento')}
+                                className="group relative w-full min-h-[140px] md:min-h-[180px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-sky-500/30 hover:border-sky-200 hover:from-white hover:to-sky-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden text-center"
+                            >
+                                <div className="absolute top-0 right-0 w-32 h-32 bg-sky-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
+                                <div className="absolute bottom-0 left-0 w-24 h-24 bg-sky-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
+
+                                <div className="w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-gradient-to-br from-sky-500 to-sky-600 flex items-center justify-center mb-3 text-white group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300 shadow-lg shadow-sky-500/30 ring-4 ring-white">
+                                    <PlusCircle className="w-6 h-6 md:w-7 md:h-7 drop-shadow-md" />
+                                </div>
+
+                                <h3 className="text-lg md:text-2xl font-bold text-slate-800 mb-1 group-hover:text-slate-900 tracking-tight uppercase">Novo Agendamento</h3>
+                                <p className="text-[10px] md:text-xs font-bold text-slate-400 group-hover:text-sky-600 transition-colors uppercase tracking-widest text-center px-4">Cadastrar ou Vincular Paciente</p>
+                            </button>
+                        )}
+
+                        {/* Acompanhar Card */}
+                        {canAccessAcompanhar && (
+                            <button
+                                onClick={() => onNavigate('consultas:acompanhar')}
+                                className="group relative w-full min-h-[140px] md:min-h-[180px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-indigo-500/30 hover:border-indigo-200 hover:from-white hover:to-indigo-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden text-center"
+                            >
+                                <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
+                                <div className="absolute bottom-0 left-0 w-24 h-24 bg-indigo-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
+
+                                <div className="w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center mb-3 text-white group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300 shadow-lg shadow-indigo-500/30 ring-4 ring-white">
+                                    <History className="w-6 h-6 md:w-7 md:h-7 drop-shadow-md" />
+                                </div>
+
+                                <h3 className="text-lg md:text-2xl font-bold text-slate-800 mb-1 group-hover:text-slate-900 tracking-tight uppercase">Acompanhar</h3>
+                                <p className="text-[10px] md:text-xs font-bold text-slate-400 group-hover:text-indigo-600 transition-colors uppercase tracking-widest text-center px-4">Fila de Espera em Tempo Real</p>
+                            </button>
+                        )}
+
+                        {/* Dados & Dashboard Card */}
+                        {canAccessDados && (
+                            <button
+                                onClick={() => onNavigate('consultas:dados')}
+                                className="group relative w-full min-h-[140px] md:min-h-[180px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-emerald-500/30 hover:border-emerald-200 hover:from-white hover:to-emerald-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden text-center"
+                            >
+                                <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
+                                <div className="absolute bottom-0 left-0 w-24 h-24 bg-emerald-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
+
+                                <div className="w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center mb-3 text-white group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300 shadow-lg shadow-emerald-500/30 ring-4 ring-white">
+                                    <Database className="w-6 h-6 md:w-7 md:h-7 drop-shadow-md" />
+                                </div>
+
+                                <h3 className="text-lg md:text-2xl font-bold text-slate-800 mb-1 group-hover:text-slate-900 tracking-tight uppercase">Dados & Dashboard</h3>
+                                <p className="text-[10px] md:text-xs font-bold text-slate-400 group-hover:text-emerald-600 transition-colors uppercase tracking-widest text-center px-4">Indicadores e Administração</p>
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    return (
+        <div className="flex-1 w-full h-full bg-[#f8fafc] relative flex flex-col overflow-hidden min-h-0">
+            <div className="flex-1 flex flex-col h-full bg-[#f8fafc] w-full max-w-[100vw] overflow-hidden relative min-h-0">
+                <main className="flex-1 overflow-y-auto md:overflow-hidden p-3 md:p-4 custom-scrollbar flex flex-col min-h-0">
+                    {!isSubView ? (
+                        renderMainScreen()
+                    ) : subView === 'novo-agendamento' ? (
+                        <NovoAgendamentoScreen
+                            currentUser={currentUser}
+                            onBack={() => onNavigate('consultas')}
+                            onNavigate={onNavigate}
+                            appState={appState}
+                        />
+                    ) : subView === 'acompanhar' ? (
+                        <AcompanharScreen
+                            currentUser={currentUser}
+                            onBack={() => onNavigate('consultas')}
+                        />
+                    ) : (
+                        <DadosScreen
+                            currentUser={currentUser}
+                            onBack={() => onNavigate('consultas')}
+                        />
+                    )}
+                </main>
+            </div>
+        </div>
+    );
+};

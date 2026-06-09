@@ -192,9 +192,9 @@ export interface AppState {
 
 export type UserRole = 'admin' | 'collaborator' | 'compras' | 'marketing' | 'licitacao';
 
-export type AppPermission = 'parent_criar_oficio' | 'parent_admin' | 'parent_compras' | 'parent_diarias' | 'parent_diarias_novo_evento' | 'parent_diarias_lancamentos' | 'parent_frotas' | 'parent_agendamento_veiculo' | 'parent_abastecimento' | 'parent_abastecimento_novo' | 'parent_abastecimento_gestao' | 'parent_abastecimento_dashboard' | 'parent_agricultura' | 'parent_obras' | 'parent_tarefas' | 'parent_calendario' | 'parent_rh' | 'parent_projetos' | 'parent_marketing' | 'parent_compras_itens' | 'parent_compras_dados' | 'parent_licitacao';
+export type AppPermission = 'parent_criar_oficio' | 'parent_admin' | 'parent_compras' | 'parent_diarias' | 'parent_diarias_novo_evento' | 'parent_diarias_lancamentos' | 'parent_frotas' | 'parent_agendamento_veiculo' | 'parent_abastecimento' | 'parent_abastecimento_novo' | 'parent_abastecimento_gestao' | 'parent_abastecimento_dashboard' | 'parent_agricultura' | 'parent_obras' | 'parent_tarefas' | 'parent_calendario' | 'parent_rh' | 'parent_projetos' | 'parent_marketing' | 'parent_compras_itens' | 'parent_compras_dados' | 'parent_licitacao' | 'parent_consultas' | 'parent_consultas_novo_agendamento' | 'parent_consultas_acompanhar' | 'parent_consultas_dados';
 
-export type BlockType = 'oficio' | 'compras' | 'diarias' | 'agendamento' | 'abastecimento' | 'vs_calendar' | 'vs_history' | 'vs_approvals' | 'dashboard' | 'agricultura' | 'obras' | 'tarefas' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'licitacao';
+export type BlockType = 'oficio' | 'compras' | 'diarias' | 'agendamento' | 'abastecimento' | 'vs_calendar' | 'vs_history' | 'vs_approvals' | 'dashboard' | 'agricultura' | 'obras' | 'tarefas' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'licitacao' | 'consultas';
 
 export interface User {
   id: string;
@@ -471,4 +471,45 @@ export interface DiariaEvento {
   user_name: string;
   created_at?: string;
 }
+
+export interface ConsultaPaciente {
+  id: string;
+  name: string;
+  cpf: string;
+  birth_date: string;
+  nickname?: string;
+  phone?: string;
+  neighborhood?: string;
+  street?: string;
+  city?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ConsultaProcedimento {
+  id: string;
+  name: string;
+  type: 'Exame' | 'Consulta';
+  available_quantity: number;
+  total_quantity: number;
+  status: 'Ativo' | 'Inativo';
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ConsultaAgendamento {
+  id: string;
+  patient_id: string;
+  procedimento_id: string;
+  appointment_date: string;
+  quantity: number;
+  priority: 'Normal' | 'Urgência';
+  status: 'Agendado' | 'Realizado' | 'Cancelado';
+  created_by: string;
+  created_at?: string;
+  paciente?: ConsultaPaciente;
+  procedimento?: ConsultaProcedimento;
+  responsavel?: { name: string };
+}
+
 declare const __LATEST_COMMIT__: string;

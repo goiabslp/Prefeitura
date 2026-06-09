@@ -95,6 +95,7 @@ import { Calendario } from './components/calendario/Calendario';
 import { RHModule } from './components/rh/RHModule';
 import { ProjetosModule } from './components/projetos/ProjetosModule';
 import { MarketingModule } from './components/marketing/MarketingModule';
+import { ConsultasModule } from './components/consultas/ConsultasModule';
 import { SystemUpdateScreen } from './components/SystemUpdateScreen';
 import { NovoEventoScreen } from './components/diarias/NovoEventoScreen';
 import { LancamentosScreen } from './components/diarias/LancamentosScreen';
@@ -158,7 +159,11 @@ const VIEW_TO_PATH: Record<string, string> = {
   'marketing:details': '/Marketing/Detalhes',
   'licitacao': '/Licitação',
   'licitacao:new': '/Licitação/NovoPedido',
-  'licitacao:details': '/Licitação/MeusProcessos'
+  'licitacao:details': '/Licitação/MeusProcessos',
+  'consultas': '/Consultas',
+  'consultas:novo-agendamento': '/Consultas/NovoAgendamento',
+  'consultas:acompanhar': '/Consultas/Acompanhar',
+  'consultas:dados': '/Consultas/DADOS'
 };
 
 const PATH_TO_STATE: Record<string, any> = Object.fromEntries(
@@ -169,7 +174,8 @@ const PATH_TO_STATE: Record<string, any> = Object.fromEntries(
 );
 
 const App: React.FC = () => {
-  const [currentView, setCurrentView] = useState<'login' | 'home' | 'admin' | 'tracking' | 'editor' | 'vehicle-scheduling' | 'abastecimento' | 'agricultura' | 'obras' | 'order-details' | 'tasks-dashboard' | 'purchase-inventory' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'diarias-novo-evento' | 'diarias-lancamentos' | 'licitacao' | 'licitacao:new' | 'licitacao:view' | 'licitacao:details' | 'licitacao-all' | 'licitacao-screening'>('login');
+  // State controlling the active module view
+  const [currentView, setCurrentView] = useState<'login' | 'home' | 'admin' | 'tracking' | 'editor' | 'vehicle-scheduling' | 'abastecimento' | 'agricultura' | 'obras' | 'order-details' | 'tasks-dashboard' | 'purchase-inventory' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'diarias-novo-evento' | 'diarias-lancamentos' | 'licitacao' | 'licitacao:new' | 'licitacao:view' | 'licitacao:details' | 'licitacao-all' | 'licitacao-screening' | 'consultas'>('login');
   const queryClient = useQueryClient();
   const { data: licitacaoProcessesData } = useLicitacaoProcesses();
 
@@ -820,6 +826,31 @@ const App: React.FC = () => {
       )
       .subscribe();
 
+    // Consultas Channel (NEW)
+    const consultasChannel = supabase.channel('public:consultas_changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'consultas_agendamentos' },
+        () => {
+          window.dispatchEvent(new Event('consultas-agendamentos-changed'));
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'consultas_pacientes' },
+        () => {
+          window.dispatchEvent(new Event('consultas-pacientes-changed'));
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'consultas_procedimentos' },
+        () => {
+          window.dispatchEvent(new Event('consultas-procedimentos-changed'));
+        }
+      )
+      .subscribe();
+
     // System Update Channel (NEW) - Enhanced with Broadcast for true Realtime
     const settingsChannel = supabase.channel('global-updates')
       .on(
@@ -858,6 +889,7 @@ const App: React.FC = () => {
       supabase.removeChannel(schedulesChannel);
       supabase.removeChannel(licitacaoChannel);
       supabase.removeChannel(settingsChannel);
+      supabase.removeChannel(consultasChannel);
     };
   }, [queryClient]);
 
@@ -931,6 +963,10 @@ const App: React.FC = () => {
           setAppState(prev => ({ ...prev, view: state.sub }));
           setActiveBlock(null);
         }
+        else if (state.view === 'consultas') {
+          setAppState(prev => ({ ...prev, view: state.sub }));
+          setActiveBlock(null);
+        }
 
       } else if (path !== '/' && path !== '/Login') {
         // Fallback for unknown paths? Maybe redirect to home or stay on login?
@@ -981,6 +1017,8 @@ const App: React.FC = () => {
         stateKey = 'order-details';
       } else if (currentView === 'rh') {
         stateKey = appState.view ? `rh:${appState.view}` : 'rh';
+      } else if (currentView === 'consultas') {
+        stateKey = appState.view ? `consultas:${appState.view}` : 'consultas';
       } else if (currentView === 'home' && !activeBlock) {
         stateKey = 'home';
       }
@@ -3538,6 +3576,10 @@ const App: React.FC = () => {
                 onRH={() => setCurrentView('rh')}
                 onProjetos={() => setCurrentView('projetos')}
                 onMarketing={() => setCurrentView('marketing')}
+                onConsultas={() => {
+                  setCurrentView('consultas');
+                  setAppState(prev => ({ ...prev, view: undefined }));
+                }}
                 activeBlock={activeBlock}
                 setActiveBlock={(block) => {
                   if (block === 'licitacao') {
@@ -3989,6 +4031,35 @@ const App: React.FC = () => {
                     executeSave();
                   }
                 }}
+              />
+            )}
+
+            {currentView === 'consultas' && (
+              <ConsultasModule
+                currentView={currentView}
+                subView={appState.view}
+                currentUser={currentUser!}
+                onNavigate={(view) => {
+                  if (view === 'home') {
+                    setCurrentView('home');
+                    setActiveBlock(null);
+                    window.history.pushState({}, '', '/PaginaInicial');
+                  } else if (view === 'consultas:novo-agendamento') {
+                    setAppState(prev => ({ ...prev, view: 'novo-agendamento' }));
+                    window.history.pushState({}, '', '/Consultas/NovoAgendamento');
+                  } else if (view === 'consultas:acompanhar') {
+                    setAppState(prev => ({ ...prev, view: 'acompanhar' }));
+                    window.history.pushState({}, '', '/Consultas/Acompanhar');
+                  } else if (view === 'consultas:dados') {
+                    setAppState(prev => ({ ...prev, view: 'dados' }));
+                    window.history.pushState({}, '', '/Consultas/DADOS');
+                  } else if (view === 'consultas') {
+                    setAppState(prev => ({ ...prev, view: undefined }));
+                    window.history.pushState({}, '', '/Consultas');
+                  }
+                }}
+                onLogout={signOut}
+                appState={appState}
               />
             )}
 
