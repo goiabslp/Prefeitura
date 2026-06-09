@@ -489,7 +489,7 @@ export interface ConsultaPaciente {
 export interface ConsultaProcedimento {
   id: string;
   name: string;
-  type: 'Exame' | 'Consulta';
+  type: 'Exame' | 'Consulta' | 'Cirurgia';
   available_quantity: number;
   total_quantity: number;
   status: 'Ativo' | 'Inativo';
@@ -504,7 +504,7 @@ export interface ConsultaAgendamento {
   appointment_date: string;
   quantity: number;
   priority: 'Normal' | 'Urgência';
-  status: 'Agendado' | 'Realizado' | 'Cancelado';
+  status: 'Agendado' | 'Realizado' | 'Cancelado' | 'Fila de Espera' | 'Aguardando Data';
   created_by: string;
   created_at?: string;
   paciente?: ConsultaPaciente;

@@ -134,6 +134,7 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
                         <AcompanharScreen
                             currentUser={currentUser}
                             onBack={() => onNavigate('consultas')}
+                            appState={appState}
                         />
                     ) : (
                         <DadosScreen

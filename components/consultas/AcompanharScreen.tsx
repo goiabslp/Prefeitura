@@ -1,21 +1,28 @@
 import React, { useState, useEffect } from 'react';
-import { User, ConsultaAgendamento, ConsultaProcedimento } from '../../types';
-import { ArrowLeft, Search, Filter, Calendar, CheckCircle2, XCircle, Trash2, Loader2, Sparkles } from 'lucide-react';
+import { User, ConsultaAgendamento, ConsultaProcedimento, AppState } from '../../types';
+import { ArrowLeft, Search, Filter, Calendar, CheckCircle2, XCircle, Trash2, Loader2, Sparkles, Clock, FileDown } from 'lucide-react';
 import * as db from '../../services/consultasService';
+import { jsPDF } from 'jspdf';
+import html2canvas from 'html2canvas';
+import { ConsultaPdfGenerator } from './ConsultaPdfGenerator';
 
 interface AcompanharScreenProps {
     currentUser: User;
     onBack: () => void;
+    appState: AppState;
 }
 
 export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     currentUser,
-    onBack
+    onBack,
+    appState
 }) => {
     // Booking list and state
     const [bookings, setBookings] = useState<ConsultaAgendamento[]>([]);
     const [procedures, setProcedures] = useState<ConsultaProcedimento[]>([]);
     const [loading, setLoading] = useState(true);
+    const [printingBooking, setPrintingBooking] = useState<ConsultaAgendamento | null>(null);
+    const [isGenerating, setIsGenerating] = useState(false);
 
     // Filters
     const [filterName, setFilterName] = useState('');
@@ -102,6 +109,53 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
         }
     };
 
+    // Download Receipt PDF
+    const handleDownloadPdf = async (booking: ConsultaAgendamento) => {
+        if (!booking.paciente || !booking.procedimento) return;
+        setIsGenerating(true);
+        setPrintingBooking(booking);
+
+        // Allow template portal to render
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        try {
+            const container = document.getElementById('consulta-pdf-content');
+            if (!container) {
+                console.error("PDF container not found");
+                return;
+            }
+
+            const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+            const canvas = await html2canvas(container, {
+                scale: 2,
+                useCORS: true,
+                allowTaint: true,
+                logging: false,
+                backgroundColor: '#ffffff',
+                scrollY: 0,
+                scrollX: 0,
+                width: container.offsetWidth,
+                height: container.offsetHeight
+            });
+
+            const imgData = canvas.toDataURL('image/jpeg', 0.98);
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+
+            pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+
+            const protocol = booking.id.substring(0, 8).toUpperCase();
+            pdf.save(`Comprovante-Agendamento-${protocol}.pdf`);
+        } catch (error) {
+            console.error('Erro ao gerar PDF do agendamento:', error);
+            alert('Não foi possível gerar o PDF no momento.');
+        } finally {
+            setIsGenerating(false);
+            setPrintingBooking(null);
+        }
+    };
+
     // Handle Delete Booking
     const handleDelete = async (id: string) => {
         if (!window.confirm('Deseja realmente excluir este agendamento? Esta ação é permanente.')) return;
@@ -117,6 +171,17 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
             loadData(true);
         }
     };
+
+    const sortedBookings = [...bookings].sort((a, b) => {
+        if (filterStatus === 'Fila de Espera') {
+            if (a.priority === 'Urgência' && b.priority !== 'Urgência') return -1;
+            if (a.priority !== 'Urgência' && b.priority === 'Urgência') return 1;
+            const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
+            const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
+            return dateA - dateB;
+        }
+        return 0;
+    });
 
     return (
         <div className="w-full mx-auto flex flex-col flex-1 h-full max-h-full min-h-0 bg-white rounded-3xl border border-slate-200/80 shadow-2xl shadow-slate-100 overflow-hidden">
@@ -140,6 +205,20 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                         </h3>
                         <p className="text-xs text-slate-500 font-medium">Lista de agendamentos realizados e andamento em tempo real</p>
                     </div>
+                </div>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={() => setFilterStatus(prev => prev === 'Fila de Espera' ? '' : 'Fila de Espera')}
+                        className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all shadow-sm border ${
+                            filterStatus === 'Fila de Espera'
+                            ? 'bg-amber-500 text-white border-amber-600 shadow-amber-200/50 hover:bg-amber-600'
+                            : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:text-slate-800'
+                        }`}
+                        title="Filtrar por Pacientes na Fila de Espera"
+                    >
+                        <Clock className="w-3.5 h-3.5" />
+                        Fila de Espera
+                    </button>
                 </div>
             </div>
 
@@ -193,6 +272,8 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                     >
                         <option value="">Todos os Status</option>
                         <option value="Agendado">Agendado</option>
+                        <option value="Aguardando Data">Aguardando Data</option>
+                        <option value="Fila de Espera">Fila de Espera</option>
                         <option value="Realizado">Realizado</option>
                         <option value="Cancelado">Cancelado</option>
                     </select>
@@ -222,7 +303,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
-                                    {bookings.map((booking) => {
+                                    {sortedBookings.map((booking) => {
                                         const isOperating = operatingId === booking.id;
                                         return (
                                             <tr key={booking.id} className="hover:bg-slate-50/30 text-xs font-semibold text-slate-700 transition-colors">
@@ -234,11 +315,13 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                                 </td>
                                                 <td className="p-4">
                                                     <div className="font-bold text-slate-800">{booking.procedimento?.name || 'Carregando...'}</div>
-                                                    <span className={`inline-block px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded mt-1 ${
-                                                        booking.procedimento?.type === 'Exame' 
-                                                        ? 'bg-sky-50 text-sky-600' 
-                                                        : 'bg-indigo-50 text-indigo-600'
-                                                    }`}>
+                                                     <span className={`inline-block px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded mt-1 ${
+                                                         booking.procedimento?.type === 'Exame' 
+                                                         ? 'bg-sky-50 text-sky-600' 
+                                                         : booking.procedimento?.type === 'Consulta'
+                                                         ? 'bg-indigo-50 text-indigo-600'
+                                                         : 'bg-rose-50 text-rose-600'
+                                                     }`}>
                                                         {booking.procedimento?.type}
                                                     </span>
                                                 </td>
@@ -260,6 +343,10 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                                         ? 'bg-sky-50 text-sky-700 border-sky-100' 
                                                         : booking.status === 'Realizado' 
                                                         ? 'bg-emerald-50 text-emerald-700 border-emerald-100' 
+                                                        : booking.status === 'Fila de Espera'
+                                                        ? 'bg-amber-50 text-amber-700 border-amber-100'
+                                                        : booking.status === 'Aguardando Data'
+                                                        ? 'bg-violet-50 text-violet-700 border-violet-100'
                                                         : 'bg-rose-50 text-rose-700 border-rose-100'
                                                     }`}>
                                                         {booking.status}
@@ -277,9 +364,21 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                                             <Loader2 className="w-5 h-5 text-sky-600 animate-spin" />
                                                         ) : (
                                                             <>
-                                                                {booking.status === 'Agendado' && (
+                                                                <button
+                                                                    onClick={() => handleDownloadPdf(booking)}
+                                                                    disabled={isGenerating}
+                                                                    className="p-1.5 text-sky-600 hover:text-white hover:bg-sky-500 rounded-lg border border-sky-100 hover:border-sky-500 transition-all flex items-center justify-center disabled:opacity-50"
+                                                                    title="Baixar Comprovante PDF"
+                                                                >
+                                                                    {isGenerating && printingBooking?.id === booking.id ? (
+                                                                        <Loader2 className="w-4.5 h-4.5 animate-spin" />
+                                                                    ) : (
+                                                                        <FileDown className="w-4 h-4" />
+                                                                    )}
+                                                                </button>
+                                                                {(booking.status === 'Agendado' || booking.status === 'Fila de Espera' || booking.status === 'Aguardando Data') && (
                                                                     <>
-                                                                        {canComplete && (
+                                                                        {booking.status === 'Agendado' && canComplete && (
                                                                             <button
                                                                                 onClick={() => handleStatusUpdate(booking.id, 'Realizado')}
                                                                                 className="p-1.5 text-emerald-500 hover:text-white hover:bg-emerald-500 rounded-lg border border-emerald-100 hover:border-emerald-500 transition-all"
@@ -327,6 +426,18 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                     </div>
                 )}
             </div>
+            {printingBooking && (
+                <ConsultaPdfGenerator
+                    bookingId={printingBooking.id}
+                    patient={printingBooking.paciente!}
+                    procedure={printingBooking.procedimento!}
+                    date={printingBooking.appointment_date}
+                    quantity={printingBooking.quantity}
+                    priority={printingBooking.priority}
+                    currentUser={currentUser}
+                    state={appState}
+                />
+            )}
         </div>
     );
 };

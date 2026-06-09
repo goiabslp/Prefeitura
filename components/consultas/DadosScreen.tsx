@@ -47,7 +47,7 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
 
     // Procedure Form State
     const [procName, setProcName] = useState('');
-    const [procType, setProcType] = useState<'Exame' | 'Consulta'>('Exame');
+    const [procType, setProcType] = useState<'Exame' | 'Consulta' | 'Cirurgia'>('Exame');
     const [procQty, setProcQty] = useState(0);
     const [procStatus, setProcStatus] = useState<'Ativo' | 'Inativo'>('Ativo');
     const [procError, setProcError] = useState('');
@@ -581,7 +581,9 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                                             <span className={`inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider mb-2 ${
                                                 p.type === 'Exame' 
                                                 ? 'bg-sky-50 text-sky-600 border border-sky-100' 
-                                                : 'bg-indigo-50 text-indigo-600 border border-indigo-100'
+                                                : p.type === 'Consulta'
+                                                ? 'bg-indigo-50 text-indigo-600 border border-indigo-100'
+                                                : 'bg-rose-50 text-rose-600 border border-rose-100'
                                             }`}>
                                                 {p.type}
                                             </span>
@@ -653,6 +655,10 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                                                         ? 'bg-sky-50 text-sky-700 border-sky-100' 
                                                         : h.status === 'Realizado' 
                                                         ? 'bg-emerald-50 text-emerald-700 border-emerald-100' 
+                                                        : h.status === 'Fila de Espera'
+                                                        ? 'bg-amber-50 text-amber-700 border-amber-100'
+                                                        : h.status === 'Aguardando Data'
+                                                        ? 'bg-violet-50 text-violet-700 border-violet-100'
                                                         : 'bg-rose-50 text-rose-700 border-rose-100'
                                                     }`}>
                                                         {h.status}
@@ -843,10 +849,11 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                                     <select
                                         className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none transition-all text-xs font-semibold appearance-none cursor-pointer"
                                         value={procType}
-                                        onChange={(e) => setProcType(e.target.value as 'Exame' | 'Consulta')}
+                                        onChange={(e) => setProcType(e.target.value as 'Exame' | 'Consulta' | 'Cirurgia')}
                                     >
                                         <option value="Exame">Exame</option>
                                         <option value="Consulta">Consulta</option>
+                                        <option value="Cirurgia">Cirurgia</option>
                                     </select>
                                 </div>
                                 <div>
@@ -926,6 +933,10 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                                                 ? 'bg-sky-50 text-sky-700 border-sky-100' 
                                                 : hist.status === 'Realizado' 
                                                 ? 'bg-emerald-50 text-emerald-700 border-emerald-100' 
+                                                : hist.status === 'Fila de Espera'
+                                                ? 'bg-amber-50 text-amber-700 border-amber-100'
+                                                : hist.status === 'Aguardando Data'
+                                                ? 'bg-violet-50 text-violet-700 border-violet-100'
                                                 : 'bg-rose-50 text-rose-700 border-rose-100'
                                             }`}>
                                                 {hist.status}

@@ -15,7 +15,8 @@ import {
     Plus, 
     Calendar,
     Users,
-    FileDown
+    FileDown,
+    X
 } from 'lucide-react';
 import * as db from '../../services/consultasService';
 import { jsPDF } from 'jspdf';
@@ -72,6 +73,15 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
     const [successMessage, setSuccessMessage] = useState('');
     const [createdBooking, setCreatedBooking] = useState<ConsultaAgendamento | null>(null);
     const [isGenerating, setIsGenerating] = useState(false);
+    const [reservedBookings, setReservedBookings] = useState<ConsultaAgendamento[]>([]);
+    const [schedulingReserved, setSchedulingReserved] = useState<ConsultaAgendamento | null>(null);
+    const [reservedDate, setReservedDate] = useState('');
+    const [isReservedModalOpen, setIsReservedModalOpen] = useState(false);
+
+    const fetchReservedBookings = async () => {
+        const data = await db.getAgendamentos({ status: 'Aguardando Data' });
+        setReservedBookings(data);
+    };
 
     // Load active procedures on mount
     useEffect(() => {
@@ -80,12 +90,33 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
             setProcedures(data);
         };
         fetchProcedures();
+        fetchReservedBookings();
         
         // Default booking date to tomorrow
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
         setBookingDate(tomorrow.toISOString().split('T')[0]);
     }, []);
+
+    const handleConfirmReservedDate = async () => {
+        if (!schedulingReserved || !reservedDate) return;
+        setLoading(true);
+        setErrorMessage('');
+        try {
+            const result = await db.confirmarDataAgendamento(schedulingReserved.id, reservedDate);
+            if (result) {
+                setCreatedBooking(result);
+                setSuccessMessage('Agendamento realizado com sucesso!');
+                setIsReservedModalOpen(false);
+                setSchedulingReserved(null);
+                fetchReservedBookings();
+            }
+        } catch (err: any) {
+            setErrorMessage(err.message || 'Erro ao agendar consulta.');
+        } finally {
+            setLoading(false);
+        }
+    };
 
     // Format CPF Input: 000.000.000-00
     const handleCpfChange = (val: string) => {
@@ -327,13 +358,23 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
             <div className="w-full max-w-[96%] 2xl:max-w-[1440px] mx-auto flex flex-col h-full max-h-full min-h-0 bg-white/95 backdrop-blur-md rounded-[2.5rem] border border-slate-200/80 shadow-[0_20px_60px_rgba(0,0,0,0.06)] overflow-hidden animate-in fade-in zoom-in-95 duration-300">
                 <div className="flex-1 flex flex-col items-center p-6 sm:p-8 text-center max-w-2xl mx-auto space-y-6 overflow-y-auto scrollbar-hide min-h-0 justify-start md:justify-center w-full">
                     {/* Success Icon */}
-                    <div className="w-20 h-20 bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 rounded-[2rem] flex items-center justify-center shadow-lg shadow-emerald-500/10 animate-bounce">
+                    <div className={`w-20 h-20 border rounded-[2rem] flex items-center justify-center shadow-lg animate-bounce ${
+                        createdBooking.status === 'Fila de Espera'
+                        ? 'bg-amber-500/10 border-amber-500/20 text-amber-500 shadow-amber-500/10'
+                        : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500 shadow-emerald-500/10'
+                    }`}>
                         <CheckCircle2 className="w-10 h-10" />
                     </div>
 
                     <div className="space-y-2">
-                        <h2 className="text-2xl font-black text-slate-800 tracking-tight uppercase">Agendamento Confirmado!</h2>
-                        <p className="text-sm font-semibold text-slate-500">O agendamento municipal foi registrado no sistema com sucesso.</p>
+                        <h2 className="text-2xl font-black text-slate-800 tracking-tight uppercase">
+                            {createdBooking.status === 'Fila de Espera' ? 'Fila de Espera Registrada!' : 'Agendamento Confirmado!'}
+                        </h2>
+                        <p className="text-sm font-semibold text-slate-500">
+                            {createdBooking.status === 'Fila de Espera' 
+                                ? 'O paciente foi adicionado à fila de espera do procedimento.' 
+                                : 'O agendamento municipal foi registrado no sistema com sucesso.'}
+                        </p>
                     </div>
 
                     {/* Receipt Summary */}
@@ -367,6 +408,16 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                 <span className={`font-black uppercase text-[10px] px-2.5 py-0.5 rounded ${
                                     createdBooking.priority === 'Urgência' ? 'bg-rose-500 text-white shadow-sm' : 'bg-slate-100 text-slate-700'
                                 }`}>{createdBooking.priority}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <span className="text-slate-400">Status:</span>
+                                <span className={`font-black uppercase text-[10px] px-2.5 py-0.5 rounded ${
+                                    createdBooking.status === 'Agendado' 
+                                    ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/10' 
+                                    : createdBooking.status === 'Fila de Espera'
+                                    ? 'bg-amber-500 text-white shadow-sm shadow-amber-500/10'
+                                    : 'bg-slate-100 text-slate-700'
+                                }`}>{createdBooking.status}</span>
                             </div>
                         </div>
                     </div>
@@ -551,6 +602,47 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                 {isRegistering ? 'Buscar Existente' : 'Cadastrar Novo'}
                             </button>
                         </div>
+
+                        {/* RESERVED BOOKINGS LIST */}
+                        {reservedBookings.length > 0 && !isRegistering && (
+                            <div className="mb-6 bg-slate-50 border border-slate-200/60 rounded-3xl p-5 shadow-sm shrink-0">
+                                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                                    <Activity className="w-4 h-4 text-amber-500 animate-pulse" />
+                                    Vagas já Reservadas (Fila de Espera Promovida)
+                                </h4>
+                                <div className="max-h-[160px] overflow-y-auto space-y-2.5 custom-scrollbar pr-1">
+                                    {reservedBookings.map((b) => (
+                                        <div 
+                                            key={b.id} 
+                                            className="p-3 bg-white border border-slate-100 hover:border-slate-200 rounded-xl flex items-center justify-between shadow-inner transition-all group"
+                                        >
+                                            <div className="min-w-0 pr-3">
+                                                <div className="font-extrabold text-slate-800 text-xs uppercase truncate">
+                                                    {b.paciente?.name}
+                                                </div>
+                                                <div className="flex items-center gap-3 text-[10px] text-slate-400 mt-1 font-bold">
+                                                    <span>CPF: {b.paciente?.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}</span>
+                                                    <span className="h-1.5 w-1.5 rounded-full bg-slate-200" />
+                                                    <span className="text-sky-600 font-extrabold uppercase">{b.procedimento?.name}</span>
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={() => {
+                                                    setSchedulingReserved(b);
+                                                    const tomorrow = new Date();
+                                                    tomorrow.setDate(tomorrow.getDate() + 1);
+                                                    setReservedDate(tomorrow.toISOString().split('T')[0]);
+                                                    setIsReservedModalOpen(true);
+                                                }}
+                                                className="px-4 py-2 bg-gradient-to-r from-sky-500 to-indigo-600 text-white hover:from-sky-600 hover:to-indigo-700 font-black rounded-lg text-[9px] uppercase tracking-wider shadow-md active:scale-95 transition-all"
+                                            >
+                                                Definir Data
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
 
                         {!isRegistering ? (
                             /* SEARCH PACIENTE */
@@ -773,13 +865,11 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                             return (
                                                 <div 
                                                     key={proc.id}
-                                                    onClick={() => hasSlots && setSelectedProcedure(proc)}
-                                                    className={`p-3.5 rounded-xl border transition-all duration-300 flex items-center justify-between group/proc ${
-                                                        !hasSlots 
-                                                        ? 'bg-slate-100/50 border-slate-200/60 opacity-55 cursor-not-allowed'
-                                                        : isSelected
+                                                    onClick={() => setSelectedProcedure(proc)}
+                                                    className={`p-3.5 rounded-xl border transition-all duration-300 flex items-center justify-between group/proc cursor-pointer hover:-translate-y-0.5 ${
+                                                        isSelected
                                                         ? 'bg-gradient-to-r from-sky-50 to-white border-sky-400 ring-2 ring-sky-500/5 shadow-md'
-                                                        : 'bg-white border-slate-100 hover:border-slate-300 hover:shadow-sm cursor-pointer hover:-translate-y-0.5'
+                                                        : 'bg-white border-slate-100 hover:border-slate-300 hover:shadow-sm'
                                                     }`}
                                                 >
                                                     <div className="min-w-0 pr-2">
@@ -787,7 +877,9 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                                         <span className={`inline-block px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider rounded border mt-1.5 ${
                                                             proc.type === 'Exame'
                                                             ? 'bg-sky-50 text-sky-600 border-sky-100'
-                                                            : 'bg-indigo-50 text-indigo-600 border-indigo-100'
+                                                            : proc.type === 'Consulta'
+                                                            ? 'bg-indigo-50 text-indigo-600 border-indigo-100'
+                                                            : 'bg-rose-50 text-rose-600 border-rose-100'
                                                         }`}>
                                                             {proc.type}
                                                         </span>
@@ -894,11 +986,18 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                                         bookingPriority === 'Urgência' ? 'bg-rose-500 text-white shadow-sm' : 'bg-slate-100 text-slate-700'
                                                     }`}>{bookingPriority}</span>
                                                 </div>
-                                                {bookingPriority === 'Normal' && !isLastWeekOfMonth(bookingDate) && selectedProcedure.available_quantity <= Math.ceil((selectedProcedure.total_quantity || selectedProcedure.available_quantity) * 0.20) && (
-                                                    <div className="text-[10px] font-bold text-rose-600 bg-rose-50 border border-rose-100 p-2 rounded-lg mt-2 flex items-center gap-1.5 animate-pulse col-span-2">
-                                                        <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                                                        <span>Apenas vagas de urgência disponíveis. Altere a prioridade.</span>
+                                                {getAvailableSlots(selectedProcedure, bookingPriority, bookingDate) <= 0 ? (
+                                                    <div className="text-[10px] font-bold text-amber-600 bg-amber-50 border border-amber-100 p-2.5 rounded-xl mt-2 flex items-center gap-1.5 col-span-2 shadow-sm animate-pulse">
+                                                        <AlertTriangle className="w-4 h-4 shrink-0 text-amber-500" />
+                                                        <span>Atenção: Não há vagas disponíveis. O paciente será registrado na Fila de Espera.</span>
                                                     </div>
+                                                ) : (
+                                                    bookingPriority === 'Normal' && !isLastWeekOfMonth(bookingDate) && selectedProcedure.available_quantity <= Math.ceil((selectedProcedure.total_quantity || selectedProcedure.available_quantity) * 0.20) && (
+                                                        <div className="text-[10px] font-bold text-rose-600 bg-rose-50 border border-rose-100 p-2 rounded-lg mt-2 flex items-center gap-1.5 animate-pulse col-span-2">
+                                                            <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                                                            <span>Apenas vagas de urgência disponíveis. Altere a prioridade ou prossiga para fila de espera.</span>
+                                                        </div>
+                                                    )
                                                 )}
                                             </div>
                                         </div>
@@ -914,14 +1013,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                     </button>
                                     <button
                                         onClick={() => setStep(3)}
-                                        disabled={
-                                            !selectedProcedure || 
-                                            !bookingDate || 
-                                            (bookingPriority === 'Normal' 
-                                                ? ((!isLastWeekOfMonth(bookingDate) && selectedProcedure.available_quantity <= Math.ceil((selectedProcedure.total_quantity || selectedProcedure.available_quantity) * 0.20)) || selectedProcedure.available_quantity < 1)
-                                                : selectedProcedure.available_quantity < 1
-                                            )
-                                        }
+                                        disabled={!selectedProcedure || !bookingDate}
                                         className="px-6 py-2.5 bg-sky-600 hover:bg-sky-700 disabled:opacity-40 disabled:hover:bg-sky-600 text-white font-extrabold rounded-2xl shadow-lg shadow-sky-600/10 hover:shadow-sky-600/20 active:scale-95 disabled:active:scale-100 transition-all text-xs uppercase tracking-wider"
                                     >
                                         Revisar
@@ -983,7 +1075,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                             <span className="block text-[8px] font-black text-slate-400 uppercase tracking-wider">Procedimento Escolhido</span>
                                             <span className="text-sm font-black text-slate-800 truncate block uppercase">{selectedProcedure?.name}</span>
                                         </div>
-                                        <div className="grid grid-cols-2 gap-4">
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                                             <div>
                                                 <span className="block text-[8px] font-black text-slate-400 uppercase tracking-wider">Data do Atendimento</span>
                                                 <span className="text-xs font-bold text-slate-700">
@@ -999,6 +1091,18 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                                 }`}>
                                                     {bookingPriority}
                                                 </span>
+                                            </div>
+                                            <div>
+                                                <span className="block text-[8px] font-black text-slate-400 uppercase tracking-wider">Status Estimado</span>
+                                                {selectedProcedure && getAvailableSlots(selectedProcedure, bookingPriority, bookingDate) > 0 ? (
+                                                    <span className="inline-block text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded mt-0.5 bg-emerald-50 text-emerald-700 border border-emerald-100 font-extrabold">
+                                                        Agendado
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-block text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded mt-0.5 bg-amber-50 text-amber-700 border border-amber-100 font-extrabold animate-pulse">
+                                                        Fila de Espera
+                                                    </span>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
@@ -1032,6 +1136,71 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                 )}
 
             </div>
+            {/* MODAL: DEFINIR DATA PARA RESERVA */}
+            {isReservedModalOpen && schedulingReserved && (
+                <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden border border-slate-100 flex flex-col transform transition-all">
+                        <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 shrink-0">
+                            <div>
+                                <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider">Definir Data do Exame</h3>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">Vaga já reservada para este paciente</p>
+                            </div>
+                            <button 
+                                onClick={() => {
+                                    setIsReservedModalOpen(false);
+                                    setSchedulingReserved(null);
+                                }} 
+                                className="p-2 hover:bg-slate-200 rounded-xl text-slate-400 hover:text-slate-700 transition-colors"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <div className="p-3.5 bg-slate-50 border border-slate-200/50 rounded-2xl space-y-2 text-xs font-bold text-slate-600">
+                                <div className="flex justify-between">
+                                    <span className="text-slate-400">Paciente:</span>
+                                    <span className="text-slate-800 uppercase font-black">{schedulingReserved.paciente?.name}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-slate-400">Procedimento:</span>
+                                    <span className="text-slate-800 uppercase font-black">{schedulingReserved.procedimento?.name}</span>
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Data da Consulta/Exame</label>
+                                <input
+                                    type="date"
+                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all text-xs font-bold"
+                                    value={reservedDate}
+                                    onChange={(e) => setReservedDate(e.target.value)}
+                                    required
+                                />
+                            </div>
+                        </div>
+                        <div className="p-5 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 shrink-0">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setIsReservedModalOpen(false);
+                                    setSchedulingReserved(null);
+                                }}
+                                className="px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-600 font-extrabold rounded-xl text-xs uppercase tracking-wider active:scale-95 transition-all"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleConfirmReservedDate}
+                                disabled={loading || !reservedDate}
+                                className="px-5 py-2.5 bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-extrabold rounded-xl text-xs uppercase tracking-wider active:scale-95 transition-all flex items-center gap-1.5 shadow-md"
+                            >
+                                {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                                Confirmar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

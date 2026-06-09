@@ -1,94 +1,29 @@
--- Migration: Create Consultas tables (Pacientes, Procedimentos, Agendamentos)
+-- Migration: Add 'Aguardando Data' status to consultations and update triggers
 
--- 1. Table: consultas_pacientes
-CREATE TABLE IF NOT EXISTS public.consultas_pacientes (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name TEXT NOT NULL,
-    nickname TEXT,
-    cpf TEXT NOT NULL UNIQUE,
-    birth_date DATE NOT NULL,
-    phone TEXT,
-    neighborhood TEXT,
-    street TEXT,
-    city TEXT DEFAULT 'SÃO JOSÉ DO GOIABAL -MG',
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
--- 2. Table: consultas_procedimentos
-CREATE TABLE IF NOT EXISTS public.consultas_procedimentos (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name TEXT NOT NULL,
-    type TEXT NOT NULL CHECK (type IN ('Exame', 'Consulta', 'Cirurgia')),
-    total_quantity INTEGER NOT NULL DEFAULT 0 CHECK (total_quantity >= 0),
-    available_quantity INTEGER NOT NULL DEFAULT 0 CHECK (available_quantity >= 0),
-    status TEXT NOT NULL DEFAULT 'Ativo' CHECK (status IN ('Ativo', 'Inativo')),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
--- 3. Table: consultas_agendamentos
-CREATE TABLE IF NOT EXISTS public.consultas_agendamentos (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    patient_id UUID NOT NULL REFERENCES public.consultas_pacientes(id) ON DELETE RESTRICT,
-    procedimento_id UUID NOT NULL REFERENCES public.consultas_procedimentos(id) ON DELETE RESTRICT,
-    appointment_date DATE NOT NULL,
-    quantity INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
-    priority TEXT NOT NULL DEFAULT 'Normal' CHECK (priority IN ('Normal', 'Urgência')),
-    status TEXT NOT NULL DEFAULT 'Agendado' CHECK (status IN ('Agendado', 'Realizado', 'Cancelado', 'Fila de Espera', 'Aguardando Data')),
-    created_by UUID NOT NULL REFERENCES public.profiles(id),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
--- 4. Constraint for Conflict Prevention (Only one active booking per patient, procedure, and day)
-CREATE UNIQUE INDEX IF NOT EXISTS unique_active_appointment 
-ON public.consultas_agendamentos (patient_id, procedimento_id, appointment_date) 
-WHERE (status = 'Agendado');
-
--- 5. Create RLS Policies
-ALTER TABLE public.consultas_pacientes ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.consultas_procedimentos ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.consultas_agendamentos ENABLE ROW LEVEL SECURITY;
-
--- Policies for consultas_pacientes
-CREATE POLICY "Allow read access to authenticated users on consultas_pacientes"
-ON public.consultas_pacientes FOR SELECT TO authenticated USING (true);
-
-CREATE POLICY "Allow write access to authenticated users on consultas_pacientes"
-ON public.consultas_pacientes FOR ALL TO authenticated USING (true) WITH CHECK (true);
-
--- Policies for consultas_procedimentos
-CREATE POLICY "Allow read access to authenticated users on consultas_procedimentos"
-ON public.consultas_procedimentos FOR SELECT TO authenticated USING (true);
-
-CREATE POLICY "Allow write access to authenticated users on consultas_procedimentos"
-ON public.consultas_procedimentos FOR ALL TO authenticated USING (true) WITH CHECK (true);
-
--- Policies for consultas_agendamentos
-CREATE POLICY "Allow read access to authenticated users on consultas_agendamentos"
-ON public.consultas_agendamentos FOR SELECT TO authenticated USING (true);
-
-CREATE POLICY "Allow write access to authenticated users on consultas_agendamentos"
-ON public.consultas_agendamentos FOR ALL TO authenticated USING (true) WITH CHECK (true);
-
--- 6. Trigger for updated_at column
-CREATE OR REPLACE FUNCTION update_modified_column()
-RETURNS TRIGGER AS $$
+-- 1. Drop existing inline status check constraint dynamically and add new one
+DO $$
+DECLARE
+    r RECORD;
 BEGIN
-    NEW.updated_at = now();
-    RETURN NEW;
-END;
-$$ language 'plpgsql';
+    FOR r IN 
+        SELECT conname 
+        FROM pg_constraint c
+        JOIN pg_class t ON c.conrelid = t.oid
+        JOIN pg_namespace n ON t.relnamespace = n.oid
+        WHERE n.nspname = 'public' 
+          AND t.relname = 'consultas_agendamentos' 
+          AND c.contype = 'c' 
+          AND pg_get_constraintdef(c.oid) LIKE '%status%'
+    LOOP
+        EXECUTE 'ALTER TABLE public.consultas_agendamentos DROP CONSTRAINT ' || quote_ident(r.conname);
+    END LOOP;
+END $$;
 
-CREATE TRIGGER update_consultas_pacientes_modtime
-    BEFORE UPDATE ON public.consultas_pacientes
-    FOR EACH ROW EXECUTE FUNCTION update_modified_column();
+ALTER TABLE public.consultas_agendamentos 
+ADD CONSTRAINT consultas_agendamentos_status_check 
+CHECK (status IN ('Agendado', 'Realizado', 'Cancelado', 'Fila de Espera', 'Aguardando Data'));
 
-CREATE TRIGGER update_consultas_procedimentos_modtime
-    BEFORE UPDATE ON public.consultas_procedimentos
-    FOR EACH ROW EXECUTE FUNCTION update_modified_column();
-
--- 7. Trigger for auto-managing vagas (available slots) on agendamentos table
+-- 2. Update processar_fila_espera_consultas to promote to 'Aguardando Data' instead of 'Agendado'
 CREATE OR REPLACE FUNCTION public.processar_fila_espera_consultas(p_procedimento_id UUID)
 RETURNS VOID AS $$
 DECLARE
@@ -97,6 +32,8 @@ DECLARE
     v_reserved INTEGER;
     r RECORD;
 BEGIN
+    -- Loop through waiting list entries for this procedure, oldest first.
+    -- Priority 'Urgência' goes first, then normal priority, sorted by creation time.
     FOR r IN 
         SELECT id, appointment_date, quantity, priority 
         FROM public.consultas_agendamentos
@@ -104,16 +41,19 @@ BEGIN
           AND status = 'Fila de Espera'
         ORDER BY CASE WHEN priority = 'Urgência' THEN 0 ELSE 1 END ASC, created_at ASC
     LOOP
+        -- Get current availability
         SELECT available_quantity, total_quantity INTO v_available, v_total
         FROM public.consultas_procedimentos
         WHERE id = p_procedimento_id;
 
+        -- Calculate reserved slots (20%) - bypass in the last week of the month
         IF EXTRACT(MONTH FROM r.appointment_date) <> EXTRACT(MONTH FROM (r.appointment_date + INTERVAL '7 days')) THEN
             v_reserved := 0;
         ELSE
             v_reserved := CEIL(v_total * 0.20);
         END IF;
 
+        -- Check if this booking can be scheduled
         IF (r.priority = 'Normal') THEN
             IF v_available >= (v_reserved + r.quantity) THEN
                 UPDATE public.consultas_agendamentos
@@ -131,6 +71,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- 3. Update main trigger handle_consultas_vagas_change to handle Awaiting Date
 CREATE OR REPLACE FUNCTION handle_consultas_vagas_change()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -140,21 +81,25 @@ DECLARE
     v_old_occupies BOOLEAN;
     v_new_occupies BOOLEAN;
 BEGIN
+    -- Helper variable checks
     v_old_occupies := OLD.status IN ('Agendado', 'Aguardando Data', 'Realizado');
     v_new_occupies := NEW.status IN ('Agendado', 'Aguardando Data', 'Realizado');
 
     IF (TG_OP = 'INSERT') THEN
         IF (v_new_occupies) THEN
+            -- Get available and total quantity
             SELECT available_quantity, total_quantity INTO v_available, v_total
             FROM public.consultas_procedimentos
             WHERE id = NEW.procedimento_id;
 
+            -- Calculate reserved slots (20%)
             IF EXTRACT(MONTH FROM NEW.appointment_date) <> EXTRACT(MONTH FROM (NEW.appointment_date + INTERVAL '7 days')) THEN
                 v_reserved := 0;
             ELSE
                 v_reserved := CEIL(v_total * 0.20);
             END IF;
 
+            -- Validate based on priority
             IF (NEW.priority = 'Normal') THEN
                 IF v_available < (v_reserved + NEW.quantity) THEN
                     NEW.status := 'Fila de Espera';
@@ -165,6 +110,7 @@ BEGIN
                 END IF;
             END IF;
 
+            -- If it remains slot-consuming, decrement vacancy
             IF (NEW.status IN ('Agendado', 'Aguardando Data', 'Realizado')) THEN
                 UPDATE public.consultas_procedimentos
                 SET available_quantity = available_quantity - NEW.quantity
@@ -173,6 +119,7 @@ BEGIN
         END IF;
 
     ELSIF (TG_OP = 'UPDATE') THEN
+        -- Case 1: From non-slot-occupying to slot-occupying
         IF (NOT v_old_occupies AND v_new_occupies) THEN
             SELECT available_quantity, total_quantity INTO v_available, v_total
             FROM public.consultas_procedimentos
@@ -200,11 +147,13 @@ BEGIN
                 WHERE id = NEW.procedimento_id;
             END IF;
 
+        -- Case 2: From slot-occupying to non-slot-occupying
         ELSIF (v_old_occupies AND NOT v_new_occupies) THEN
             UPDATE public.consultas_procedimentos
             SET available_quantity = available_quantity + OLD.quantity
             WHERE id = OLD.procedimento_id;
 
+        -- Case 3: Both occupy slots, but details (qty / priority / date) changed
         ELSIF (v_old_occupies AND v_new_occupies) THEN
             IF (OLD.quantity <> NEW.quantity OR OLD.priority <> NEW.priority OR OLD.appointment_date <> NEW.appointment_date) THEN
                 SELECT available_quantity, total_quantity INTO v_available, v_total
@@ -217,6 +166,7 @@ BEGIN
                     v_reserved := CEIL(v_total * 0.20);
                 END IF;
 
+                -- Check availability considering OLD quantity returned first
                 IF (NEW.priority = 'Normal') THEN
                     IF (v_available + OLD.quantity) < (v_reserved + NEW.quantity) THEN
                         RAISE EXCEPTION 'Vagas normais esgotadas para este procedimento. Vagas restantes reservadas para Urgência.';
@@ -245,10 +195,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER trigger_handle_consultas_vagas
-    BEFORE INSERT OR UPDATE OR DELETE ON public.consultas_agendamentos
-    FOR EACH ROW EXECUTE FUNCTION handle_consultas_vagas_change();
-
+-- 4. Update handle_consultas_vagas_after_change trigger to cover 'Aguardando Data'
 CREATE OR REPLACE FUNCTION handle_consultas_vagas_after_change()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -259,6 +206,7 @@ BEGIN
     v_new_occupies := NEW.status IN ('Agendado', 'Aguardando Data', 'Realizado');
 
     IF (TG_OP = 'UPDATE') THEN
+        -- If slots were released (transition from occupies to not occupies, or decrease in qty)
         IF (v_old_occupies AND NOT v_new_occupies) THEN
             PERFORM public.processar_fila_espera_consultas(NEW.procedimento_id);
         ELSIF (v_old_occupies AND v_new_occupies AND NEW.quantity < OLD.quantity) THEN
@@ -272,40 +220,3 @@ BEGIN
     RETURN NULL;
 END;
 $$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trigger_handle_consultas_vagas_after
-    AFTER UPDATE OR DELETE ON public.consultas_agendamentos
-    FOR EACH ROW EXECUTE FUNCTION handle_consultas_vagas_after_change();
-
-CREATE OR REPLACE FUNCTION handle_procedimentos_vagas_after_change()
-RETURNS TRIGGER AS $$
-BEGIN
-    IF (NEW.available_quantity > OLD.available_quantity) THEN
-        PERFORM public.processar_fila_espera_consultas(NEW.id);
-    END IF;
-    RETURN NULL;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trigger_handle_procedimentos_vagas_after
-    AFTER UPDATE ON public.consultas_procedimentos
-    FOR EACH ROW EXECUTE FUNCTION handle_procedimentos_vagas_after_change();
-
--- 8. Add tables to Realtime publication
-DO $$
-BEGIN
-    ALTER PUBLICATION supabase_realtime ADD TABLE public.consultas_pacientes;
-EXCEPTION WHEN OTHERS THEN NULL;
-END $$;
-
-DO $$
-BEGIN
-    ALTER PUBLICATION supabase_realtime ADD TABLE public.consultas_procedimentos;
-EXCEPTION WHEN OTHERS THEN NULL;
-END $$;
-
-DO $$
-BEGIN
-    ALTER PUBLICATION supabase_realtime ADD TABLE public.consultas_agendamentos;
-EXCEPTION WHEN OTHERS THEN NULL;
-END $$;

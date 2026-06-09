@@ -315,6 +315,31 @@ export const updateAgendamentoStatus = async (id: string, status: ConsultaAgenda
     }
 };
 
+export const confirmarDataAgendamento = async (id: string, date: string): Promise<ConsultaAgendamento | null> => {
+    try {
+        const { data, error } = await supabase
+            .from('consultas_agendamentos')
+            .update({ 
+                appointment_date: date,
+                status: 'Agendado'
+            })
+            .eq('id', id)
+            .select(`
+                *,
+                paciente:consultas_pacientes(*),
+                procedimento:consultas_procedimentos(*),
+                responsavel:profiles(name)
+            `)
+            .single();
+
+        if (error) throw error;
+        return data;
+    } catch (error: any) {
+        console.error('[consultasService] confirmarDataAgendamento Error:', error.message);
+        throw error;
+    }
+};
+
 export const deleteAgendamento = async (id: string): Promise<boolean> => {
     try {
         const { error } = await supabase
