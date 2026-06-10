@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { User, ConsultaAgendamento, ConsultaProcedimento, AppState } from '../../types';
-import { ArrowLeft, Search, Filter, Calendar, CheckCircle2, XCircle, Trash2, Loader2, Sparkles, Clock, FileDown } from 'lucide-react';
+import { ArrowLeft, Search, Filter, Calendar, CheckCircle2, XCircle, Trash2, Loader2, Sparkles, Clock, FileDown, UserX, Repeat, X } from 'lucide-react';
 import * as db from '../../services/consultasService';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import { ConsultaPdfGenerator } from './ConsultaPdfGenerator';
+import { ConsultasReportPdfGenerator } from './ConsultasReportPdfGenerator';
 
 interface AcompanharScreenProps {
     currentUser: User;
@@ -19,6 +21,11 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
 }) => {
     // Booking list and state
     const [bookings, setBookings] = useState<ConsultaAgendamento[]>([]);
+    const [allBookings, setAllBookings] = useState<ConsultaAgendamento[]>([]);
+    const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+    const [reportType, setReportType] = useState<'completo' | 'fila'>('completo');
+    const [isPrintingReport, setIsPrintingReport] = useState(false);
+    const [queuePositions, setQueuePositions] = useState<Record<string, number>>({});
     const [procedures, setProcedures] = useState<ConsultaProcedimento[]>([]);
     const [loading, setLoading] = useState(true);
     const [printingBooking, setPrintingBooking] = useState<ConsultaAgendamento | null>(null);
@@ -33,6 +40,9 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
 
     // Operations states
     const [operatingId, setOperatingId] = useState<string | null>(null);
+    const [retornoBooking, setRetornoBooking] = useState<ConsultaAgendamento | null>(null);
+    const [retornoDate, setRetornoDate] = useState('');
+    const [isRetornoModalOpen, setIsRetornoModalOpen] = useState(false);
 
     // Permissions check
     const isAdmin = currentUser.role === 'admin';
@@ -40,22 +50,140 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     const canComplete = currentUser.permissions?.includes('parent_consultas_novo_agendamento') || isAdmin;
     const canDelete = isAdmin; // Delete strictly admin
 
+    const formatDateBr = (d: string) => {
+        if (!d) return '';
+        const parts = d.split('-');
+        if (parts.length !== 3) return d;
+        const [year, month, day] = parts;
+        return `${day}/${month}/${year}`;
+    };
+
+    // Groupings for complete report
+    const reportDataCompleto = useMemo(() => {
+        const groups: Record<string, Record<string, Record<string, ConsultaAgendamento[]>>> = {};
+        allBookings.forEach(b => {
+            const type = b.procedimento?.type || 'OUTRO';
+            const priority = b.priority === 'Urgência' ? 'Urgência' : b.is_retorno ? 'Retorno' : 'Normal';
+            const status = b.status || 'Solicitado';
+            
+            if (!groups[type]) groups[type] = {};
+            if (!groups[type][priority]) groups[type][priority] = {};
+            if (!groups[type][priority][status]) groups[type][priority][status] = [];
+            
+            groups[type][priority][status].push(b);
+        });
+        return groups;
+    }, [allBookings]);
+
+    // Groupings for waitlist report
+    const reportDataFila = useMemo(() => {
+        const groups: Record<string, ConsultaAgendamento[]> = {};
+        const waitlist = allBookings.filter(b => b.status === 'Fila de espera');
+        
+        waitlist.forEach(b => {
+            const name = b.procedimento?.name || 'PROCEDIMENTO INDEFINIDO';
+            if (!groups[name]) groups[name] = [];
+            groups[name].push(b);
+        });
+
+        // Sort each group by position
+        Object.keys(groups).forEach(name => {
+            groups[name].sort((a, b) => {
+                const posA = queuePositions[a.id] || 9999;
+                const posB = queuePositions[b.id] || 9999;
+                return posA - posB;
+            });
+        });
+
+        return groups;
+    }, [allBookings, queuePositions]);
+
+    // General stats
+    const statsCompleto = useMemo(() => {
+        const total = allBookings.length;
+        const agendados = allBookings.filter(b => b.status === 'Agendado').length;
+        const fila = allBookings.filter(b => b.status === 'Fila de espera').length;
+        const realizados = allBookings.filter(b => b.status === 'Realizado').length;
+        const solicitados = allBookings.filter(b => b.status === 'Solicitado').length;
+        return { total, agendados, fila, realizados, solicitados };
+    }, [allBookings]);
+
+    const statsFila = useMemo(() => {
+        const total = allBookings.filter(b => b.status === 'Fila de espera').length;
+        const proceduresCount = Object.keys(reportDataFila).length;
+        return { total, proceduresCount };
+    }, [allBookings, reportDataFila]);
+
     // Load data
     const loadData = async (silent = false) => {
         if (!silent) setLoading(true);
         try {
-            const [bookingData, procData] = await Promise.all([
-                db.getAgendamentos({
-                    patientName: filterName,
-                    patientCpf: filterCpf,
-                    procedimentoId: filterProcId,
-                    date: filterDate,
-                    status: filterStatus
-                }),
+            const [allBookingData, procData] = await Promise.all([
+                db.getAgendamentos(), // Fetch all unfiltered for correct queue calculation
                 db.getProcedimentos()
             ]);
-            setBookings(bookingData);
             setProcedures(procData);
+            setAllBookings(allBookingData);
+
+            // Group all waitlisted bookings by procedure_id to calculate position
+            const waitlistByProc: Record<string, ConsultaAgendamento[]> = {};
+            const allWaitlist = allBookingData.filter(b => b.status === 'Fila de espera');
+            
+            allWaitlist.forEach(b => {
+                if (!waitlistByProc[b.procedimento_id]) {
+                    waitlistByProc[b.procedimento_id] = [];
+                }
+                waitlistByProc[b.procedimento_id].push(b);
+            });
+
+            const positionMap: Record<string, number> = {};
+            const getPriorityWeight = (booking: ConsultaAgendamento) => {
+                if (booking.priority === 'Urgência') return 0;
+                if (booking.is_retorno) return 1;
+                return 2;
+            };
+
+            Object.keys(waitlistByProc).forEach(procId => {
+                const list = waitlistByProc[procId];
+                list.sort((a, b) => {
+                    const weightA = getPriorityWeight(a);
+                    const weightB = getPriorityWeight(b);
+                    if (weightA !== weightB) {
+                        return weightA - weightB;
+                    }
+                    const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
+                    const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
+                    return dateA - dateB;
+                });
+
+                list.forEach((b, index) => {
+                    positionMap[b.id] = index + 1;
+                });
+            });
+
+            setQueuePositions(positionMap);
+
+            // Apply filters in-memory
+            let filtered = allBookingData;
+            if (filterName) {
+                const search = filterName.toLowerCase();
+                filtered = filtered.filter(a => a.paciente?.name.toLowerCase().includes(search));
+            }
+            if (filterCpf) {
+                const search = filterCpf.replace(/\D/g, '');
+                filtered = filtered.filter(a => a.paciente?.cpf.includes(search));
+            }
+            if (filterProcId) {
+                filtered = filtered.filter(a => a.procedimento_id === filterProcId);
+            }
+            if (filterDate) {
+                filtered = filtered.filter(a => a.appointment_date === filterDate);
+            }
+            if (filterStatus) {
+                filtered = filtered.filter(a => a.status === filterStatus);
+            }
+
+            setBookings(filtered);
         } catch (error) {
             console.error('Error loading agendamentos:', error);
         } finally {
@@ -94,17 +222,42 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
         };
     }, [filterName, filterCpf, filterProcId, filterDate, filterStatus]);
 
-    // Handle Status Change (Cancelar / Concluir)
     const handleStatusUpdate = async (id: string, newStatus: ConsultaAgendamento['status']) => {
         setOperatingId(id);
         try {
-            await db.updateAgendamentoStatus(id, newStatus);
-            // Optimistic update of local list
-            setBookings(prev => prev.map(b => b.id === id ? { ...b, status: newStatus } : b));
+            const updated = await db.updateAgendamentoStatus(id, newStatus);
+            if (updated) {
+                setBookings(prev => prev.map(b => b.id === id ? updated : b));
+            }
         } catch (error: any) {
             alert(error.message || 'Erro ao alterar o status do agendamento.');
+            loadData(true);
         } finally {
             setOperatingId(null);
+        }
+    };
+
+    const handleConfirmRetorno = async () => {
+        if (!retornoBooking || !retornoDate) return;
+        setOperatingId(retornoBooking.id);
+        setIsRetornoModalOpen(false);
+        try {
+            const newAgendamento = {
+                patient_id: retornoBooking.patient_id,
+                procedimento_id: retornoBooking.procedimento_id,
+                appointment_date: retornoDate,
+                quantity: 1,
+                priority: 'Normal' as const,
+                status: 'Retorno' as const,
+                created_by: currentUser.id
+            };
+            await db.createAgendamento(newAgendamento);
+            alert('Retorno agendado com sucesso!');
+        } catch (error: any) {
+            alert(error.message || 'Erro ao agendar o retorno.');
+        } finally {
+            setOperatingId(null);
+            setRetornoBooking(null);
             loadData(true);
         }
     };
@@ -166,16 +319,24 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
             setBookings(prev => prev.filter(b => b.id !== id));
         } catch (error: any) {
             alert(error.message || 'Erro ao excluir agendamento.');
+            loadData(true);
         } finally {
             setOperatingId(null);
-            loadData(true);
         }
     };
 
     const sortedBookings = [...bookings].sort((a, b) => {
-        if (filterStatus === 'Fila de Espera') {
-            if (a.priority === 'Urgência' && b.priority !== 'Urgência') return -1;
-            if (a.priority !== 'Urgência' && b.priority === 'Urgência') return 1;
+        if (filterStatus === 'Fila de espera') {
+            const getPriorityWeight = (booking: ConsultaAgendamento) => {
+                if (booking.priority === 'Urgência') return 0;
+                if (booking.is_retorno) return 1;
+                return 2;
+            };
+            const weightA = getPriorityWeight(a);
+            const weightB = getPriorityWeight(b);
+            if (weightA !== weightB) {
+                return weightA - weightB;
+            }
             const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
             const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
             return dateA - dateB;
@@ -208,9 +369,17 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                 </div>
                 <div className="flex items-center gap-2">
                     <button
-                        onClick={() => setFilterStatus(prev => prev === 'Fila de Espera' ? '' : 'Fila de Espera')}
+                        onClick={() => setIsReportModalOpen(true)}
+                        className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all shadow-sm border bg-white text-sky-600 border-sky-100 hover:bg-sky-50 hover:text-sky-700"
+                        title="Gerar Relatórios"
+                    >
+                        <FileDown className="w-3.5 h-3.5" />
+                        Relatório
+                    </button>
+                    <button
+                        onClick={() => setFilterStatus(prev => prev === 'Fila de espera' ? '' : 'Fila de espera')}
                         className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all shadow-sm border ${
-                            filterStatus === 'Fila de Espera'
+                            filterStatus === 'Fila de espera'
                             ? 'bg-amber-500 text-white border-amber-600 shadow-amber-200/50 hover:bg-amber-600'
                             : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:text-slate-800'
                         }`}
@@ -252,7 +421,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                     >
                         <option value="">Todos os Exames/Consultas</option>
                         {procedures.map(p => (
-                            <option key={p.id} value={p.id}>{p.name} ({p.type})</option>
+                            <option key={p.id} value={p.id}>{p.name} {p.code ? `[${p.code}]` : ''} ({p.type})</option>
                         ))}
                     </select>
                 </div>
@@ -271,10 +440,12 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                         onChange={(e) => setFilterStatus(e.target.value)}
                     >
                         <option value="">Todos os Status</option>
+                        <option value="Solicitado">Solicitado</option>
                         <option value="Agendado">Agendado</option>
                         <option value="Aguardando Data">Aguardando Data</option>
-                        <option value="Fila de Espera">Fila de Espera</option>
+                        <option value="Fila de espera">Fila de espera</option>
                         <option value="Realizado">Realizado</option>
+                        <option value="Não Realizado">Não Realizado</option>
                         <option value="Cancelado">Cancelado</option>
                     </select>
                 </div>
@@ -293,6 +464,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                             <table className="w-full text-left border-collapse">
                                 <thead>
                                     <tr className="bg-slate-50 border-b border-slate-100 text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                                        <th className="p-4 text-center w-24">Posição</th>
                                         <th className="p-4">Paciente / CPF</th>
                                         <th className="p-4">Exame / Procedimento</th>
                                         <th className="p-4">Data Agendada</th>
@@ -307,6 +479,15 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                         const isOperating = operatingId === booking.id;
                                         return (
                                             <tr key={booking.id} className="hover:bg-slate-50/30 text-xs font-semibold text-slate-700 transition-colors">
+                                                <td className="p-4 text-center">
+                                                    {booking.status === 'Fila de espera' && queuePositions[booking.id] ? (
+                                                        <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full bg-amber-50 text-amber-600 border border-amber-200 font-extrabold text-[11px] shadow-sm animate-pulse">
+                                                            {queuePositions[booking.id]}º
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-slate-300 font-normal">-</span>
+                                                    )}
+                                                </td>
                                                 <td className="p-4">
                                                     <div className="font-extrabold text-slate-900">{booking.paciente?.name || 'Carregando...'}</div>
                                                     <div className="text-[10px] text-slate-400 mt-0.5 font-bold">
@@ -314,7 +495,14 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                                     </div>
                                                 </td>
                                                 <td className="p-4">
-                                                    <div className="font-bold text-slate-800">{booking.procedimento?.name || 'Carregando...'}</div>
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="font-bold text-slate-800">{booking.procedimento?.name || 'Carregando...'}</div>
+                                                        {booking.procedimento?.code && (
+                                                            <span className="text-[9px] text-slate-400 font-extrabold bg-slate-100 px-1.5 py-0.5 rounded">
+                                                                {booking.procedimento.code}
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                      <span className={`inline-block px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded mt-1 ${
                                                          booking.procedimento?.type === 'Exame' 
                                                          ? 'bg-sky-50 text-sky-600' 
@@ -329,28 +517,43 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                                     {new Date(booking.appointment_date + 'T00:00:00').toLocaleDateString('pt-BR')}
                                                 </td>
                                                 <td className="p-4 text-center">
-                                                    <span className={`inline-flex px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${
-                                                        booking.priority === 'Urgência'
-                                                        ? 'bg-rose-500 text-white shadow-sm'
-                                                        : 'bg-slate-100 text-slate-600'
-                                                    }`}>
-                                                        {booking.priority || 'Normal'}
-                                                    </span>
+                                                     <span className={`inline-flex px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${
+                                                         booking.priority === 'Urgência'
+                                                         ? 'bg-rose-500 text-white shadow-sm'
+                                                         : booking.is_retorno
+                                                         ? 'bg-teal-500 text-white shadow-sm'
+                                                         : 'bg-slate-100 text-slate-600'
+                                                     }`}>
+                                                         {booking.priority === 'Urgência' ? 'Urgência' : booking.is_retorno ? 'Retorno' : 'Normal'}
+                                                     </span>
                                                 </td>
                                                 <td className="p-4 text-center">
-                                                    <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border ${
-                                                        booking.status === 'Agendado' 
-                                                        ? 'bg-sky-50 text-sky-700 border-sky-100' 
-                                                        : booking.status === 'Realizado' 
-                                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-100' 
-                                                        : booking.status === 'Fila de Espera'
-                                                        ? 'bg-amber-50 text-amber-700 border-amber-100'
-                                                        : booking.status === 'Aguardando Data'
-                                                        ? 'bg-violet-50 text-violet-700 border-violet-100'
-                                                        : 'bg-rose-50 text-rose-700 border-rose-100'
-                                                    }`}>
-                                                        {booking.status}
-                                                    </span>
+                                                    <div className="flex flex-col items-center gap-1">
+                                                        <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border ${
+                                                            booking.status === 'Solicitado'
+                                                            ? 'bg-sky-50 text-sky-700 border-sky-100'
+                                                            : booking.status === 'Agendado' 
+                                                            ? 'bg-indigo-50 text-indigo-700 border-indigo-100' 
+                                                            : booking.status === 'Realizado' 
+                                                            ? 'bg-emerald-50 text-emerald-700 border-emerald-100' 
+                                                            : booking.status === 'Não Realizado'
+                                                            ? 'bg-slate-100 text-slate-600 border-slate-200'
+                                                            : booking.status === 'Fila de espera'
+                                                            ? 'bg-amber-50 text-amber-700 border-amber-100'
+                                                            : booking.status === 'Aguardando Data'
+                                                            ? 'bg-violet-50 text-violet-700 border-violet-100'
+                                                            : booking.status === 'Retorno'
+                                                            ? 'bg-teal-50 text-teal-700 border-teal-100'
+                                                            : 'bg-rose-50 text-rose-700 border-rose-100'
+                                                        }`}>
+                                                            {booking.status}
+                                                        </span>
+                                                        {booking.status === 'Fila de espera' && queuePositions[booking.id] && (
+                                                            <span className="text-[10px] text-amber-600 font-extrabold uppercase tracking-wide bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded shadow-sm">
+                                                                {queuePositions[booking.id]}º na fila
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 </td>
                                                 <td className="p-4 text-slate-500">
                                                     <div>{booking.responsavel?.name || 'Sistema'}</div>
@@ -376,13 +579,28 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                                                         <FileDown className="w-4 h-4" />
                                                                     )}
                                                                 </button>
-                                                                {(booking.status === 'Agendado' || booking.status === 'Fila de Espera' || booking.status === 'Aguardando Data') && (
+                                                                {booking.status === 'Realizado' && (
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            setRetornoBooking(booking);
+                                                                            const tomorrow = new Date();
+                                                                            tomorrow.setDate(tomorrow.getDate() + 1);
+                                                                            setRetornoDate(tomorrow.toISOString().split('T')[0]);
+                                                                            setIsRetornoModalOpen(true);
+                                                                        }}
+                                                                        className="p-1.5 text-teal-600 hover:text-white hover:bg-teal-500 rounded-lg border border-teal-100 hover:border-teal-500 transition-all flex items-center justify-center"
+                                                                        title="Agendar Retorno"
+                                                                    >
+                                                                        <Repeat className="w-4 h-4" />
+                                                                    </button>
+                                                                )}
+                                                                {booking.status === 'Solicitado' && (
                                                                     <>
-                                                                        {booking.status === 'Agendado' && canComplete && (
+                                                                        {canComplete && (
                                                                             <button
-                                                                                onClick={() => handleStatusUpdate(booking.id, 'Realizado')}
-                                                                                className="p-1.5 text-emerald-500 hover:text-white hover:bg-emerald-500 rounded-lg border border-emerald-100 hover:border-emerald-500 transition-all"
-                                                                                title="Confirmar Realização"
+                                                                                onClick={() => handleStatusUpdate(booking.id, 'Agendado')}
+                                                                                className="p-1.5 text-emerald-500 hover:text-white hover:bg-emerald-500 rounded-lg border border-emerald-100 hover:border-emerald-500 transition-all flex items-center justify-center"
+                                                                                title="Aprovar Agendamento"
                                                                             >
                                                                                 <CheckCircle2 className="w-4 h-4" />
                                                                             </button>
@@ -390,7 +608,51 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                                                         {canCancel && (
                                                                             <button
                                                                                 onClick={() => handleStatusUpdate(booking.id, 'Cancelado')}
-                                                                                className="p-1.5 text-rose-400 hover:text-white hover:bg-rose-500 rounded-lg border border-rose-100 hover:border-rose-500 transition-all"
+                                                                                className="p-1.5 text-rose-400 hover:text-white hover:bg-rose-500 rounded-lg border border-rose-100 hover:border-rose-500 transition-all flex items-center justify-center"
+                                                                                title="Rejeitar/Cancelar Agendamento"
+                                                                            >
+                                                                                <XCircle className="w-4 h-4" />
+                                                                            </button>
+                                                                        )}
+                                                                    </>
+                                                                )}
+                                                                {booking.status === 'Agendado' && (
+                                                                    <>
+                                                                        {canComplete && (
+                                                                            <button
+                                                                                onClick={() => handleStatusUpdate(booking.id, 'Realizado')}
+                                                                                className="p-1.5 text-emerald-500 hover:text-white hover:bg-emerald-500 rounded-lg border border-emerald-100 hover:border-emerald-500 transition-all flex items-center justify-center"
+                                                                                title="Confirmar Realização"
+                                                                            >
+                                                                                <CheckCircle2 className="w-4 h-4" />
+                                                                            </button>
+                                                                        )}
+                                                                        {canComplete && (
+                                                                            <button
+                                                                                onClick={() => handleStatusUpdate(booking.id, 'Não Realizado')}
+                                                                                className="p-1.5 text-slate-500 hover:text-white hover:bg-slate-500 rounded-lg border border-slate-200 hover:border-slate-500 transition-all flex items-center justify-center"
+                                                                                title="Marcar Falta (Não Realizado)"
+                                                                            >
+                                                                                <UserX className="w-4 h-4" />
+                                                                            </button>
+                                                                        )}
+                                                                        {canCancel && (
+                                                                            <button
+                                                                                onClick={() => handleStatusUpdate(booking.id, 'Cancelado')}
+                                                                                className="p-1.5 text-rose-400 hover:text-white hover:bg-rose-500 rounded-lg border border-rose-100 hover:border-rose-500 transition-all flex items-center justify-center"
+                                                                                title="Cancelar Agendamento"
+                                                                            >
+                                                                                <XCircle className="w-4 h-4" />
+                                                                            </button>
+                                                                        )}
+                                                                    </>
+                                                                )}
+                                                                {(booking.status === 'Fila de espera' || booking.status === 'Aguardando Data') && (
+                                                                    <>
+                                                                        {canCancel && (
+                                                                            <button
+                                                                                onClick={() => handleStatusUpdate(booking.id, 'Cancelado')}
+                                                                                className="p-1.5 text-rose-400 hover:text-white hover:bg-rose-500 rounded-lg border border-rose-100 hover:border-rose-500 transition-all flex items-center justify-center"
                                                                                 title="Cancelar Agendamento"
                                                                             >
                                                                                 <XCircle className="w-4 h-4" />
@@ -434,8 +696,360 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                     date={printingBooking.appointment_date}
                     quantity={printingBooking.quantity}
                     priority={printingBooking.priority}
+                    is_retorno={printingBooking.is_retorno}
                     currentUser={currentUser}
                     state={appState}
+                />
+            )}
+            {/* MODAL: DEFINIR DATA PARA RETORNO */}
+            {isRetornoModalOpen && retornoBooking && (
+                <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden border border-slate-100 flex flex-col transform transition-all">
+                        <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 shrink-0">
+                            <div>
+                                <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider">Agendar Retorno</h3>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">Define a data de retorno do paciente</p>
+                            </div>
+                            <button 
+                                onClick={() => {
+                                    setIsRetornoModalOpen(false);
+                                    setRetornoBooking(null);
+                                }} 
+                                className="p-2 hover:bg-slate-200 rounded-xl text-slate-400 hover:text-slate-700 transition-colors"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <div className="p-3.5 bg-slate-50 border border-slate-200/50 rounded-2xl space-y-2 text-xs font-bold text-slate-600">
+                                <div className="flex justify-between">
+                                    <span className="text-slate-400">Paciente:</span>
+                                    <span className="text-slate-800 uppercase font-black">{retornoBooking.paciente?.name}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-slate-400">Procedimento:</span>
+                                    <span className="text-slate-800 uppercase font-black">{retornoBooking.procedimento?.name}</span>
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Data do Retorno</label>
+                                <input
+                                    type="date"
+                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all text-xs font-bold"
+                                    value={retornoDate}
+                                    onChange={(e) => setRetornoDate(e.target.value)}
+                                    required
+                                />
+                            </div>
+                        </div>
+                        <div className="p-5 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 shrink-0">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setIsRetornoModalOpen(false);
+                                    setRetornoBooking(null);
+                                }}
+                                className="px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-600 font-extrabold rounded-xl text-xs uppercase tracking-wider active:scale-95 transition-all"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleConfirmRetorno}
+                                disabled={!retornoDate}
+                                className="px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-extrabold rounded-xl text-xs uppercase tracking-wider active:scale-95 transition-all flex items-center gap-1.5 shadow-md"
+                            >
+                                Confirmar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* MODAL: RELATÓRIOS */}
+            {isReportModalOpen && createPortal(
+                <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-fade-in font-sans">
+                    <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-4xl max-h-[85vh] overflow-hidden border border-slate-100 flex flex-col transform transition-all animate-scale-in">
+                        {/* Header */}
+                        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 shrink-0">
+                            <div>
+                                <h3 className="text-base font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
+                                    <FileDown className="w-5 h-5 text-sky-600" />
+                                    Painel de Relatórios Municipais
+                                </h3>
+                                <p className="text-xs text-slate-500 font-semibold mt-0.5">Visualize e exporte informações de agendamentos e filas em tempo real</p>
+                            </div>
+                            <button 
+                                onClick={() => setIsReportModalOpen(false)} 
+                                className="p-2 hover:bg-slate-200 rounded-xl text-slate-400 hover:text-slate-700 transition-colors"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        {/* Tabs Selector */}
+                        <div className="px-6 py-3 bg-slate-100/40 border-b border-slate-100 flex gap-2 shrink-0">
+                            <button
+                                onClick={() => setReportType('completo')}
+                                className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 ${
+                                    reportType === 'completo'
+                                    ? 'bg-sky-600 text-white shadow-md shadow-sky-200/50'
+                                    : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+                                }`}
+                            >
+                                <FileDown className="w-3.5 h-3.5" />
+                                Relatório Completo
+                            </button>
+                            <button
+                                onClick={() => setReportType('fila')}
+                                className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 ${
+                                    reportType === 'fila'
+                                    ? 'bg-amber-500 text-white shadow-md shadow-amber-200/50'
+                                    : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+                                }`}
+                            >
+                                <Clock className="w-3.5 h-3.5" />
+                                Fila de Espera
+                            </button>
+                        </div>
+
+                        {/* Modal Body */}
+                        <div className="flex-1 overflow-y-auto p-6 space-y-6 min-h-0 bg-slate-50/30">
+                            {reportType === 'completo' ? (
+                                <>
+                                    {/* Stats Grid */}
+                                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3.5">
+                                        <div className="bg-white border border-slate-200/60 p-4 rounded-2xl shadow-sm flex flex-col justify-between">
+                                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Total</span>
+                                            <span className="text-xl font-black text-slate-800 mt-1">{statsCompleto.total}</span>
+                                        </div>
+                                        <div className="bg-white border border-slate-200/60 p-4 rounded-2xl shadow-sm flex flex-col justify-between">
+                                            <span className="text-[10px] font-black uppercase tracking-wider text-sky-500">Solicitados</span>
+                                            <span className="text-xl font-black text-sky-600 mt-1">{statsCompleto.solicitados}</span>
+                                        </div>
+                                        <div className="bg-white border border-slate-200/60 p-4 rounded-2xl shadow-sm flex flex-col justify-between">
+                                            <span className="text-[10px] font-black uppercase tracking-wider text-indigo-500">Agendados</span>
+                                            <span className="text-xl font-black text-indigo-600 mt-1">{statsCompleto.agendados}</span>
+                                        </div>
+                                        <div className="bg-white border border-slate-200/60 p-4 rounded-2xl shadow-sm flex flex-col justify-between">
+                                            <span className="text-[10px] font-black uppercase tracking-wider text-amber-500">Em Fila</span>
+                                            <span className="text-xl font-black text-amber-600 mt-1">{statsCompleto.fila}</span>
+                                        </div>
+                                        <div className="bg-white border border-slate-200/60 p-4 rounded-2xl shadow-sm flex flex-col justify-between col-span-2 md:col-span-1">
+                                            <span className="text-[10px] font-black uppercase tracking-wider text-emerald-500">Realizados</span>
+                                            <span className="text-xl font-black text-emerald-600 mt-1">{statsCompleto.realizados}</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Grouped Data Preview */}
+                                    <div className="space-y-6">
+                                        {Object.keys(reportDataCompleto).length === 0 ? (
+                                            <div className="text-center py-12 text-slate-400 font-bold">Nenhum registro encontrado.</div>
+                                        ) : (
+                                            Object.keys(reportDataCompleto).sort().map(type => (
+                                                <div key={type} className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
+                                                    {/* Procedure Type Header */}
+                                                    <div className="px-5 py-3.5 bg-sky-50/60 border-b border-sky-100/50 flex justify-between items-center">
+                                                        <h4 className="text-xs font-black text-sky-800 uppercase tracking-widest flex items-center gap-2">
+                                                            <span className="w-2 h-2 rounded-full bg-sky-500"></span>
+                                                            Procedimento: {type}
+                                                        </h4>
+                                                        <span className="px-2 py-0.5 rounded-full bg-sky-100 text-sky-700 text-[10px] font-black">
+                                                            {Object.values(reportDataCompleto[type]).reduce((acc, curr) => 
+                                                                acc + Object.values(curr).reduce((sAcc, sCurr) => sAcc + sCurr.length, 0)
+                                                            , 0)} reg.
+                                                        </span>
+                                                    </div>
+
+                                                    {/* Priorities Level */}
+                                                    <div className="p-4 space-y-5">
+                                                        {Object.keys(reportDataCompleto[type]).map(priority => (
+                                                            <div key={priority} className="space-y-3 pl-2 border-l-2 border-slate-200">
+                                                                <h5 className="text-[10px] font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                                                                    <span className={`w-1.5 h-1.5 rounded-full ${
+                                                                        priority === 'Urgência' ? 'bg-rose-500 animate-pulse' : priority === 'Retorno' ? 'bg-teal-500' : 'bg-slate-400'
+                                                                    }`}></span>
+                                                                    Prioridade: {priority}
+                                                                </h5>
+
+                                                                {/* Status Level */}
+                                                                <div className="space-y-3.5 pl-4">
+                                                                    {Object.keys(reportDataCompleto[type][priority]).map(status => {
+                                                                        const bookingsGroup = reportDataCompleto[type][priority][status];
+                                                                        return (
+                                                                            <div key={status} className="space-y-2">
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Status:</span>
+                                                                                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase border tracking-wider ${
+                                                                                        status === 'Solicitado'
+                                                                                        ? 'bg-sky-50 text-sky-700 border-sky-100'
+                                                                                        : status === 'Agendado' 
+                                                                                        ? 'bg-indigo-50 text-indigo-700 border-indigo-100' 
+                                                                                        : status === 'Realizado' 
+                                                                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-100' 
+                                                                                        : status === 'Fila de espera'
+                                                                                        ? 'bg-amber-50 text-amber-700 border-amber-100'
+                                                                                        : 'bg-slate-100 text-slate-600 border-slate-200'
+                                                                                    }`}>
+                                                                                        {status}
+                                                                                    </span>
+                                                                                    <span className="text-[9px] font-bold text-slate-400">({bookingsGroup.length})</span>
+                                                                                </div>
+
+                                                                                {/* Bookings List Table */}
+                                                                                <div className="border border-slate-100 rounded-xl overflow-hidden shadow-sm bg-white">
+                                                                                    <table className="w-full text-left border-collapse">
+                                                                                        <thead>
+                                                                                            <tr className="bg-slate-50 border-b border-slate-100 text-[9px] font-extrabold uppercase text-slate-400 tracking-wider">
+                                                                                                <th className="px-4 py-2 w-[45%]">Paciente / CPF</th>
+                                                                                                <th className="px-4 py-2 w-[30%]">Procedimento/Exame</th>
+                                                                                                <th className="px-4 py-2 text-center w-[25%]">Data</th>
+                                                                                            </tr>
+                                                                                        </thead>
+                                                                                        <tbody className="divide-y divide-slate-100 text-[11px] font-semibold text-slate-600 uppercase">
+                                                                                            {bookingsGroup.map(b => (
+                                                                                                <tr key={b.id} className="hover:bg-slate-50/40">
+                                                                                                    <td className="px-4 py-1.5 font-bold">
+                                                                                                        <div className="font-extrabold text-slate-900">{b.paciente?.name}</div>
+                                                                                                        <div className="text-[9px] text-slate-400 font-bold mt-0.5">
+                                                                                                            CPF: {b.paciente?.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}
+                                                                                                        </div>
+                                                                                                    </td>
+                                                                                                    <td className="px-4 py-1.5">{b.procedimento?.name}</td>
+                                                                                                    <td className="px-4 py-1.5 text-center font-mono text-slate-500">
+                                                                                                        {formatDateBr(b.appointment_date)}
+                                                                                                    </td>
+                                                                                                </tr>
+                                                                                            ))}
+                                                                                        </tbody>
+                                                                                    </table>
+                                                                                </div>
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    {/* Waitlist Stats */}
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="bg-white border border-slate-200/60 p-5 rounded-2xl shadow-sm flex flex-col justify-between">
+                                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Total na Fila de Espera</span>
+                                            <span className="text-2xl font-black text-amber-500 mt-1">{statsFila.total}</span>
+                                        </div>
+                                        <div className="bg-white border border-slate-200/60 p-5 rounded-2xl shadow-sm flex flex-col justify-between">
+                                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Procedimentos com Fila</span>
+                                            <span className="text-2xl font-black text-slate-800 mt-1">{statsFila.proceduresCount}</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Fila De Espera Groups */}
+                                    <div className="space-y-6">
+                                        {Object.keys(reportDataFila).length === 0 ? (
+                                            <div className="text-center py-12 text-slate-400 font-bold bg-white rounded-3xl border border-slate-200">
+                                                Nenhum paciente na fila de espera no momento.
+                                            </div>
+                                        ) : (
+                                            Object.keys(reportDataFila).sort().map(procName => {
+                                                const waitlistGroup = reportDataFila[procName];
+                                                return (
+                                                    <div key={procName} className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
+                                                        <div className="px-5 py-3.5 bg-amber-50/40 border-b border-amber-100 flex justify-between items-center">
+                                                            <h4 className="text-xs font-black text-amber-800 uppercase tracking-widest flex items-center gap-2">
+                                                                <Clock className="w-4 h-4 text-amber-500" />
+                                                                Fila: {procName}
+                                                            </h4>
+                                                            <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-black">
+                                                                {waitlistGroup.length} pacientes
+                                                            </span>
+                                                        </div>
+
+                                                        <div className="p-4">
+                                                            <div className="border border-slate-100 rounded-xl overflow-hidden bg-white shadow-sm">
+                                                                <table className="w-full text-left border-collapse">
+                                                                    <thead>
+                                                                        <tr className="bg-slate-50 border-b border-slate-100 text-[9px] font-extrabold uppercase text-slate-400 tracking-wider">
+                                                                            <th className="px-4 py-2.5 text-center w-[12%]">Posição</th>
+                                                                            <th className="px-4 py-2.5 w-[50%]">Paciente / CPF</th>
+                                                                            <th className="px-4 py-2.5 text-center w-[18%]">Prioridade</th>
+                                                                            <th className="px-4 py-2.5 text-center w-[20%]">Registrado em</th>
+                                                                        </tr>
+                                                                    </thead>
+                                                                    <tbody className="divide-y divide-slate-100 text-[11px] font-semibold text-slate-600 uppercase">
+                                                                        {waitlistGroup.map(b => (
+                                                                            <tr key={b.id} className="hover:bg-slate-50/40">
+                                                                                <td className="px-4 py-2 text-center font-black text-amber-600">
+                                                                                    {queuePositions[b.id]}º
+                                                                                </td>
+                                                                                <td className="px-4 py-2 font-bold">
+                                                                                    <div className="font-extrabold text-slate-900">{b.paciente?.name}</div>
+                                                                                    <div className="text-[9px] text-slate-400 font-bold mt-0.5">
+                                                                                        CPF: {b.paciente?.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}
+                                                                                    </div>
+                                                                                </td>
+                                                                                <td className="px-4 py-2 text-center">
+                                                                                    <span className={`inline-flex px-2 py-0.5 rounded text-[8px] font-black uppercase text-white ${
+                                                                                        b.priority === 'Urgência' ? 'bg-rose-500' : b.is_retorno ? 'bg-teal-500' : 'bg-slate-400'
+                                                                                    }`}>
+                                                                                        {b.priority === 'Urgência' ? 'Urgência' : b.is_retorno ? 'Retorno' : 'Normal'}
+                                                                                    </span>
+                                                                                </td>
+                                                                                <td className="px-4 py-2 text-center font-mono text-slate-400">
+                                                                                    {b.created_at ? new Date(b.created_at).toLocaleDateString('pt-BR') : '-'}
+                                                                                </td>
+                                                                            </tr>
+                                                                        ))}
+                                                                    </tbody>
+                                                                </table>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })
+                                        )}
+                                    </div>
+                                </>
+                            )}
+                        </div>
+
+                        {/* Footer Actions */}
+                        <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 shrink-0">
+                            <button
+                                type="button"
+                                onClick={() => setIsReportModalOpen(false)}
+                                className="px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-600 font-extrabold rounded-xl text-xs uppercase tracking-wider active:scale-95 transition-all"
+                            >
+                                Fechar
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setIsPrintingReport(true)}
+                                className="px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-extrabold rounded-xl text-xs uppercase tracking-wider active:scale-95 transition-all flex items-center gap-1.5 shadow-md"
+                            >
+                                <FileDown className="w-4 h-4" />
+                                Exportar PDF
+                            </button>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
+
+            {isPrintingReport && (
+                <ConsultasReportPdfGenerator
+                    reportType={reportType}
+                    bookings={allBookings}
+                    procedures={procedures}
+                    queuePositions={queuePositions}
+                    state={appState}
+                    currentUser={currentUser}
+                    onClose={() => setIsPrintingReport(false)}
                 />
             )}
         </div>

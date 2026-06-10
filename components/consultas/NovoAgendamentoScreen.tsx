@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { User, ConsultaPaciente, ConsultaProcedimento, AppState, ConsultaAgendamento } from '../../types';
+import { createPortal } from 'react-dom';
+import { User, ConsultaPaciente, ConsultaProcedimento, AppState, ConsultaAgendamento, ConsultaVaga } from '../../types';
 import { 
     ArrowLeft, 
     UserPlus, 
@@ -14,9 +15,12 @@ import {
     Activity, 
     Plus, 
     Calendar,
+    Clock,
     Users,
     FileDown,
-    X
+    X,
+    ChevronLeft,
+    ChevronRight
 } from 'lucide-react';
 import * as db from '../../services/consultasService';
 import { jsPDF } from 'jspdf';
@@ -74,13 +78,199 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
     const [createdBooking, setCreatedBooking] = useState<ConsultaAgendamento | null>(null);
     const [isGenerating, setIsGenerating] = useState(false);
     const [reservedBookings, setReservedBookings] = useState<ConsultaAgendamento[]>([]);
-    const [schedulingReserved, setSchedulingReserved] = useState<ConsultaAgendamento | null>(null);
-    const [reservedDate, setReservedDate] = useState('');
-    const [isReservedModalOpen, setIsReservedModalOpen] = useState(false);
+    const [confirmedReservedBookings, setConfirmedReservedBookings] = useState<Record<string, ConsultaAgendamento>>({});
+    const [reservedDates, setReservedDates] = useState<Record<string, string>>({});
+    const [reservedTimes, setReservedTimes] = useState<Record<string, string>>({});
+    const [reservedProceduresVagas, setReservedProceduresVagas] = useState<Record<string, ConsultaVaga[]>>({});
+    const [reservedProceduresBookings, setReservedProceduresBookings] = useState<Record<string, ConsultaAgendamento[]>>({});
+    const [activeDateDropdownId, setActiveDateDropdownId] = useState<string | null>(null);
+    const [activeTimeDropdownId, setActiveTimeDropdownId] = useState<string | null>(null);
+    const [printingBooking, setPrintingBooking] = useState<ConsultaAgendamento | null>(null);
+    const [conflictBooking, setConflictBooking] = useState<ConsultaAgendamento | null>(null);
+    const [isConflictModalOpen, setIsConflictModalOpen] = useState(false);
+
+    // Custom Vagas Calendar Picker States & Helpers
+    const [vagas, setVagas] = useState<ConsultaVaga[]>([]);
+    const [procedureBookings, setProcedureBookings] = useState<ConsultaAgendamento[]>([]);
+    const [loadingVagas, setLoadingVagas] = useState(false);
+    const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+    const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
+    const [bookingTime, setBookingTime] = useState('');
+    const [activeDate, setActiveDate] = useState('');
+
+    // Check if appointment date falls in the last 7 days of its month
+    const isLastWeekOfMonth = (dateStr: string): boolean => {
+        if (!dateStr) return false;
+        const date = new Date(dateStr + 'T12:00:00'); // Use noon to avoid timezone shift issues
+        const currentMonth = date.getMonth();
+        
+        // Add 7 days
+        const nextWeek = new Date(date);
+        nextWeek.setDate(nextWeek.getDate() + 7);
+        
+        return nextWeek.getMonth() !== currentMonth;
+    };
+
+    // Get available slots based on priority and date
+    const getAvailableSlots = (proc: ConsultaProcedimento, priority: 'Normal' | 'Urgência', dateStr: string): number => {
+        if (!proc) return 0;
+        return proc.available_quantity;
+    };
+
+    // Check if procedure is waitlist-only for Normal priority (0 available normal vacancies)
+    const isNormalWaitlistOnly = selectedProcedure !== null && 
+        bookingPriority === 'Normal' && 
+        getAvailableSlots(selectedProcedure, 'Normal', '') === 0;
+
+    const getDaysInMonth = (date: Date) => {
+        const year = date.getFullYear();
+        const month = date.getMonth();
+        const firstDayIndex = new Date(year, month, 1).getDay();
+        const totalDays = new Date(year, month + 1, 0).getDate();
+        
+        const days = [];
+        for (let i = 0; i < firstDayIndex; i++) {
+            days.push(null);
+        }
+        for (let i = 1; i <= totalDays; i++) {
+            days.push(new Date(year, month, i));
+        }
+        return days;
+    };
+
+    const formatDateToYYYYMMDD = (date: Date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
+    const getDateVagasInfo = (dateStr: string) => {
+        const slotsForDate = vagas.filter(v => v.data === dateStr);
+        if (slotsForDate.length === 0) return { exists: false, availableCount: 0, totalCount: 0 };
+        const availableCount = slotsForDate.filter(v => v.status === 'Disponível').length;
+        return {
+            exists: true,
+            availableCount,
+            totalCount: slotsForDate.length
+        };
+    };
+
+    // Fetch vagas and bookings when procedure changes
+    useEffect(() => {
+        if (selectedProcedure) {
+            setLoadingVagas(true);
+            Promise.all([
+                db.getVagas(selectedProcedure.id),
+                db.getAgendamentos({ procedimentoId: selectedProcedure.id })
+            ])
+                .then(([vagasData, bookingsData]) => {
+                    setVagas(vagasData);
+                    setProcedureBookings(bookingsData);
+                    // Do NOT default bookingDate/time so that field starts empty
+                    setBookingDate('');
+                    setBookingTime('');
+                    setActiveDate('');
+                    if (vagasData.length > 0) {
+                        setCurrentMonth(new Date(vagasData[0].data + 'T12:00:00'));
+                    } else {
+                        setCurrentMonth(new Date());
+                    }
+                })
+                .catch(err => {
+                    console.error("Error fetching vagas and bookings:", err);
+                })
+                .finally(() => {
+                    setLoadingVagas(false);
+                });
+        } else {
+            setVagas([]);
+            setProcedureBookings([]);
+            setBookingDate('');
+            setBookingTime('');
+            setActiveDate('');
+        }
+    }, [selectedProcedure]);
 
     const fetchReservedBookings = async () => {
         const data = await db.getAgendamentos({ status: 'Aguardando Data' });
         setReservedBookings(data);
+        
+        if (data.length > 0) {
+            const procIds = Array.from(new Set(data.map(b => b.procedimento_id)));
+            const vagasMap: Record<string, ConsultaVaga[]> = {};
+            const bookingsMap: Record<string, ConsultaAgendamento[]> = {};
+            
+            await Promise.all(procIds.map(async (procId) => {
+                try {
+                    const [vagasData, bookingsData] = await Promise.all([
+                        db.getVagas(procId),
+                        db.getAgendamentos({ procedimentoId: procId })
+                    ]);
+                    vagasMap[procId] = vagasData;
+                    bookingsMap[procId] = bookingsData;
+                } catch (err) {
+                    console.error("Error fetching data for procedure " + procId, err);
+                }
+            }));
+            
+            setReservedProceduresVagas(vagasMap);
+            setReservedProceduresBookings(bookingsMap);
+        }
+    };
+
+    const getSlotAssignmentsForProcedure = (vagasList: ConsultaVaga[], bookingsList: ConsultaAgendamento[]) => {
+        const assignments = new Map<string, ConsultaAgendamento>();
+        
+        const slotsByDate: Record<string, ConsultaVaga[]> = {};
+        vagasList.forEach(v => {
+            if (!slotsByDate[v.data]) {
+                slotsByDate[v.data] = [];
+            }
+            slotsByDate[v.data].push(v);
+        });
+
+        const bookingsByDate: Record<string, ConsultaAgendamento[]> = {};
+        bookingsList.forEach(b => {
+            if (b.status === 'Cancelado' || b.status === 'Não Realizado' || !b.appointment_date) return;
+            if (!bookingsByDate[b.appointment_date]) {
+                bookingsByDate[b.appointment_date] = [];
+            }
+            bookingsByDate[b.appointment_date].push(b);
+        });
+
+        Object.keys(slotsByDate).forEach(dateStr => {
+            const slots = slotsByDate[dateStr];
+            const bookings = bookingsByDate[dateStr] || [];
+            
+            const unmatchedBookings = [...bookings];
+            const matchedBookingIds = new Set<string>();
+
+            slots.forEach(slot => {
+                const exactMatch = bookings.find(b => 
+                    b.appointment_time && 
+                    matchTime(b.appointment_time, slot.hora) &&
+                    !matchedBookingIds.has(b.id)
+                );
+                if (exactMatch) {
+                    assignments.set(slot.id, exactMatch);
+                    matchedBookingIds.add(exactMatch.id);
+                    const idx = unmatchedBookings.findIndex(b => b.id === exactMatch.id);
+                    if (idx > -1) {
+                        unmatchedBookings.splice(idx, 1);
+                    }
+                }
+            });
+
+            slots.forEach(slot => {
+                if (!assignments.has(slot.id) && unmatchedBookings.length > 0) {
+                    const nextBooking = unmatchedBookings.shift()!;
+                    assignments.set(slot.id, nextBooking);
+                }
+            });
+        });
+
+        return assignments;
     };
 
     // Load active procedures on mount
@@ -91,31 +281,46 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
         };
         fetchProcedures();
         fetchReservedBookings();
-        
-        // Default booking date to tomorrow
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        setBookingDate(tomorrow.toISOString().split('T')[0]);
     }, []);
 
-    const handleConfirmReservedDate = async () => {
-        if (!schedulingReserved || !reservedDate) return;
+    useEffect(() => {
+        const handleOutsideClick = (e: MouseEvent) => {
+            const target = e.target as HTMLElement;
+            if (!target.closest('.dropdown-container')) {
+                setActiveDateDropdownId(null);
+                setActiveTimeDropdownId(null);
+            }
+        };
+        document.addEventListener('click', handleOutsideClick);
+        return () => document.removeEventListener('click', handleOutsideClick);
+    }, []);
+
+    const handleConfirmReservedDateAndTime = async (id: string) => {
+        const date = reservedDates[id];
+        const time = reservedTimes[id];
+        if (!date || !time) {
+            alert('Por favor, preencha a data e a hora.');
+            return;
+        }
         setLoading(true);
         setErrorMessage('');
         try {
-            const result = await db.confirmarDataAgendamento(schedulingReserved.id, reservedDate);
+            const result = await db.confirmarDataAgendamento(id, date, time);
             if (result) {
-                setCreatedBooking(result);
-                setSuccessMessage('Agendamento realizado com sucesso!');
-                setIsReservedModalOpen(false);
-                setSchedulingReserved(null);
-                fetchReservedBookings();
+                setConfirmedReservedBookings(prev => ({ ...prev, [id]: result }));
             }
         } catch (err: any) {
-            setErrorMessage(err.message || 'Erro ao agendar consulta.');
+            alert(err.message || 'Erro ao confirmar data e hora.');
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleCloseReservedModal = () => {
+        setConfirmedReservedBookings({});
+        setReservedDates({});
+        setReservedTimes({});
+        fetchReservedBookings();
     };
 
     // Format CPF Input: 000.000.000-00
@@ -250,23 +455,24 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
         }
     };
 
-    // Handle Schedule Submission
-    const handleConfirmBooking = async () => {
-        if (!selectedPatient || !selectedProcedure || !bookingDate) return;
-        
-        setErrorMessage('');
+    const createNewBooking = async () => {
+        const targetDate = isNormalWaitlistOnly ? formatDateToYYYYMMDD(new Date()) : bookingDate;
+        if (!selectedPatient || !selectedProcedure || !targetDate) return;
         setLoading(true);
-
+        
+        // Determine status based on slot availability (including 20% urgency quota check)
+        const availableSlots = isNormalWaitlistOnly ? 0 : getAvailableSlots(selectedProcedure, bookingPriority, targetDate);
+        const targetStatus = availableSlots >= bookingQty ? ('Solicitado' as const) : ('Fila de espera' as const);
         const optimisticBooking = {
             patient_id: selectedPatient.id,
             procedimento_id: selectedProcedure.id,
-            appointment_date: bookingDate,
+            appointment_date: targetDate,
+            appointment_time: isNormalWaitlistOnly ? undefined : bookingTime || undefined,
             quantity: bookingQty,
             priority: bookingPriority,
-            status: 'Agendado' as const,
+            status: targetStatus,
             created_by: currentUser.id
         };
-
         try {
             const result = await db.createAgendamento(optimisticBooking);
             setCreatedBooking(result);
@@ -278,10 +484,104 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
         }
     };
 
+    const handleRescheduleConflict = async () => {
+        const targetDate = isNormalWaitlistOnly ? formatDateToYYYYMMDD(new Date()) : bookingDate;
+        if (!conflictBooking || !targetDate || !selectedProcedure) return;
+        setIsConflictModalOpen(false);
+        setLoading(true);
+        try {
+            // Determine target status: check if slots are available on the new date
+            const availableSlots = isNormalWaitlistOnly ? 0 : getAvailableSlots(selectedProcedure, bookingPriority, targetDate);
+            const targetStatus = availableSlots > 0 ? 'Agendado' : 'Fila de espera';
+
+            const result = await db.updateAgendamentoDateAndStatus(conflictBooking.id, targetDate, targetStatus);
+            if (result) {
+                setCreatedBooking(result);
+                setSuccessMessage(
+                    targetStatus === 'Agendado'
+                    ? 'Agendamento existente atualizado e confirmado para a nova data mais próxima com sucesso!'
+                    : 'Agendamento existente atualizado e direcionado para a fila de espera na nova data com sucesso!'
+                );
+            } else {
+                throw new Error('Falha ao atualizar agendamento.');
+            }
+        } catch (err: any) {
+            setErrorMessage(err.message || 'Erro ao atualizar agendamento.');
+        } finally {
+            setLoading(false);
+            setConflictBooking(null);
+        }
+    };
+
+    // Handle Schedule Submission
+    const handleConfirmBooking = async () => {
+        const targetDate = isNormalWaitlistOnly ? formatDateToYYYYMMDD(new Date()) : bookingDate;
+        if (!selectedPatient || !selectedProcedure || !targetDate) return;
+        
+        setErrorMessage('');
+        setLoading(true);
+        
+        // Only run check if priority is Normal
+        const isUrgent = bookingPriority === 'Urgência';
+        
+        if (!isUrgent) {
+            try {
+                // Fetch patient history to check for active same-procedure bookings within 15 days
+                const history = await db.getPacienteHistory(selectedPatient.id);
+                
+                // Find any active/pending booking for the same procedure that is within 15 days of the proposed date
+                // and is NOT an urgency or retorno
+                const activeConflict = history.find(h => {
+                    if (h.procedimento_id !== selectedProcedure.id) return false;
+                    
+                    const isActive = ['Solicitado', 'Agendado', 'Aguardando Data', 'Fila de espera'].includes(h.status);
+                    if (!isActive) return false;
+                    
+                    const isExc = h.priority === 'Urgência' || h.status === 'Retorno' || h.is_retorno === true;
+                    if (isExc) return false;
+
+                    // Calculate days difference
+                    const d1 = new Date(h.appointment_date + 'T12:00:00');
+                    const d2 = new Date(targetDate + 'T12:00:00');
+                    const diffTime = Math.abs(d1.getTime() - d2.getTime());
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    
+                    return diffDays <= 15;
+                });
+
+                if (activeConflict) {
+                    const existingDate = new Date(activeConflict.appointment_date + 'T12:00:00');
+                    const newDate = new Date(targetDate + 'T12:00:00');
+                    
+                    if (newDate.getTime() < existingDate.getTime()) {
+                        // Proposed date is closer! Show modal to reschedule
+                        setConflictBooking(activeConflict);
+                        setIsConflictModalOpen(true);
+                        setLoading(false);
+                        return;
+                    } else {
+                        // Existing date is closer! Block booking
+                        const formattedOldDate = new Date(activeConflict.appointment_date + 'T00:00:00').toLocaleDateString('pt-BR');
+                        setErrorMessage(`Não é permitido ter dois agendamentos ativos para o mesmo procedimento no período de 15 dias. O agendamento mais próximo (em ${formattedOldDate}) foi mantido.`);
+                        setLoading(false);
+                        return;
+                    }
+                }
+            } catch (err: any) {
+                console.error("Error checking conflict:", err);
+            }
+        }
+
+        // If no conflict or conflict bypassed/resolved, proceed with normal booking
+        await createNewBooking();
+    };
+
     // Download Receipt PDF
-    const handleDownloadPdf = async () => {
-        if (!createdBooking) return;
+    const handleDownloadPdf = async (booking?: ConsultaAgendamento) => {
+        const targetBooking = booking || createdBooking;
+        if (!targetBooking) return;
         setIsGenerating(true);
+        setPrintingBooking(targetBooking);
 
         // Allow template portal to render
         await new Promise(resolve => setTimeout(resolve, 500));
@@ -313,176 +613,270 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
 
             pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
 
-            const protocol = createdBooking.id.substring(0, 8).toUpperCase();
+            const protocol = targetBooking.id.substring(0, 8).toUpperCase();
             pdf.save(`Comprovante-Agendamento-${protocol}.pdf`);
         } catch (error) {
             console.error('Erro ao gerar PDF do agendamento:', error);
             alert('Não foi possível gerar o PDF no momento.');
         } finally {
             setIsGenerating(false);
+            setPrintingBooking(null);
         }
     };
 
     // Filter procedures
     const filteredProcedures = procedures.filter(p => 
-        p.name.toLowerCase().includes(procedureQuery.toLowerCase())
+        p.name.toLowerCase().includes(procedureQuery.toLowerCase()) ||
+        (p.code && p.code.includes(procedureQuery))
     );
 
-    // Check if appointment date falls in the last 7 days of its month
-    const isLastWeekOfMonth = (dateStr: string): boolean => {
-        if (!dateStr) return false;
-        const date = new Date(dateStr + 'T12:00:00'); // Use noon to avoid timezone shift issues
-        const currentMonth = date.getMonth();
-        
-        // Add 7 days
-        const nextWeek = new Date(date);
-        nextWeek.setDate(nextWeek.getDate() + 7);
-        
-        return nextWeek.getMonth() !== currentMonth;
+    // Helper functions and waitlist check defined at top
+
+    const matchTime = (t1: string | undefined, t2: string) => {
+        if (!t1 || !t2) return false;
+        return t1.substring(0, 5) === t2.substring(0, 5);
     };
 
-    // Get available slots based on priority and date
-    const getAvailableSlots = (proc: ConsultaProcedimento, priority: 'Normal' | 'Urgência', dateStr: string): number => {
-        if (!proc) return 0;
-        if (priority === 'Urgência' || isLastWeekOfMonth(dateStr)) {
-            return proc.available_quantity;
-        }
-        const total = proc.total_quantity || proc.available_quantity;
-        const reserved = Math.ceil(total * 0.20);
-        return Math.max(0, proc.available_quantity - reserved);
+    const slotAssignments = React.useMemo(() => {
+        const assignments = new Map<string, ConsultaAgendamento>();
+        
+        // Group slots by date
+        const slotsByDate: { [date: string]: ConsultaVaga[] } = {};
+        vagas.forEach(v => {
+            if (!slotsByDate[v.data]) {
+                slotsByDate[v.data] = [];
+            }
+            slotsByDate[v.data].push(v);
+        });
+
+        // Group bookings by date (excluding cancelados/não realizados)
+        const bookingsByDate: { [date: string]: ConsultaAgendamento[] } = {};
+        procedureBookings.forEach(b => {
+            if (b.status === 'Cancelado' || b.status === 'Não Realizado' || !b.appointment_date) return;
+            if (!bookingsByDate[b.appointment_date]) {
+                bookingsByDate[b.appointment_date] = [];
+            }
+            bookingsByDate[b.appointment_date].push(b);
+        });
+
+        // Match for each date
+        Object.keys(slotsByDate).forEach(dateStr => {
+            const slots = slotsByDate[dateStr];
+            const bookings = bookingsByDate[dateStr] || [];
+            
+            const unmatchedBookings = [...bookings];
+            const matchedBookingIds = new Set<string>();
+
+            // First pass: Match exact times
+            slots.forEach(slot => {
+                const exactMatch = bookings.find(b => 
+                    b.appointment_time && 
+                    matchTime(b.appointment_time, slot.hora) &&
+                    !matchedBookingIds.has(b.id)
+                );
+                if (exactMatch) {
+                    assignments.set(slot.id, exactMatch);
+                    matchedBookingIds.add(exactMatch.id);
+                    const idx = unmatchedBookings.findIndex(b => b.id === exactMatch.id);
+                    if (idx > -1) {
+                        unmatchedBookings.splice(idx, 1);
+                    }
+                }
+            });
+
+            // Second pass: Match remaining bookings to remaining unmatched slots
+            slots.forEach(slot => {
+                if (!assignments.has(slot.id) && unmatchedBookings.length > 0) {
+                    const nextBooking = unmatchedBookings.shift()!;
+                    assignments.set(slot.id, nextBooking);
+                }
+            });
+        });
+
+        return assignments;
+    }, [vagas, procedureBookings]);
+
+    const getSlotBooking = (slot: ConsultaVaga) => {
+        return slotAssignments.get(slot.id);
+    };
+
+    const isSlotVisible = (slot: ConsultaVaga) => {
+        const activeBooking = getSlotBooking(slot);
+        const isConfirmed = activeBooking && ['Agendado', 'Retorno', 'Realizado'].includes(activeBooking.status);
+        return !isConfirmed;
+    };
+
+    const isSlotReallyAvailable = (slot: ConsultaVaga) => {
+        const activeBooking = getSlotBooking(slot);
+        return !activeBooking;
     };
 
     // If booking was confirmed, show custom confirmation/receipt screen
     if (createdBooking) {
         return (
             <div className="w-full max-w-[96%] 2xl:max-w-[1440px] mx-auto flex flex-col h-full max-h-full min-h-0 bg-white/95 backdrop-blur-md rounded-[2.5rem] border border-slate-200/80 shadow-[0_20px_60px_rgba(0,0,0,0.06)] overflow-hidden animate-in fade-in zoom-in-95 duration-300">
-                <div className="flex-1 flex flex-col items-center p-6 sm:p-8 text-center max-w-2xl mx-auto space-y-6 overflow-y-auto scrollbar-hide min-h-0 justify-start md:justify-center w-full">
-                    {/* Success Icon */}
-                    <div className={`w-20 h-20 border rounded-[2rem] flex items-center justify-center shadow-lg animate-bounce ${
-                        createdBooking.status === 'Fila de Espera'
-                        ? 'bg-amber-500/10 border-amber-500/20 text-amber-500 shadow-amber-500/10'
-                        : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500 shadow-emerald-500/10'
-                    }`}>
-                        <CheckCircle2 className="w-10 h-10" />
+                <div className="flex-1 flex flex-col items-center justify-center p-6 sm:p-8 text-center max-w-xl mx-auto space-y-5 w-full min-h-0 overflow-hidden">
+                    {/* Success Icon with glowing background animation */}
+                    <div className="relative flex items-center justify-center shrink-0">
+                        <div className={`absolute inset-0 rounded-full blur-md opacity-45 animate-pulse ${
+                            createdBooking.status === 'Fila de espera' ? 'bg-amber-500' : 'bg-emerald-500'
+                        }`} />
+                        <div className={`relative w-14 h-14 border-2 rounded-2xl flex items-center justify-center shadow-lg transition-transform duration-300 hover:scale-105 ${
+                            createdBooking.status === 'Fila de espera'
+                            ? 'bg-amber-50 border-amber-200 text-amber-500'
+                            : 'bg-emerald-50 border-emerald-200 text-emerald-500'
+                        }`}>
+                            <CheckCircle2 className="w-7 h-7" />
+                        </div>
                     </div>
 
-                    <div className="space-y-2">
-                        <h2 className="text-2xl font-black text-slate-800 tracking-tight uppercase">
-                            {createdBooking.status === 'Fila de Espera' ? 'Fila de Espera Registrada!' : 'Agendamento Confirmado!'}
+                    <div className="space-y-1">
+                        <h2 className="text-xl font-black text-slate-800 tracking-tight uppercase">
+                            {createdBooking.status === 'Fila de espera' ? 'Fila de Espera Registrada!' : 'Solicitação Registrada!'}
                         </h2>
-                        <p className="text-sm font-semibold text-slate-500">
-                            {createdBooking.status === 'Fila de Espera' 
+                        <p className="text-xs font-semibold text-slate-400 max-w-md mx-auto leading-relaxed">
+                            {createdBooking.status === 'Fila de espera' 
                                 ? 'O paciente foi adicionado à fila de espera do procedimento.' 
-                                : 'O agendamento municipal foi registrado no sistema com sucesso.'}
+                                : 'A solicitação municipal de agendamento foi registrada com sucesso.'}
                         </p>
                     </div>
 
-                    {/* Receipt Summary */}
-                    <div className="w-full p-6 bg-slate-50 border border-slate-200/60 rounded-3xl space-y-4 text-left shadow-inner">
-                        <div className="flex items-center justify-between border-b border-slate-200/80 pb-3">
-                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Protocolo do Agendamento</span>
-                            <span className="px-3 py-1 bg-white border border-slate-200 rounded-lg text-xs font-mono font-black text-slate-700">
-                                {createdBooking.id.substring(0, 8).toUpperCase()}
-                            </span>
+                    {/* Premium Digital Voucher (Ticket Style) */}
+                    <div className="w-full bg-slate-50/70 border border-slate-200/50 rounded-[2rem] p-5 text-left shadow-sm relative overflow-hidden group hover:border-slate-300 transition-colors duration-300">
+                        {/* Ticket punch hole style cutouts */}
+                        <div className="absolute top-1/2 left-0 w-3.5 h-7 bg-white border-r border-slate-200/50 rounded-r-full -translate-y-1/2" />
+                        <div className="absolute top-1/2 right-0 w-3.5 h-7 bg-white border-l border-slate-200/50 rounded-l-full -translate-y-1/2" />
+
+                        {/* Ticket Header */}
+                        <div className="flex items-center justify-between border-b border-dashed border-slate-200/80 pb-3.5 mb-3.5">
+                            <div className="flex flex-col gap-0.5">
+                                <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">Protocolo</span>
+                                <span className="text-xs font-mono font-black text-slate-700">
+                                    {createdBooking.id.substring(0, 8).toUpperCase()}
+                                </span>
+                            </div>
+                            
+                            <div className="flex gap-2">
+                                <span className={`font-black uppercase text-[9px] tracking-wide px-2.5 py-0.5 rounded-full border ${
+                                     createdBooking.priority === 'Urgência'
+                                     ? 'bg-rose-50 border-rose-100 text-rose-600'
+                                     : createdBooking.is_retorno
+                                     ? 'bg-teal-50 border-teal-100 text-teal-600'
+                                     : 'bg-slate-100 border-slate-200/60 text-slate-600'
+                                 }`}>{createdBooking.priority === 'Urgência' ? 'Urgência' : createdBooking.is_retorno ? 'Retorno' : 'Normal'}</span>
+                                 
+                                <span className={`font-black uppercase text-[9px] tracking-wide px-2.5 py-0.5 rounded-full border ${
+                                     createdBooking.status === 'Solicitado' || createdBooking.status === 'Agendado' 
+                                     ? 'bg-emerald-50 border-emerald-100 text-emerald-600' 
+                                     : createdBooking.status === 'Retorno'
+                                     ? 'bg-teal-50 border-teal-100 text-teal-600'
+                                     : createdBooking.status === 'Fila de espera'
+                                     ? 'bg-amber-50 border-amber-100 text-amber-600'
+                                     : 'bg-slate-100 border-slate-200/60 text-slate-600'
+                                 }`}>{createdBooking.status}</span>
+                            </div>
                         </div>
 
-                        <div className="space-y-3.5 text-xs font-bold text-slate-600">
-                            <div className="flex justify-between items-start">
-                                <span className="text-slate-400">Paciente:</span>
-                                <span className="text-slate-800 text-right uppercase font-black">{createdBooking.paciente?.name || selectedPatient?.name}</span>
+                        {/* Ticket Details Grid */}
+                        <div className="grid grid-cols-2 gap-x-6 gap-y-3.5 text-xs font-bold text-slate-500">
+                            <div className="space-y-0.5">
+                                <span className="text-[9px] uppercase tracking-wider text-slate-400 block font-extrabold">Paciente</span>
+                                <span className="text-slate-800 uppercase font-black truncate block">{createdBooking.paciente?.name || selectedPatient?.name}</span>
                             </div>
-                            <div className="flex justify-between items-center">
-                                <span className="text-slate-400">CPF:</span>
-                                <span className="text-slate-800">{(createdBooking.paciente?.cpf || selectedPatient!.cpf).replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}</span>
+                            
+                            <div className="space-y-0.5">
+                                <span className="text-[9px] uppercase tracking-wider text-slate-400 block font-extrabold">Procedimento</span>
+                                <span className="text-slate-800 uppercase font-black truncate block">{createdBooking.procedimento?.name || selectedProcedure?.name}</span>
                             </div>
-                            <div className="flex justify-between items-start">
-                                <span className="text-slate-400">Procedimento:</span>
-                                <span className="text-slate-800 text-right uppercase font-black">{createdBooking.procedimento?.name || selectedProcedure?.name}</span>
+
+                            <div className="space-y-0.5">
+                                <span className="text-[9px] uppercase tracking-wider text-slate-400 block font-extrabold">CPF do Paciente</span>
+                                <span className="text-slate-700 block font-semibold">{(createdBooking.paciente?.cpf || selectedPatient!.cpf).replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}</span>
                             </div>
-                            <div className="flex justify-between items-center">
-                                <span className="text-slate-400">Data Agendada:</span>
-                                <span className="text-slate-800">{new Date(createdBooking.appointment_date + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                                <span className="text-slate-400">Prioridade:</span>
-                                <span className={`font-black uppercase text-[10px] px-2.5 py-0.5 rounded ${
-                                    createdBooking.priority === 'Urgência' ? 'bg-rose-500 text-white shadow-sm' : 'bg-slate-100 text-slate-700'
-                                }`}>{createdBooking.priority}</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                                <span className="text-slate-400">Status:</span>
-                                <span className={`font-black uppercase text-[10px] px-2.5 py-0.5 rounded ${
-                                    createdBooking.status === 'Agendado' 
-                                    ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/10' 
-                                    : createdBooking.status === 'Fila de Espera'
-                                    ? 'bg-amber-500 text-white shadow-sm shadow-amber-500/10'
-                                    : 'bg-slate-100 text-slate-700'
-                                }`}>{createdBooking.status}</span>
+
+                            <div className="space-y-0.5">
+                                <span className="text-[9px] uppercase tracking-wider text-slate-400 block font-extrabold">Data e Hora</span>
+                                <span className="text-slate-700 block font-semibold">
+                                    {new Date(createdBooking.appointment_date + 'T00:00:00').toLocaleDateString('pt-BR')}
+                                    {bookingTime ? ` às ${bookingTime}` : ''}
+                                </span>
                             </div>
                         </div>
                     </div>
 
-                    {/* Action buttons */}
-                    <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-3 pt-4 shrink-0">
-                        <button
-                            onClick={handleDownloadPdf}
-                            disabled={isGenerating}
-                            className="w-full px-6 py-4 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white font-black rounded-2xl shadow-xl shadow-sky-500/20 active:scale-95 transition-all text-xs uppercase tracking-widest flex items-center justify-center gap-2"
-                        >
-                            {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
-                            {isGenerating ? 'Gerando PDF...' : 'Baixar Comprovante PDF'}
-                        </button>
-                        <button
-                            onClick={() => {
-                                // Reset all state
-                                setStep(1);
-                                setPatientQuery('');
-                                setPatientResults([]);
-                                setSelectedPatient(null);
-                                setIsRegistering(false);
-                                setNewPatientName('');
-                                setNewPatientNickname('');
-                                setNewPatientCpf('');
-                                setNewPatientBirthDate('');
-                                setNewPatientPhone('');
-                                setNewPatientNeighborhood('');
-                                setNewPatientStreet('');
-                                setNewPatientCity('SÃO JOSÉ DO GOIABAL -MG');
-                                setCpfError('');
-                                setSelectedProcedure(null);
-                                setBookingQty(1);
-                                setBookingPriority('Normal');
-                                setErrorMessage('');
-                                setSuccessMessage('');
-                                setCreatedBooking(null);
-                            }}
-                            className="w-full px-6 py-4 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 font-black rounded-2xl active:scale-95 transition-all text-xs uppercase tracking-widest flex items-center justify-center"
-                        >
-                            Novo Agendamento
-                        </button>
+                    {/* Integrated Action Buttons */}
+                    <div className="w-full space-y-2.5 pt-2 shrink-0">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
+                            <button
+                                onClick={() => handleDownloadPdf()}
+                                disabled={isGenerating}
+                                className="w-full px-5 py-3.5 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white font-black rounded-xl shadow-lg shadow-sky-500/10 active:scale-95 hover:scale-[1.01] transition-all text-[10px] uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer"
+                            >
+                                {isGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />}
+                                {isGenerating ? 'Gerando PDF...' : 'Baixar Comprovante'}
+                            </button>
+                            
+                            <button
+                                onClick={() => {
+                                    // Reset all state
+                                    setStep(1);
+                                    setPatientQuery('');
+                                    setPatientResults([]);
+                                    setSelectedPatient(null);
+                                    setIsRegistering(false);
+                                    setNewPatientName('');
+                                    setNewPatientNickname('');
+                                    setNewPatientCpf('');
+                                    setNewPatientBirthDate('');
+                                    setNewPatientPhone('');
+                                    setNewPatientNeighborhood('');
+                                    setNewPatientStreet('');
+                                    setNewPatientCity('SÃO JOSÉ DO GOIABAL -MG');
+                                    setCpfError('');
+                                    setSelectedProcedure(null);
+                                    setBookingQty(1);
+                                    setBookingPriority('Normal');
+                                    setErrorMessage('');
+                                    setSuccessMessage('');
+                                    setCreatedBooking(null);
+                                    setBookingTime('');
+                                    setActiveDate('');
+                                }}
+                                className="w-full px-5 py-3.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 hover:text-slate-800 font-black rounded-xl active:scale-95 hover:scale-[1.01] transition-all text-[10px] uppercase tracking-wider flex items-center justify-center cursor-pointer"
+                            >
+                                Novo Agendamento
+                            </button>
+                        </div>
+
                         <button
                             onClick={() => onNavigate('consultas:acompanhar')}
-                            className="w-full sm:col-span-2 px-6 py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold rounded-2xl active:scale-95 transition-all text-xs uppercase tracking-widest flex items-center justify-center gap-2 border border-slate-200"
+                            className="w-full py-2 bg-transparent text-sky-600 hover:text-sky-700 font-bold hover:underline transition-all text-[10px] uppercase tracking-widest flex items-center justify-center gap-1.5 cursor-pointer group/link"
                         >
-                            Ir para Fila de Acompanhamento
+                            Ir para a fila de acompanhamento 
+                            <ChevronRight className="w-4 h-4 transition-transform duration-300 group-hover/link:translate-x-1" />
                         </button>
                     </div>
                 </div>
 
                 {/* PDF Portal Rendering */}
-                <ConsultaPdfGenerator
-                    bookingId={createdBooking.id}
-                    patient={createdBooking.paciente || selectedPatient!}
-                    procedure={createdBooking.procedimento || selectedProcedure!}
-                    date={createdBooking.appointment_date}
-                    quantity={createdBooking.quantity}
-                    priority={createdBooking.priority}
-                    currentUser={currentUser}
-                    state={appState}
-                />
+                {printingBooking && (
+                    <ConsultaPdfGenerator
+                        bookingId={printingBooking.id}
+                        patient={printingBooking.paciente || selectedPatient!}
+                        procedure={printingBooking.procedimento || selectedProcedure!}
+                        date={printingBooking.appointment_date}
+                        quantity={printingBooking.quantity}
+                        priority={printingBooking.priority}
+                        is_retorno={printingBooking.is_retorno}
+                        currentUser={currentUser}
+                        state={appState}
+                    />
+                )}
             </div>
         );
     }
+
+    // Move hooks to top to avoid React Hook mismatch during early return
 
     return (
         <div className="w-full max-w-[96%] 2xl:max-w-[1440px] mx-auto flex flex-col h-full max-h-full min-h-0 bg-white/95 backdrop-blur-md rounded-[2.5rem] border border-slate-200/80 shadow-[0_20px_60px_rgba(0,0,0,0.06)] overflow-hidden animate-in fade-in zoom-in-95 duration-300">
@@ -512,9 +906,26 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                         const Icon = s.icon;
                         const isActive = step === s.stepNum;
                         const isCompleted = step > s.stepNum;
+                        const isClickable = (() => {
+                            if (s.stepNum === 1) return true;
+                            if (s.stepNum === 2) return !!selectedPatient;
+                            if (s.stepNum === 3) return !!selectedPatient && !!selectedProcedure && (!!bookingDate || isNormalWaitlistOnly);
+                            return false;
+                        })();
                         return (
                             <React.Fragment key={s.stepNum}>
-                                <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        if (isClickable) setStep(s.stepNum as 1 | 2 | 3);
+                                    }}
+                                    disabled={!isClickable}
+                                    className={`flex items-center gap-2 outline-none border-0 bg-transparent p-0 transition-all ${
+                                        isClickable 
+                                        ? 'cursor-pointer hover:opacity-80 active:scale-[0.98]' 
+                                        : 'cursor-not-allowed opacity-50'
+                                    }`}
+                                >
                                     <div className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all duration-300 ${
                                         isCompleted 
                                         ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' 
@@ -529,7 +940,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                     }`}>
                                         {s.label}
                                     </span>
-                                </div>
+                                </button>
                                 {s.stepNum < 3 && (
                                     <div className={`h-[2px] w-6 rounded-full transition-all duration-300 ${
                                         isCompleted ? 'bg-emerald-400' : 'bg-slate-200'
@@ -542,18 +953,31 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
 
                 {/* Mobile Stepper Dot Indicator */}
                 <div className="flex sm:hidden items-center gap-1.5 bg-white p-2 rounded-xl border border-slate-100 shadow-sm">
-                    {[1, 2, 3].map((s) => (
-                        <div 
-                            key={s}
-                            className={`h-2 rounded-full transition-all duration-300 ${
-                                step === s 
-                                ? 'w-6 bg-sky-600' 
-                                : step > s 
-                                ? 'w-2 bg-emerald-500' 
-                                : 'w-2 bg-slate-200'
-                            }`}
-                        />
-                    ))}
+                    {[1, 2, 3].map((s) => {
+                        const isClickable = (() => {
+                            if (s === 1) return true;
+                            if (s === 2) return !!selectedPatient;
+                            if (s === 3) return !!selectedPatient && !!selectedProcedure && (!!bookingDate || isNormalWaitlistOnly);
+                            return false;
+                        })();
+                        return (
+                            <button 
+                                key={s}
+                                type="button"
+                                onClick={() => {
+                                    if (isClickable) setStep(s as 1 | 2 | 3);
+                                }}
+                                disabled={!isClickable}
+                                className={`h-2 rounded-full transition-all duration-300 outline-none border-0 p-0 ${
+                                    step === s 
+                                    ? 'w-6 bg-sky-600' 
+                                    : step > s 
+                                    ? 'w-2 bg-emerald-500' 
+                                    : 'w-2 bg-slate-200'
+                                } ${isClickable ? 'cursor-pointer hover:opacity-80' : 'cursor-not-allowed opacity-40'}`}
+                            />
+                        );
+                    })}
                 </div>
             </div>
 
@@ -603,46 +1027,6 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                             </button>
                         </div>
 
-                        {/* RESERVED BOOKINGS LIST */}
-                        {reservedBookings.length > 0 && !isRegistering && (
-                            <div className="mb-6 bg-slate-50 border border-slate-200/60 rounded-3xl p-5 shadow-sm shrink-0">
-                                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
-                                    <Activity className="w-4 h-4 text-amber-500 animate-pulse" />
-                                    Vagas já Reservadas (Fila de Espera Promovida)
-                                </h4>
-                                <div className="max-h-[160px] overflow-y-auto space-y-2.5 custom-scrollbar pr-1">
-                                    {reservedBookings.map((b) => (
-                                        <div 
-                                            key={b.id} 
-                                            className="p-3 bg-white border border-slate-100 hover:border-slate-200 rounded-xl flex items-center justify-between shadow-inner transition-all group"
-                                        >
-                                            <div className="min-w-0 pr-3">
-                                                <div className="font-extrabold text-slate-800 text-xs uppercase truncate">
-                                                    {b.paciente?.name}
-                                                </div>
-                                                <div className="flex items-center gap-3 text-[10px] text-slate-400 mt-1 font-bold">
-                                                    <span>CPF: {b.paciente?.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}</span>
-                                                    <span className="h-1.5 w-1.5 rounded-full bg-slate-200" />
-                                                    <span className="text-sky-600 font-extrabold uppercase">{b.procedimento?.name}</span>
-                                                </div>
-                                            </div>
-                                            <button
-                                                onClick={() => {
-                                                    setSchedulingReserved(b);
-                                                    const tomorrow = new Date();
-                                                    tomorrow.setDate(tomorrow.getDate() + 1);
-                                                    setReservedDate(tomorrow.toISOString().split('T')[0]);
-                                                    setIsReservedModalOpen(true);
-                                                }}
-                                                className="px-4 py-2 bg-gradient-to-r from-sky-500 to-indigo-600 text-white hover:from-sky-600 hover:to-indigo-700 font-black rounded-lg text-[9px] uppercase tracking-wider shadow-md active:scale-95 transition-all"
-                                            >
-                                                Definir Data
-                                            </button>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
 
                         {!isRegistering ? (
                             /* SEARCH PACIENTE */
@@ -883,6 +1267,11 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                                         }`}>
                                                             {proc.type}
                                                         </span>
+                                                        {proc.code && (
+                                                            <span className="inline-block px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider rounded border mt-1.5 ml-1.5 bg-slate-50 border-slate-200 text-slate-500">
+                                                                CÓD. {proc.code}
+                                                            </span>
+                                                        )}
                                                     </div>
                                                     <div className="shrink-0 text-right">
                                                         <span className={`inline-block px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider border shadow-sm ${
@@ -913,13 +1302,31 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                     <div>
                                         <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">Data da Consulta/Exame</label>
                                         <div className="relative">
-                                            <input
-                                                type="date"
-                                                className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-slate-900 focus:border-sky-500 focus:ring-4 focus:ring-sky-500/5 outline-none transition-all text-xs font-bold"
-                                                value={bookingDate}
-                                                onChange={(e) => setBookingDate(e.target.value)}
-                                                required
-                                            />
+                                            <button
+                                                type="button"
+                                                disabled={isNormalWaitlistOnly}
+                                                onClick={() => {
+                                                    if (!selectedProcedure) {
+                                                        setErrorMessage('Por favor, selecione um procedimento primeiro.');
+                                                        return;
+                                                    }
+                                                    setIsCalendarOpen(true);
+                                                }}
+                                                className={`w-full rounded-xl border p-2.5 text-xs font-bold text-left flex items-center justify-between shadow-sm transition-all ${
+                                                    isNormalWaitlistOnly
+                                                    ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed shadow-none'
+                                                    : 'border-slate-200 bg-white text-slate-900 hover:border-slate-300 focus:border-sky-500 focus:ring-4 focus:ring-sky-500/5 outline-none'
+                                                }`}
+                                            >
+                                                <span>
+                                                    {isNormalWaitlistOnly
+                                                        ? 'Fila de espera (Não há vagas normais disponíveis)'
+                                                        : bookingDate 
+                                                            ? `${new Date(bookingDate + 'T12:00:00').toLocaleDateString('pt-BR')}${bookingTime ? ` às ${bookingTime}` : ''}`
+                                                            : 'Clique para selecionar uma data e hora do procedimento'}
+                                                </span>
+                                                <Calendar className="w-4 h-4 text-slate-400" />
+                                            </button>
                                         </div>
                                     </div>
                                     <div>
@@ -971,13 +1378,23 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                                     <span className="font-black text-slate-800 truncate max-w-[170px] uppercase">{selectedProcedure.name}</span>
                                                 </div>
                                                 <div className="flex justify-between items-center">
+                                                    <span className="font-bold text-slate-400">Data e Hora:</span>
+                                                    <span className="font-black text-slate-800">
+                                                        {isNormalWaitlistOnly
+                                                            ? 'Fila de Espera (Automático)'
+                                                            : bookingDate 
+                                                                ? `${new Date(bookingDate + 'T12:00:00').toLocaleDateString('pt-BR')}${bookingTime ? ` às ${bookingTime}` : ''}`
+                                                                : '-'}
+                                                    </span>
+                                                </div>
+                                                <div className="flex justify-between items-center">
                                                     <span className="font-bold text-slate-400">Vagas Disponíveis:</span>
                                                     <span className={`font-black ${
-                                                        getAvailableSlots(selectedProcedure, bookingPriority, bookingDate) > 0 
+                                                        (!isNormalWaitlistOnly && getAvailableSlots(selectedProcedure, bookingPriority, bookingDate) > 0) 
                                                         ? 'text-emerald-600' 
                                                         : 'text-rose-600'
                                                     }`}>
-                                                        {getAvailableSlots(selectedProcedure, bookingPriority, bookingDate)} vagas
+                                                        {isNormalWaitlistOnly ? 0 : getAvailableSlots(selectedProcedure, bookingPriority, bookingDate)} vagas
                                                     </span>
                                                 </div>
                                                 <div className="flex justify-between items-center">
@@ -986,19 +1403,17 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                                         bookingPriority === 'Urgência' ? 'bg-rose-500 text-white shadow-sm' : 'bg-slate-100 text-slate-700'
                                                     }`}>{bookingPriority}</span>
                                                 </div>
-                                                {getAvailableSlots(selectedProcedure, bookingPriority, bookingDate) <= 0 ? (
+                                                {isNormalWaitlistOnly ? (
                                                     <div className="text-[10px] font-bold text-amber-600 bg-amber-50 border border-amber-100 p-2.5 rounded-xl mt-2 flex items-center gap-1.5 col-span-2 shadow-sm animate-pulse">
                                                         <AlertTriangle className="w-4 h-4 shrink-0 text-amber-500" />
                                                         <span>Atenção: Não há vagas disponíveis. O paciente será registrado na Fila de Espera.</span>
                                                     </div>
-                                                ) : (
-                                                    bookingPriority === 'Normal' && !isLastWeekOfMonth(bookingDate) && selectedProcedure.available_quantity <= Math.ceil((selectedProcedure.total_quantity || selectedProcedure.available_quantity) * 0.20) && (
-                                                        <div className="text-[10px] font-bold text-rose-600 bg-rose-50 border border-rose-100 p-2 rounded-lg mt-2 flex items-center gap-1.5 animate-pulse col-span-2">
-                                                            <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                                                            <span>Apenas vagas de urgência disponíveis. Altere a prioridade ou prossiga para fila de espera.</span>
-                                                        </div>
-                                                    )
-                                                )}
+                                                ) : getAvailableSlots(selectedProcedure, bookingPriority, bookingDate) <= 0 ? (
+                                                    <div className="text-[10px] font-bold text-amber-600 bg-amber-50 border border-amber-100 p-2.5 rounded-xl mt-2 flex items-center gap-1.5 col-span-2 shadow-sm animate-pulse">
+                                                        <AlertTriangle className="w-4 h-4 shrink-0 text-amber-500" />
+                                                        <span>Atenção: Não há vagas disponíveis. O paciente será registrado na Fila de Espera.</span>
+                                                    </div>
+                                                ) : null}
                                             </div>
                                         </div>
                                     )}
@@ -1013,7 +1428,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                     </button>
                                     <button
                                         onClick={() => setStep(3)}
-                                        disabled={!selectedProcedure || !bookingDate}
+                                        disabled={!selectedProcedure || (!bookingDate && !isNormalWaitlistOnly)}
                                         className="px-6 py-2.5 bg-sky-600 hover:bg-sky-700 disabled:opacity-40 disabled:hover:bg-sky-600 text-white font-extrabold rounded-2xl shadow-lg shadow-sky-600/10 hover:shadow-sky-600/20 active:scale-95 disabled:active:scale-100 transition-all text-xs uppercase tracking-wider"
                                     >
                                         Revisar
@@ -1079,7 +1494,9 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                             <div>
                                                 <span className="block text-[8px] font-black text-slate-400 uppercase tracking-wider">Data do Atendimento</span>
                                                 <span className="text-xs font-bold text-slate-700">
-                                                    {bookingDate && new Date(bookingDate + 'T00:00:00').toLocaleDateString('pt-BR')}
+                                                    {isNormalWaitlistOnly
+                                                        ? 'Fila de Espera (Registro Automático)'
+                                                        : (bookingDate && new Date(bookingDate + 'T12:00:00').toLocaleDateString('pt-BR')) + (bookingTime ? ` às ${bookingTime}` : '')}
                                                 </span>
                                             </div>
                                             <div>
@@ -1094,7 +1511,11 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                             </div>
                                             <div>
                                                 <span className="block text-[8px] font-black text-slate-400 uppercase tracking-wider">Status Estimado</span>
-                                                {selectedProcedure && getAvailableSlots(selectedProcedure, bookingPriority, bookingDate) > 0 ? (
+                                                {isNormalWaitlistOnly ? (
+                                                    <span className="inline-block text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded mt-0.5 bg-amber-50 text-amber-700 border border-amber-100 font-extrabold animate-pulse">
+                                                        Fila de Espera
+                                                    </span>
+                                                ) : selectedProcedure && getAvailableSlots(selectedProcedure, bookingPriority, bookingDate) > 0 ? (
                                                     <span className="inline-block text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded mt-0.5 bg-emerald-50 text-emerald-700 border border-emerald-100 font-extrabold">
                                                         Agendado
                                                     </span>
@@ -1136,70 +1557,554 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                 )}
 
             </div>
-            {/* MODAL: DEFINIR DATA PARA RESERVA */}
-            {isReservedModalOpen && schedulingReserved && (
-                <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-                    <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden border border-slate-100 flex flex-col transform transition-all">
-                        <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 shrink-0">
+            {/* MODAL: VAGAS RESERVADAS PENDENTES (FILA DE ESPERA PROMOVIDA) */}
+            {reservedBookings.length > 0 && typeof document !== 'undefined' && createPortal(
+                <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-md transition-all animate-in fade-in duration-300">
+                    <div className="bg-white rounded-[2.5rem] shadow-[0_25px_70px_rgba(0,0,0,0.15)] w-full max-w-2xl overflow-hidden border border-slate-100 flex flex-col max-h-[85vh] transform transition-all animate-in zoom-in-95 slide-in-from-bottom-8 duration-300">
+                        {/* Header */}
+                        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 shrink-0">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-2xl bg-amber-500/10 flex items-center justify-center border border-amber-500/20 shadow-sm animate-pulse">
+                                    <Activity className="w-5 h-5 text-amber-600" />
+                                </div>
+                                <div>
+                                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider">Vagas Reservadas Pendentes</h3>
+                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">Fila de espera promovida</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        {/* Body */}
+                        <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar min-h-0">
+                            <div className="p-4 bg-amber-50/50 border border-amber-200/50 rounded-2xl text-[11px] font-bold text-amber-800 leading-relaxed shrink-0">
+                                Os pacientes listados abaixo foram promovidos da fila de espera. Você deve preencher a **Data** e a **Hora** para cada um deles antes de prosseguir com o uso da tela.
+                            </div>
+                            
+                            <div className="space-y-3">
+                                {reservedBookings.map((b) => {
+                                    const isConfirmed = !!confirmedReservedBookings[b.id];
+                                    const confirmedBooking = confirmedReservedBookings[b.id];
+                                    const dateVal = reservedDates[b.id] || '';
+                                    const timeVal = reservedTimes[b.id] || '';
+                                    
+                                    const procVagas = reservedProceduresVagas[b.procedimento_id] || [];
+                                    const procBookings = reservedProceduresBookings[b.procedimento_id] || [];
+                                    const assignments = getSlotAssignmentsForProcedure(procVagas, procBookings);
+                                    const availableSlotsForProc = procVagas.filter(v => 
+                                        v.status === 'Disponível' && 
+                                        !assignments.has(v.id)
+                                    );
+                                    
+                                    const uniqueDates = Array.from(new Set(availableSlotsForProc.map(v => v.data))).sort();
+                                    const timesForSelectedDate = availableSlotsForProc
+                                        .filter(v => v.data === dateVal)
+                                        .map(v => v.hora.substring(0, 5))
+                                        .sort();
+                                    
+                                    return (
+                                        <div 
+                                            key={b.id} 
+                                            className={`p-5 rounded-2xl border transition-all ${
+                                                isConfirmed 
+                                                ? 'bg-emerald-50/30 border-emerald-200 shadow-sm' 
+                                                : 'bg-slate-50/40 border-slate-200 hover:border-slate-300'
+                                            }`}
+                                        >
+                                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                                                <div>
+                                                    <div className="font-extrabold text-slate-800 text-xs uppercase">
+                                                        {b.paciente?.name}
+                                                    </div>
+                                                    <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-1 font-bold">
+                                                        <span>CPF: {b.paciente?.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}</span>
+                                                        <span className="h-1 w-1 rounded-full bg-slate-300" />
+                                                        <span className="text-sky-600 uppercase font-black">{b.procedimento?.name}</span>
+                                                    </div>
+                                                </div>
+                                                {isConfirmed && (
+                                                    <span className="inline-flex px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-100">
+                                                        Confirmado
+                                                    </span>
+                                                )}
+                                            </div>
+                                            
+                                            <div className="pt-3">
+                                                {isConfirmed ? (
+                                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                                        <div className="text-[11px] font-black text-slate-700">
+                                                            Agendado para: <span className="text-emerald-600">{new Date(confirmedBooking.appointment_date + 'T12:00:00').toLocaleDateString('pt-BR')}</span> às <span className="text-emerald-600">{confirmedBooking.appointment_time?.substring(0, 5)}</span>
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleDownloadPdf(confirmedBooking)}
+                                                            disabled={isGenerating}
+                                                            className="px-4 py-2 bg-sky-50 border border-sky-200 hover:bg-sky-500 hover:border-sky-500 hover:text-white text-sky-700 font-black rounded-xl text-[9px] uppercase tracking-wider shadow-sm transition-all flex items-center gap-1.5"
+                                                        >
+                                                            {isGenerating && printingBooking?.id === confirmedBooking.id ? (
+                                                                <Loader2 className="w-3 h-3 animate-spin" />
+                                                            ) : (
+                                                                <FileDown className="w-3 h-3" />
+                                                            )}
+                                                            Baixar Recibo
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                                                        {/* CUSTOM DATE DROPDOWN */}
+                                                        <div className="dropdown-container relative">
+                                                            <label className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1.5 ml-1">Data da Consulta</label>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setActiveDateDropdownId(activeDateDropdownId === b.id ? null : b.id);
+                                                                    setActiveTimeDropdownId(null);
+                                                                }}
+                                                                className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-slate-900 focus:border-sky-500 focus:ring-4 focus:ring-sky-500/5 outline-none transition-all text-xs font-bold flex items-center justify-between cursor-pointer shadow-sm hover:border-slate-300"
+                                                            >
+                                                                <span className={dateVal ? "text-slate-800" : "text-slate-400"}>
+                                                                    {dateVal ? new Date(dateVal + 'T12:00:00').toLocaleDateString('pt-BR') : 'Selecione a Data...'}
+                                                                </span>
+                                                                <Calendar className="w-4 h-4 text-slate-400" />
+                                                            </button>
+                                                            
+                                                            {activeDateDropdownId === b.id && (
+                                                                <div className="absolute z-[100] mt-1 w-full bg-white border border-slate-200/80 rounded-xl shadow-lg py-1 max-h-48 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200 custom-scrollbar">
+                                                                    {uniqueDates.length === 0 ? (
+                                                                        <div className="px-4 py-2.5 text-xs font-bold text-slate-400 uppercase tracking-wider text-center">
+                                                                            Sem datas disponíveis
+                                                                        </div>
+                                                                    ) : (
+                                                                        uniqueDates.map(d => (
+                                                                            <button
+                                                                                key={d}
+                                                                                type="button"
+                                                                                onClick={() => {
+                                                                                    setReservedDates(prev => ({ ...prev, [b.id]: d }));
+                                                                                    setReservedTimes(prev => ({ ...prev, [b.id]: '' }));
+                                                                                    setActiveDateDropdownId(null);
+                                                                                }}
+                                                                                className={`w-full text-left px-4 py-2.5 text-xs font-bold transition-colors ${
+                                                                                    dateVal === d 
+                                                                                    ? 'bg-sky-500 text-white' 
+                                                                                    : 'text-slate-700 hover:bg-slate-50'
+                                                                                }`}
+                                                                            >
+                                                                                {new Date(d + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric', month: 'short' })}
+                                                                            </button>
+                                                                        ))
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                        </div>
+
+                                                        {/* CUSTOM TIME DROPDOWN */}
+                                                        <div className="dropdown-container relative">
+                                                            <label className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1.5 ml-1">Hora da Consulta</label>
+                                                            <button
+                                                                type="button"
+                                                                disabled={!dateVal}
+                                                                onClick={() => {
+                                                                    setActiveTimeDropdownId(activeTimeDropdownId === b.id ? null : b.id);
+                                                                    setActiveDateDropdownId(null);
+                                                                }}
+                                                                className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-slate-900 focus:border-sky-500 focus:ring-4 focus:ring-sky-500/5 outline-none transition-all text-xs font-bold flex items-center justify-between cursor-pointer shadow-sm hover:border-slate-300 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
+                                                            >
+                                                                <span className={timeVal ? "text-slate-800" : "text-slate-400"}>
+                                                                    {timeVal ? timeVal : 'Selecione o Horário...'}
+                                                                </span>
+                                                                <Clock className="w-4 h-4 text-slate-400" />
+                                                            </button>
+                                                            
+                                                            {activeTimeDropdownId === b.id && dateVal && (
+                                                                <div className="absolute z-[100] mt-1 w-full bg-white border border-slate-200/80 rounded-xl shadow-lg py-1 max-h-48 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200 custom-scrollbar">
+                                                                    {timesForSelectedDate.length === 0 ? (
+                                                                        <div className="px-4 py-2.5 text-xs font-bold text-slate-400 uppercase tracking-wider text-center">
+                                                                            Sem horários disponíveis
+                                                                        </div>
+                                                                    ) : (
+                                                                        timesForSelectedDate.map(t => (
+                                                                            <button
+                                                                                key={t}
+                                                                                type="button"
+                                                                                onClick={() => {
+                                                                                    setReservedTimes(prev => ({ ...prev, [b.id]: t }));
+                                                                                    setActiveTimeDropdownId(null);
+                                                                                }}
+                                                                                className={`w-full text-left px-4 py-2.5 text-xs font-bold transition-colors ${
+                                                                                    timeVal === t 
+                                                                                    ? 'bg-sky-500 text-white' 
+                                                                                    : 'text-slate-700 hover:bg-slate-50'
+                                                                                }`}
+                                                                            >
+                                                                                {t}
+                                                                            </button>
+                                                                        ))
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                        </div>
+
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleConfirmReservedDateAndTime(b.id)}
+                                                            disabled={loading || !dateVal || !timeVal}
+                                                            className="w-full py-2.5 bg-gradient-to-r from-sky-500 to-indigo-600 text-white font-black rounded-xl text-[9px] uppercase tracking-wider shadow-md hover:from-sky-600 hover:to-indigo-700 active:scale-95 disabled:opacity-40 transition-all flex items-center justify-center gap-1.5 h-[38px]"
+                                                        >
+                                                            {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                                                            Confirmar
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                        
+                        {/* Footer */}
+                        <div className="p-5 bg-slate-50 border-t border-slate-100 flex justify-between gap-3 shrink-0">
+                            <button
+                                type="button"
+                                onClick={onBack}
+                                className="px-5 py-3 bg-white border border-slate-200 hover:bg-slate-100 text-slate-600 font-extrabold rounded-2xl text-xs uppercase tracking-wider active:scale-95 transition-all"
+                            >
+                                Voltar ao Menu
+                            </button>
+                            
+                            {reservedBookings.every(b => !!confirmedReservedBookings[b.id]) ? (
+                                <button
+                                    type="button"
+                                    onClick={handleCloseReservedModal}
+                                    className="px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-extrabold rounded-2xl text-xs uppercase tracking-wider active:scale-95 transition-all shadow-md shadow-emerald-500/20 hover:scale-[1.01]"
+                                >
+                                    Acessar Tela de Agendamento
+                                </button>
+                            ) : (
+                                <button
+                                    type="button"
+                                    disabled={true}
+                                    className="px-6 py-3 bg-slate-200 text-slate-400 font-extrabold rounded-2xl text-xs uppercase tracking-wider cursor-not-allowed opacity-60"
+                                >
+                                    Defina todas as vagas para prosseguir
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
+            {/* MODAL: CONFLITO DE DATA (MAIS PRÓXIMA) */}
+            {isConflictModalOpen && conflictBooking && typeof document !== 'undefined' && createPortal(
+                <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/50 backdrop-blur-md animate-in fade-in duration-300">
+                    <div className="bg-white rounded-[2.5rem] shadow-[0_25px_70px_rgba(0,0,0,0.15)] w-full max-w-md overflow-hidden border border-slate-100 flex flex-col transform transition-all animate-in zoom-in-95 slide-in-from-bottom-8 duration-300">
+                        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 shrink-0">
                             <div>
-                                <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider">Definir Data do Exame</h3>
-                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">Vaga já reservada para este paciente</p>
+                                <h3 className="text-sm font-black text-amber-600 uppercase tracking-wider flex items-center gap-1.5">
+                                    <AlertTriangle className="w-4 h-4" /> Alterar Data do Agendamento
+                                </h3>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">Procedimento já agendado anteriormente</p>
                             </div>
                             <button 
                                 onClick={() => {
-                                    setIsReservedModalOpen(false);
-                                    setSchedulingReserved(null);
+                                    setIsConflictModalOpen(false);
+                                    setConflictBooking(null);
                                 }} 
-                                className="p-2 hover:bg-slate-200 rounded-xl text-slate-400 hover:text-slate-700 transition-colors"
+                                className="p-2 hover:bg-slate-200 rounded-xl text-slate-400 hover:text-slate-700 transition-all hover:rotate-90 duration-300"
                             >
                                 <X className="w-5 h-5" />
                             </button>
                         </div>
                         <div className="p-6 space-y-4">
-                            <div className="p-3.5 bg-slate-50 border border-slate-200/50 rounded-2xl space-y-2 text-xs font-bold text-slate-600">
-                                <div className="flex justify-between">
-                                    <span className="text-slate-400">Paciente:</span>
-                                    <span className="text-slate-800 uppercase font-black">{schedulingReserved.paciente?.name}</span>
+                            <p className="text-xs text-slate-600 font-semibold leading-relaxed">
+                                O paciente já possui um agendamento ativo para **{selectedProcedure?.name}**. 
+                                Como a nova data proposta é mais próxima, você pode optar por transferir o agendamento existente para a nova data.
+                            </p>
+                            
+                            <div className="p-4 bg-slate-50 border border-slate-200/50 rounded-2xl space-y-2.5 text-xs font-bold text-slate-700 shadow-inner">
+                                <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                                    <span className="text-slate-400 font-semibold">Data Atual:</span>
+                                    <span className="text-slate-800 line-through">
+                                        {new Date(conflictBooking.appointment_date + 'T00:00:00').toLocaleDateString('pt-BR')}
+                                    </span>
                                 </div>
-                                <div className="flex justify-between">
-                                    <span className="text-slate-400">Procedimento:</span>
-                                    <span className="text-slate-800 uppercase font-black">{schedulingReserved.procedimento?.name}</span>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-sky-600 font-black">Nova Data Mais Próxima:</span>
+                                    <span className="text-sky-600 font-black bg-sky-50 border border-sky-200 px-2 py-0.5 rounded-lg">
+                                        {new Date(bookingDate + 'T00:00:00').toLocaleDateString('pt-BR')}
+                                    </span>
                                 </div>
                             </div>
-                            <div>
-                                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Data da Consulta/Exame</label>
-                                <input
-                                    type="date"
-                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all text-xs font-bold"
-                                    value={reservedDate}
-                                    onChange={(e) => setReservedDate(e.target.value)}
-                                    required
-                                />
-                            </div>
+                            
+                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                                * Nota: Não é permitido ter 2 agendamentos ativos para o mesmo procedimento. O agendamento antigo será atualizado para a nova data.
+                            </p>
                         </div>
                         <div className="p-5 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 shrink-0">
                             <button
                                 type="button"
                                 onClick={() => {
-                                    setIsReservedModalOpen(false);
-                                    setSchedulingReserved(null);
+                                    setIsConflictModalOpen(false);
+                                    setConflictBooking(null);
                                 }}
-                                className="px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-600 font-extrabold rounded-xl text-xs uppercase tracking-wider active:scale-95 transition-all"
+                                className="px-5 py-3 bg-white border border-slate-200 hover:bg-slate-100 text-slate-600 font-extrabold rounded-2xl text-xs uppercase tracking-wider active:scale-95 transition-all"
                             >
-                                Cancelar
+                                Manter Anterior
                             </button>
                             <button
                                 type="button"
-                                onClick={handleConfirmReservedDate}
-                                disabled={loading || !reservedDate}
-                                className="px-5 py-2.5 bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-extrabold rounded-xl text-xs uppercase tracking-wider active:scale-95 transition-all flex items-center gap-1.5 shadow-md"
+                                onClick={handleRescheduleConflict}
+                                disabled={loading}
+                                className="px-6 py-3 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 disabled:opacity-50 text-white font-extrabold rounded-2xl text-xs uppercase tracking-wider active:scale-95 transition-all flex items-center gap-1.5 shadow-md shadow-sky-500/20"
                             >
                                 {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                                Confirmar
+                                Alterar Data
                             </button>
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
+            )}
+            {/* MODAL: SELECIONAR DATA DA CONSULTA (CALENDÁRIO DE VAGAS) */}
+            {isCalendarOpen && selectedProcedure && typeof document !== 'undefined' && createPortal(
+                <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/50 backdrop-blur-md animate-in fade-in duration-300">
+                    <div className="bg-white rounded-[2.5rem] shadow-[0_25px_70px_rgba(0,0,0,0.15)] w-full max-w-2xl md:max-w-3xl overflow-hidden border border-slate-100 flex flex-col h-[600px] max-h-[90vh] animate-in zoom-in-95 slide-in-from-bottom-8 duration-300">
+                        {/* Header */}
+                        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 shrink-0">
+                            <div>
+                                <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider">Selecione Data e Hora</h3>
+                                <p className="text-[10px] text-sky-600 font-black uppercase tracking-wider mt-0.5">{selectedProcedure.name}</p>
+                            </div>
+                            <button 
+                                onClick={() => setIsCalendarOpen(false)} 
+                                className="p-2 hover:bg-slate-200 rounded-xl text-slate-400 hover:text-slate-700 transition-all hover:rotate-90 duration-300"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        
+                        {/* Body */}
+                        <div className="flex-1 min-h-0 flex overflow-hidden">
+                            {loadingVagas ? (
+                                <div className="flex-1 flex flex-col items-center justify-center space-y-3">
+                                    <Loader2 className="w-8 h-8 text-sky-600 animate-spin" />
+                                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Carregando datas...</span>
+                                </div>
+                            ) : (vagas.length === 0 || vagas.filter(isSlotVisible).length === 0) ? (
+                                <div className="flex-1 p-6 flex flex-col items-center justify-center text-center space-y-4 animate-in fade-in duration-300">
+                                    <AlertTriangle className="w-12 h-12 text-amber-500 animate-bounce" />
+                                    <div className="space-y-1">
+                                        <h4 className="text-sm font-black text-slate-800 uppercase">Sem vagas cadastradas</h4>
+                                        <p className="text-[10px] text-slate-400 font-semibold max-w-xs leading-relaxed">
+                                            Não há datas com horários definidos para este procedimento. O agendamento será direcionado automaticamente para a Fila de Espera.
+                                        </p>
+                                    </div>
+                                    <div className="w-full max-w-sm pt-4">
+                                        <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1.5 text-left ml-1">Escolha uma data para fila de espera</label>
+                                        <input
+                                            type="date"
+                                            min={new Date().toISOString().split('T')[0]}
+                                            className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-slate-900 text-xs font-bold focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all"
+                                            value={bookingDate}
+                                            onChange={(e) => {
+                                                setBookingDate(e.target.value);
+                                                setBookingTime('');
+                                                setIsCalendarOpen(false);
+                                            }}
+                                            required
+                                        />
+                                    </div>
+                                </div>
+                            ) : (() => {
+                                const todayStr = new Date().toISOString().split('T')[0];
+                                const uniqueDates = Array.from(new Set(vagas.map(v => v.data)))
+                                    .filter(d => d >= todayStr)
+                                    .filter(d => vagas.filter(v => v.data === d).some(isSlotVisible))
+                                    .sort();
+                                const currentActiveDate = activeDate || (uniqueDates.length > 0 ? uniqueDates[0] : '');
+                                const slotsForActiveDate = vagas.filter(v => v.data === currentActiveDate);
+
+                                return (
+                                    <>
+                                        {/* Left Panel: Dates */}
+                                        <div className="w-[42%] flex flex-col min-h-0 border-r border-slate-100 bg-slate-50/30">
+                                            <div className="p-3 bg-slate-50/80 border-b border-slate-100 shrink-0 text-center flex items-center justify-center gap-1.5">
+                                                <CalendarDays className="w-3.5 h-3.5 text-slate-400" />
+                                                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Datas Disponíveis</span>
+                                            </div>
+                                            <div className="flex-1 overflow-y-auto p-3.5 space-y-2.5 custom-scrollbar">
+                                                {uniqueDates.map(d => {
+                                                    const isSelected = currentActiveDate === d;
+                                                    const dateObj = new Date(d + 'T12:00:00');
+                                                    const weekday = dateObj.toLocaleDateString('pt-BR', { weekday: 'long' }).split('-')[0];
+                                                    const dateFormatted = dateObj.toLocaleDateString('pt-BR');
+                                                    
+                                                    const slotsForThisDate = vagas.filter(v => v.data === d);
+                                                    const availableCount = slotsForThisDate.filter(v => 
+                                                        v.status === 'Disponível' && 
+                                                        isSlotReallyAvailable(v) && 
+                                                        getAvailableSlots(selectedProcedure, bookingPriority, v.data) > 0
+                                                    ).length;
+
+                                                    return (
+                                                        <button
+                                                            key={d}
+                                                            type="button"
+                                                            onClick={() => setActiveDate(d)}
+                                                            className={`w-full p-4 rounded-2xl border transition-all text-left flex items-center justify-between group/date ${
+                                                                isSelected 
+                                                                ? 'bg-gradient-to-r from-sky-50 to-white border-sky-300 border-l-4 border-l-sky-500 text-sky-800 shadow-md font-black scale-[1.01]' 
+                                                                : 'bg-white border-slate-100 border-l-4 border-l-transparent hover:bg-slate-50 hover:border-slate-200 text-slate-600 hover:text-slate-800'
+                                                            }`}
+                                                        >
+                                                            <div className="min-w-0 pr-2">
+                                                                <span className={`text-[8px] font-black uppercase tracking-wider block ${
+                                                                    isSelected ? 'text-sky-500' : 'text-slate-400 group-hover/date:text-slate-500'
+                                                                }`}>
+                                                                    {weekday}
+                                                                </span>
+                                                                <span className="text-xs font-black tracking-tight mt-0.5 block">
+                                                                    {dateFormatted}
+                                                                </span>
+                                                            </div>
+                                                            <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded ${
+                                                                availableCount > 0
+                                                                ? 'bg-emerald-500/10 text-emerald-700 border border-emerald-500/20'
+                                                                : 'bg-amber-500/10 text-amber-700 border border-amber-500/20 animate-pulse font-extrabold'
+                                                            }`}>
+                                                                {availableCount > 0 ? `${availableCount} v` : 'Fila'}
+                                                            </span>
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+
+                                        {/* Right Panel: Times */}
+                                        <div className="w-[58%] flex flex-col min-h-0">
+                                            <div className="p-3 bg-slate-50/80 border-b border-slate-100 shrink-0 text-center flex items-center justify-center gap-1.5">
+                                                <Clock className="w-3.5 h-3.5 text-slate-400" />
+                                                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                                                    {currentActiveDate 
+                                                        ? `Horários para ${new Date(currentActiveDate + 'T12:00:00').toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })}`
+                                                        : 'Horários de Atendimento'
+                                                    }
+                                                </span>
+                                            </div>
+                                            <div className="flex-1 overflow-y-auto p-5 custom-scrollbar">
+                                                {currentActiveDate ? (
+                                                    slotsForActiveDate.length > 0 ? (
+                                                        <div className="grid grid-cols-2 gap-3">
+                                                            {slotsForActiveDate.map(slot => {
+                                                                if (!isSlotVisible(slot)) return null;
+
+                                                                const isReallyAvailable = slot.status === 'Disponível' && 
+                                                                    isSlotReallyAvailable(slot) &&
+                                                                    getAvailableSlots(selectedProcedure, bookingPriority, slot.data) > 0;
+                                                                const slotTime = slot.hora.substring(0, 5);
+                                                                
+                                                                const activeBooking = getSlotBooking(slot);
+
+                                                                // If there is a confirmed/realized booking, hide/remove the slot completely
+                                                                if (activeBooking && ['Agendado', 'Retorno', 'Realizado'].includes(activeBooking.status)) {
+                                                                    return null;
+                                                                }
+
+                                                                // If there is a pending request, block the slot (disable it)
+                                                                const isBlocked = activeBooking && ['Solicitado', 'Fila de espera', 'Aguardando Data'].includes(activeBooking.status);
+
+                                                                if (isBlocked) {
+                                                                    return (
+                                                                        <button
+                                                                            key={slot.id}
+                                                                            type="button"
+                                                                            disabled={true}
+                                                                            className="p-3.5 rounded-2xl border border-slate-200 bg-slate-100/70 text-slate-400 text-center font-black flex flex-col items-center justify-center space-y-1 cursor-not-allowed opacity-60 shadow-none"
+                                                                        >
+                                                                            <span className="text-sm tracking-wide line-through">{slotTime}</span>
+                                                                            <span className="text-[8px] font-extrabold uppercase tracking-wider text-slate-400">
+                                                                                Bloqueado
+                                                                            </span>
+                                                                        </button>
+                                                                    );
+                                                                }
+
+                                                                return (
+                                                                    <button
+                                                                        key={slot.id}
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            setBookingDate(currentActiveDate);
+                                                                            setBookingTime(slotTime);
+                                                                            setIsCalendarOpen(false);
+                                                                        }}
+                                                                        className={`p-3.5 rounded-2xl border text-center font-black transition-all flex flex-col items-center justify-center space-y-1 hover:scale-[1.02] hover:-translate-y-0.5 active:scale-95 shadow-sm duration-200 ${
+                                                                            isReallyAvailable
+                                                                            ? 'bg-emerald-50/50 hover:bg-emerald-500 border-emerald-100 hover:border-emerald-500 text-emerald-800 hover:text-white shadow-emerald-500/5 hover:shadow-md'
+                                                                            : 'bg-amber-50/50 hover:bg-amber-500 border-amber-100 hover:border-amber-500 text-amber-800 hover:text-white shadow-amber-500/5 hover:shadow-md'
+                                                                        }`}
+                                                                    >
+                                                                        <span className="text-sm tracking-wide">{slotTime}</span>
+                                                                        <span className="text-[8px] font-extrabold uppercase tracking-wider opacity-85">
+                                                                            {isReallyAvailable ? 'Disponível' : 'Fila de Espera'}
+                                                                        </span>
+                                                                    </button>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    ) : (
+                                                        <div className="h-full flex items-center justify-center text-slate-400 text-[10px] font-bold uppercase tracking-wider">
+                                                            Nenhum horário cadastrado.
+                                                        </div>
+                                                    )
+                                                ) : (
+                                                    <div className="h-full flex items-center justify-center text-slate-400 text-[10px] font-bold uppercase tracking-wider text-center p-4">
+                                                        Selecione uma data para ver os horários.
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </>
+                                );
+                            })()}
+                        </div>
+                        
+                        {/* Footer / Legend */}
+                        <div className="p-5 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-[8px] font-black uppercase tracking-widest text-slate-400 shrink-0">
+                            <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-1.5">
+                                    <div className="w-2.5 h-2.5 rounded bg-emerald-500 shadow-sm shadow-emerald-500/20"></div>
+                                    <span>Disponível</span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                    <div className="w-2.5 h-2.5 rounded bg-amber-500 shadow-sm shadow-amber-500/20 animate-pulse"></div>
+                                    <span>Fila de Espera</span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                    <div className="w-2.5 h-2.5 rounded bg-slate-300 shadow-sm"></div>
+                                    <span>Bloqueado (Pendente)</span>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-1">
+                                <span className="font-extrabold text-slate-400">Total de Horários: {vagas.length}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
+            {printingBooking && (
+                <ConsultaPdfGenerator
+                    bookingId={printingBooking.id}
+                    patient={printingBooking.paciente || selectedPatient!}
+                    procedure={printingBooking.procedimento || selectedProcedure!}
+                    date={printingBooking.appointment_date}
+                    quantity={printingBooking.quantity}
+                    priority={printingBooking.priority}
+                    is_retorno={printingBooking.is_retorno}
+                    currentUser={currentUser}
+                    state={appState}
+                />
             )}
         </div>
     );

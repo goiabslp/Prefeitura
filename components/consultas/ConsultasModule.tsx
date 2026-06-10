@@ -23,7 +23,7 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
     onLogout,
     appState
 }) => {
-    const isSubView = subView === 'novo-agendamento' || subView === 'acompanhar' || subView === 'dados';
+    const isSubView = subView === 'novo-agendamento' || subView === 'acompanhar' || subView === 'dados' || (subView?.startsWith('dados') ?? false);
     
     // Permission checks
     const isAdmin = currentUser.role === 'admin';
@@ -97,7 +97,7 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
                         {/* Dados & Dashboard Card */}
                         {canAccessDados && (
                             <button
-                                onClick={() => onNavigate('consultas:dados')}
+                                onClick={() => onNavigate('consultas:dados-dashboard')}
                                 className="group relative w-full min-h-[140px] md:min-h-[180px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-emerald-500/30 hover:border-emerald-200 hover:from-white hover:to-emerald-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden text-center"
                             >
                                 <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
@@ -140,6 +140,8 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
                         <DadosScreen
                             currentUser={currentUser}
                             onBack={() => onNavigate('consultas')}
+                            subView={subView}
+                            onNavigate={onNavigate}
                         />
                     )}
                 </main>

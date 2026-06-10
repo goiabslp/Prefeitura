@@ -489,6 +489,7 @@ export interface ConsultaPaciente {
 export interface ConsultaProcedimento {
   id: string;
   name: string;
+  code?: string;
   type: 'Exame' | 'Consulta' | 'Cirurgia';
   available_quantity: number;
   total_quantity: number;
@@ -502,14 +503,25 @@ export interface ConsultaAgendamento {
   patient_id: string;
   procedimento_id: string;
   appointment_date: string;
+  appointment_time?: string;
   quantity: number;
   priority: 'Normal' | 'Urgência';
-  status: 'Agendado' | 'Realizado' | 'Cancelado' | 'Fila de Espera' | 'Aguardando Data';
+  status: 'Solicitado' | 'Agendado' | 'Realizado' | 'Cancelado' | 'Não Realizado' | 'Fila de espera' | 'Aguardando Data' | 'Retorno';
   created_by: string;
   created_at?: string;
+  is_retorno?: boolean;
   paciente?: ConsultaPaciente;
   procedimento?: ConsultaProcedimento;
   responsavel?: { name: string };
+}
+
+export interface ConsultaVaga {
+  id: string;
+  procedimento_id: string;
+  data: string;
+  hora: string;
+  status: 'Disponível' | 'Ocupada';
+  created_at?: string;
 }
 
 declare const __LATEST_COMMIT__: string;

@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS public.consultas_agendamentos (
     appointment_date DATE NOT NULL,
     quantity INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
     priority TEXT NOT NULL DEFAULT 'Normal' CHECK (priority IN ('Normal', 'Urgência')),
-    status TEXT NOT NULL DEFAULT 'Agendado' CHECK (status IN ('Agendado', 'Realizado', 'Cancelado', 'Fila de Espera', 'Aguardando Data')),
+    status TEXT NOT NULL DEFAULT 'Solicitado' CHECK (status IN ('Solicitado', 'Agendado', 'Realizado', 'Cancelado', 'Não Realizado', 'Fila de espera', 'Aguardando Data')),
     created_by UUID NOT NULL REFERENCES public.profiles(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
@@ -101,7 +101,7 @@ BEGIN
         SELECT id, appointment_date, quantity, priority 
         FROM public.consultas_agendamentos
         WHERE procedimento_id = p_procedimento_id 
-          AND status = 'Fila de Espera'
+          AND status = 'Fila de espera'
         ORDER BY CASE WHEN priority = 'Urgência' THEN 0 ELSE 1 END ASC, created_at ASC
     LOOP
         SELECT available_quantity, total_quantity INTO v_available, v_total
@@ -137,11 +137,18 @@ DECLARE
     v_available INTEGER;
     v_total INTEGER;
     v_reserved INTEGER;
-    v_old_occupies BOOLEAN;
-    v_new_occupies BOOLEAN;
+    v_old_occupies BOOLEAN := FALSE;
+    v_new_occupies BOOLEAN := FALSE;
 BEGIN
-    v_old_occupies := OLD.status IN ('Agendado', 'Aguardando Data', 'Realizado');
-    v_new_occupies := NEW.status IN ('Agendado', 'Aguardando Data', 'Realizado');
+    -- Avalia OLD.status apenas em UPDATE e DELETE
+    IF (TG_OP = 'UPDATE' OR TG_OP = 'DELETE') THEN
+        v_old_occupies := OLD.status IN ('Solicitado', 'Agendado', 'Aguardando Data', 'Realizado');
+    END IF;
+
+    -- Avalia NEW.status apenas em INSERT e UPDATE
+    IF (TG_OP = 'INSERT' OR TG_OP = 'UPDATE') THEN
+        v_new_occupies := NEW.status IN ('Solicitado', 'Agendado', 'Aguardando Data', 'Realizado');
+    END IF;
 
     IF (TG_OP = 'INSERT') THEN
         IF (v_new_occupies) THEN
@@ -157,15 +164,15 @@ BEGIN
 
             IF (NEW.priority = 'Normal') THEN
                 IF v_available < (v_reserved + NEW.quantity) THEN
-                    NEW.status := 'Fila de Espera';
+                    NEW.status := 'Fila de espera';
                 END IF;
             ELSE
                 IF v_available < NEW.quantity THEN
-                    NEW.status := 'Fila de Espera';
+                    NEW.status := 'Fila de espera';
                 END IF;
             END IF;
 
-            IF (NEW.status IN ('Agendado', 'Aguardando Data', 'Realizado')) THEN
+            IF (NEW.status IN ('Solicitado', 'Agendado', 'Aguardando Data', 'Realizado')) THEN
                 UPDATE public.consultas_procedimentos
                 SET available_quantity = available_quantity - NEW.quantity
                 WHERE id = NEW.procedimento_id;
@@ -186,15 +193,15 @@ BEGIN
 
             IF (NEW.priority = 'Normal') THEN
                 IF v_available < (v_reserved + NEW.quantity) THEN
-                    NEW.status := 'Fila de Espera';
+                    NEW.status := 'Fila de espera';
                 END IF;
             ELSE
                 IF v_available < NEW.quantity THEN
-                    NEW.status := 'Fila de Espera';
+                    NEW.status := 'Fila de espera';
                 END IF;
             END IF;
 
-            IF (NEW.status IN ('Agendado', 'Aguardando Data', 'Realizado')) THEN
+            IF (NEW.status IN ('Solicitado', 'Agendado', 'Aguardando Data', 'Realizado')) THEN
                 UPDATE public.consultas_procedimentos
                 SET available_quantity = available_quantity - NEW.quantity
                 WHERE id = NEW.procedimento_id;
@@ -252,11 +259,16 @@ CREATE TRIGGER trigger_handle_consultas_vagas
 CREATE OR REPLACE FUNCTION handle_consultas_vagas_after_change()
 RETURNS TRIGGER AS $$
 DECLARE
-    v_old_occupies BOOLEAN;
-    v_new_occupies BOOLEAN;
+    v_old_occupies BOOLEAN := FALSE;
+    v_new_occupies BOOLEAN := FALSE;
 BEGIN
-    v_old_occupies := OLD.status IN ('Agendado', 'Aguardando Data', 'Realizado');
-    v_new_occupies := NEW.status IN ('Agendado', 'Aguardando Data', 'Realizado');
+    IF (TG_OP = 'UPDATE' OR TG_OP = 'DELETE') THEN
+        v_old_occupies := OLD.status IN ('Solicitado', 'Agendado', 'Aguardando Data', 'Realizado');
+    END IF;
+
+    IF (TG_OP = 'UPDATE') THEN
+        v_new_occupies := NEW.status IN ('Solicitado', 'Agendado', 'Aguardando Data', 'Realizado');
+    END IF;
 
     IF (TG_OP = 'UPDATE') THEN
         IF (v_old_occupies AND NOT v_new_occupies) THEN

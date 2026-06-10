@@ -1,23 +1,235 @@
-import React, { useState, useEffect } from 'react';
-import { User, ConsultaPaciente, ConsultaProcedimento, ConsultaAgendamento } from '../../types';
-import { ArrowLeft, Users, Calendar, Settings, BarChart3, Plus, Edit2, Search, Check, AlertTriangle, Loader2, History, X } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { User, ConsultaPaciente, ConsultaProcedimento, ConsultaAgendamento, ConsultaVaga } from '../../types';
+import { ArrowLeft, Users, Calendar, Settings, BarChart3, Plus, Edit2, Search, Check, AlertTriangle, Loader2, History, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import * as db from '../../services/consultasService';
 import { ResponsiveContainer, AreaChart, XAxis, YAxis, Tooltip, Area, CartesianGrid } from 'recharts';
 
 interface DadosScreenProps {
     currentUser: User;
     onBack: () => void;
+    subView?: string;
+    onNavigate?: (view: string) => void;
 }
 
 type TabType = 'dashboard' | 'pacientes' | 'historico' | 'procedimentos';
 
 export const DadosScreen: React.FC<DadosScreenProps> = ({
     currentUser,
-    onBack
+    onBack,
+    subView,
+    onNavigate
 }) => {
-    // Current Active Tab
-    const [activeTab, setActiveTab] = useState<TabType>('dashboard');
+    // Current Active Tab derived from URL sub-view state
+    const activeTab = (() => {
+        if (subView === 'dados-pacientes') return 'pacientes';
+        if (subView === 'dados-procedimentos') return 'procedimentos';
+        if (subView === 'dados-historico') return 'historico';
+        return 'dashboard';
+    })();
     const [loading, setLoading] = useState(false);
+
+    // Vagas / Detail states
+    const [selectedProc, setSelectedProc] = useState<ConsultaProcedimento | null>(null);
+    const [vagas, setVagas] = useState<ConsultaVaga[]>([]);
+    const [procBookings, setProcBookings] = useState<ConsultaAgendamento[]>([]);
+    const [isAddVagasModalOpen, setIsAddVagasModalOpen] = useState(false);
+    
+    // Calendar Picker Modal States
+    const [currentMonth, setCurrentMonth] = useState(new Date());
+    const [selectedDate, setSelectedDate] = useState<Date | null>(new Date());
+    const [selectedTimes, setSelectedTimes] = useState<string[]>([]);
+    const [customTime, setCustomTime] = useState('');
+
+    const matchTime = (timeA: string, timeB: string) => {
+        const cleanA = timeA.substring(0, 5);
+        const cleanB = timeB.substring(0, 5);
+        return cleanA === cleanB;
+    };
+
+    const slotAssignments = useMemo(() => {
+        const assignments = new Map<string, ConsultaAgendamento>();
+        
+        // Group slots by date
+        const slotsByDate: { [date: string]: ConsultaVaga[] } = {};
+        vagas.forEach(v => {
+            if (!slotsByDate[v.data]) {
+                slotsByDate[v.data] = [];
+            }
+            slotsByDate[v.data].push(v);
+        });
+
+        // Group bookings by date (excluding cancelados/não realizados)
+        const bookingsByDate: { [date: string]: ConsultaAgendamento[] } = {};
+        procBookings.forEach(b => {
+            if (b.status === 'Cancelado' || b.status === 'Não Realizado' || !b.appointment_date) return;
+            if (!bookingsByDate[b.appointment_date]) {
+                bookingsByDate[b.appointment_date] = [];
+            }
+            bookingsByDate[b.appointment_date].push(b);
+        });
+
+        // Match for each date
+        Object.keys(slotsByDate).forEach(dateStr => {
+            const slots = slotsByDate[dateStr];
+            const bookings = bookingsByDate[dateStr] || [];
+            
+            const unmatchedBookings = [...bookings];
+            const matchedBookingIds = new Set<string>();
+
+            // First pass: Match exact times
+            slots.forEach(slot => {
+                const exactMatch = bookings.find(b => 
+                    b.appointment_time && 
+                    matchTime(b.appointment_time, slot.hora) &&
+                    !matchedBookingIds.has(b.id)
+                );
+                if (exactMatch) {
+                    assignments.set(slot.id, exactMatch);
+                    matchedBookingIds.add(exactMatch.id);
+                    const idx = unmatchedBookings.findIndex(b => b.id === exactMatch.id);
+                    if (idx > -1) {
+                        unmatchedBookings.splice(idx, 1);
+                    }
+                }
+            });
+
+            // Second pass: Match remaining bookings to remaining unmatched slots
+            slots.forEach(slot => {
+                if (!assignments.has(slot.id) && unmatchedBookings.length > 0) {
+                    const nextBooking = unmatchedBookings.shift()!;
+                    assignments.set(slot.id, nextBooking);
+                }
+            });
+        });
+
+        return assignments;
+    }, [vagas, procBookings]);
+
+    // Fetch and reload vagas functions
+    const reloadVagas = async () => {
+        if (!selectedProc) return;
+        try {
+            const [vagasData, bookingsData] = await Promise.all([
+                db.getVagas(selectedProc.id),
+                db.getAgendamentos({ procedimentoId: selectedProc.id })
+            ]);
+            setVagas(vagasData);
+            setProcBookings(bookingsData);
+            
+            // Also refresh stats so quantities stay in sync
+            const statsData = await db.getDashboardStats();
+            setStats(statsData);
+            
+            // And reload procedures list to show updated quantities
+            const procData = await db.getProcedimentos();
+            setProcedures(procData);
+            
+            // If the active procedure details are open, also update the selectedProc counts
+            const updated = procData.find(p => p.id === selectedProc.id);
+            if (updated) {
+                setSelectedProc(updated);
+            }
+        } catch (err) {
+            console.error('Error reloading data:', err);
+        }
+    };
+
+    useEffect(() => {
+        const fetchVagas = async () => {
+            if (!selectedProc) return;
+            setLoading(true);
+            try {
+                const [vagasData, bookingsData] = await Promise.all([
+                    db.getVagas(selectedProc.id),
+                    db.getAgendamentos({ procedimentoId: selectedProc.id })
+                ]);
+                setVagas(vagasData);
+                setProcBookings(bookingsData);
+            } catch (err) {
+                console.error('Error fetching vagas:', err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchVagas();
+    }, [selectedProc]);
+
+    const toggleTime = (time: string) => {
+        if (selectedTimes.includes(time)) {
+            setSelectedTimes(selectedTimes.filter(t => t !== time));
+        } else {
+            setSelectedTimes([...selectedTimes, time]);
+        }
+    };
+
+    const addCustomTime = () => {
+        if (!customTime) return;
+        if (!selectedTimes.includes(customTime)) {
+            setSelectedTimes([...selectedTimes, customTime]);
+        }
+        setCustomTime('');
+    };
+
+    const formatDateToYYYYMMDD = (date: Date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
+    const handleConfirmAddVagas = async () => {
+        if (!selectedDate || selectedTimes.length === 0 || !selectedProc) return;
+        setLoading(true);
+        try {
+            const formattedDate = formatDateToYYYYMMDD(selectedDate);
+            const newVagas = selectedTimes.map(t => ({
+                procedimento_id: selectedProc.id,
+                data: formattedDate,
+                hora: t
+            }));
+
+            await db.createVagas(newVagas);
+            
+            setSelectedTimes([]);
+            setIsAddVagasModalOpen(false);
+            await reloadVagas();
+        } catch (err) {
+            console.error('Error creating vagas:', err);
+            alert('Erro ao criar vagas. Por favor, verifique se a tabela de vagas foi criada no banco de dados.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleDeleteSlot = async (slotId: string) => {
+        if (!window.confirm('Deseja realmente excluir esta vaga?')) return;
+        setLoading(true);
+        try {
+            await db.deleteVaga(slotId);
+            await reloadVagas();
+        } catch (err) {
+            console.error('Error deleting vaga:', err);
+            alert('Erro ao deletar vaga.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const getDaysInMonth = (date: Date) => {
+        const year = date.getFullYear();
+        const month = date.getMonth();
+        const firstDayIndex = new Date(year, month, 1).getDay();
+        const totalDays = new Date(year, month + 1, 0).getDate();
+        
+        const days = [];
+        for (let i = 0; i < firstDayIndex; i++) {
+            days.push(null);
+        }
+        for (let i = 1; i <= totalDays; i++) {
+            days.push(new Date(year, month, i));
+        }
+        return days;
+    };
 
     // Patients States
     const [patients, setPatients] = useState<ConsultaPaciente[]>([]);
@@ -47,6 +259,7 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
 
     // Procedure Form State
     const [procName, setProcName] = useState('');
+    const [procCode, setProcCode] = useState('');
     const [procType, setProcType] = useState<'Exame' | 'Consulta' | 'Cirurgia'>('Exame');
     const [procQty, setProcQty] = useState(0);
     const [procStatus, setProcStatus] = useState<'Ativo' | 'Inativo'>('Ativo');
@@ -91,24 +304,30 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
 
     useEffect(() => {
         fetchTabContent();
+        setSelectedProc(null);
     }, [activeTab]);
 
     // Realtime changes listener to keep dashboard/tables synced
     useEffect(() => {
         const handleRealtimeChange = () => {
             fetchTabContent();
+            if (selectedProc) {
+                reloadVagas();
+            }
         };
 
         window.addEventListener('consultas-agendamentos-changed', handleRealtimeChange);
         window.addEventListener('consultas-pacientes-changed', handleRealtimeChange);
         window.addEventListener('consultas-procedimentos-changed', handleRealtimeChange);
+        window.addEventListener('consultas-vagas-changed', handleRealtimeChange);
 
         return () => {
             window.removeEventListener('consultas-agendamentos-changed', handleRealtimeChange);
             window.removeEventListener('consultas-pacientes-changed', handleRealtimeChange);
             window.removeEventListener('consultas-procedimentos-changed', handleRealtimeChange);
+            window.removeEventListener('consultas-vagas-changed', handleRealtimeChange);
         };
-    }, [activeTab]);
+    }, [activeTab, selectedProc]);
 
     // Patient Form Phone Mask
     const handlePatPhoneChange = (val: string) => {
@@ -203,29 +422,27 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
             setProcError('Nome do procedimento é obrigatório.');
             return;
         }
-        if (procQty < 0) {
-            setProcError('Quantidade de cotas deve ser maior ou igual a zero.');
+        if (!/^\d{4}$/.test(procCode)) {
+            setProcError('Código do procedimento deve conter exatamente 4 dígitos numéricos (ex: 0123).');
             return;
         }
 
         setLoading(true);
         try {
             if (editingProc) {
-                const bookedSlots = (editingProc.total_quantity || editingProc.available_quantity) - editingProc.available_quantity;
-                const newAvailable = Math.max(0, procQty - bookedSlots);
                 await db.updateProcedimento(editingProc.id, {
                     name: procName,
+                    code: procCode,
                     type: procType,
-                    total_quantity: procQty,
-                    available_quantity: newAvailable,
                     status: procStatus
                 });
             } else {
                 await db.createProcedimento({
                     name: procName,
+                    code: procCode,
                     type: procType,
-                    total_quantity: procQty,
-                    available_quantity: procQty,
+                    total_quantity: 0,
+                    available_quantity: 0,
                     status: procStatus
                 });
             }
@@ -283,13 +500,15 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
         setEditingProc(proc);
         if (proc) {
             setProcName(proc.name);
+            setProcCode(proc.code || '');
             setProcType(proc.type);
             setProcQty(proc.available_quantity);
             setProcStatus(proc.status);
         } else {
             setProcName('');
+            setProcCode('');
             setProcType('Exame');
-            setProcQty(10);
+            setProcQty(0);
             setProcStatus('Ativo');
         }
         setProcError('');
@@ -303,7 +522,8 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
     );
 
     const filteredProcedures = procedures.filter(p => 
-        p.name.toLowerCase().includes(procSearch.toLowerCase())
+        p.name.toLowerCase().includes(procSearch.toLowerCase()) ||
+        (p.code && p.code.includes(procSearch))
     );
 
     const filteredHistory = historyLogs.filter(h => 
@@ -344,7 +564,11 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                     return (
                         <button
                             key={t.id}
-                            onClick={() => setActiveTab(t.id as TabType)}
+                            onClick={() => {
+                                if (onNavigate) {
+                                    onNavigate(`consultas:dados-${t.id}`);
+                                }
+                            }}
                             className={`flex items-center gap-2 py-3 border-b-2 font-bold text-xs uppercase tracking-wider transition-all ${
                                 isActive 
                                 ? 'border-sky-600 text-sky-600' 
@@ -546,65 +770,271 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                 {/* 3. PROCEDIMENTOS TAB */}
                 {activeTab === 'procedimentos' && (
                     <div className="space-y-4">
-                        <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-                            <div className="relative w-full sm:max-w-md">
-                                <input
-                                    type="text"
-                                    placeholder="Buscar exame ou consulta..."
-                                    className="w-full bg-white border border-slate-200/80 rounded-xl pl-9 pr-3 py-2 text-xs font-semibold focus:outline-none focus:border-sky-500 transition-all text-slate-900"
-                                    value={procSearch}
-                                    onChange={(e) => setProcSearch(e.target.value)}
-                                />
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-                            </div>
-                            <button
-                                onClick={() => handleOpenProcModal()}
-                                className="w-full sm:w-auto px-4 py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-extrabold rounded-xl shadow-md hover:shadow-sky-500/10 active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-1.5"
-                            >
-                                <Plus className="w-4 h-4" /> Novo Procedimento
-                            </button>
-                        </div>
+                        {selectedProc ? (
+                            /* DETALHES DO PROCEDIMENTO */
+                            (() => {
+                                const groupedVagas: Record<string, ConsultaVaga[]> = {};
+                                vagas.forEach(v => {
+                                    if (!groupedVagas[v.data]) {
+                                        groupedVagas[v.data] = [];
+                                    }
+                                    groupedVagas[v.data].push(v);
+                                });
 
-                        {filteredProcedures.length > 0 ? (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                                {filteredProcedures.map(p => (
-                                    <div key={p.id} className="p-4 bg-white border border-slate-200 rounded-2xl flex flex-col justify-between h-[130px] shadow-sm relative group hover:border-sky-300 hover:shadow-md transition-all">
-                                        <button
-                                            onClick={() => handleOpenProcModal(p)}
-                                            className="absolute top-3 right-3 p-1.5 text-slate-300 hover:text-sky-600 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
-                                            title="Editar Procedimento"
-                                        >
-                                            <Edit2 className="w-3.5 h-3.5" />
-                                        </button>
-                                        
-                                        <div>
-                                            <span className={`inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider mb-2 ${
-                                                p.type === 'Exame' 
-                                                ? 'bg-sky-50 text-sky-600 border border-sky-100' 
-                                                : p.type === 'Consulta'
-                                                ? 'bg-indigo-50 text-indigo-600 border border-indigo-100'
-                                                : 'bg-rose-50 text-rose-600 border border-rose-100'
-                                            }`}>
-                                                {p.type}
-                                            </span>
-                                            <h4 className="font-extrabold text-slate-900 text-sm truncate max-w-[200px]">{p.name}</h4>
+                                const sortedDates = Object.keys(groupedVagas).sort();
+                                const busyVagas = vagas.filter(v => slotAssignments.has(v.id)).length;
+                                const availableVagas = vagas.filter(v => !slotAssignments.has(v.id)).length;
+
+                                return (
+                                    <div className="space-y-6">
+                                        {/* Header block */}
+                                        <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+                                            <div className="flex items-center gap-3">
+                                                <button 
+                                                    onClick={() => setSelectedProc(null)} 
+                                                    className="p-2 text-slate-400 hover:text-slate-800 hover:bg-slate-200 rounded-xl transition-all"
+                                                    title="Voltar para Lista"
+                                                >
+                                                    <ArrowLeft className="w-4 h-4" />
+                                                </button>
+                                                <div>
+                                                    <div className="flex items-center gap-2">
+                                                        <h4 className="font-extrabold text-slate-900 text-sm uppercase">{selectedProc.name}</h4>
+                                                        {selectedProc.code && (
+                                                            <span className="text-[10px] text-slate-400 font-extrabold bg-slate-100 px-1.5 py-0.5 rounded">
+                                                                CÓD. {selectedProc.code}
+                                                            </span>
+                                                        )}
+                                                        <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${
+                                                            selectedProc.type === 'Exame' 
+                                                            ? 'bg-sky-50 text-sky-600 border border-sky-100' 
+                                                            : selectedProc.type === 'Consulta'
+                                                            ? 'bg-indigo-50 text-indigo-600 border border-indigo-100'
+                                                            : 'bg-rose-50 text-rose-600 border border-rose-100'
+                                                        }`}>
+                                                            {selectedProc.type}
+                                                        </span>
+                                                    </div>
+                                                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">Gestão de Vagas por Horário</p>
+                                                </div>
+                                            </div>
+
+                                            <button
+                                                onClick={() => {
+                                                    setSelectedDate(new Date());
+                                                    setCurrentMonth(new Date());
+                                                    setSelectedTimes([]);
+                                                    setIsAddVagasModalOpen(true);
+                                                }}
+                                                className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white font-extrabold rounded-xl shadow-md hover:shadow-sky-500/10 active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-1.5"
+                                            >
+                                                <Plus className="w-4 h-4" /> Adicionar Vagas
+                                            </button>
                                         </div>
 
-                                        <div className="flex items-center justify-between pt-2 border-t border-slate-50 mt-2">
-                                            <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wide border ${
-                                                p.status === 'Ativo' 
-                                                ? 'bg-emerald-50 text-emerald-700 border-emerald-100' 
-                                                : 'bg-slate-100 text-slate-500 border-slate-200'
-                                            }`}>
-                                                {p.status}
-                                            </span>
-                                            <span className="text-xs font-black text-slate-700">{p.available_quantity} cotas</span>
+                                        {/* Stats grid */}
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                            <div className="p-4 bg-slate-50 border border-slate-200/60 rounded-2xl shadow-sm flex flex-col justify-between">
+                                                <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 block mb-1">Vagas Totais</span>
+                                                <span className="text-2xl font-black text-slate-800">{vagas.length}</span>
+                                            </div>
+                                            <div className="p-4 bg-emerald-50 border border-emerald-100/60 rounded-2xl shadow-sm flex flex-col justify-between">
+                                                <span className="text-[9px] font-black uppercase tracking-widest text-emerald-600 block mb-1">Disponíveis</span>
+                                                <span className="text-2xl font-black text-emerald-700">{availableVagas}</span>
+                                            </div>
+                                            <div className="p-4 bg-indigo-50 border border-indigo-100/60 rounded-2xl shadow-sm flex flex-col justify-between">
+                                                <span className="text-[9px] font-black uppercase tracking-widest text-indigo-600 block mb-1">Agendadas (Ocupadas)</span>
+                                                <span className="text-2xl font-black text-indigo-700">{busyVagas}</span>
+                                            </div>
+                                        </div>
+
+                                        {/* Slots grouped by Date */}
+                                        <div className="space-y-4">
+                                            <h5 className="text-xs font-black uppercase text-slate-700 tracking-wider">Visualização por Data</h5>
+                                            
+                                            {sortedDates.length > 0 ? (
+                                                <div className="space-y-3">
+                                                    {sortedDates.map(dateStr => {
+                                                        const slots = groupedVagas[dateStr];
+                                                        const formattedDate = new Date(dateStr + 'T00:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+                                                        
+                                                        return (
+                                                            <div key={dateStr} className="p-5 bg-white border border-slate-200/60 rounded-[1.5rem] shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                                                <div>
+                                                                    <span className="text-xs font-extrabold text-slate-800 block capitalize">{formattedDate}</span>
+                                                                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mt-0.5">{slots.length} vaga(s) cadastrada(s)</span>
+                                                                </div>
+                                                                
+                                                                <div className="flex flex-wrap gap-2 items-center">
+                                                                    {slots.map(v => {
+                                                                        const activeBooking = slotAssignments.get(v.id);
+                                                                        const dynamicStatus = activeBooking ? activeBooking.status : 'Disponível';
+                                                                        const patientName = activeBooking?.paciente?.name;
+
+                                                                        const statusColors = (() => {
+                                                                            switch (dynamicStatus) {
+                                                                                case 'Solicitado':
+                                                                                    return {
+                                                                                        container: 'bg-sky-50 border-sky-100 text-sky-600',
+                                                                                        badge: 'bg-sky-100 text-sky-700'
+                                                                                    };
+                                                                                case 'Agendado':
+                                                                                    return {
+                                                                                        container: 'bg-indigo-50 border-indigo-100 text-indigo-600',
+                                                                                        badge: 'bg-indigo-100 text-indigo-700'
+                                                                                    };
+                                                                                case 'Realizado':
+                                                                                    return {
+                                                                                        container: 'bg-emerald-50 border-emerald-100 text-emerald-600',
+                                                                                        badge: 'bg-emerald-100 text-emerald-700'
+                                                                                    };
+                                                                                case 'Retorno':
+                                                                                    return {
+                                                                                        container: 'bg-teal-50 border-teal-100 text-teal-600',
+                                                                                        badge: 'bg-teal-100 text-teal-700'
+                                                                                    };
+                                                                                case 'Aguardando Data':
+                                                                                    return {
+                                                                                        container: 'bg-violet-50 border-violet-100 text-violet-600',
+                                                                                        badge: 'bg-violet-100 text-violet-700'
+                                                                                    };
+                                                                                case 'Fila de espera':
+                                                                                    return {
+                                                                                        container: 'bg-amber-50 border-amber-100 text-amber-600',
+                                                                                        badge: 'bg-amber-100 text-amber-700'
+                                                                                    };
+                                                                                case 'Cancelado':
+                                                                                case 'Não Realizado':
+                                                                                case 'Disponível':
+                                                                                default:
+                                                                                    return {
+                                                                                        container: 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 hover:border-slate-300',
+                                                                                        badge: 'bg-emerald-100 text-emerald-700'
+                                                                                    };
+                                                                            }
+                                                                        })();
+
+                                                                        return (
+                                                                            <div 
+                                                                                key={v.id} 
+                                                                                className={`px-3 py-1.5 border rounded-xl flex items-center gap-2 group text-xs font-bold shadow-sm transition-all ${statusColors.container}`}
+                                                                                title={patientName ? `Paciente: ${patientName}` : undefined}
+                                                                            >
+                                                                                <span className="font-extrabold">{v.hora.slice(0, 5)}</span>
+                                                                                {patientName && (
+                                                                                    <span className="text-[10px] opacity-75 font-bold max-w-[80px] truncate" title={patientName}>
+                                                                                        - {patientName.split(' ')[0]}
+                                                                                    </span>
+                                                                                )}
+                                                                                <span className={`text-[8px] font-black uppercase px-1.5 py-0.2 rounded ${statusColors.badge}`}>
+                                                                                    {dynamicStatus === 'Disponível' ? 'Disponível' : dynamicStatus}
+                                                                                </span>
+                                                                                {!activeBooking && (
+                                                                                    <button
+                                                                                        onClick={() => handleDeleteSlot(v.id)}
+                                                                                        className="p-0.5 hover:bg-slate-200 rounded text-slate-400 hover:text-rose-600 transition-colors ml-0.5"
+                                                                                        title="Excluir Vaga"
+                                                                                    >
+                                                                                        <X className="w-3.5 h-3.5" />
+                                                                                    </button>
+                                                                                )}
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            ) : (
+                                                <div className="p-8 bg-slate-50 border border-dashed border-slate-200 rounded-[2rem] text-center">
+                                                    <Calendar className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                                                    <span className="text-xs font-bold text-slate-400 block">Nenhuma vaga cadastrada por horário.</span>
+                                                    <span className="text-[10px] text-slate-400 block mt-1">Utilize o botão "Adicionar Vagas" para alocar horários neste procedimento.</span>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
-                                ))}
-                            </div>
+                                );
+                            })()
                         ) : (
-                            <div className="text-center text-xs font-bold text-slate-400 py-12">Nenhum exame ou consulta cadastrado.</div>
+                            /* LISTAGEM DE PROCEDIMENTOS */
+                            <>
+                                <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+                                    <div className="relative w-full sm:max-w-md">
+                                        <input
+                                            type="text"
+                                            placeholder="Buscar exame ou consulta..."
+                                            className="w-full bg-white border border-slate-200/80 rounded-xl pl-9 pr-3 py-2 text-xs font-semibold focus:outline-none focus:border-sky-500 transition-all text-slate-900"
+                                            value={procSearch}
+                                            onChange={(e) => setProcSearch(e.target.value)}
+                                        />
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+                                    </div>
+                                    <button
+                                        onClick={() => handleOpenProcModal()}
+                                        className="w-full sm:w-auto px-4 py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-extrabold rounded-xl shadow-md hover:shadow-sky-500/10 active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-1.5"
+                                    >
+                                        <Plus className="w-4 h-4" /> Novo Procedimento
+                                    </button>
+                                </div>
+
+                                {filteredProcedures.length > 0 ? (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                                        {filteredProcedures.map(p => (
+                                            <div 
+                                                key={p.id} 
+                                                onClick={() => setSelectedProc(p)}
+                                                className="p-4 bg-white border border-slate-200 rounded-2xl flex flex-col justify-between h-[130px] shadow-sm relative group hover:border-sky-300 hover:shadow-md transition-all cursor-pointer"
+                                            >
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleOpenProcModal(p);
+                                                    }}
+                                                    className="absolute top-3 right-3 p-1.5 text-slate-300 hover:text-sky-600 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                                                    title="Editar Procedimento"
+                                                >
+                                                    <Edit2 className="w-3.5 h-3.5" />
+                                                </button>
+                                                
+                                                <div>
+                                                    <div className="flex items-center justify-between mb-2">
+                                                        <span className={`inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${
+                                                            p.type === 'Exame' 
+                                                            ? 'bg-sky-50 text-sky-600 border border-sky-100' 
+                                                            : p.type === 'Consulta'
+                                                            ? 'bg-indigo-50 text-indigo-600 border border-indigo-100'
+                                                            : 'bg-rose-50 text-rose-600 border border-rose-100'
+                                                        }`}>
+                                                            {p.type}
+                                                        </span>
+                                                        {p.code && (
+                                                            <span className="text-[9px] text-slate-400 font-extrabold tracking-wider">
+                                                                CÓD. {p.code}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <h4 className="font-extrabold text-slate-900 text-sm truncate max-w-[200px]">{p.name}</h4>
+                                                </div>
+
+                                                <div className="flex items-center justify-between pt-2 border-t border-slate-50 mt-2">
+                                                    <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wide border ${
+                                                        p.status === 'Ativo' 
+                                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-100' 
+                                                        : 'bg-slate-100 text-slate-500 border-slate-200'
+                                                    }`}>
+                                                        {p.status}
+                                                    </span>
+                                                    <span className="text-xs font-black text-slate-700">{p.available_quantity} cotas</span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="text-center text-xs font-bold text-slate-400 py-12">Nenhum exame ou consulta cadastrado.</div>
+                                )}
+                            </>
                         )}
                     </div>
                 )}
@@ -650,15 +1080,21 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                                                     {new Date(h.appointment_date + 'T00:00:00').toLocaleDateString('pt-BR')}
                                                 </td>
                                                 <td className="p-4 text-center">
-                                                    <span className={`inline-flex px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border ${
-                                                        h.status === 'Agendado' 
-                                                        ? 'bg-sky-50 text-sky-700 border-sky-100' 
+                                                    <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border ${
+                                                        h.status === 'Solicitado'
+                                                        ? 'bg-sky-50 text-sky-700 border-sky-100'
+                                                        : h.status === 'Agendado' 
+                                                        ? 'bg-indigo-50 text-indigo-700 border-indigo-100' 
                                                         : h.status === 'Realizado' 
                                                         ? 'bg-emerald-50 text-emerald-700 border-emerald-100' 
-                                                        : h.status === 'Fila de Espera'
+                                                        : h.status === 'Não Realizado'
+                                                        ? 'bg-slate-100 text-slate-600 border-slate-200'
+                                                        : h.status === 'Fila de espera'
                                                         ? 'bg-amber-50 text-amber-700 border-amber-100'
                                                         : h.status === 'Aguardando Data'
                                                         ? 'bg-violet-50 text-violet-700 border-violet-100'
+                                                        : h.status === 'Retorno'
+                                                        ? 'bg-teal-50 text-teal-700 border-teal-100'
                                                         : 'bg-rose-50 text-rose-700 border-rose-100'
                                                     }`}>
                                                         {h.status}
@@ -857,13 +1293,14 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Quantidade de Vagas (Cotas)</label>
+                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Código (4 dígitos)</label>
                                     <input
-                                        type="number"
-                                        min={0}
+                                        type="text"
+                                        maxLength={4}
                                         className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none transition-all text-xs font-bold"
-                                        value={procQty}
-                                        onChange={(e) => setProcQty(parseInt(e.target.value) || 0)}
+                                        placeholder="Ex: 0123"
+                                        value={procCode}
+                                        onChange={(e) => setProcCode(e.target.value.replace(/\D/g, '').slice(0, 4))}
                                         required
                                     />
                                 </div>
@@ -929,14 +1366,20 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                                         <div className="flex items-center justify-between">
                                             <span className="font-extrabold text-xs text-slate-800">{hist.procedimento?.name}</span>
                                             <span className={`inline-flex px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider border ${
-                                                hist.status === 'Agendado' 
-                                                ? 'bg-sky-50 text-sky-700 border-sky-100' 
+                                                hist.status === 'Solicitado'
+                                                ? 'bg-sky-50 text-sky-700 border-sky-100'
+                                                : hist.status === 'Agendado' 
+                                                ? 'bg-indigo-50 text-indigo-700 border-indigo-100' 
                                                 : hist.status === 'Realizado' 
                                                 ? 'bg-emerald-50 text-emerald-700 border-emerald-100' 
-                                                : hist.status === 'Fila de Espera'
+                                                : hist.status === 'Não Realizado'
+                                                ? 'bg-slate-100 text-slate-600 border-slate-200'
+                                                : hist.status === 'Fila de espera'
                                                 ? 'bg-amber-50 text-amber-700 border-amber-100'
                                                 : hist.status === 'Aguardando Data'
                                                 ? 'bg-violet-50 text-violet-700 border-violet-100'
+                                                : hist.status === 'Retorno'
+                                                ? 'bg-teal-50 text-teal-700 border-teal-100'
                                                 : 'bg-rose-50 text-rose-700 border-rose-100'
                                             }`}>
                                                 {hist.status}
@@ -951,6 +1394,172 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                             ) : (
                                 <div className="text-center text-xs font-bold text-slate-400 py-12">Nenhum agendamento registrado para este paciente.</div>
                             )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* MODAL: ADICIONAR VAGAS */}
+            {isAddVagasModalOpen && selectedProc && (
+                <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-2xl overflow-hidden border border-slate-100 flex flex-col max-h-[95vh]">
+                        {/* Header */}
+                        <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 shrink-0">
+                            <div>
+                                <h3 className="text-base font-black text-slate-800 uppercase tracking-wider">Adicionar Vagas</h3>
+                                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">{selectedProc.name}</p>
+                            </div>
+                            <button onClick={() => { setIsAddVagasModalOpen(false); setSelectedTimes([]); }} className="p-2 hover:bg-slate-200 rounded-xl text-slate-400 hover:text-slate-700 transition-colors">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        
+                        {/* Body */}
+                        <div className="p-6 overflow-y-auto custom-scrollbar flex-1 flex flex-col md:flex-row gap-6">
+                            {/* Left side: Calendar */}
+                            <div className="flex-1 space-y-4">
+                                <div className="flex items-center justify-between px-1">
+                                    <button 
+                                        type="button"
+                                        onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))}
+                                        className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500"
+                                    >
+                                        <ChevronLeft className="w-4 h-4" />
+                                    </button>
+                                    <span className="text-xs font-black uppercase text-slate-800 tracking-wider">
+                                        {currentMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+                                    </span>
+                                    <button 
+                                        type="button"
+                                        onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))}
+                                        className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500"
+                                    >
+                                        <ChevronRight className="w-4 h-4" />
+                                    </button>
+                                </div>
+                                
+                                <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                                    <span>Dom</span><span>Seg</span><span>Ter</span><span>Qua</span><span>Qui</span><span>Sex</span><span>Sáb</span>
+                                </div>
+                                
+                                <div className="grid grid-cols-7 gap-1">
+                                    {getDaysInMonth(currentMonth).map((day, idx) => {
+                                        if (!day) return <div key={`empty-${idx}`} className="h-8"></div>;
+                                        const isSelected = selectedDate && formatDateToYYYYMMDD(day) === formatDateToYYYYMMDD(selectedDate);
+                                        const isToday = formatDateToYYYYMMDD(day) === formatDateToYYYYMMDD(new Date());
+                                        const isPast = day.getTime() < new Date(new Date().setHours(0,0,0,0)).getTime();
+                                        
+                                        return (
+                                            <button
+                                                key={day.toISOString()}
+                                                type="button"
+                                                onClick={() => setSelectedDate(day)}
+                                                disabled={isPast}
+                                                className={`h-8 w-full rounded-lg text-xs font-bold transition-all flex items-center justify-center ${
+                                                    isSelected 
+                                                    ? 'bg-sky-600 text-white shadow-md shadow-sky-500/20' 
+                                                    : isToday
+                                                    ? 'border border-sky-500 text-sky-600'
+                                                    : isPast
+                                                    ? 'text-slate-300 cursor-not-allowed'
+                                                    : 'hover:bg-slate-100 text-slate-700'
+                                                }`}
+                                            >
+                                                {day.getDate()}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                            
+                            {/* Right side: Time slots */}
+                            <div className="w-full md:w-[260px] border-t md:border-t-0 md:border-l border-slate-100 pt-6 md:pt-0 md:pl-6 flex flex-col space-y-4">
+                                <h4 className="text-xs font-black uppercase text-slate-800 tracking-wider">
+                                    Horários de Vaga
+                                </h4>
+                                
+                                {/* Selected Date indicator */}
+                                <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100 text-center">
+                                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">Dia Selecionado</span>
+                                    <span className="text-xs font-bold text-slate-700">
+                                        {selectedDate ? selectedDate.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }) : 'Nenhum'}
+                                    </span>
+                                </div>
+                                
+                                {/* Time slots grid */}
+                                <div className="grid grid-cols-3 gap-1.5 max-h-[160px] overflow-y-auto pr-1">
+                                    {['07:00', '08:00', '09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00', '17:00'].map(t => {
+                                        const isTimeSelected = selectedTimes.includes(t);
+                                        return (
+                                            <button
+                                                key={t}
+                                                type="button"
+                                                onClick={() => toggleTime(t)}
+                                                className={`py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                                                    isTimeSelected
+                                                    ? 'bg-indigo-50 border-indigo-300 text-indigo-600 shadow-sm'
+                                                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                                                }`}
+                                            >
+                                                {t}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                                
+                                {/* Custom time input */}
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Outro Horário</label>
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="time"
+                                            value={customTime}
+                                            onChange={(e) => setCustomTime(e.target.value)}
+                                            className="bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-xs font-bold outline-none focus:border-indigo-500 focus:bg-white text-slate-800 flex-1"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={addCustomTime}
+                                            className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-lg text-[10px] uppercase tracking-wider transition-colors"
+                                        >
+                                            Inserir
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                {/* Selected summary */}
+                                {selectedTimes.length > 0 && (
+                                    <div className="p-2.5 bg-indigo-50/50 rounded-xl border border-indigo-100/50 text-xs">
+                                        <span className="font-extrabold text-indigo-700 block mb-1">Resumo das Vagas:</span>
+                                        <div className="flex flex-wrap gap-1">
+                                            {selectedTimes.sort().map(t => (
+                                                <span key={t} className="px-1.5 py-0.5 bg-white border border-indigo-200 rounded text-[10px] font-bold text-indigo-600">
+                                                    {t}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                        
+                        {/* Footer */}
+                        <div className="p-5 border-t border-slate-100 bg-slate-50/50 flex justify-end gap-3 shrink-0">
+                            <button
+                                type="button"
+                                onClick={() => { setIsAddVagasModalOpen(false); setSelectedTimes([]); }}
+                                className="px-4 py-2 border border-slate-200 hover:bg-slate-100 text-slate-500 font-bold rounded-xl text-xs uppercase tracking-wider transition-colors"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleConfirmAddVagas}
+                                disabled={!selectedDate || selectedTimes.length === 0 || loading}
+                                className="px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-extrabold rounded-xl shadow-md hover:shadow-sky-500/10 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-1.5"
+                            >
+                                {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Confirmar Vagas'}
+                            </button>
                         </div>
                     </div>
                 </div>

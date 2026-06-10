@@ -163,7 +163,11 @@ const VIEW_TO_PATH: Record<string, string> = {
   'consultas': '/Consultas',
   'consultas:novo-agendamento': '/Consultas/NovoAgendamento',
   'consultas:acompanhar': '/Consultas/Acompanhar',
-  'consultas:dados': '/Consultas/DADOS'
+  'consultas:dados': '/Consultas/DADOS',
+  'consultas:dados-dashboard': '/Consultas/DADOS/Dashboard',
+  'consultas:dados-pacientes': '/Consultas/DADOS/Pacientes',
+  'consultas:dados-procedimentos': '/Consultas/DADOS/Exames',
+  'consultas:dados-historico': '/Consultas/DADOS/Historico'
 };
 
 const PATH_TO_STATE: Record<string, any> = Object.fromEntries(
@@ -964,7 +968,11 @@ const App: React.FC = () => {
           setActiveBlock(null);
         }
         else if (state.view === 'consultas') {
-          setAppState(prev => ({ ...prev, view: state.sub }));
+          let targetSub = state.sub;
+          if (targetSub === 'dados') {
+            targetSub = 'dados-dashboard';
+          }
+          setAppState(prev => ({ ...prev, view: targetSub }));
           setActiveBlock(null);
         }
 
@@ -4051,8 +4059,20 @@ const App: React.FC = () => {
                     setAppState(prev => ({ ...prev, view: 'acompanhar' }));
                     window.history.pushState({}, '', '/Consultas/Acompanhar');
                   } else if (view === 'consultas:dados') {
-                    setAppState(prev => ({ ...prev, view: 'dados' }));
-                    window.history.pushState({}, '', '/Consultas/DADOS');
+                    setAppState(prev => ({ ...prev, view: 'dados-dashboard' }));
+                    window.history.pushState({}, '', '/Consultas/DADOS/Dashboard');
+                  } else if (view === 'consultas:dados-dashboard') {
+                    setAppState(prev => ({ ...prev, view: 'dados-dashboard' }));
+                    window.history.pushState({}, '', '/Consultas/DADOS/Dashboard');
+                  } else if (view === 'consultas:dados-pacientes') {
+                    setAppState(prev => ({ ...prev, view: 'dados-pacientes' }));
+                    window.history.pushState({}, '', '/Consultas/DADOS/Pacientes');
+                  } else if (view === 'consultas:dados-procedimentos') {
+                    setAppState(prev => ({ ...prev, view: 'dados-procedimentos' }));
+                    window.history.pushState({}, '', '/Consultas/DADOS/Exames');
+                  } else if (view === 'consultas:dados-historico') {
+                    setAppState(prev => ({ ...prev, view: 'dados-historico' }));
+                    window.history.pushState({}, '', '/Consultas/DADOS/Historico');
                   } else if (view === 'consultas') {
                     setAppState(prev => ({ ...prev, view: undefined }));
                     window.history.pushState({}, '', '/Consultas');

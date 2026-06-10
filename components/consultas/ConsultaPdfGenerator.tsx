@@ -11,6 +11,7 @@ interface ConsultaPdfGeneratorProps {
     date: string;
     quantity: number;
     priority: 'Normal' | 'Urgência';
+    is_retorno?: boolean;
     currentUser: User;
     state: AppState;
 }
@@ -22,6 +23,7 @@ export const ConsultaPdfGenerator: React.FC<ConsultaPdfGeneratorProps> = ({
     date,
     quantity,
     priority,
+    is_retorno,
     currentUser,
     state
 }) => {
@@ -131,7 +133,9 @@ export const ConsultaPdfGenerator: React.FC<ConsultaPdfGeneratorProps> = ({
                                                 </div>
                                                 <div>
                                                     <span className="block text-[7pt] font-bold uppercase text-slate-400 tracking-wider">Prioridade</span>
-                                                    <span className="font-bold text-slate-800 uppercase" style={{ color: priority === 'Urgência' ? '#dc2626' : '#475569' }}>{priority}</span>
+                                                    <span className="font-bold text-slate-800 uppercase" style={{ color: priority === 'Urgência' ? '#dc2626' : is_retorno ? '#0d9488' : '#475569' }}>
+                                                        {priority === 'Urgência' ? 'Urgência' : is_retorno ? 'Retorno' : 'Normal'}
+                                                    </span>
                                                 </div>
                                             </div>
                                         </div>

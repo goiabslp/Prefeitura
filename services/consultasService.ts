@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient';
-import { ConsultaPaciente, ConsultaProcedimento, ConsultaAgendamento } from '../types';
+import { ConsultaPaciente, ConsultaProcedimento, ConsultaAgendamento, ConsultaVaga } from '../types';
 import { handleSupabaseError } from '../utils/errorUtils';
 
 // --- PACIENTES ---
@@ -315,14 +315,47 @@ export const updateAgendamentoStatus = async (id: string, status: ConsultaAgenda
     }
 };
 
-export const confirmarDataAgendamento = async (id: string, date: string): Promise<ConsultaAgendamento | null> => {
+export const updateAgendamentoDateAndStatus = async (
+    id: string, 
+    date: string, 
+    status: ConsultaAgendamento['status']
+): Promise<ConsultaAgendamento | null> => {
     try {
         const { data, error } = await supabase
             .from('consultas_agendamentos')
             .update({ 
                 appointment_date: date,
-                status: 'Agendado'
+                status: status
             })
+            .eq('id', id)
+            .select(`
+                *,
+                paciente:consultas_pacientes(*),
+                procedimento:consultas_procedimentos(*),
+                responsavel:profiles(name)
+            `)
+            .single();
+
+        if (error) throw error;
+        return data;
+    } catch (error: any) {
+        console.error('[consultasService] updateAgendamentoDateAndStatus Error:', error.message);
+        throw error;
+    }
+};
+
+export const confirmarDataAgendamento = async (id: string, date: string, time?: string): Promise<ConsultaAgendamento | null> => {
+    try {
+        const updatePayload: any = { 
+            appointment_date: date,
+            status: 'Agendado'
+        };
+        if (time) {
+            updatePayload.appointment_time = time;
+        }
+        const { data, error } = await supabase
+            .from('consultas_agendamentos')
+            .update(updatePayload)
             .eq('id', id)
             .select(`
                 *,
@@ -342,12 +375,15 @@ export const confirmarDataAgendamento = async (id: string, date: string): Promis
 
 export const deleteAgendamento = async (id: string): Promise<boolean> => {
     try {
-        const { error } = await supabase
+        const { error, count } = await supabase
             .from('consultas_agendamentos')
-            .delete()
+            .delete({ count: 'exact' })
             .eq('id', id);
 
         if (error) throw error;
+        if (count === 0) {
+            throw new Error('Nenhum registro foi excluído. Verifique se você possui permissões de exclusão ou se o registro existe.');
+        }
         return true;
     } catch (error) {
         const appError = handleSupabaseError(error);
@@ -478,5 +514,57 @@ export const getDashboardStats = async (): Promise<ConsultasDashboardStats> => {
             availableQuantities: [],
             bookingsByPeriod: []
         };
+    }
+};
+
+// --- VAGAS ---
+
+export const getVagas = async (procedimentoId: string): Promise<ConsultaVaga[]> => {
+    try {
+        const { data, error } = await supabase
+            .from('consultas_vagas')
+            .select('*')
+            .eq('procedimento_id', procedimentoId)
+            .order('data', { ascending: true })
+            .order('hora', { ascending: true });
+
+        if (error) throw error;
+        return data || [];
+    } catch (error) {
+        const appError = handleSupabaseError(error);
+        console.error('[consultasService] getVagas Error:', appError.message);
+        return [];
+    }
+};
+
+export const createVagas = async (vagas: Omit<ConsultaVaga, 'id' | 'created_at' | 'status'>[]): Promise<ConsultaVaga[] | null> => {
+    try {
+        const { data, error } = await supabase
+            .from('consultas_vagas')
+            .insert(vagas)
+            .select();
+
+        if (error) throw error;
+        return data;
+    } catch (error) {
+        const appError = handleSupabaseError(error);
+        console.error('[consultasService] createVagas Error:', appError.message);
+        throw appError;
+    }
+};
+
+export const deleteVaga = async (id: string): Promise<boolean> => {
+    try {
+        const { error } = await supabase
+            .from('consultas_vagas')
+            .delete()
+            .eq('id', id);
+
+        if (error) throw error;
+        return true;
+    } catch (error) {
+        const appError = handleSupabaseError(error);
+        console.error('[consultasService] deleteVaga Error:', appError.message);
+        throw appError;
     }
 };
