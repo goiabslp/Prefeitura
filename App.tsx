@@ -177,6 +177,39 @@ const PATH_TO_STATE: Record<string, any> = Object.fromEntries(
   })
 );
 
+const mapLicitacaoProcessToOrder = (process: any): Order => {
+  let mappedStatus: any = 'pending';
+  if (process.status === 'Rascunho') mappedStatus = 'pending';
+  else if (process.status === 'Aguardando Assinatura' || process.status === 'Assinado') mappedStatus = 'awaiting_approval';
+  else if (process.status === 'Em Análise') mappedStatus = 'in_progress';
+  else if (process.status === 'Concluído' || process.status === 'completed') mappedStatus = 'completed';
+  else if (process.status === 'Rejeitado' || process.status === 'rejected') mappedStatus = 'rejected';
+
+  return {
+    id: process.id,
+    protocol: process.protocolo || process.id,
+    title: process.finalidade,
+    status: mappedStatus,
+    createdAt: process.criado_em || new Date().toISOString(),
+    userId: process.criado_por,
+    userName: process.solicitante_nome,
+    blockType: 'licitacao',
+    documentos: process.documentos || process.licitacao_documentos || [],
+    documentSnapshot: {
+      content: {
+        objeto: process.finalidade,
+        prioridade: process.prioridade,
+        requesterName: process.solicitante_nome,
+        requesterSector: process.solicitante_setor,
+        justificativa: process.justificativa?.texto || (process.licitacao_justificativas ? (Array.isArray(process.licitacao_justificativas) ? process.licitacao_justificativas[0]?.texto : process.licitacao_justificativas.texto) : undefined),
+        itens: process.itens || process.licitacao_itens, // Keep as undefined when not fetched yet
+        finalDocumentUrl: process.assinatura ? 'true' : null,
+        fase: process.fase
+      }
+    }
+  } as unknown as Order;
+};
+
 const App: React.FC = () => {
   // State controlling the active module view
   const [currentView, setCurrentView] = useState<'login' | 'home' | 'admin' | 'tracking' | 'editor' | 'vehicle-scheduling' | 'abastecimento' | 'agricultura' | 'obras' | 'order-details' | 'tasks-dashboard' | 'purchase-inventory' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'diarias-novo-evento' | 'diarias-lancamentos' | 'licitacao' | 'licitacao:new' | 'licitacao:view' | 'licitacao:details' | 'licitacao-all' | 'licitacao-screening' | 'consultas'>('login');
@@ -185,38 +218,7 @@ const App: React.FC = () => {
 
   const mappedLicitacaoOrders: Order[] = React.useMemo(() => {
     if (!licitacaoProcessesData) return [];
-    return licitacaoProcessesData.map((process: any) => {
-      let mappedStatus: any = 'pending';
-      if (process.status === 'Rascunho') mappedStatus = 'pending';
-      else if (process.status === 'Aguardando Assinatura' || process.status === 'Assinado') mappedStatus = 'awaiting_approval';
-      else if (process.status === 'Em Análise') mappedStatus = 'in_progress';
-      else if (process.status === 'Concluído' || process.status === 'completed') mappedStatus = 'completed';
-      else if (process.status === 'Rejeitado' || process.status === 'rejected') mappedStatus = 'rejected';
-
-      return {
-        id: process.id,
-        protocol: process.protocolo || process.id,
-        title: process.finalidade,
-        status: mappedStatus,
-        createdAt: process.criado_em || new Date().toISOString(),
-        userId: process.criado_por,
-        userName: process.solicitante_nome,
-        blockType: 'licitacao',
-        documentos: process.documentos || process.licitacao_documentos || [],
-        documentSnapshot: {
-          content: {
-            objeto: process.finalidade,
-            prioridade: process.prioridade,
-            requesterName: process.solicitante_nome,
-            requesterSector: process.solicitante_setor,
-            justificativa: process.justificativa?.texto || (process.licitacao_justificativas ? (Array.isArray(process.licitacao_justificativas) ? process.licitacao_justificativas[0]?.texto : process.licitacao_justificativas.texto) : undefined),
-            itens: process.itens || process.licitacao_itens || [],
-            finalDocumentUrl: process.assinatura ? 'true' : null,
-            fase: process.fase
-          }
-        }
-      } as unknown as Order;
-    });
+    return licitacaoProcessesData.map(mapLicitacaoProcessToOrder);
   }, [licitacaoProcessesData]);
 
   const updateLicitacaoProcessMutation = useUpdateLicitacaoProcess();
@@ -2691,7 +2693,7 @@ const App: React.FC = () => {
       (order.blockType === 'oficio' && !order.documentSnapshot?.content?.body) ||
       (order.blockType === 'compras' && (!order.documentSnapshot?.content?.purchaseItems || order.documentSnapshot.content.purchaseItems.length === 0)) ||
       (order.blockType === 'diarias' && !order.documentSnapshot?.content?.requestedValue) ||
-      (order.blockType === 'licitacao' && (!order.documentSnapshot?.content?.licitacaoStages || order.documentSnapshot.content.licitacaoStages.length === 0))
+      (order.blockType === 'licitacao' && (order.documentSnapshot?.content as any)?.itens === undefined)
     );
 
     if (needsFetch) {
@@ -2718,8 +2720,15 @@ const App: React.FC = () => {
         } else if (order.blockType === 'licitacao') {
           const fetched = await licitacaoService.getLicitacaoProcessById(order.id);
           if (fetched) {
-            fullOrder = fetched as any;
-            setLicitacaoProcesses(prev => prev.map(o => o.id === fullOrder.id ? fullOrder : o));
+            // Update React Query list query cache so that the item is stored with details
+            queryClient.setQueryData(licitacaoKeys.lists(), (oldData: any[] | undefined) => {
+              if (!oldData) return [fetched];
+              return oldData.map(o => o.id === fetched.id ? fetched : o);
+            });
+            // Update local state if needed
+            setLicitacaoProcesses(prev => prev.map(o => o.id === fetched.id ? fetched : o));
+            // Map the fetched process to Order
+            fullOrder = mapLicitacaoProcessToOrder(fetched);
           }
         }
       } catch (err) {
@@ -2762,8 +2771,12 @@ const App: React.FC = () => {
       } else if (order.blockType === 'licitacao') {
         const fetched = await licitacaoService.getLicitacaoProcessById(order.id);
         if (fetched) {
+          queryClient.setQueryData(licitacaoKeys.lists(), (oldData: any[] | undefined) => {
+            if (!oldData) return [fetched];
+            return oldData.map(o => o.id === fetched.id ? fetched : o);
+          });
           setLicitacaoProcesses(prev => prev.map(o => o.id === fetched.id ? fetched : o));
-          return fetched as any;
+          return mapLicitacaoProcessToOrder(fetched);
         }
       }
       return null;

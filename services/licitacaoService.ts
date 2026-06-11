@@ -84,13 +84,7 @@ export const getLicitacaoProcesses = async (): Promise<LicitacaoProcesso[]> => {
     try {
         const { data, error } = await supabase
             .from('licitacao_processos')
-            .select(`
-                *,
-                licitacao_itens (*),
-                licitacao_justificativas (*),
-                licitacao_assinaturas (*),
-                licitacao_documentos (*)
-            `)
+            .select('*')
             .order('criado_em', { ascending: false });
 
         if (error) throw error;

@@ -170,6 +170,8 @@ export interface ContentData {
   finalDocumentUrl?: string;
   finalDocumentName?: string;
   licitacaoStages?: any[];
+  itens?: any[];
+  objeto?: string;
 }
 
 export interface UIConfig {

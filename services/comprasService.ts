@@ -7,8 +7,8 @@ import { handleSupabaseError } from '../utils/errorUtils';
 export const getAllPurchaseOrders = async (lightweight = true, page = 0, limit = 50, searchTerm = '', status?: string, purchaseStatus?: string): Promise<Order[]> => {
     // ... select specific columns
     const columns = lightweight
-        ? `id, protocol, title, status, purchase_status, status_history, created_at, user_id, user_name, completion_forecast, budget_file_url, reqName:document_snapshot->content->>requesterName, reqSector:document_snapshot->content->>requesterSector, reqPriority:document_snapshot->content->>priority, reqAccount:document_snapshot->content->>selectedAccount, profiles:user_id(sector)`
-        : '*, profiles:user_id(sector)';
+        ? `id, protocol, title, status, purchase_status, status_history, created_at, user_id, user_name, completion_forecast, budget_file_url, reqName:document_snapshot->content->>requesterName, reqSector:document_snapshot->content->>requesterSector, reqPriority:document_snapshot->content->>priority, reqAccount:document_snapshot->content->>selectedAccount`
+        : '*';
 
     let query = supabase
         .from('purchase_orders')
@@ -109,7 +109,7 @@ export const getAllPurchaseOrders = async (lightweight = true, page = 0, limit =
             content: {
                 title: item.title,
                 requesterName: item.reqName || item.document_snapshot?.content?.requesterName,
-                requesterSector: item.reqSector || item.document_snapshot?.content?.requesterSector || item.profiles?.sector,
+                requesterSector: item.reqSector || item.document_snapshot?.content?.requesterSector,
                 priority: item.reqPriority || item.document_snapshot?.content?.priority,
                 selectedAccount: item.reqAccount || item.document_snapshot?.content?.selectedAccount
             }
@@ -117,7 +117,7 @@ export const getAllPurchaseOrders = async (lightweight = true, page = 0, limit =
         budgetFileUrl: item.budget_file_url,
         attachments: item.attachments,
         completionForecast: item.completion_forecast,
-        requestingSector: item.requester_sector || item.profiles?.sector
+        requestingSector: item.requester_sector
     }));
 };
 
