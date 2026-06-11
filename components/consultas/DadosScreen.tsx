@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { User, ConsultaPaciente, ConsultaProcedimento, ConsultaAgendamento, ConsultaVaga } from '../../types';
-import { ArrowLeft, Users, Calendar, Settings, BarChart3, Plus, Edit2, Search, Check, AlertTriangle, Loader2, History, X, ChevronLeft, ChevronRight, Activity, Stethoscope, Sparkles } from 'lucide-react';
+import { ArrowLeft, Users, Calendar, Settings, BarChart3, Plus, Edit2, Search, Check, AlertTriangle, Loader2, History, X, ChevronLeft, ChevronRight, Activity, Stethoscope, Sparkles, Trash2 } from 'lucide-react';
 import * as db from '../../services/consultasService';
 import { ResponsiveContainer, AreaChart, XAxis, YAxis, Tooltip, Area, CartesianGrid } from 'recharts';
 
@@ -210,6 +210,20 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
         } catch (err) {
             console.error('Error deleting vaga:', err);
             alert('Erro ao deletar vaga.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleDeletePatient = async (patientId: string) => {
+        if (!window.confirm('Deseja realmente excluir este paciente? Esta ação não pode ser desfeita.')) return;
+        setLoading(true);
+        try {
+            await db.deletePaciente(patientId);
+            await fetchTabContent();
+        } catch (err: any) {
+            console.error('Error deleting patient:', err);
+            alert(err.message || 'Erro ao deletar paciente.');
         } finally {
             setLoading(false);
         }
@@ -506,7 +520,13 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
             setProcStatus(proc.status);
         } else {
             setProcName('');
-            setProcCode('');
+            // Auto-generate unique sequential 4-digit code
+            const nextNum = procedures.reduce((max, p) => {
+                const codeNum = parseInt(p.code || '0', 10);
+                return isNaN(codeNum) ? max : Math.max(max, codeNum);
+            }, 0) + 1;
+            const nextCode = String(nextNum).padStart(4, '0');
+            setProcCode(nextCode);
             setProcType('Exame');
             setProcQty(0);
             setProcStatus('Ativo');
@@ -625,7 +645,7 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                             <div className="p-5 bg-gradient-to-br from-slate-700 to-slate-800 text-white rounded-2xl shadow-md flex flex-col justify-between min-h-[110px]">
                                 <span className="text-[10px] font-black uppercase tracking-widest text-slate-300">Vagas Totais Ativas</span>
                                 <span className="text-3xl font-black">
-                                    {stats.availableQuantities.reduce((acc, curr) => acc + curr.available, 0)}
+                                    {stats.availableQuantities.reduce((acc, curr) => acc + Math.max(0, curr.available), 0)}
                                 </span>
                             </div>
                         </div>
@@ -687,10 +707,10 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
                                 {stats.availableQuantities.length > 0 ? (
                                     stats.availableQuantities.map((item, idx) => {
-                                        const isCritical = item.available <= 5;
+                                        const isCritical = item.available > 0 && item.available <= 5;
                                         return (
                                             <div key={idx} className={`p-3.5 border rounded-xl flex flex-col justify-between ${
-                                                item.available === 0 
+                                                item.available <= 0 
                                                 ? 'bg-rose-50/50 border-rose-100' 
                                                 : isCritical 
                                                 ? 'bg-amber-50/50 border-amber-100' 
@@ -700,13 +720,13 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                                                 <div className="flex items-center justify-between mt-2">
                                                     <span className="text-[8px] font-bold uppercase tracking-wider text-slate-400">{item.type}</span>
                                                     <span className={`text-xs font-black ${
-                                                        item.available === 0 
+                                                        item.available <= 0 
                                                         ? 'text-rose-600' 
                                                         : isCritical 
                                                         ? 'text-amber-600' 
                                                         : 'text-slate-700'
                                                     }`}>
-                                                        {item.available} vagas
+                                                        {Math.max(0, item.available)} vagas
                                                     </span>
                                                 </div>
                                             </div>
@@ -773,6 +793,13 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                                                             title="Editar Dados"
                                                         >
                                                             <Edit2 className="w-4 h-4" />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDeletePatient(p.id)}
+                                                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+                                                            title="Excluir Paciente"
+                                                        >
+                                                            <Trash2 className="w-4 h-4" />
                                                         </button>
                                                     </div>
                                                 </td>
@@ -1072,7 +1099,7 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                                                         <div className="text-left sm:text-right min-w-[90px]">
                                                             <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-1">Cotas Disponíveis</span>
                                                             <div className="flex items-baseline gap-1 sm:justify-end">
-                                                                <span className="text-base font-black text-slate-800">{p.available_quantity}</span>
+                                                                <span className="text-base font-black text-slate-800">{Math.max(0, p.available_quantity)}</span>
                                                                 <span className="text-[10px] font-bold text-slate-400">cotas</span>
                                                             </div>
                                                         </div>
@@ -1360,11 +1387,9 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                                     <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Código (4 dígitos)</label>
                                     <input
                                         type="text"
-                                        maxLength={4}
-                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none transition-all text-xs font-bold"
-                                        placeholder="Ex: 0123"
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-100 p-3 text-slate-500 outline-none transition-all text-xs font-bold cursor-not-allowed select-none"
                                         value={procCode}
-                                        onChange={(e) => setProcCode(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                                        disabled
                                         required
                                     />
                                 </div>

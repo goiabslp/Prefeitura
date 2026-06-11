@@ -106,6 +106,28 @@ export const updatePaciente = async (id: string, updates: Partial<ConsultaPacien
     }
 };
 
+export const deletePaciente = async (id: string): Promise<boolean> => {
+    try {
+        const { error, count } = await supabase
+            .from('consultas_pacientes')
+            .delete({ count: 'exact' })
+            .eq('id', id);
+
+        if (error) throw error;
+        if (count === 0) {
+            throw new Error('Nenhum registro foi excluído. Verifique se o registro existe.');
+        }
+        return true;
+    } catch (error: any) {
+        const appError = handleSupabaseError(error);
+        console.error('[consultasService] deletePaciente Error:', appError.message);
+        if (error.code === '23503') {
+            throw new Error('Não é possível excluir este paciente pois existem agendamentos/consultas vinculados a ele.');
+        }
+        throw appError;
+    }
+};
+
 export const getPacienteHistory = async (pacienteId: string): Promise<ConsultaAgendamento[]> => {
     try {
         const { data, error } = await supabase
@@ -426,7 +448,7 @@ export const getDashboardStats = async (): Promise<ConsultasDashboardStats> => {
         const availableQuantities = (procedures || []).map(p => ({
             name: p.name,
             type: p.type,
-            available: p.available_quantity
+            available: Math.max(0, p.available_quantity)
         })).sort((a, b) => a.available - b.available); // Sort by fewer available first
 
         // 4. Bookings raw details to compute popularity and period trends

@@ -121,7 +121,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
     // Get available slots based on priority and date
     const getAvailableSlots = (proc: ConsultaProcedimento, priority: 'Normal' | 'Urgência', dateStr: string): number => {
         if (!proc) return 0;
-        return proc.available_quantity;
+        return Math.max(0, proc.available_quantity);
     };
 
     // Check if procedure is waitlist-only for Normal priority (0 available normal vacancies)
@@ -1256,7 +1256,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                     {filteredProcedures.length > 0 ? (
                                         filteredProcedures.map((proc) => {
                                             const hasSlots = proc.available_quantity > 0;
-                                            const isCritical = proc.available_quantity <= 5;
+                                            const isCritical = proc.available_quantity > 0 && proc.available_quantity <= 5;
                                             const isSelected = selectedProcedure?.id === proc.id;
                                             
                                             return (
@@ -1294,7 +1294,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                                             ? 'bg-amber-50 text-amber-600 border-amber-100 shadow-amber-100/30 animate-pulse' 
                                                             : 'bg-emerald-50 text-emerald-600 border-emerald-100 shadow-emerald-100/30'
                                                         }`}>
-                                                            {proc.available_quantity} vagas
+                                                            {Math.max(0, proc.available_quantity)} vagas
                                                         </span>
                                                     </div>
                                                 </div>
