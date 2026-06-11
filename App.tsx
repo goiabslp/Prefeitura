@@ -96,6 +96,7 @@ import { RHModule } from './components/rh/RHModule';
 import { ProjetosModule } from './components/projetos/ProjetosModule';
 import { MarketingModule } from './components/marketing/MarketingModule';
 import { ConsultasModule } from './components/consultas/ConsultasModule';
+import { FarmaciaModule } from './components/farmacia/FarmaciaModule';
 import { SystemUpdateScreen } from './components/SystemUpdateScreen';
 import { NovoEventoScreen } from './components/diarias/NovoEventoScreen';
 import { LancamentosScreen } from './components/diarias/LancamentosScreen';
@@ -167,7 +168,13 @@ const VIEW_TO_PATH: Record<string, string> = {
   'consultas:dados-dashboard': '/Consultas/DADOS/Dashboard',
   'consultas:dados-pacientes': '/Consultas/DADOS/Pacientes',
   'consultas:dados-procedimentos': '/Consultas/DADOS/Exames',
-  'consultas:dados-historico': '/Consultas/DADOS/Historico'
+  'consultas:dados-historico': '/Consultas/DADOS/Historico',
+  'farmacia': '/FarmaciaPopular',
+  'farmacia:consultar': '/FarmaciaPopular/Consultar',
+  'farmacia:retirar': '/FarmaciaPopular/Retirar',
+  'farmacia:estoque': '/FarmaciaPopular/Estoque',
+  'farmacia:dados': '/FarmaciaPopular/Dados',
+  'farmacia:historico': '/FarmaciaPopular/Historico'
 };
 
 const PATH_TO_STATE: Record<string, any> = Object.fromEntries(
@@ -212,7 +219,7 @@ const mapLicitacaoProcessToOrder = (process: any): Order => {
 
 const App: React.FC = () => {
   // State controlling the active module view
-  const [currentView, setCurrentView] = useState<'login' | 'home' | 'admin' | 'tracking' | 'editor' | 'vehicle-scheduling' | 'abastecimento' | 'agricultura' | 'obras' | 'order-details' | 'tasks-dashboard' | 'purchase-inventory' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'diarias-novo-evento' | 'diarias-lancamentos' | 'licitacao' | 'licitacao:new' | 'licitacao:view' | 'licitacao:details' | 'licitacao-all' | 'licitacao-screening' | 'consultas'>('login');
+  const [currentView, setCurrentView] = useState<'login' | 'home' | 'admin' | 'tracking' | 'editor' | 'vehicle-scheduling' | 'abastecimento' | 'agricultura' | 'obras' | 'order-details' | 'tasks-dashboard' | 'purchase-inventory' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'diarias-novo-evento' | 'diarias-lancamentos' | 'licitacao' | 'licitacao:new' | 'licitacao:view' | 'licitacao:details' | 'licitacao-all' | 'licitacao-screening' | 'consultas' | 'farmacia'>('login');
   const queryClient = useQueryClient();
   const { data: licitacaoProcessesData } = useLicitacaoProcesses();
 
@@ -857,6 +864,31 @@ const App: React.FC = () => {
       )
       .subscribe();
 
+    // Farmácia Popular Channel (NEW)
+    const farmaciaChannel = supabase.channel('public:farmacia_changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'farmacia_medicamentos' },
+        () => {
+          window.dispatchEvent(new Event('farmacia-medicamentos-changed'));
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'farmacia_movimentacoes' },
+        () => {
+          window.dispatchEvent(new Event('farmacia-movimentacoes-changed'));
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'farmacia_config' },
+        () => {
+          window.dispatchEvent(new Event('farmacia-config-changed'));
+        }
+      )
+      .subscribe();
+
     // System Update Channel (NEW) - Enhanced with Broadcast for true Realtime
     const settingsChannel = supabase.channel('global-updates')
       .on(
@@ -896,6 +928,7 @@ const App: React.FC = () => {
       supabase.removeChannel(licitacaoChannel);
       supabase.removeChannel(settingsChannel);
       supabase.removeChannel(consultasChannel);
+      supabase.removeChannel(farmaciaChannel);
     };
   }, [queryClient]);
 
@@ -977,6 +1010,10 @@ const App: React.FC = () => {
           setAppState(prev => ({ ...prev, view: targetSub }));
           setActiveBlock(null);
         }
+        else if (state.view === 'farmacia') {
+          setAppState(prev => ({ ...prev, view: state.sub }));
+          setActiveBlock(null);
+        }
 
       } else if (path !== '/' && path !== '/Login') {
         // Fallback for unknown paths? Maybe redirect to home or stay on login?
@@ -1029,6 +1066,8 @@ const App: React.FC = () => {
         stateKey = appState.view ? `rh:${appState.view}` : 'rh';
       } else if (currentView === 'consultas') {
         stateKey = appState.view ? `consultas:${appState.view}` : 'consultas';
+      } else if (currentView === 'farmacia') {
+        stateKey = appState.view ? `farmacia:${appState.view}` : 'farmacia';
       } else if (currentView === 'home' && !activeBlock) {
         stateKey = 'home';
       }
@@ -3601,6 +3640,10 @@ const App: React.FC = () => {
                   setCurrentView('consultas');
                   setAppState(prev => ({ ...prev, view: undefined }));
                 }}
+                onFarmacia={() => {
+                  setCurrentView('farmacia');
+                  setAppState(prev => ({ ...prev, view: undefined }));
+                }}
                 activeBlock={activeBlock}
                 setActiveBlock={(block) => {
                   if (block === 'licitacao') {
@@ -4089,6 +4132,41 @@ const App: React.FC = () => {
                   } else if (view === 'consultas') {
                     setAppState(prev => ({ ...prev, view: undefined }));
                     window.history.pushState({}, '', '/Consultas');
+                  }
+                }}
+                onLogout={signOut}
+                appState={appState}
+              />
+            )}
+
+            {currentView === 'farmacia' && (
+              <FarmaciaModule
+                currentView={currentView}
+                subView={appState.view}
+                currentUser={currentUser!}
+                onNavigate={(view) => {
+                  if (view === 'home') {
+                    setCurrentView('home');
+                    setActiveBlock(null);
+                    window.history.pushState({}, '', '/PaginaInicial');
+                  } else if (view === 'farmacia:consultar') {
+                    setAppState(prev => ({ ...prev, view: 'consultar' }));
+                    window.history.pushState({}, '', '/FarmaciaPopular/Consultar');
+                  } else if (view === 'farmacia:retirar') {
+                    setAppState(prev => ({ ...prev, view: 'retirar' }));
+                    window.history.pushState({}, '', '/FarmaciaPopular/Retirar');
+                  } else if (view === 'farmacia:estoque') {
+                    setAppState(prev => ({ ...prev, view: 'estoque' }));
+                    window.history.pushState({}, '', '/FarmaciaPopular/Estoque');
+                  } else if (view === 'farmacia:dados') {
+                    setAppState(prev => ({ ...prev, view: 'dados' }));
+                    window.history.pushState({}, '', '/FarmaciaPopular/Dados');
+                  } else if (view === 'farmacia:historico') {
+                    setAppState(prev => ({ ...prev, view: 'historico' }));
+                    window.history.pushState({}, '', '/FarmaciaPopular/Historico');
+                  } else if (view === 'farmacia') {
+                    setAppState(prev => ({ ...prev, view: undefined }));
+                    window.history.pushState({}, '', '/FarmaciaPopular');
                   }
                 }}
                 onLogout={signOut}

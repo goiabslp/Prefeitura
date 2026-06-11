@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FilePlus, Package, History, FileText, ArrowRight, ArrowLeft, ShoppingCart, Gavel, Wallet, Inbox, CalendarRange, FileSearch, Droplet, Fuel, BarChart3, TrendingUp, LogOut, Sprout, HardHat, Activity, Car, ChevronDown, CalendarDays, Users, LayoutGrid, Megaphone, Database } from 'lucide-react';
+import { FilePlus, Package, History, FileText, ArrowRight, ArrowLeft, ShoppingCart, Gavel, Wallet, Inbox, CalendarRange, FileSearch, Droplet, Fuel, BarChart3, TrendingUp, LogOut, Sprout, HardHat, Activity, Car, ChevronDown, CalendarDays, Users, LayoutGrid, Megaphone, Database, Pill } from 'lucide-react';
 import { UserRole, UIConfig, AppPermission, BlockType } from '../types';
 import { TasksDashboard } from './dashboard/TasksDashboard';
 import { QuickTaskCreation } from './dashboard/QuickTaskCreation';
@@ -24,6 +24,7 @@ interface HomeScreenProps {
     onProjetos?: () => void;
     onMarketing?: () => void;
     onConsultas?: () => void;
+    onFarmacia?: () => void;
     onViewTasksDashboard?: () => void;
     userRole: UserRole;
     userName: string;
@@ -68,6 +69,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     onProjetos,
     onMarketing,
     onConsultas,
+    onFarmacia,
     onLogout,
     onViewTasksDashboard,
     orders = [], // Receive orders for Tasks Dashboard
@@ -112,6 +114,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     const canAccessProjetos = (permissions.includes('parent_projetos') || userRole === 'admin') && isModuleActive('parent_projetos');
     const canAccessMarketing = (permissions.includes('parent_marketing') || userRole === 'admin') && isModuleActive('parent_marketing');
     const canAccessConsultas = (permissions.includes('parent_consultas') || userRole === 'admin') && isModuleActive('parent_consultas');
+    const canAccessFarmacia = (permissions.includes('parent_farmacia') || userRole === 'admin') && isModuleActive('parent_farmacia');
     const firstName = userName.split(' ')[0];
 
     // --- Helper Functions for Card Styling ---
@@ -424,6 +427,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                                 {canAccessProjetos && renderModuleButton(() => onProjetos?.(), 'teal', LayoutGrid, 'Projetos', 'Gestão', '245ms', false)}
                                 {canAccessMarketing && renderModuleButton(() => onMarketing?.(), 'teal', Megaphone, 'Marketing', 'Criativo', '248ms', false)}
                                 {canAccessConsultas && renderModuleButton(() => onConsultas?.(), 'sky', Activity, 'Consultas', 'Regulação e exames', '249ms', false)}
+                                {canAccessFarmacia && renderModuleButton(() => onFarmacia?.(), 'pink', Pill, 'Farmácia Popular', 'Medicamentos', '252ms', false)}
 
                                 {canAccessScheduling && renderModuleButton(() => { setActiveBlock('agendamento'); onVehicleScheduling?.(); }, 'violet', CalendarRange, 'Veículos', 'Agendamento', '250ms', false)}
                                 {canAccessAbastecimento && renderModuleButton(() => setActiveBlock('abastecimento'), 'cyan', Droplet, 'Abastecimento', 'Combustível', '300ms', false)}

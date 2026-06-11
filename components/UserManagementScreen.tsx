@@ -965,6 +965,17 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                           { id: 'parent_consultas_dados', label: 'Área de Dados' }
                         ],
                         color: 'sky'
+                      },
+                      {
+                        title: 'Farmácia Popular',
+                        permissions: [
+                          { id: 'parent_farmacia', label: 'Módulo: Farmácia Popular' },
+                          { id: 'parent_farmacia_criar', label: 'Registrar Medicamentos / Entradas' },
+                          { id: 'parent_farmacia_editar', label: 'Editar Medicamentos / Limites' },
+                          { id: 'parent_farmacia_excluir', label: 'Excluir Medicamentos' },
+                          { id: 'parent_farmacia_aprovar', label: 'Aprovar Ajustes' }
+                        ],
+                        color: 'violet'
                       }
                     ].map((category) => (
                       <div key={category.title} className="bg-slate-50/50 rounded-2xl p-5 border border-slate-100/60">
