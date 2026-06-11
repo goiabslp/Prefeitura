@@ -151,9 +151,14 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                     if (weightA !== weightB) {
                         return weightA - weightB;
                     }
-                    const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
-                    const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
-                    return dateA - dateB;
+                    const dateA = a.solicitation_date ? new Date(a.solicitation_date + 'T00:00:00').getTime() : (a.created_at ? new Date(a.created_at).getTime() : 0);
+                    const dateB = b.solicitation_date ? new Date(b.solicitation_date + 'T00:00:00').getTime() : (b.created_at ? new Date(b.created_at).getTime() : 0);
+                    if (dateA !== dateB) {
+                        return dateA - dateB;
+                    }
+                    const cA = a.created_at ? new Date(a.created_at).getTime() : 0;
+                    const cB = b.created_at ? new Date(b.created_at).getTime() : 0;
+                    return cA - cB;
                 });
 
                 list.forEach((b, index) => {
@@ -337,9 +342,14 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
             if (weightA !== weightB) {
                 return weightA - weightB;
             }
-            const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
-            const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
-            return dateA - dateB;
+            const dateA = a.solicitation_date ? new Date(a.solicitation_date + 'T00:00:00').getTime() : (a.created_at ? new Date(a.created_at).getTime() : 0);
+            const dateB = b.solicitation_date ? new Date(b.solicitation_date + 'T00:00:00').getTime() : (b.created_at ? new Date(b.created_at).getTime() : 0);
+            if (dateA !== dateB) {
+                return dateA - dateB;
+            }
+            const cA = a.created_at ? new Date(a.created_at).getTime() : 0;
+            const cB = b.created_at ? new Date(b.created_at).getTime() : 0;
+            return cA - cB;
         }
         return 0;
     });
@@ -465,6 +475,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                 <thead>
                                     <tr className="bg-slate-50 border-b border-slate-100 text-[10px] font-black text-slate-400 uppercase tracking-wider">
                                         <th className="p-4 text-center w-24">Posição</th>
+                                        <th className="p-4">Solicitado</th>
                                         <th className="p-4">Paciente / CPF</th>
                                         <th className="p-4">Exame / Procedimento</th>
                                         <th className="p-4">Data Agendada</th>
@@ -487,6 +498,11 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                                     ) : (
                                                         <span className="text-slate-300 font-normal">-</span>
                                                     )}
+                                                </td>
+                                                <td className="p-4 text-slate-500">
+                                                    {booking.solicitation_date 
+                                                        ? new Date(booking.solicitation_date + 'T00:00:00').toLocaleDateString('pt-BR') 
+                                                        : (booking.created_at ? new Date(booking.created_at).toLocaleDateString('pt-BR') : '-')}
                                                 </td>
                                                 <td className="p-4">
                                                     <div className="font-extrabold text-slate-900">{booking.paciente?.name || 'Carregando...'}</div>
@@ -511,7 +527,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                                          : 'bg-rose-50 text-rose-600'
                                                      }`}>
                                                         {booking.procedimento?.type}
-                                                    </span>
+                                                     </span>
                                                 </td>
                                                 <td className="p-4 text-slate-500">
                                                     {new Date(booking.appointment_date + 'T00:00:00').toLocaleDateString('pt-BR')}

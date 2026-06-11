@@ -71,6 +71,13 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
     const [bookingQty, setBookingQty] = useState(1);
     const [bookingPriority, setBookingPriority] = useState<'Normal' | 'Urgência'>('Normal');
     const [procedureQuery, setProcedureQuery] = useState('');
+    const [solicitationDate, setSolicitationDate] = useState(() => {
+        const d = new Date();
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    });
 
     // Submission States
     const [errorMessage, setErrorMessage] = useState('');
@@ -468,6 +475,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
             procedimento_id: selectedProcedure.id,
             appointment_date: targetDate,
             appointment_time: isNormalWaitlistOnly ? undefined : bookingTime || undefined,
+            solicitation_date: solicitationDate,
             quantity: bookingQty,
             priority: bookingPriority,
             status: targetStatus,
@@ -841,6 +849,11 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                     setCreatedBooking(null);
                                     setBookingTime('');
                                     setActiveDate('');
+                                    const d = new Date();
+                                    const y = d.getFullYear();
+                                    const m = String(d.getMonth() + 1).padStart(2, '0');
+                                    const day = String(d.getDate()).padStart(2, '0');
+                                    setSolicitationDate(`${y}-${m}-${day}`);
                                 }}
                                 className="w-full px-5 py-3.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 hover:text-slate-800 font-black rounded-xl active:scale-95 hover:scale-[1.01] transition-all text-[10px] uppercase tracking-wider flex items-center justify-center cursor-pointer"
                             >
@@ -1299,34 +1312,46 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                             {/* Right Col: Date & Quantity */}
                             <div className="flex flex-col justify-between p-4 bg-slate-50/50 border border-slate-100 rounded-3xl min-h-0">
                                 <div className="space-y-3 flex-1 min-h-0 pb-1.5">
-                                    <div>
-                                        <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">Data da Consulta/Exame</label>
-                                        <div className="relative">
-                                            <button
-                                                type="button"
-                                                disabled={isNormalWaitlistOnly}
-                                                onClick={() => {
-                                                    if (!selectedProcedure) {
-                                                        setErrorMessage('Por favor, selecione um procedimento primeiro.');
-                                                        return;
-                                                    }
-                                                    setIsCalendarOpen(true);
-                                                }}
-                                                className={`w-full rounded-xl border p-2.5 text-xs font-bold text-left flex items-center justify-between shadow-sm transition-all ${
-                                                    isNormalWaitlistOnly
-                                                    ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed shadow-none'
-                                                    : 'border-slate-200 bg-white text-slate-900 hover:border-slate-300 focus:border-sky-500 focus:ring-4 focus:ring-sky-500/5 outline-none'
-                                                }`}
-                                            >
-                                                <span>
-                                                    {isNormalWaitlistOnly
-                                                        ? 'Fila de espera (Não há vagas normais disponíveis)'
-                                                        : bookingDate 
-                                                            ? `${new Date(bookingDate + 'T12:00:00').toLocaleDateString('pt-BR')}${bookingTime ? ` às ${bookingTime}` : ''}`
-                                                            : 'Clique para selecionar uma data e hora do procedimento'}
-                                                </span>
-                                                <Calendar className="w-4 h-4 text-slate-400" />
-                                            </button>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">Data da Solicitação</label>
+                                            <input
+                                                type="date"
+                                                className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-xs font-bold text-slate-900 focus:border-sky-500 focus:ring-4 focus:ring-sky-500/5 outline-none shadow-sm transition-all"
+                                                value={solicitationDate}
+                                                onChange={(e) => setSolicitationDate(e.target.value)}
+                                                required
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">Data da Consulta/Exame</label>
+                                            <div className="relative">
+                                                <button
+                                                    type="button"
+                                                    disabled={isNormalWaitlistOnly}
+                                                    onClick={() => {
+                                                        if (!selectedProcedure) {
+                                                            setErrorMessage('Por favor, selecione um procedimento primeiro.');
+                                                            return;
+                                                        }
+                                                        setIsCalendarOpen(true);
+                                                    }}
+                                                    className={`w-full rounded-xl border p-2.5 text-xs font-bold text-left flex items-center justify-between shadow-sm transition-all ${
+                                                        isNormalWaitlistOnly
+                                                        ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed shadow-none'
+                                                        : 'border-emerald-600 bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-500/10 focus:ring-emerald-500/20 focus:ring-4 outline-none'
+                                                    }`}
+                                                >
+                                                    <span>
+                                                        {isNormalWaitlistOnly
+                                                            ? 'Fila de espera (Não há vagas normais disponíveis)'
+                                                            : bookingDate 
+                                                                ? `${new Date(bookingDate + 'T12:00:00').toLocaleDateString('pt-BR')}${bookingTime ? ` às ${bookingTime}` : ''}`
+                                                                : 'Selecione a Data'}
+                                                    </span>
+                                                    <Calendar className={`w-4 h-4 ${isNormalWaitlistOnly ? 'text-slate-400' : 'text-white'}`} />
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                     <div>
@@ -1376,6 +1401,12 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                                 <div className="flex justify-between items-center">
                                                     <span className="font-bold text-slate-400">Procedimento:</span>
                                                     <span className="font-black text-slate-800 truncate max-w-[170px] uppercase">{selectedProcedure.name}</span>
+                                                </div>
+                                                <div className="flex justify-between items-center">
+                                                    <span className="font-bold text-slate-400">Data da Solicitação:</span>
+                                                    <span className="font-black text-slate-800">
+                                                        {solicitationDate ? new Date(solicitationDate + 'T12:00:00').toLocaleDateString('pt-BR') : '-'}
+                                                    </span>
                                                 </div>
                                                 <div className="flex justify-between items-center">
                                                     <span className="font-bold text-slate-400">Data e Hora:</span>

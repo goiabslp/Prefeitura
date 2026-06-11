@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { User, ConsultaPaciente, ConsultaProcedimento, ConsultaAgendamento, ConsultaVaga } from '../../types';
-import { ArrowLeft, Users, Calendar, Settings, BarChart3, Plus, Edit2, Search, Check, AlertTriangle, Loader2, History, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Users, Calendar, Settings, BarChart3, Plus, Edit2, Search, Check, AlertTriangle, Loader2, History, X, ChevronLeft, ChevronRight, Activity, Stethoscope, Sparkles } from 'lucide-react';
 import * as db from '../../services/consultasService';
 import { ResponsiveContainer, AreaChart, XAxis, YAxis, Tooltip, Area, CartesianGrid } from 'recharts';
 
@@ -552,12 +552,32 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
             </div>
 
             {/* Tab Selector */}
-            <div className="px-6 bg-slate-50 border-b border-slate-100 flex gap-4 shrink-0">
+            <div className="px-6 py-3 bg-slate-50/50 border-b border-slate-100 flex flex-wrap gap-2 shrink-0">
                 {[
-                    { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
-                    { id: 'pacientes', label: 'Pacientes', icon: Users },
-                    { id: 'procedimentos', label: 'Exames & Consultas', icon: Settings },
-                    { id: 'historico', label: 'Histórico Completo', icon: History }
+                    { 
+                        id: 'dashboard', 
+                        label: 'Dashboard', 
+                        icon: BarChart3,
+                        activeClass: 'bg-sky-50/80 text-sky-600 border-sky-200/60 shadow-sm shadow-sky-500/5'
+                    },
+                    { 
+                        id: 'pacientes', 
+                        label: 'Pacientes', 
+                        icon: Users,
+                        activeClass: 'bg-violet-50/80 text-violet-600 border-violet-200/60 shadow-sm shadow-violet-500/5'
+                    },
+                    { 
+                        id: 'procedimentos', 
+                        label: 'Exames & Consultas', 
+                        icon: Settings,
+                        activeClass: 'bg-indigo-50/80 text-indigo-600 border-indigo-200/60 shadow-sm shadow-indigo-500/5'
+                    },
+                    { 
+                        id: 'historico', 
+                        label: 'Histórico Completo', 
+                        icon: History,
+                        activeClass: 'bg-emerald-50/80 text-emerald-700 border-emerald-200/60 shadow-sm shadow-emerald-500/5'
+                    }
                 ].map(t => {
                     const Icon = t.icon;
                     const isActive = activeTab === t.id;
@@ -569,13 +589,13 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                                     onNavigate(`consultas:dados-${t.id}`);
                                 }
                             }}
-                            className={`flex items-center gap-2 py-3 border-b-2 font-bold text-xs uppercase tracking-wider transition-all ${
+                            className={`flex items-center gap-2 px-4 py-2 border rounded-xl font-bold text-xs uppercase tracking-wider transition-all duration-300 transform active:scale-[0.97] select-none ${
                                 isActive 
-                                ? 'border-sky-600 text-sky-600' 
-                                : 'border-transparent text-slate-400 hover:text-slate-700'
+                                ? `${t.activeClass}` 
+                                : 'border-transparent text-slate-400 hover:text-slate-600 hover:bg-slate-100/70'
                             }`}
                         >
-                            <Icon className="w-4 h-4" />
+                            <Icon className={`w-4 h-4 transition-transform duration-300 ${isActive ? 'scale-110' : ''}`} />
                             {t.label}
                         </button>
                     );
@@ -708,11 +728,11 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                                 <input
                                     type="text"
                                     placeholder="Buscar paciente por nome ou CPF..."
-                                    className="w-full bg-white border border-slate-200/80 rounded-xl pl-9 pr-3 py-2 text-xs font-semibold focus:outline-none focus:border-sky-500 transition-all text-slate-900"
+                                    className="w-full bg-white border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs font-semibold placeholder:text-slate-500 focus:outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/15 transition-all text-slate-900 shadow-sm"
                                     value={patientSearch}
                                     onChange={(e) => setPatientSearch(e.target.value)}
                                 />
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+                                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4" />
                             </div>
                             <button
                                 onClick={() => handleOpenPatientModal()}
@@ -965,11 +985,11 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                                         <input
                                             type="text"
                                             placeholder="Buscar exame ou consulta..."
-                                            className="w-full bg-white border border-slate-200/80 rounded-xl pl-9 pr-3 py-2 text-xs font-semibold focus:outline-none focus:border-sky-500 transition-all text-slate-900"
+                                            className="w-full bg-white border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs font-semibold placeholder:text-slate-500 focus:outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/15 transition-all text-slate-900 shadow-sm"
                                             value={procSearch}
                                             onChange={(e) => setProcSearch(e.target.value)}
                                         />
-                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+                                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4" />
                                     </div>
                                     <button
                                         onClick={() => handleOpenProcModal()}
@@ -980,56 +1000,100 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                                 </div>
 
                                 {filteredProcedures.length > 0 ? (
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                                        {filteredProcedures.map(p => (
-                                            <div 
-                                                key={p.id} 
-                                                onClick={() => setSelectedProc(p)}
-                                                className="p-4 bg-white border border-slate-200 rounded-2xl flex flex-col justify-between h-[130px] shadow-sm relative group hover:border-sky-300 hover:shadow-md transition-all cursor-pointer"
-                                            >
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        handleOpenProcModal(p);
-                                                    }}
-                                                    className="absolute top-3 right-3 p-1.5 text-slate-300 hover:text-sky-600 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
-                                                    title="Editar Procedimento"
-                                                >
-                                                    <Edit2 className="w-3.5 h-3.5" />
-                                                </button>
-                                                
-                                                <div>
-                                                    <div className="flex items-center justify-between mb-2">
-                                                        <span className={`inline-block px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${
-                                                            p.type === 'Exame' 
-                                                            ? 'bg-sky-50 text-sky-600 border border-sky-100' 
-                                                            : p.type === 'Consulta'
-                                                            ? 'bg-indigo-50 text-indigo-600 border border-indigo-100'
-                                                            : 'bg-rose-50 text-rose-600 border border-rose-100'
-                                                        }`}>
-                                                            {p.type}
-                                                        </span>
-                                                        {p.code && (
-                                                            <span className="text-[9px] text-slate-400 font-extrabold tracking-wider">
-                                                                CÓD. {p.code}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    <h4 className="font-extrabold text-slate-900 text-sm truncate max-w-[200px]">{p.name}</h4>
-                                                </div>
+                                    <div className="space-y-3">
+                                        {filteredProcedures.map(p => {
+                                            const typeConfig = (() => {
+                                                switch (p.type) {
+                                                    case 'Exame':
+                                                        return {
+                                                            icon: Activity,
+                                                            colorClass: 'text-sky-600 bg-sky-50 border-sky-100',
+                                                            hoverColorClass: 'group-hover:border-sky-300 group-hover:bg-sky-50/50'
+                                                        };
+                                                    case 'Consulta':
+                                                        return {
+                                                            icon: Stethoscope,
+                                                            colorClass: 'text-indigo-600 bg-indigo-50 border-indigo-100',
+                                                            hoverColorClass: 'group-hover:border-indigo-300 group-hover:bg-indigo-50/50'
+                                                        };
+                                                    case 'Cirurgia':
+                                                    default:
+                                                        return {
+                                                            icon: Sparkles,
+                                                            colorClass: 'text-rose-600 bg-rose-50 border-rose-100',
+                                                            hoverColorClass: 'group-hover:border-rose-300 group-hover:bg-rose-50/50'
+                                                        };
+                                                }
+                                            })();
+                                            const IconComponent = typeConfig.icon;
 
-                                                <div className="flex items-center justify-between pt-2 border-t border-slate-50 mt-2">
-                                                    <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wide border ${
-                                                        p.status === 'Ativo' 
-                                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-100' 
-                                                        : 'bg-slate-100 text-slate-500 border-slate-200'
-                                                    }`}>
-                                                        {p.status}
-                                                    </span>
-                                                    <span className="text-xs font-black text-slate-700">{p.available_quantity} cotas</span>
+                                            return (
+                                                <div 
+                                                    key={p.id} 
+                                                    onClick={() => setSelectedProc(p)}
+                                                    className="group relative bg-white hover:bg-slate-50/30 border border-slate-200/80 hover:border-sky-300/80 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all duration-300 cursor-pointer shadow-sm hover:shadow-md hover:-translate-y-0.5"
+                                                >
+                                                    {/* Left side: Icon, Name and Code */}
+                                                    <div className="flex items-center gap-4 min-w-0 flex-1">
+                                                        <div className={`p-3 rounded-xl ${typeConfig.colorClass} border shrink-0 transition-transform duration-300 group-hover:scale-110 shadow-sm`}>
+                                                            <IconComponent className="w-5 h-5" />
+                                                        </div>
+                                                        <div className="min-w-0 flex-1">
+                                                            <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                                                                <span className="text-[9px] font-black tracking-wider text-slate-400 bg-slate-100 px-2 py-0.5 rounded uppercase">
+                                                                    Cód. {p.code || '----'}
+                                                                </span>
+                                                                <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${typeConfig.colorClass} border`}>
+                                                                    {p.type}
+                                                                </span>
+                                                            </div>
+                                                            <h4 className="font-extrabold text-slate-800 text-sm sm:text-base truncate group-hover:text-sky-700 transition-colors">
+                                                                {p.name}
+                                                            </h4>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Middle/Right: Info Columns */}
+                                                    <div className="flex items-center justify-between sm:justify-end gap-6 shrink-0 border-t border-slate-100 sm:border-t-0 pt-3 sm:pt-0">
+                                                        {/* Status Badge */}
+                                                        <div className="text-left sm:text-right">
+                                                            <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-1">Status</span>
+                                                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide border ${
+                                                                p.status === 'Ativo' 
+                                                                ? 'bg-emerald-50 text-emerald-700 border-emerald-100' 
+                                                                : 'bg-slate-100 text-slate-500 border-slate-200'
+                                                            }`}>
+                                                                {p.status === 'Ativo' && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />}
+                                                                {p.status}
+                                                            </span>
+                                                        </div>
+
+                                                        {/* Cotas Counter */}
+                                                        <div className="text-left sm:text-right min-w-[90px]">
+                                                            <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-1">Cotas Disponíveis</span>
+                                                            <div className="flex items-baseline gap-1 sm:justify-end">
+                                                                <span className="text-base font-black text-slate-800">{p.available_quantity}</span>
+                                                                <span className="text-[10px] font-bold text-slate-400">cotas</span>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Actions Area */}
+                                                        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                                                            <button
+                                                                onClick={() => handleOpenProcModal(p)}
+                                                                className="p-2 text-slate-400 hover:text-sky-600 hover:bg-sky-50 border border-slate-200/60 rounded-xl transition-all"
+                                                                title="Editar Procedimento"
+                                                            >
+                                                                <Edit2 className="w-4 h-4" />
+                                                            </button>
+                                                            <div className="hidden sm:flex p-2 text-slate-300 group-hover:text-sky-500 transition-colors">
+                                                                <ChevronRight className="w-5 h-5 transform group-hover:translate-x-1 transition-transform" />
+                                                            </div>
+                                                        </div>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 ) : (
                                     <div className="text-center text-xs font-bold text-slate-400 py-12">Nenhum exame ou consulta cadastrado.</div>
@@ -1046,11 +1110,11 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                             <input
                                 type="text"
                                 placeholder="Filtrar por Paciente ou Exame..."
-                                className="w-full bg-white border border-slate-200/80 rounded-xl pl-9 pr-3 py-2 text-xs font-semibold focus:outline-none focus:border-sky-500 transition-all text-slate-900"
+                                className="w-full bg-white border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs font-semibold placeholder:text-slate-500 focus:outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/15 transition-all text-slate-900 shadow-sm"
                                 value={historySearch}
                                 onChange={(e) => setHistorySearch(e.target.value)}
                             />
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+                            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4" />
                         </div>
 
                         {filteredHistory.length > 0 ? (

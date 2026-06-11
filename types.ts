@@ -504,6 +504,7 @@ export interface ConsultaAgendamento {
   procedimento_id: string;
   appointment_date: string;
   appointment_time?: string;
+  solicitation_date?: string;
   quantity: number;
   priority: 'Normal' | 'Urgência';
   status: 'Solicitado' | 'Agendado' | 'Realizado' | 'Cancelado' | 'Não Realizado' | 'Fila de espera' | 'Aguardando Data' | 'Retorno';
