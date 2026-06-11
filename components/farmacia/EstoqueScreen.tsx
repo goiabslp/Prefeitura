@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { User, FarmaciaMedicamento, FarmaciaMovimentacao } from '../../types';
-import { Package, Plus, Edit, Trash2, Calendar, AlertTriangle, ChevronRight, CheckCircle2, TrendingUp, Info, Loader2, Sparkles, SlidersHorizontal, X, XCircle } from 'lucide-react';
+import { Package, Plus, Edit, Trash2, Calendar, AlertTriangle, ChevronRight, CheckCircle2, TrendingUp, Info, Loader2, Sparkles, SlidersHorizontal, X, XCircle, Search } from 'lucide-react';
 import * as db from '../../services/farmaciaService';
 
 interface EstoqueScreenProps {
@@ -17,12 +17,19 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
     const [medicamentos, setMedicamentos] = useState<FarmaciaMedicamento[]>([]);
     const [movimentacoes, setMovimentacoes] = useState<FarmaciaMovimentacao[]>([]);
     const [loading, setLoading] = useState(true);
+    const [searchTerm, setSearchTerm] = useState('');
 
     // Modal control
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [isAdjustModalOpen, setIsAdjustModalOpen] = useState(false);
     const [selectedMed, setSelectedMed] = useState<FarmaciaMedicamento | null>(null);
+
+    // Custom select dropdown states
+    const [isAddCatOpen, setIsAddCatOpen] = useState(false);
+    const [isAddTipoOpen, setIsAddTipoOpen] = useState(false);
+    const [isEditCatOpen, setIsEditCatOpen] = useState(false);
+    const [isEditTipoOpen, setIsEditTipoOpen] = useState(false);
 
     // Form inputs
     const [nome, setNome] = useState('');
@@ -113,6 +120,19 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
         };
     }, [medicamentos, movimentacoes]);
 
+    // Filtered list for search
+    const filteredMedicamentos = useMemo(() => {
+        if (!searchTerm.trim()) return medicamentos;
+        const term = searchTerm.toLowerCase();
+        return medicamentos.filter(med => 
+            med.nome.toLowerCase().includes(term) ||
+            med.lote.toLowerCase().includes(term) ||
+            med.categoria.toLowerCase().includes(term) ||
+            (med.fornecedor && med.fornecedor.toLowerCase().includes(term)) ||
+            (med.tipo && med.tipo.toLowerCase().includes(term))
+        );
+    }, [medicamentos, searchTerm]);
+
     // --- CRUD ACTIONS ---
 
     const handleOpenAddModal = () => {
@@ -135,6 +155,18 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
             alert('Preencha os campos obrigatórios.');
             return;
         }
+
+        const isDuplicate = medicamentos.some(med => 
+            med.nome.toUpperCase() === nome.toUpperCase() &&
+            (med.tipo || '').toUpperCase() === tipo.toUpperCase() &&
+            (med.dosagem || '').toUpperCase() === (dosagem || '').toUpperCase()
+        );
+
+        if (isDuplicate) {
+            alert(`Já existe um medicamento cadastrado com o mesmo Nome ("${nome.toUpperCase()}"), Tipo ("${tipo}") e Dosagem ("${dosagem || 'Sem Dosagem'}").`);
+            return;
+        }
+
         setSaving(true);
         try {
             const qtyNum = parseInt(quantidade, 10);
@@ -197,6 +229,19 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
     const handleUpdate = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!selectedMed) return;
+
+        const isDuplicate = medicamentos.some(med => 
+            med.id !== selectedMed.id &&
+            med.nome.toUpperCase() === nome.toUpperCase() &&
+            (med.tipo || '').toUpperCase() === tipo.toUpperCase() &&
+            (med.dosagem || '').toUpperCase() === (dosagem || '').toUpperCase()
+        );
+
+        if (isDuplicate) {
+            alert(`Já existe outro medicamento cadastrado com o mesmo Nome ("${nome.toUpperCase()}"), Tipo ("${tipo}") e Dosagem ("${dosagem || 'Sem Dosagem'}").`);
+            return;
+        }
+
         setSaving(true);
         try {
             await db.updateMedicamento(selectedMed.id, {
@@ -301,193 +346,143 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
     return (
         <div className="w-full mx-auto flex flex-col flex-1 h-full max-h-full min-h-0 bg-slate-50/20 rounded-3xl border border-slate-200/80 shadow-xl overflow-hidden animate-in fade-in duration-300">
             {/* Main Action Bar */}
-            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-white shrink-0">
+            <div className="px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white shrink-0">
                 <div className="flex items-center gap-2">
                     <SlidersHorizontal className="w-5 h-5 text-pink-600" />
                     <h3 className="font-extrabold text-slate-800 text-sm md:text-base uppercase tracking-tight">Painel de Estoque</h3>
                 </div>
 
-                {canCreate && (
-                    <button
-                        onClick={handleOpenAddModal}
-                        className="px-4 py-2 bg-pink-600 hover:bg-pink-700 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-md flex items-center gap-2"
-                    >
-                        <Plus className="w-4 h-4" />
-                        Cadastrar Lote
-                    </button>
-                )}
+                <div className="flex items-center gap-3 self-end sm:self-auto w-full sm:w-auto justify-end">
+                    <div className="relative w-full sm:w-[520px]">
+                        <input
+                            type="text"
+                            placeholder="Buscar por medicamento, lote..."
+                            className="w-full pl-9 pr-8 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:border-pink-500 bg-slate-50 focus:bg-white transition-all placeholder:text-slate-400"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                        {searchTerm && (
+                            <button
+                                onClick={() => setSearchTerm('')}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                            >
+                                <X className="w-3.5 h-3.5" />
+                            </button>
+                        )}
+                    </div>
+
+                    {canCreate && (
+                        <button
+                            onClick={handleOpenAddModal}
+                            className="px-4 py-2 bg-pink-600 hover:bg-pink-700 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-md flex items-center gap-2 shrink-0"
+                        >
+                            <Plus className="w-4 h-4" />
+                            Novo Medicamento
+                        </button>
+                    )}
+                </div>
             </div>
 
-            {/* Content Split: Top Dashboard | Bottom Lote List */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar min-h-0">
-                {/* 1. DASHBOARD PANEL */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    {/* Metric 1 */}
-                    <div className="bg-white p-5 border border-slate-200/60 rounded-3xl shadow-sm flex items-center gap-4">
-                        <div className="p-3 rounded-2xl bg-pink-50 text-pink-600 shadow-inner shrink-0">
-                            <Package className="w-6 h-6" />
-                        </div>
-                        <div>
-                            <span className="text-[9px] text-slate-400 font-black uppercase tracking-wider block">Lotes em Estoque</span>
-                            <span className="text-2xl font-black text-slate-800 leading-none mt-1 block">{stats.totalItems}</span>
-                        </div>
+            {/* Lote List Container */}
+            <div className="flex-1 overflow-y-auto p-6 custom-scrollbar min-h-0">
+                <div className="bg-white border border-slate-200/60 rounded-3xl p-6 shadow-sm flex flex-col w-full">
+                    <div className="flex items-center gap-2 mb-4">
+                        <Package className="w-5 h-5 text-slate-700" />
+                        <h4 className="font-extrabold text-slate-800 text-sm uppercase tracking-tight">Estoque de Medicamentos por Lote</h4>
                     </div>
 
-                    {/* Metric 2 */}
-                    <div className="bg-white p-5 border border-slate-200/60 rounded-3xl shadow-sm flex items-center gap-4">
-                        <div className="p-3 rounded-2xl bg-indigo-50 text-indigo-600 shadow-inner shrink-0">
-                            <Sparkles className="w-6 h-6" />
-                        </div>
-                        <div>
-                            <span className="text-[9px] text-slate-400 font-black uppercase tracking-wider block">Total de Unidades</span>
-                            <span className="text-2xl font-black text-slate-800 leading-none mt-1 block">{stats.totalQty}</span>
-                        </div>
-                    </div>
-
-                    {/* Metric 3 */}
-                    <div className="bg-white p-5 border border-slate-200/60 rounded-3xl shadow-sm flex items-center gap-4">
-                        <div className="p-3 rounded-2xl bg-rose-50 text-rose-600 shadow-inner shrink-0">
-                            <XCircle className="w-6 h-6" />
-                        </div>
-                        <div>
-                            <span className="text-[9px] text-slate-400 font-black uppercase tracking-wider block">Medicamentos em Falta</span>
-                            <span className="text-2xl font-black text-rose-600 leading-none mt-1 block">{stats.outOfStock}</span>
-                        </div>
-                    </div>
-
-                    {/* Metric 4 */}
-                    <div className="bg-white p-5 border border-slate-200/60 rounded-3xl shadow-sm flex items-center gap-4">
-                        <div className="p-3 rounded-2xl bg-amber-50 text-amber-600 shadow-inner shrink-0">
-                            <AlertTriangle className="w-6 h-6" />
-                        </div>
-                        <div>
-                            <span className="text-[9px] text-slate-400 font-black uppercase tracking-wider block">Próximos do Vencimento</span>
-                            <span className="text-2xl font-black text-amber-600 leading-none mt-1 block">{stats.nearExpiration}</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    {/* Left: Lote List Table */}
-                    <div className="lg:col-span-2 bg-white border border-slate-200/60 rounded-3xl p-6 shadow-sm flex flex-col">
-                        <div className="flex items-center gap-2 mb-4">
-                            <Package className="w-5 h-5 text-slate-700" />
-                            <h4 className="font-extrabold text-slate-800 text-sm uppercase tracking-tight">Estoque de Medicamentos por Lote</h4>
-                        </div>
-
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left border-collapse">
-                                <thead>
-                                    <tr className="bg-slate-50 border-b border-slate-100 text-[9px] font-black text-slate-400 uppercase tracking-wider">
-                                        <th className="p-3">Medicamento / Categoria</th>
-                                        <th className="p-3">Lote</th>
-                                        <th className="p-3">Validade</th>
-                                        <th className="p-3 text-center">Quantidade</th>
-                                        <th className="p-3 text-right">Ações</th>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="bg-slate-50 border-b border-slate-100 text-[9px] font-black text-slate-400 uppercase tracking-wider">
+                                    <th className="p-3">Medicamento / Categoria</th>
+                                    <th className="p-3">Lote</th>
+                                    <th className="p-3">Validade</th>
+                                    <th className="p-3 text-center">Quantidade</th>
+                                    <th className="p-3 text-right">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-700">
+                                {filteredMedicamentos.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={5} className="p-8 text-center text-slate-400 font-semibold italic">
+                                            Nenhum lote ou medicamento encontrado.
+                                        </td>
                                     </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-700">
-                                    {medicamentos.map(med => {
+                                ) : (
+                                    filteredMedicamentos.map(med => {
                                         const isExpired = new Date(med.validade).getTime() <= Date.now();
-                                        const badgeClass = getStockBadgeColor(med);
-                                        return (
-                                            <tr key={med.id} className="hover:bg-slate-50/20 transition-colors">
-                                                <td className="p-3">
-                                                    <div className="font-extrabold text-slate-800 uppercase">{med.nome}</div>
-                                                    <div className="flex flex-wrap gap-1 mt-1">
-                                                        <span className="inline-block px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded bg-pink-50 text-pink-600">
-                                                            {med.categoria}
+                                    const badgeClass = getStockBadgeColor(med);
+                                    return (
+                                        <tr key={med.id} className="hover:bg-slate-50/20 transition-colors">
+                                            <td className="p-3">
+                                                <div className="font-extrabold text-slate-800 uppercase">{med.nome}</div>
+                                                <div className="flex flex-wrap gap-1 mt-1">
+                                                    <span className="inline-block px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded bg-pink-50 text-pink-600">
+                                                        {med.categoria}
+                                                    </span>
+                                                    {med.dosagem && (
+                                                        <span className="inline-block px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded bg-pink-50 text-pink-700 border border-pink-100">
+                                                            {med.dosagem}
                                                         </span>
-                                                        {med.dosagem && (
-                                                            <span className="inline-block px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded bg-pink-50 text-pink-700 border border-pink-100">
-                                                                {med.dosagem}
-                                                            </span>
-                                                        )}
-                                                        {med.tipo && (
-                                                            <span className="inline-block px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded bg-slate-100 text-slate-600">
-                                                                {med.tipo}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                </td>
-                                                <td className="p-3 font-mono font-bold text-slate-500">{med.lote}</td>
-                                                <td className="p-3">
-                                                    <span className={`${isExpired ? 'text-rose-500 font-bold' : 'text-slate-600'}`}>
-                                                        {formatDateBr(med.validade)}
-                                                        {isExpired && ' (Vencido)'}
-                                                    </span>
-                                                </td>
-                                                <td className="p-3 text-center">
-                                                    <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-black border ${badgeClass}`}>
-                                                        {med.quantidade} {med.unidade}
-                                                    </span>
-                                                </td>
-                                                <td className="p-3 text-right">
-                                                    <div className="flex items-center justify-end gap-2">
-                                                        {canCreate && (
-                                                            <button
-                                                                onClick={() => handleOpenAdjustModal(med)}
-                                                                className="px-2 py-1 text-[9px] font-black uppercase bg-pink-50 text-pink-600 hover:bg-pink-100 border border-pink-200/50 rounded-lg"
-                                                                title="Entrada / Ajuste manual de estoque"
-                                                            >
-                                                                Estoque
-                                                            </button>
-                                                        )}
-                                                        {canEdit && (
-                                                            <button
-                                                                onClick={() => handleOpenEditModal(med)}
-                                                                className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-lg"
-                                                                title="Editar dados cadastrais"
-                                                            >
-                                                                <Edit className="w-3.5 h-3.5" />
-                                                            </button>
-                                                        )}
-                                                        {canDelete && (
-                                                            <button
-                                                                onClick={() => handleDelete(med.id, med.nome)}
-                                                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-slate-100 rounded-lg"
-                                                                title="Remover lote"
-                                                            >
-                                                                <Trash2 className="w-3.5 h-3.5" />
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-
-                    {/* Right: Most Withdrawn Ranking */}
-                    <div className="bg-white border border-slate-200/60 rounded-3xl p-6 shadow-sm flex flex-col">
-                        <div className="flex items-center gap-2 mb-4">
-                            <TrendingUp className="w-5 h-5 text-slate-700" />
-                            <h4 className="font-extrabold text-slate-800 text-sm uppercase tracking-tight font-black">Mais Dispensados</h4>
-                        </div>
-
-                        {stats.sortedRanking.length > 0 ? (
-                            <div className="space-y-4">
-                                {stats.sortedRanking.map((item, idx) => (
-                                    <div key={item.name} className="flex items-center justify-between border-b border-slate-50 pb-2.5 last:border-0">
-                                        <div className="flex items-center gap-3">
-                                            <span className="w-6 h-6 rounded-full bg-pink-50 text-pink-600 flex items-center justify-center font-black text-xs shrink-0">
-                                                {idx + 1}
-                                            </span>
-                                            <span className="font-extrabold text-slate-700 uppercase text-xs truncate max-w-[160px]">{item.name}</span>
-                                        </div>
-                                        <span className="text-xs font-black text-slate-900">{item.qty} un</span>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <div className="h-full flex flex-col items-center justify-center text-slate-400 p-6">
-                                <Info className="w-8 h-8 opacity-20 text-slate-500 mb-1" />
-                                <span className="text-xs font-semibold text-slate-500">Sem estatísticas no momento</span>
-                            </div>
-                        )}
+                                                    )}
+                                                    {med.tipo && (
+                                                        <span className="inline-block px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded bg-slate-100 text-slate-600">
+                                                            {med.tipo}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td className="p-3 font-mono font-bold text-slate-500">{med.lote}</td>
+                                            <td className="p-3">
+                                                <span className={`${isExpired ? 'text-rose-500 font-bold' : 'text-slate-600'}`}>
+                                                    {formatDateBr(med.validade)}
+                                                    {isExpired && ' (Vencido)'}
+                                                </span>
+                                            </td>
+                                            <td className="p-3 text-center">
+                                                <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-black border ${badgeClass}`}>
+                                                    {med.quantidade} {med.unidade}
+                                                </span>
+                                            </td>
+                                            <td className="p-3 text-right">
+                                                <div className="flex items-center justify-end gap-2">
+                                                    {canCreate && (
+                                                        <button
+                                                            onClick={() => handleOpenAdjustModal(med)}
+                                                            className="px-2 py-1 text-[9px] font-black uppercase bg-pink-50 text-pink-600 hover:bg-pink-100 border border-pink-200/50 rounded-lg"
+                                                            title="Entrada / Ajuste manual de estoque"
+                                                        >
+                                                            Estoque
+                                                        </button>
+                                                    )}
+                                                    {canEdit && (
+                                                        <button
+                                                            onClick={() => handleOpenEditModal(med)}
+                                                            className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-lg"
+                                                            title="Editar dados cadastrais"
+                                                        >
+                                                            <Edit className="w-3.5 h-3.5" />
+                                                        </button>
+                                                    )}
+                                                    {canDelete && (
+                                                        <button
+                                                            onClick={() => handleDelete(med.id, med.nome)}
+                                                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-slate-100 rounded-lg"
+                                                            title="Remover lote"
+                                                        >
+                                                            <Trash2 className="w-3.5 h-3.5" />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })
+                                )}
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
@@ -495,69 +490,198 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
             {/* ADD MODAL */}
             {isAddModalOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200/50">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden border border-slate-200/50 flex flex-col animate-in zoom-in-95 duration-200">
                         <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                            <h3 className="font-extrabold text-slate-800 uppercase text-sm tracking-wide">Cadastrar Novo Lote</h3>
-                            <button onClick={() => setIsAddModalOpen(false)} className="p-1 hover:bg-slate-200 rounded-lg text-slate-500"><X className="w-5 h-5" /></button>
-                        </div>
-                        <form onSubmit={handleCreate} className="p-6 space-y-4">
                             <div>
-                                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">Nome do Medicamento *</label>
-                                <input type="text" className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs focus:bg-white focus:border-pink-500 outline-none font-semibold text-slate-900" value={nome} onChange={e => setNome(e.target.value)} required />
+                                <h3 className="font-extrabold text-slate-800 uppercase text-sm tracking-wide">Cadastrar Novo Lote</h3>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">Insira os dados do lote para alimentar o estoque</p>
                             </div>
-                            <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">Categoria *</label>
-                                    <select className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs focus:bg-white focus:border-pink-500 outline-none font-semibold text-slate-900" value={categoria} onChange={e => setCategoria(e.target.value as any)}>
-                                        <option value="CBAF">Componente Básico (CBAF)</option>
-                                        <option value="CESAF">Componente Estratégico (CESAF)</option>
-                                        <option value="CEAF">Componente Especializado (CEAF)</option>
-                                    </select>
+                            <button onClick={() => setIsAddModalOpen(false)} className="p-1.5 hover:bg-slate-200 rounded-lg text-slate-500 transition-colors">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <form onSubmit={handleCreate} className="p-6 space-y-5">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                {/* Row 1 */}
+                                <div className="md:col-span-2">
+                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Nome do Medicamento *</label>
+                                    <input 
+                                        type="text" 
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold text-slate-900 uppercase" 
+                                        placeholder="Ex: PARACETAMOL"
+                                        value={nome} 
+                                        onChange={e => setNome(e.target.value)} 
+                                        required 
+                                    />
                                 </div>
                                 <div>
-                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">Unidade *</label>
-                                    <input type="text" className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs focus:bg-white focus:border-pink-500 outline-none font-semibold text-slate-900" value={unidade} onChange={e => setUnidade(e.target.value)} required />
+                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Lote *</label>
+                                    <input 
+                                        type="text" 
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-mono font-bold text-slate-900 uppercase" 
+                                        placeholder="Ex: A23" 
+                                        value={lote} 
+                                        onChange={e => setLote(e.target.value)} 
+                                        required 
+                                    />
+                                </div>
+
+                                {/* Row 2 */}
+                                {/* Custom Categoria Select */}
+                                <div className="relative">
+                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Categoria *</label>
+                                    <div 
+                                        onClick={() => {
+                                            setIsAddCatOpen(!isAddCatOpen);
+                                            setIsAddTipoOpen(false);
+                                        }}
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm text-slate-900 focus-within:bg-white focus-within:border-pink-500 focus-within:ring-2 focus-within:ring-pink-500/10 outline-none transition-all font-semibold cursor-pointer flex justify-between items-center select-none"
+                                    >
+                                        <span>
+                                            {categoria === 'CBAF' && 'Componente Básico (CBAF)'}
+                                            {categoria === 'CESAF' && 'Componente Estratégico (CESAF)'}
+                                            {categoria === 'CEAF' && 'Componente Especializado (CEAF)'}
+                                        </span>
+                                        <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform ${isAddCatOpen ? 'rotate-90' : ''}`} />
+                                    </div>
+
+                                    {isAddCatOpen && (
+                                        <>
+                                            <div className="fixed inset-0 z-40" onClick={() => setIsAddCatOpen(false)} />
+                                            <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200/80 rounded-xl shadow-xl z-50 overflow-hidden py-1 animate-in fade-in slide-in-from-top-1 duration-100">
+                                                {(['CBAF', 'CESAF', 'CEAF'] as const).map((cat) => (
+                                                    <button
+                                                        key={cat}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setCategoria(cat);
+                                                            setIsAddCatOpen(false);
+                                                        }}
+                                                        className={`w-full text-left px-4 py-2.5 text-xs font-semibold hover:bg-slate-50 transition-colors flex justify-between items-center ${
+                                                            categoria === cat ? 'text-pink-650 bg-pink-50/10 font-bold' : 'text-slate-700'
+                                                        }`}
+                                                    >
+                                                        <span>
+                                                            {cat === 'CBAF' && 'Componente Básico (CBAF)'}
+                                                            {cat === 'CESAF' && 'Componente Estratégico (CESAF)'}
+                                                            {cat === 'CEAF' && 'Componente Especializado (CEAF)'}
+                                                        </span>
+                                                        {categoria === cat && <CheckCircle2 className="w-3.5 h-3.5 text-pink-600" />}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+
+                                {/* Custom Tipo Select */}
+                                <div className="relative">
+                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Tipo *</label>
+                                    <div 
+                                        onClick={() => {
+                                            setIsAddTipoOpen(!isAddTipoOpen);
+                                            setIsAddCatOpen(false);
+                                        }}
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm text-slate-900 focus-within:bg-white focus-within:border-pink-500 focus-within:ring-2 focus-within:ring-pink-500/10 outline-none transition-all font-semibold cursor-pointer flex justify-between items-center select-none"
+                                    >
+                                        <span>{tipo}</span>
+                                        <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform ${isAddTipoOpen ? 'rotate-90' : ''}`} />
+                                    </div>
+
+                                    {isAddTipoOpen && (
+                                        <>
+                                            <div className="fixed inset-0 z-40" onClick={() => setIsAddTipoOpen(false)} />
+                                            <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200/80 rounded-xl shadow-xl z-50 overflow-hidden py-1 animate-in fade-in slide-in-from-top-1 duration-100">
+                                                {['Comprimido', 'Frasco', 'Ampola', 'Creme', 'Outros'].map((t) => (
+                                                    <button
+                                                        key={t}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setTipo(t);
+                                                            setIsAddTipoOpen(false);
+                                                        }}
+                                                        className={`w-full text-left px-4 py-2.5 text-xs font-semibold hover:bg-slate-50 transition-colors flex justify-between items-center ${
+                                                            tipo === t ? 'text-pink-650 bg-pink-50/10 font-bold' : 'text-slate-700'
+                                                        }`}
+                                                    >
+                                                        <span>{t}</span>
+                                                        {tipo === t && <CheckCircle2 className="w-3.5 h-3.5 text-pink-600" />}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                                <div>
+                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Dosagem (Ex: 500mg, 10ml)</label>
+                                    <input 
+                                        type="text" 
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold text-slate-900" 
+                                        placeholder="Ex: 500mg" 
+                                        value={dosagem} 
+                                        onChange={e => setDosagem(e.target.value)} 
+                                    />
+                                </div>
+
+                                {/* Row 3 */}
+                                <div>
+                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Quantidade Inicial *</label>
+                                    <input 
+                                        type="number" 
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-bold text-slate-900" 
+                                        placeholder="0"
+                                        value={quantidade} 
+                                        onChange={e => setQuantidade(e.target.value)} 
+                                        min="0" 
+                                        required 
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Unidade *</label>
+                                    <input 
+                                        type="text" 
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold text-slate-900" 
+                                        placeholder="Ex: Comprimidos"
+                                        value={unidade} 
+                                        onChange={e => setUnidade(e.target.value)} 
+                                        required 
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Limite Mínimo de Alerta *</label>
+                                    <input 
+                                        type="number" 
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-bold text-slate-900" 
+                                        value={limiteMinimo} 
+                                        onChange={e => setLimiteMinimo(e.target.value)} 
+                                        min="0" 
+                                        required 
+                                    />
+                                </div>
+
+                                {/* Row 4 */}
+                                <div>
+                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Validade *</label>
+                                    <input 
+                                        type="date" 
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold text-slate-900 cursor-pointer" 
+                                        value={validade} 
+                                        onChange={e => setValidade(e.target.value)} 
+                                        required 
+                                    />
+                                </div>
+                                <div className="md:col-span-2">
+                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Fornecedor</label>
+                                    <input 
+                                        type="text" 
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold text-slate-900" 
+                                        placeholder="Ex: MedSul Distribuidora"
+                                        value={fornecedor} 
+                                        onChange={e => setFornecedor(e.target.value)} 
+                                    />
                                 </div>
                             </div>
-                            <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">Quantidade Inicial *</label>
-                                    <input type="number" className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs focus:bg-white focus:border-pink-500 outline-none font-semibold text-slate-900 font-bold" value={quantidade} onChange={e => setQuantidade(e.target.value)} min="0" required />
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">Limite Mínimo de Alerta *</label>
-                                    <input type="number" className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs focus:bg-white focus:border-pink-500 outline-none font-semibold text-slate-900 font-bold" value={limiteMinimo} onChange={e => setLimiteMinimo(e.target.value)} min="0" required />
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">Lote *</label>
-                                    <input type="text" className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs focus:bg-white focus:border-pink-500 outline-none font-mono font-bold text-slate-900" placeholder="Ex: A23" value={lote} onChange={e => setLote(e.target.value)} required />
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">Validade *</label>
-                                    <input type="date" className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs focus:bg-white focus:border-pink-500 outline-none font-semibold text-slate-900" value={validade} onChange={e => setValidade(e.target.value)} required />
-                                </div>
-                            </div>
-                             <div className="grid grid-cols-2 gap-3">
-                                 <div>
-                                     <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">Tipo *</label>
-                                     <select className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs focus:bg-white focus:border-pink-500 outline-none font-semibold text-slate-900 cursor-pointer" value={tipo} onChange={e => setTipo(e.target.value)} required>
-                                         <option value="Comprimido">Comprimido</option>
-                                         <option value="Frasco">Frasco</option>
-                                         <option value="Outros">Outros</option>
-                                     </select>
-                                 </div>
-                                 <div>
-                                     <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">Dosagem (Ex: 500mg, 10ml)</label>
-                                     <input type="text" className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs focus:bg-white focus:border-pink-500 outline-none font-semibold text-slate-900" placeholder="Ex: 500mg" value={dosagem} onChange={e => setDosagem(e.target.value)} />
-                                 </div>
-                             </div>
-                             <div>
-                                 <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">Fornecedor</label>
-                                 <input type="text" className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs focus:bg-white focus:border-pink-500 outline-none font-semibold text-slate-900" value={fornecedor} onChange={e => setFornecedor(e.target.value)} />
-                             </div>
-                            <button type="submit" disabled={saving} className="w-full py-2.5 bg-pink-600 hover:bg-pink-700 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-md">
+                            <button type="submit" disabled={saving} className="w-full py-3.5 bg-pink-600 hover:bg-pink-700 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-md active:scale-98">
                                 {saving ? 'Salvando...' : 'Cadastrar Medicamento'}
                             </button>
                         </form>
@@ -568,65 +692,181 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
             {/* EDIT MODAL */}
             {isEditModalOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200/50">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden border border-slate-200/50 flex flex-col animate-in zoom-in-95 duration-200">
                         <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                            <h3 className="font-extrabold text-slate-800 uppercase text-sm tracking-wide">Editar Medicamento</h3>
-                            <button onClick={() => setIsEditModalOpen(false)} className="p-1 hover:bg-slate-200 rounded-lg text-slate-500"><X className="w-5 h-5" /></button>
-                        </div>
-                        <form onSubmit={handleUpdate} className="p-6 space-y-4">
                             <div>
-                                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">Nome do Medicamento *</label>
-                                <input type="text" className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs focus:bg-white focus:border-pink-500 outline-none font-semibold text-slate-900" value={nome} onChange={e => setNome(e.target.value)} required />
+                                <h3 className="font-extrabold text-slate-800 uppercase text-sm tracking-wide">Editar Medicamento</h3>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">Modifique os dados cadastrais do lote</p>
                             </div>
-                            <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">Categoria *</label>
-                                    <select className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs focus:bg-white focus:border-pink-500 outline-none font-semibold text-slate-900" value={categoria} onChange={e => setCategoria(e.target.value as any)}>
-                                        <option value="CBAF">Componente Básico (CBAF)</option>
-                                        <option value="CESAF">Componente Estratégico (CESAF)</option>
-                                        <option value="CEAF">Componente Especializado (CEAF)</option>
-                                    </select>
+                            <button onClick={() => setIsEditModalOpen(false)} className="p-1.5 hover:bg-slate-200 rounded-lg text-slate-500 transition-colors">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <form onSubmit={handleUpdate} className="p-6 space-y-5">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                {/* Row 1 */}
+                                <div className="md:col-span-2">
+                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Nome do Medicamento *</label>
+                                    <input 
+                                        type="text" 
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold text-slate-900 uppercase" 
+                                        value={nome} 
+                                        onChange={e => setNome(e.target.value)} 
+                                        required 
+                                    />
                                 </div>
                                 <div>
-                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">Unidade *</label>
-                                    <input type="text" className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs focus:bg-white focus:border-pink-500 outline-none font-semibold text-slate-900" value={unidade} onChange={e => setUnidade(e.target.value)} required />
+                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Lote *</label>
+                                    <input 
+                                        type="text" 
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-mono font-bold text-slate-900 uppercase" 
+                                        value={lote} 
+                                        onChange={e => setLote(e.target.value)} 
+                                        required 
+                                    />
+                                </div>
+
+                                {/* Row 2 */}
+                                {/* Custom Categoria Select */}
+                                <div className="relative">
+                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Categoria *</label>
+                                    <div 
+                                        onClick={() => {
+                                            setIsEditCatOpen(!isEditCatOpen);
+                                            setIsEditTipoOpen(false);
+                                        }}
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm text-slate-900 focus-within:bg-white focus-within:border-pink-500 focus-within:ring-2 focus-within:ring-pink-500/10 outline-none transition-all font-semibold cursor-pointer flex justify-between items-center select-none"
+                                    >
+                                        <span>
+                                            {categoria === 'CBAF' && 'Componente Básico (CBAF)'}
+                                            {categoria === 'CESAF' && 'Componente Estratégico (CESAF)'}
+                                            {categoria === 'CEAF' && 'Componente Especializado (CEAF)'}
+                                        </span>
+                                        <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform ${isEditCatOpen ? 'rotate-90' : ''}`} />
+                                    </div>
+
+                                    {isEditCatOpen && (
+                                        <>
+                                            <div className="fixed inset-0 z-40" onClick={() => setIsEditCatOpen(false)} />
+                                            <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200/80 rounded-xl shadow-xl z-50 overflow-hidden py-1 animate-in fade-in slide-in-from-top-1 duration-100">
+                                                {(['CBAF', 'CESAF', 'CEAF'] as const).map((cat) => (
+                                                    <button
+                                                        key={cat}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setCategoria(cat);
+                                                            setIsEditCatOpen(false);
+                                                        }}
+                                                        className={`w-full text-left px-4 py-2.5 text-xs font-semibold hover:bg-slate-50 transition-colors flex justify-between items-center ${
+                                                            categoria === cat ? 'text-pink-650 bg-pink-50/10 font-bold' : 'text-slate-700'
+                                                        }`}
+                                                    >
+                                                        <span>
+                                                            {cat === 'CBAF' && 'Componente Básico (CBAF)'}
+                                                            {cat === 'CESAF' && 'Componente Estratégico (CESAF)'}
+                                                            {cat === 'CEAF' && 'Componente Especializado (CEAF)'}
+                                                        </span>
+                                                        {categoria === cat && <CheckCircle2 className="w-3.5 h-3.5 text-pink-600" />}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+
+                                {/* Custom Tipo Select */}
+                                <div className="relative">
+                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Tipo *</label>
+                                    <div 
+                                        onClick={() => {
+                                            setIsEditTipoOpen(!isEditTipoOpen);
+                                            setIsEditCatOpen(false);
+                                        }}
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm text-slate-900 focus-within:bg-white focus-within:border-pink-500 focus-within:ring-2 focus-within:ring-pink-500/10 outline-none transition-all font-semibold cursor-pointer flex justify-between items-center select-none"
+                                    >
+                                        <span>{tipo}</span>
+                                        <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform ${isEditTipoOpen ? 'rotate-90' : ''}`} />
+                                    </div>
+
+                                    {isEditTipoOpen && (
+                                        <>
+                                            <div className="fixed inset-0 z-40" onClick={() => setIsEditTipoOpen(false)} />
+                                            <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200/80 rounded-xl shadow-xl z-50 overflow-hidden py-1 animate-in fade-in slide-in-from-top-1 duration-100">
+                                                {['Comprimido', 'Frasco', 'Ampola', 'Creme', 'Outros'].map((t) => (
+                                                    <button
+                                                        key={t}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setTipo(t);
+                                                            setIsEditTipoOpen(false);
+                                                        }}
+                                                        className={`w-full text-left px-4 py-2.5 text-xs font-semibold hover:bg-slate-50 transition-colors flex justify-between items-center ${
+                                                            tipo === t ? 'text-pink-650 bg-pink-50/10 font-bold' : 'text-slate-700'
+                                                        }`}
+                                                    >
+                                                        <span>{t}</span>
+                                                        {tipo === t && <CheckCircle2 className="w-3.5 h-3.5 text-pink-600" />}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                                <div>
+                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Dosagem (Ex: 500mg, 10ml)</label>
+                                    <input 
+                                        type="text" 
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold text-slate-900" 
+                                        value={dosagem} 
+                                        onChange={e => setDosagem(e.target.value)} 
+                                    />
+                                </div>
+
+                                {/* Row 3 */}
+                                <div>
+                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Limite Mínimo de Alerta *</label>
+                                    <input 
+                                        type="number" 
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-bold text-slate-900" 
+                                        value={limiteMinimo} 
+                                        onChange={e => setLimiteMinimo(e.target.value)} 
+                                        min="0" 
+                                        required 
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Unidade *</label>
+                                    <input 
+                                        type="text" 
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold text-slate-900" 
+                                        value={unidade} 
+                                        onChange={e => setUnidade(e.target.value)} 
+                                        required 
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Validade *</label>
+                                    <input 
+                                        type="date" 
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold text-slate-900 cursor-pointer" 
+                                        value={validade} 
+                                        onChange={e => setValidade(e.target.value)} 
+                                        required 
+                                    />
+                                </div>
+
+                                {/* Row 4 */}
+                                <div className="md:col-span-3">
+                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Fornecedor</label>
+                                    <input 
+                                        type="text" 
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold text-slate-900" 
+                                        value={fornecedor} 
+                                        onChange={e => setFornecedor(e.target.value)} 
+                                    />
                                 </div>
                             </div>
-                            <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">Limite Mínimo de Alerta *</label>
-                                    <input type="number" className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs focus:bg-white focus:border-pink-500 outline-none font-semibold text-slate-900 font-bold" value={limiteMinimo} onChange={e => setLimiteMinimo(e.target.value)} min="0" required />
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">Lote *</label>
-                                    <input type="text" className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs focus:bg-white focus:border-pink-500 outline-none font-mono font-bold text-slate-900" value={lote} onChange={e => setLote(e.target.value)} required />
-                                </div>
-                            </div>
-                             <div className="grid grid-cols-2 gap-3">
-                                 <div>
-                                     <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">Validade *</label>
-                                     <input type="date" className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs focus:bg-white focus:border-pink-500 outline-none font-semibold text-slate-900" value={validade} onChange={e => setValidade(e.target.value)} required />
-                                 </div>
-                                 <div>
-                                     <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">Tipo *</label>
-                                     <select className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs focus:bg-white focus:border-pink-500 outline-none font-semibold text-slate-900 cursor-pointer" value={tipo} onChange={e => setTipo(e.target.value)} required>
-                                         <option value="Comprimido">Comprimido</option>
-                                         <option value="Frasco">Frasco</option>
-                                         <option value="Outros">Outros</option>
-                                     </select>
-                                 </div>
-                             </div>
-                             <div className="grid grid-cols-2 gap-3">
-                                 <div>
-                                     <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">Dosagem (Ex: 500mg, 10ml)</label>
-                                     <input type="text" className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs focus:bg-white focus:border-pink-500 outline-none font-semibold text-slate-900" placeholder="Ex: 500mg" value={dosagem} onChange={e => setDosagem(e.target.value)} />
-                                 </div>
-                                 <div>
-                                     <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">Fornecedor</label>
-                                     <input type="text" className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs focus:bg-white focus:border-pink-500 outline-none font-semibold text-slate-900" value={fornecedor} onChange={e => setFornecedor(e.target.value)} />
-                                 </div>
-                             </div>
-                            <button type="submit" disabled={saving} className="w-full py-2.5 bg-pink-600 hover:bg-pink-700 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-md">
+                            <button type="submit" disabled={saving} className="w-full py-3.5 bg-pink-600 hover:bg-pink-700 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-md active:scale-98">
                                 {saving ? 'Salvando...' : 'Salvar Alterações'}
                             </button>
                         </form>

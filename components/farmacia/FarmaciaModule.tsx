@@ -1,6 +1,7 @@
-import React from 'react';
-import { User, AppState } from '../../types';
-import { ArrowLeft, Pill, Search, ClipboardList, Package, Settings, History } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { User, AppState, FarmaciaMedicamento, FarmaciaMovimentacao } from '../../types';
+import { ArrowLeft, Pill, Search, ClipboardList, Package, Settings, History, AlertTriangle, X, Info } from 'lucide-react';
+import * as db from '../../services/farmaciaService';
 import { FarmaciaDashboard } from './FarmaciaDashboard.tsx';
 import { ConsultarScreen } from './ConsultarScreen.tsx';
 import { RetirarScreen } from './RetirarScreen.tsx';
@@ -27,6 +28,143 @@ export const FarmaciaModule: React.FC<FarmaciaModuleProps> = ({
 }) => {
     const isSubView = !!subView;
     const isAdmin = currentUser.role === 'admin';
+
+    // Data states for stock alerts
+    const [medicamentos, setMedicamentos] = useState<FarmaciaMedicamento[]>([]);
+    const [movimentacoes, setMovimentacoes] = useState<FarmaciaMovimentacao[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [isAlertModalOpen, setIsAlertModalOpen] = useState(false);
+    const [hasAlerted, setHasAlerted] = useState(false);
+
+    const loadData = async () => {
+        try {
+            const [medData, movData] = await Promise.all([
+                db.getMedicamentos(),
+                db.getMovimentacoes()
+            ]);
+            setMedicamentos(medData);
+            setMovimentacoes(movData);
+        } catch (error) {
+            console.error('[FarmaciaModule] Error loading alert data:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        loadData();
+
+        const handleMedChange = () => loadData();
+        const handleMovChange = () => loadData();
+
+        window.addEventListener('farmacia-medicamentos-changed', handleMedChange);
+        window.addEventListener('farmacia-movimentacoes-changed', handleMovChange);
+
+        return () => {
+            window.removeEventListener('farmacia-medicamentos-changed', handleMedChange);
+            window.removeEventListener('farmacia-movimentacoes-changed', handleMovChange);
+        };
+    }, []);
+
+    const formatDate = (dateStr?: string) => {
+        if (!dateStr) return '';
+        try {
+            const date = new Date(dateStr);
+            const day = String(date.getDate()).padStart(2, '0');
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const year = date.getFullYear();
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            return `${day}/${month}/${year} ${hours}:${minutes}`;
+        } catch (e) {
+            return dateStr;
+        }
+    };
+
+    // Filter low stock medicines based on rule:
+    // 50% = (Estoque Anterior + Último Abastecimento) / 2
+    const lowStockMedicamentos = useMemo(() => {
+        return medicamentos.map(med => {
+            const medMovs = movimentacoes
+                .filter(m => m.medicamento_id === med.id)
+                .sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime());
+
+            // 1. Simulate starting from 0 to find the discrepancy
+            let stock = 0;
+            for (const mov of medMovs) {
+                if (mov.tipo === 'Entrada') {
+                    stock += mov.quantidade;
+                } else if (mov.tipo === 'Saída') {
+                    stock -= mov.quantidade;
+                } else if (mov.tipo === 'Ajuste') {
+                    stock = mov.quantidade;
+                }
+            }
+
+            const discrepancy = med.quantidade - stock;
+
+            // 2. Rerun simulation with the correct initial stock to find the last supply and previous stock
+            stock = discrepancy;
+            let lastSupplyQty = 0;
+            let stockBeforeLastSupply = 0;
+            let lastSupplyDate = '';
+            let hasSupply = false;
+
+            for (const mov of medMovs) {
+                if (mov.tipo === 'Entrada') {
+                    lastSupplyQty = mov.quantidade;
+                    stockBeforeLastSupply = stock;
+                    stock += mov.quantidade;
+                    lastSupplyDate = mov.data;
+                    hasSupply = true;
+                } else if (mov.tipo === 'Saída') {
+                    stock -= mov.quantidade;
+                } else if (mov.tipo === 'Ajuste') {
+                    if (mov.quantidade > stock) {
+                        lastSupplyQty = mov.quantidade - stock;
+                        stockBeforeLastSupply = stock;
+                        lastSupplyDate = mov.data;
+                        hasSupply = true;
+                    }
+                    stock = mov.quantidade;
+                }
+            }
+
+            if (!hasSupply) {
+                lastSupplyQty = discrepancy > 0 ? discrepancy : med.quantidade;
+                stockBeforeLastSupply = 0;
+            }
+
+            const thresholdLow = (lastSupplyQty + stockBeforeLastSupply) / 2;
+            const thresholdCritical = thresholdLow / 2;
+            const isCritical = med.quantidade <= thresholdCritical && med.quantidade > 0;
+            const isLow = med.quantidade <= thresholdLow && med.quantidade > thresholdCritical;
+            const isOutOfStock = med.quantidade === 0;
+
+            return {
+                ...med,
+                thresholdLow,
+                thresholdCritical,
+                lastSupplyQty,
+                stockBeforeLastSupply,
+                lastSupplyDate,
+                isLow,
+                isCritical,
+                isOutOfStock
+            };
+        }).filter(item => item.isLow || item.isCritical || item.isOutOfStock);
+    }, [medicamentos, movimentacoes]);
+
+    const hasCriticalItems = useMemo(() => {
+        return lowStockMedicamentos.some(med => med.isCritical || med.isOutOfStock);
+    }, [lowStockMedicamentos]);
+
+    useEffect(() => {
+        if (!loading && lowStockMedicamentos.length > 0 && !hasAlerted) {
+            setIsAlertModalOpen(true);
+            setHasAlerted(true);
+        }
+    }, [loading, lowStockMedicamentos, hasAlerted]);;
 
     // Permissions
     const canAccessConsultar = currentUser.permissions?.includes('parent_farmacia') || isAdmin;
@@ -110,6 +248,20 @@ export const FarmaciaModule: React.FC<FarmaciaModuleProps> = ({
                             </div>
                         </div>
                     </div>
+
+                    {lowStockMedicamentos.length > 0 && (
+                        <button
+                            onClick={() => setIsAlertModalOpen(true)}
+                            className={`flex items-center gap-2 px-3.5 py-1.5 bg-gradient-to-r ${
+                                hasCriticalItems 
+                                    ? 'from-rose-500/10 to-red-500/10 border-rose-200/50 text-rose-800 hover:text-rose-950 animate-pulse hover:animate-none' 
+                                    : 'from-amber-500/10 to-orange-500/10 border-amber-200/50 text-amber-800 hover:text-amber-950'
+                            } border rounded-xl text-xs font-black transition-all shadow-sm shrink-0 uppercase tracking-wider`}
+                        >
+                            <AlertTriangle className={`w-4 h-4 shrink-0 ${hasCriticalItems ? 'text-rose-500' : 'text-amber-500'}`} />
+                            <span>Alerta de Estoque ({lowStockMedicamentos.length})</span>
+                        </button>
+                    )}
                 </div>
             )}
 
@@ -153,6 +305,139 @@ export const FarmaciaModule: React.FC<FarmaciaModuleProps> = ({
                     <div className="text-center py-10 font-bold text-slate-400">Página Não Encontrada.</div>
                 )}
             </main>
+
+            {/* Floating Alert Trigger (FAB) */}
+            {lowStockMedicamentos.length > 0 && (
+                <button
+                    onClick={() => setIsAlertModalOpen(true)}
+                    className={`absolute bottom-6 right-6 z-50 p-3.5 bg-gradient-to-r ${
+                        hasCriticalItems 
+                            ? 'from-rose-500 to-red-600 animate-pulse' 
+                            : 'from-amber-400 to-orange-500'
+                    } text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-110 flex items-center justify-center group`}
+                    title="Alerta de Estoque"
+                >
+                    <div className="relative flex items-center justify-center">
+                        <AlertTriangle className="w-5 h-5 text-white" />
+                        <span className="absolute -top-2.5 -right-2.5 w-5.5 h-5.5 bg-rose-600 text-white border border-white text-[9px] font-black rounded-full flex items-center justify-center shadow-sm">
+                            {lowStockMedicamentos.length}
+                        </span>
+                    </div>
+                </button>
+            )}
+
+            {/* Critical Stock Alert Modal */}
+            {isAlertModalOpen && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200">
+                    <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 max-w-5xl w-full max-h-[85vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+                        {/* Modal Header */}
+                        <div className="p-6 bg-gradient-to-r from-amber-50 to-rose-50 border-b border-slate-200/50 flex justify-between items-center shrink-0">
+                            <div className="flex items-center gap-3">
+                                <div className={`p-2.5 rounded-xl ${hasCriticalItems ? 'bg-rose-500/10 text-rose-600' : 'bg-amber-500/10 text-amber-600'}`}>
+                                    <AlertTriangle className={`w-6 h-6 ${hasCriticalItems ? 'animate-bounce' : 'animate-pulse'}`} />
+                                </div>
+                                <div>
+                                    <h3 className="text-xl font-black text-slate-800 tracking-tight uppercase leading-none">Alerta de Estoque Baixo / Crítico</h3>
+                                    <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mt-1">Medicamentos com estoque abaixo dos limites recomendados</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setIsAlertModalOpen(false)}
+                                className="p-2 rounded-full hover:bg-slate-200/50 text-slate-400 hover:text-slate-600 transition-colors"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        {/* Modal Content */}
+                        <div className="p-6 overflow-y-auto flex-1 custom-scrollbar space-y-6">
+
+                            {/* Table of critical medicines */}
+                            <div className="border border-slate-200/60 rounded-2xl overflow-hidden bg-white shadow-sm">
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left border-collapse">
+                                        <thead>
+                                            <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 text-[10px] font-bold uppercase tracking-wider whitespace-nowrap">
+                                                <th className="p-4">Medicamento</th>
+                                                <th className="p-4 text-center">Estoque Atual</th>
+                                                <th className="p-4 text-center">Situação</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {lowStockMedicamentos.map(med => {
+                                                const percentOfLow = med.thresholdLow > 0 ? (med.quantidade / med.thresholdLow) * 100 : 0;
+                                                const isCriticalOrOut = med.quantidade === 0 || med.isCritical;
+                                                
+                                                return (
+                                                    <tr key={med.id} className="hover:bg-slate-50/40 transition-colors text-slate-700 text-xs whitespace-nowrap">
+                                                        <td className="p-4 whitespace-nowrap">
+                                                            <div className="flex items-center gap-2 whitespace-nowrap">
+                                                                <span className="font-extrabold text-slate-900">
+                                                                    {med.nome}
+                                                                </span>
+                                                                <span className="text-[9px] font-bold px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded uppercase tracking-wider shrink-0">
+                                                                    {med.categoria}
+                                                                </span>
+                                                                {med.tipo && (
+                                                                    <span className="text-[9px] font-bold px-1.5 py-0.5 bg-pink-50 text-pink-600 rounded uppercase tracking-wider shrink-0">
+                                                                        {med.tipo}
+                                                                    </span>
+                                                                )}
+                                                                {med.dosagem && (
+                                                                    <span className="text-[9px] font-medium text-slate-400 shrink-0">
+                                                                        {med.dosagem}
+                                                                    </span>
+                                                                )}
+
+                                                            </div>
+                                                        </td>
+                                                        <td className="p-4 text-center">
+                                                            <div className={`font-black text-sm ${isCriticalOrOut ? 'text-rose-600' : 'text-amber-600'}`}>
+                                                                {med.quantidade} <span className="text-[10px] font-bold opacity-75">{med.unidade}</span>
+                                                            </div>
+                                                            <div className="w-16 bg-slate-100 rounded-full h-1.5 mx-auto mt-1 overflow-hidden">
+                                                                <div 
+                                                                    className={`h-full rounded-full ${isCriticalOrOut ? 'bg-rose-500 animate-pulse' : 'bg-amber-500'}`}
+                                                                    style={{ width: `${Math.min(percentOfLow, 100)}%` }}
+                                                                ></div>
+                                                            </div>
+                                                        </td>
+                                                        <td className="p-4 text-center whitespace-nowrap">
+                                                            {med.quantidade === 0 ? (
+                                                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-rose-100 text-rose-800 border border-rose-200 whitespace-nowrap">
+                                                                    Sem Estoque
+                                                                </span>
+                                                            ) : med.isCritical ? (
+                                                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-red-100 text-red-800 border border-red-200 animate-pulse whitespace-nowrap">
+                                                                    Crítico (≤ 25%)
+                                                                </span>
+                                                            ) : (
+                                                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200 whitespace-nowrap">
+                                                                    Estoque Baixo
+                                                                </span>
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Modal Footer */}
+                        <div className="p-6 border-t border-slate-200/50 bg-slate-50 flex justify-end gap-3 shrink-0">
+                            <button
+                                onClick={() => setIsAlertModalOpen(false)}
+                                className="px-6 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-slate-900/10 hover:shadow-lg uppercase tracking-wider"
+                            >
+                                Entendi, Fechar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

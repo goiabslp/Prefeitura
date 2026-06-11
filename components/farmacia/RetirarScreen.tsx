@@ -50,6 +50,11 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
     // Success notification modal state
     const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
 
+    // Medicamento modal selection states
+    const [isMedModalOpen, setIsMedModalOpen] = useState(false);
+    const [medModalSearch, setMedModalSearch] = useState('');
+    const [medModalCategory, setMedModalCategory] = useState<'TODOS' | 'CBAF' | 'CESAF' | 'CEAF'>('TODOS');
+
     // Load data
     const loadData = async (silent = false) => {
         if (!silent) setLoading(true);
@@ -117,6 +122,31 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
     const selectedMed = useMemo(() => {
         return medicamentos.find(m => m.id === selectedMedId);
     }, [medicamentos, selectedMedId]);
+
+    // Filtered list of medicines for select modal
+    const modalMedOptions = useMemo(() => {
+        // Show only medicines in stock (quantidade > 0)
+        let list = medicamentos.filter(m => m.quantidade > 0);
+        
+        // Filter by category tab
+        if (medModalCategory !== 'TODOS') {
+            list = list.filter(m => m.categoria === medModalCategory);
+        }
+        
+        // Filter by search query
+        if (medModalSearch.trim()) {
+            const query = medModalSearch.toLowerCase();
+            list = list.filter(m => 
+                m.nome.toLowerCase().includes(query) ||
+                m.lote.toLowerCase().includes(query) ||
+                (m.dosagem || '').toLowerCase().includes(query) ||
+                (m.fornecedor || '').toLowerCase().includes(query) ||
+                m.categoria.toLowerCase().includes(query)
+            );
+        }
+        
+        return list;
+    }, [medicamentos, medModalSearch, medModalCategory]);
 
     // Filter withdrawals for the active patient
     const patientWithdrawals = useMemo(() => {
@@ -299,10 +329,10 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                         <div className="space-y-4">
                             {/* CPF */}
                             <div>
-                                <label className="block text-[9px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">CPF do Paciente</label>
+                                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">CPF do Paciente</label>
                                 <input
                                     type="text"
-                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3.5 px-4 text-[11px] text-slate-900 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-mono font-bold"
+                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm text-slate-900 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-mono font-bold"
                                     placeholder="000.000.000-00"
                                     value={patientCpf}
                                     onChange={(e) => handleCpfChange(e.target.value)}
@@ -312,10 +342,10 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
 
                             {/* Patient search & name */}
                             <div className="relative">
-                                <label className="block text-[9px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">Paciente</label>
+                                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Paciente</label>
                                 <input
                                     type="text"
-                                    className={`w-full rounded-xl border border-slate-200 py-3.5 px-4 text-[11px] text-slate-900 outline-none transition-all font-semibold uppercase ${
+                                    className={`w-full rounded-xl border border-slate-200 py-3 px-4 text-sm text-slate-900 outline-none transition-all font-semibold uppercase ${
                                         !isPatientUnlocked 
                                             ? 'bg-slate-100 opacity-60 cursor-not-allowed' 
                                             : 'bg-slate-50 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10'
@@ -345,10 +375,10 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                                     handleCpfChange(p.cpf);
                                                     setShowPatientDropdown(false);
                                                 }}
-                                                className="w-full text-left px-4 py-2.5 hover:bg-pink-50 text-slate-700 text-[11px] font-semibold border-b border-slate-50 last:border-0 flex items-center justify-between"
+                                                className="w-full text-left px-4 py-2.5 hover:bg-pink-50 text-slate-700 text-xs font-semibold border-b border-slate-50 last:border-0 flex items-center justify-between"
                                             >
                                                 <span>{p.name}</span>
-                                                <span className="text-[9px] text-slate-400 font-mono">
+                                                <span className="text-[10px] text-slate-400 font-mono">
                                                     {p.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}
                                                 </span>
                                             </button>
@@ -358,67 +388,37 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                             </div>
 
                             {/* Medicamento Batch selection */}
-                            <div className="relative">
-                                <label className="block text-[9px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">Medicamento (Lote/Categoria)</label>
-                                <input
-                                    type="text"
-                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3.5 px-4 text-[11px] text-slate-900 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold uppercase"
-                                    placeholder="Digite nome, dosagem, lote ou categoria..."
-                                    value={medSearchQuery}
-                                    onChange={(e) => {
-                                        setMedSearchQuery(e.target.value.toUpperCase());
-                                        setSelectedMedId(''); // clear selection if user types
-                                        setShowMedDropdown(true);
+                            <div>
+                                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Medicamento (Lote/Categoria)</label>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setMedModalSearch('');
+                                        setMedModalCategory('TODOS');
+                                        setIsMedModalOpen(true);
                                     }}
-                                    onFocus={() => setShowMedDropdown(true)}
-                                    onBlur={() => setTimeout(() => setShowMedDropdown(false), 200)}
-                                    required
-                                />
-
-                                {/* Autocomplete suggestion box */}
-                                {showMedDropdown && medSuggestions.length > 0 && (
-                                    <div className="absolute left-0 top-full mt-1 w-full bg-white rounded-xl shadow-xl border border-slate-100 max-h-48 overflow-y-auto z-50 custom-scrollbar">
-                                        {medSuggestions.map(med => (
-                                            <button
-                                                key={med.id}
-                                                type="button"
-                                                onMouseDown={() => {
-                                                    const medLabel = `${med.nome.toUpperCase()} ${med.dosagem ? `(${med.dosagem})` : ''} - Lote: ${med.lote} (Disp: ${med.quantidade} ${med.unidade})`;
-                                                    setSelectedMedId(med.id);
-                                                    setMedSearchQuery(medLabel);
-                                                    setShowMedDropdown(false);
-                                                }}
-                                                className="w-full text-left px-4 py-2.5 hover:bg-pink-50 text-slate-700 text-[11px] font-semibold border-b border-slate-50 last:border-0 flex flex-col gap-0.5"
-                                            >
-                                                <div className="flex justify-between items-center w-full">
-                                                    <span className="font-extrabold uppercase text-slate-800">
-                                                        {med.nome} {med.dosagem ? `(${med.dosagem})` : ''}
-                                                    </span>
-                                                    <span className="text-[9px] font-mono text-slate-400 font-bold">
-                                                        Lote: {med.lote}
-                                                    </span>
-                                                </div>
-                                                <div className="flex justify-between items-center w-full text-[9px] text-slate-400 mt-0.5">
-                                                    <span className="uppercase tracking-wider">
-                                                        {med.categoria} {med.tipo ? `[${med.tipo}]` : ''}
-                                                    </span>
-                                                    <span className="font-black text-pink-600">
-                                                        Disp: {med.quantidade} {med.unidade}
-                                                    </span>
-                                                </div>
-                                            </button>
-                                        ))}
-                                    </div>
-                                )}
+                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm text-slate-900 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold uppercase cursor-pointer flex justify-between items-center select-none text-left"
+                                >
+                                    {selectedMed ? (
+                                        <span className="text-slate-900 font-extrabold truncate">
+                                            {selectedMed.nome} {selectedMed.dosagem ? `(${selectedMed.dosagem})` : ''} - Lote: {selectedMed.lote} (Disp: {selectedMed.quantidade} {selectedMed.unidade})
+                                        </span>
+                                    ) : (
+                                        <span className="text-slate-400 normal-case font-medium">
+                                            Selecione o medicamento...
+                                        </span>
+                                    )}
+                                    <Search className="w-4 h-4 text-slate-400 shrink-0 ml-2" />
+                                </button>
                             </div>
 
                             {/* Quantidade */}
                             <div>
-                                <label className="block text-[9px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">Quantidade</label>
+                                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Quantidade</label>
                                 <div className="relative">
                                     <input
                                         type="number"
-                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3.5 pl-4 pr-16 text-[11px] text-slate-900 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-bold"
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm text-slate-900 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-bold"
                                         placeholder="Qtde"
                                         value={quantity}
                                         onChange={(e) => setQuantity(e.target.value)}
@@ -427,7 +427,7 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                         required
                                     />
                                     {selectedMed && (
-                                        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[9px] font-bold text-slate-400">
+                                        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">
                                             {selectedMed.unidade}
                                         </span>
                                     )}
@@ -439,10 +439,10 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                         <div className="space-y-4 flex flex-col justify-between">
                             {/* Data */}
                             <div>
-                                <label className="block text-[9px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">Data</label>
+                                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Data</label>
                                 <input
                                     type="date"
-                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3.5 px-4 text-[11px] text-slate-900 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold cursor-pointer"
+                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm text-slate-900 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold cursor-pointer"
                                     value={withdrawalDate}
                                     onChange={(e) => setWithdrawalDate(e.target.value)}
                                     required
@@ -451,9 +451,9 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
 
                             {/* Observações */}
                             <div className="flex-1 flex flex-col">
-                                <label className="block text-[9px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">Observações / Receita</label>
+                                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Observações / Receita</label>
                                 <textarea
-                                    className="w-full flex-1 rounded-xl border border-slate-200 bg-slate-50 py-3.5 px-4 text-[11px] text-slate-900 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold min-h-[60px] md:min-h-0"
+                                    className="w-full flex-1 rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm text-slate-900 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold min-h-[60px] md:min-h-0"
                                     placeholder="Ex: Receita do Dr. João, validade 6 meses..."
                                     value={observacoes}
                                     onChange={(e) => setObservacoes(e.target.value)}
@@ -462,8 +462,8 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
 
                             {/* Responsável read-only */}
                             <div>
-                                <label className="block text-[9px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">Responsável pela Entrega</label>
-                                <div className="w-full rounded-xl border border-slate-200 bg-slate-100 py-3.5 px-4 text-[11px] text-slate-500 font-bold flex items-center gap-2 shadow-inner">
+                                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Responsável pela Entrega</label>
+                                <div className="w-full rounded-xl border border-slate-200 bg-slate-100 py-3 px-4 text-sm text-slate-500 font-bold flex items-center gap-2 shadow-inner">
                                     <UserIcon className="w-4 h-4 text-slate-400" />
                                     {currentUser.name}
                                 </div>
@@ -475,7 +475,7 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                     <button
                         type="submit"
                         disabled={saving}
-                        className="w-full py-3.5 rounded-xl bg-pink-600 hover:bg-pink-700 text-white font-black text-[11px] uppercase tracking-widest transition-all shadow-md hover:shadow-lg active:scale-98 flex items-center justify-center gap-2 shrink-0"
+                        className="w-full py-3.5 rounded-xl bg-pink-600 hover:bg-pink-700 text-white font-black text-xs uppercase tracking-widest transition-all shadow-md hover:shadow-lg active:scale-98 flex items-center justify-center gap-2 shrink-0"
                     >
                         {saving ? (
                             <>
@@ -654,10 +654,10 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                         >
                             {/* CPF (read-only) */}
                             <div>
-                                <label className="block text-[9px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">CPF do Paciente</label>
+                                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">CPF do Paciente</label>
                                 <input
                                     type="text"
-                                    className="w-full rounded-xl border border-slate-200 bg-slate-100 py-3.5 px-4 text-[11px] text-slate-500 font-mono font-bold outline-none cursor-not-allowed"
+                                    className="w-full rounded-xl border border-slate-200 bg-slate-100 py-3 px-4 text-sm text-slate-500 font-mono font-bold outline-none cursor-not-allowed"
                                     value={pendingCpf}
                                     disabled
                                 />
@@ -665,10 +665,10 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
 
                             {/* Nome Completo */}
                             <div>
-                                <label className="block text-[9px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">Nome Completo</label>
+                                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Nome Completo</label>
                                 <input
                                     type="text"
-                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3.5 px-4 text-[11px] text-slate-900 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold uppercase"
+                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm text-slate-900 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold uppercase"
                                     placeholder="Nome Completo do Paciente"
                                     value={newPatientName}
                                     onChange={(e) => setNewPatientName(e.target.value.toUpperCase())}
@@ -678,10 +678,10 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
 
                             {/* Data de Nascimento */}
                             <div>
-                                <label className="block text-[9px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">Data de Nascimento</label>
+                                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Data de Nascimento</label>
                                 <input
                                     type="date"
-                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3.5 px-4 text-[11px] text-slate-900 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold cursor-pointer"
+                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm text-slate-900 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold cursor-pointer"
                                     value={newPatientBirthDate}
                                     onChange={(e) => setNewPatientBirthDate(e.target.value)}
                                     required
@@ -696,14 +696,14 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                         setIsRegModalOpen(false);
                                         setPatientCpf('');
                                     }}
-                                    className="flex-1 py-3 rounded-xl border border-slate-200 text-slate-700 font-extrabold text-[11px] uppercase tracking-wider hover:bg-slate-50 transition-all active:scale-98"
+                                    className="flex-1 py-3 rounded-xl border border-slate-200 text-slate-700 font-extrabold text-xs uppercase tracking-wider hover:bg-slate-50 transition-all active:scale-98"
                                 >
                                     Cancelar
                                 </button>
                                 <button
                                     type="submit"
                                     disabled={registering}
-                                    className="flex-1 py-3 rounded-xl bg-pink-600 hover:bg-pink-700 text-white font-black text-[11px] uppercase tracking-wider transition-all shadow-md hover:shadow-lg active:scale-98 flex items-center justify-center gap-2"
+                                    className="flex-1 py-3 rounded-xl bg-pink-600 hover:bg-pink-700 text-white font-black text-xs uppercase tracking-wider transition-all shadow-md hover:shadow-lg active:scale-98 flex items-center justify-center gap-2"
                                 >
                                     {registering ? (
                                         <>
@@ -741,6 +741,148 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                         >
                             Ok, Voltar
                         </button>
+                    </div>
+                </div>
+            )}
+
+            {/* MEDICAMENTO SELECT MODAL */}
+            {isMedModalOpen && (
+                <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xl max-h-[80vh] overflow-hidden border border-slate-200/50 flex flex-col animate-in zoom-in-95 duration-200">
+                        {/* Header */}
+                        <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                            <div>
+                                <h3 className="font-extrabold text-slate-800 uppercase text-xs tracking-wider">
+                                    Selecionar Medicamento
+                                </h3>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">
+                                    Escolha um lote disponível no estoque
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setIsMedModalOpen(false)}
+                                className="p-1.5 hover:bg-slate-200 rounded-lg text-slate-500 transition-colors"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        {/* Search and Category filters */}
+                        <div className="p-4 bg-white border-b border-slate-100 space-y-3">
+                            <div className="relative">
+                                <input
+                                    type="text"
+                                    placeholder="Buscar por nome, lote, dosagem..."
+                                    className="w-full pl-10 pr-8 py-2.5 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:border-pink-500 bg-slate-50 focus:bg-white transition-all placeholder:text-slate-400"
+                                    value={medModalSearch}
+                                    onChange={(e) => setMedModalSearch(e.target.value)}
+                                    autoFocus
+                                />
+                                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                                {medModalSearch && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setMedModalSearch('')}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                    >
+                                        <X className="w-3.5 h-3.5" />
+                                    </button>
+                                )}
+                            </div>
+
+                            {/* Categories tabs */}
+                            <div className="flex gap-1.5">
+                                {(['TODOS', 'CBAF', 'CESAF', 'CEAF'] as const).map(cat => (
+                                    <button
+                                        key={cat}
+                                        type="button"
+                                        onClick={() => setMedModalCategory(cat)}
+                                        className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${
+                                            medModalCategory === cat
+                                                ? 'bg-pink-600 text-white shadow-sm'
+                                                : 'bg-slate-50 text-slate-400 hover:bg-slate-100'
+                                        }`}
+                                    >
+                                        {cat}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* List */}
+                        <div className="flex-1 overflow-y-auto p-4 space-y-2.5 custom-scrollbar min-h-0">
+                            {modalMedOptions.length > 0 ? (
+                                modalMedOptions.map(med => {
+                                    const isLowStock = med.quantidade <= med.limite_minimo;
+                                    const qtyBadgeColor = med.quantidade === 0 
+                                        ? 'bg-rose-50 text-rose-700 border-rose-100' 
+                                        : isLowStock 
+                                            ? 'bg-amber-50 text-amber-700 border-amber-100' 
+                                            : 'bg-emerald-50 text-emerald-700 border-emerald-100';
+
+                                    const isExpired = new Date(med.validade).getTime() <= Date.now();
+
+                                    return (
+                                        <div
+                                            key={med.id}
+                                            onClick={() => {
+                                                setSelectedMedId(med.id);
+                                                setMedSearchQuery(`${med.nome.toUpperCase()} ${med.dosagem ? `(${med.dosagem})` : ''} - Lote: ${med.lote} (Disp: ${med.quantidade} ${med.unidade})`);
+                                                setIsMedModalOpen(false);
+                                            }}
+                                            className="w-full text-left p-3.5 rounded-2xl border border-slate-150/70 hover:border-pink-300 hover:bg-pink-50/20 cursor-pointer transition-all flex flex-col gap-2 group animate-in fade-in slide-in-from-bottom-2 duration-150"
+                                        >
+                                            <div className="flex justify-between items-start w-full">
+                                                <div>
+                                                    <h4 className="font-black text-sm uppercase text-slate-800 group-hover:text-pink-700 transition-colors">
+                                                        {med.nome} {med.dosagem ? `(${med.dosagem})` : ''}
+                                                    </h4>
+                                                    <div className="flex flex-wrap gap-1 mt-1">
+                                                        <span className="px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded bg-pink-50 text-pink-600">
+                                                            {med.categoria}
+                                                        </span>
+                                                        {med.tipo && (
+                                                            <span className="px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded bg-slate-100 text-slate-500">
+                                                                {med.tipo}
+                                                            </span>
+                                                        )}
+                                                        <span className="px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded bg-slate-50 border border-slate-200 text-slate-500 font-mono">
+                                                            Lote: {med.lote}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <span className={`inline-flex px-2 py-1 rounded-lg text-[10px] font-black border uppercase tracking-wider shrink-0 ${qtyBadgeColor}`}>
+                                                    {med.quantidade} {med.unidade}
+                                                </span>
+                                            </div>
+
+                                            <div className="flex items-center justify-between text-[10px] text-slate-500 border-t border-slate-100 pt-2 mt-1">
+                                                <span className="font-semibold">
+                                                    Validade: <span className={isExpired ? 'text-rose-500 font-bold' : 'font-bold'}>
+                                                        {formatDateBr(med.validade)}
+                                                        {isExpired && ' (Vencido)'}
+                                                    </span>
+                                                </span>
+                                                {med.fornecedor && (
+                                                    <span className="font-medium italic truncate max-w-[200px]">
+                                                        Forn: {med.fornecedor}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })
+                            ) : (
+                                <div className="py-12 flex flex-col items-center justify-center text-slate-400">
+                                    <Search className="w-12 h-12 mb-2 opacity-20 text-slate-500" />
+                                    <h4 className="text-xs font-extrabold text-slate-700">Nenhum lote em estoque</h4>
+                                    <p className="text-[10px] text-slate-500 text-center mt-0.5 font-medium">
+                                        Não encontramos medicamentos que correspondam aos filtros selecionados.
+                                    </p>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}
