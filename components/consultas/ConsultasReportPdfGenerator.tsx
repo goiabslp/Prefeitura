@@ -200,7 +200,25 @@ export const ConsultasReportPdfGenerator: React.FC<ConsultasReportPdfGeneratorPr
     }
 
     const ITEMS_PER_PAGE = 18;
-    const totalPages = Math.max(1, Math.ceil(displayItems.length / ITEMS_PER_PAGE));
+    const detailPagesCount = Math.ceil(displayItems.length / ITEMS_PER_PAGE);
+    const totalPages = 1 + detailPagesCount;
+
+    // Calculate summary statistics per procedure
+    const summaryData = procedures.map(proc => {
+        const procBookings = bookings.filter(b => b.procedimento_id === proc.id || b.procedimento?.id === proc.id);
+        const queueCount = procBookings.filter(b => b.status === 'Fila de espera').length;
+        const urgencyCount = procBookings.filter(b => b.priority === 'Urgência').length;
+        return {
+            procedureName: proc.name,
+            type: proc.type || 'Consulta',
+            queueCount,
+            urgencyCount
+        };
+    }).sort((a, b) => {
+        const typeCompare = a.type.localeCompare(b.type);
+        if (typeCompare !== 0) return typeCompare;
+        return a.procedureName.localeCompare(b.procedureName);
+    });
 
     const reportState = {
         ...state,
@@ -224,140 +242,239 @@ export const ConsultasReportPdfGenerator: React.FC<ConsultasReportPdfGeneratorPr
 
     const renderPages = () => {
         const pages = [];
-        for (let i = 0; i < displayItems.length; i += ITEMS_PER_PAGE) {
-            const pageItems = displayItems.slice(i, i + ITEMS_PER_PAGE);
-            const pageIndex = Math.floor(i / ITEMS_PER_PAGE);
 
-            pages.push(
-                <PageWrapper
-                    key={`page-${pageIndex}`}
-                    state={reportState}
-                    pageIndex={pageIndex}
-                    totalPages={totalPages}
-                    isGenerating={isGenerating}
-                >
-                    <div className="flex flex-col gap-5 h-full pb-6">
-                        {/* Custom PDF Header */}
-                        <div className="flex flex-col border-b-2 border-slate-900 pb-3 mt-4">
-                            <h1 className="text-[12pt] font-black uppercase tracking-tight text-slate-900 mb-1">
-                                {reportType === 'completo' ? 'RELATÓRIO COMPLETO DE PROCEDIMENTOS' : 'RELATÓRIO DE PACIENTES NA FILA DE ESPERA'}
-                            </h1>
-                            <div className="flex items-center justify-between text-[8pt] font-bold text-slate-700">
-                                <div className="flex items-center gap-6">
-                                    <div>
-                                        <span className="text-slate-400 font-semibold mr-1 uppercase text-[7pt]">Emissor:</span>
-                                        <span className="text-slate-800">{currentUser.name}</span>
-                                    </div>
-                                    <div>
-                                        <span className="text-slate-400 font-semibold mr-1 uppercase text-[7pt]">Total de Registros:</span>
-                                        <span className="text-slate-800">{displayItems.filter(item => item.type === 'booking').length}</span>
-                                    </div>
+        // 1. Page 1 (Index 0): Summary Page
+        pages.push(
+            <PageWrapper
+                key="page-summary"
+                state={reportState}
+                pageIndex={0}
+                totalPages={totalPages}
+                isGenerating={isGenerating}
+            >
+                <div className="flex flex-col gap-5 h-full pb-6">
+                    {/* Custom PDF Header */}
+                    <div className="flex flex-col border-b-2 border-slate-900 pb-3 mt-4">
+                        <h1 className="text-[12pt] font-black uppercase tracking-tight text-slate-900 mb-1">
+                            {reportType === 'completo' ? 'RESUMO COMPLETO DE PROCEDIMENTOS' : 'RESUMO DA FILA DE ESPERA POR PROCEDIMENTO'}
+                        </h1>
+                        <div className="flex items-center justify-between text-[8pt] font-bold text-slate-700">
+                            <div className="flex items-center gap-6">
+                                <div>
+                                    <span className="text-slate-400 font-semibold mr-1 uppercase text-[7pt]">Emissor:</span>
+                                    <span className="text-slate-800">{currentUser.name}</span>
                                 </div>
-                                <div className="text-[7.5pt] font-mono bg-slate-100 border border-slate-200 px-2 py-0.5 rounded text-slate-600">
-                                    Emissão: {new Date().toLocaleString('pt-BR')}
+                                <div>
+                                    <span className="text-slate-400 font-semibold mr-1 uppercase text-[7pt]">Total de Procedimentos:</span>
+                                    <span className="text-slate-800">{procedures.length}</span>
                                 </div>
                             </div>
-                        </div>
-
-                        {/* Items Table */}
-                        <div className="border border-slate-200 rounded-xl overflow-hidden flex flex-col mt-1">
-                            <table className="w-full text-left border-collapse">
-                                <thead className="bg-slate-900 text-white">
-                                    <tr className="text-[7.5pt] font-black uppercase tracking-wider">
-                                        {reportType === 'completo' ? (
-                                            <>
-                                                <th className="px-4 py-2 w-[40%] border-r border-slate-700">Paciente</th>
-                                                <th className="px-4 py-2 w-[35%] border-r border-slate-700">Procedimento/Exame</th>
-                                                <th className="px-4 py-2 text-center w-[25%]">Data Agendada</th>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <th className="px-4 py-2 text-center w-[12%] border-r border-slate-700">Posição</th>
-                                                <th className="px-4 py-2 w-[45%] border-r border-slate-700">Paciente</th>
-                                                <th className="px-4 py-2 text-center w-[20%] border-r border-slate-700">Prioridade</th>
-                                                <th className="px-4 py-2 text-center w-[23%]">Registrado em</th>
-                                            </>
-                                        )}
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100 uppercase text-[7.5pt] font-semibold text-slate-700">
-                                    {pageItems.map((item, idx) => {
-                                        if (item.type === 'proc_header') {
-                                            return (
-                                                <tr key={`proc-${idx}`} className="bg-sky-50/70">
-                                                    <td colSpan={reportType === 'completo' ? 3 : 4} className="px-4 py-1.5 text-[8pt] font-black text-sky-800 tracking-wider">
-                                                        {item.label}
-                                                    </td>
-                                                </tr>
-                                            );
-                                        }
-                                        if (item.type === 'priority_header') {
-                                            return (
-                                                <tr key={`prio-${idx}`} className="bg-slate-100/80">
-                                                    <td colSpan={reportType === 'completo' ? 3 : 4} className="px-4 py-1 text-[7.5pt] font-extrabold text-slate-600 pl-6">
-                                                        {item.label}
-                                                    </td>
-                                                </tr>
-                                            );
-                                        }
-                                        if (item.type === 'status_header') {
-                                            return (
-                                                <tr key={`stat-${idx}`} className="bg-slate-50/50">
-                                                    <td colSpan={reportType === 'completo' ? 3 : 4} className="px-4 py-0.5 text-[7pt] font-extrabold text-slate-400 pl-8">
-                                                        {item.label}
-                                                    </td>
-                                                </tr>
-                                            );
-                                        }
-
-                                        const b = item.data;
-                                        const cpfFormatted = b.paciente?.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4") || '';
-                                        
-                                        if (reportType === 'completo') {
-                                            return (
-                                                <tr key={`b-${b.id}`} className="hover:bg-slate-50/30">
-                                                    <td className="px-4 py-1.5 font-bold border-r border-slate-100">
-                                                        <div className="font-extrabold text-slate-900">{b.paciente?.name}</div>
-                                                        <div className="text-[6.5pt] text-slate-400 font-medium">CPF: {cpfFormatted}</div>
-                                                    </td>
-                                                    <td className="px-4 py-1.5 border-r border-slate-100">
-                                                        <div className="font-bold text-slate-800">{b.procedimento?.name}</div>
-                                                    </td>
-                                                    <td className="px-4 py-1.5 text-center font-mono text-slate-600">
-                                                        {formatDateBr(b.appointment_date)}
-                                                    </td>
-                                                </tr>
-                                            );
-                                        } else {
-                                            return (
-                                                <tr key={`b-${b.id}`} className="hover:bg-slate-50/30">
-                                                    <td className="px-4 py-1.5 text-center font-black border-r border-slate-100 text-amber-600">
-                                                        {queuePositions[b.id]}º
-                                                    </td>
-                                                    <td className="px-4 py-1.5 font-bold border-r border-slate-100">
-                                                        <div className="font-extrabold text-slate-900">{b.paciente?.name}</div>
-                                                        <div className="text-[6.5pt] text-slate-400 font-medium">CPF: {cpfFormatted}</div>
-                                                    </td>
-                                                    <td className="px-4 py-1.5 text-center border-r border-slate-100">
-                                                        <span className={`inline-block px-1.5 py-0.5 rounded text-[6.5pt] font-black text-white ${
-                                                            b.priority === 'Urgência' ? 'bg-rose-500' : b.is_retorno ? 'bg-teal-500' : 'bg-slate-400'
-                                                        }`}>
-                                                            {b.priority === 'Urgência' ? 'URG' : b.is_retorno ? 'RET' : 'NOR'}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-4 py-1.5 text-center font-mono text-slate-500">
-                                                        {b.created_at ? new Date(b.created_at).toLocaleDateString('pt-BR') : '-'}
-                                                    </td>
-                                                </tr>
-                                            );
-                                        }
-                                    })}
-                                </tbody>
-                            </table>
+                            <div className="text-[7.5pt] font-mono bg-slate-100 border border-slate-200 px-2 py-0.5 rounded text-slate-600">
+                                Emissão: {new Date().toLocaleString('pt-BR')}
+                            </div>
                         </div>
                     </div>
-                </PageWrapper>
-            );
+
+                    {/* Summary Tables Grouped by Type */}
+                    <div className="flex flex-col gap-4 flex-1 mt-1">
+                        {summaryData.length === 0 ? (
+                            <div className="text-center py-8 text-slate-400 font-bold text-[8.5pt] uppercase">
+                                Nenhum procedimento cadastrado no sistema.
+                            </div>
+                        ) : (
+                            ['Consulta', 'Exame', 'Cirurgia'].map(type => {
+                                const typeItems = summaryData.filter(item => item.type === type);
+                                if (typeItems.length === 0) return null;
+
+                                return (
+                                    <div key={type} className="border border-slate-200 rounded-xl overflow-hidden flex flex-col bg-white">
+                                        <div className="bg-slate-900 px-4 py-2 border-b border-slate-800 flex justify-between items-center text-white">
+                                            <h3 className="text-[8pt] font-black uppercase tracking-wider flex items-center gap-2">
+                                                <span className="w-1.5 h-3 bg-sky-500 rounded-full" />
+                                                {type === 'Consulta' ? 'CONSULTAS' : type === 'Exame' ? 'EXAMES' : 'CIRURGIAS'}
+                                            </h3>
+                                            <span className="px-2 py-0.5 rounded-full bg-slate-800 text-[7pt] font-extrabold text-sky-450 uppercase">
+                                                {typeItems.length} Procedimento(s)
+                                            </span>
+                                        </div>
+                                        <table className="w-full text-left border-collapse">
+                                            <thead className="bg-slate-100 border-b border-slate-200">
+                                                <tr className="text-[6.5pt] font-black uppercase tracking-wider text-slate-500">
+                                                    <th className="px-4 py-1.5 w-[50%] border-r border-slate-200">Nome do Procedimento</th>
+                                                    <th className="px-4 py-1.5 text-center w-[25%] border-r border-slate-200">Em Fila de Espera</th>
+                                                    <th className="px-4 py-1.5 text-center w-[25%]">Casos de Urgência</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100 uppercase text-[7pt] font-semibold text-slate-700">
+                                                {typeItems.map(item => (
+                                                    <tr key={item.procedureName} className="hover:bg-slate-50/30">
+                                                        <td className="px-4 py-1.5 font-bold border-r border-slate-100 text-slate-900">
+                                                            {item.procedureName}
+                                                        </td>
+                                                        <td className="px-4 py-1.5 text-center border-r border-slate-100 font-mono">
+                                                            {item.queueCount > 0 ? (
+                                                                <span className="text-amber-600 font-black">{item.queueCount}</span>
+                                                            ) : (
+                                                                <span className="text-slate-350 font-normal">-</span>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-4 py-1.5 text-center font-mono">
+                                                            {item.urgencyCount > 0 ? (
+                                                                <span className="text-rose-600 font-black">{item.urgencyCount}</span>
+                                                            ) : (
+                                                                <span className="text-slate-350 font-normal">-</span>
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                );
+                            })
+                        )}
+                    </div>
+                </div>
+            </PageWrapper>
+        );
+
+        // 2. Page 2 onwards: Detail Pages
+        if (displayItems.length > 0) {
+            for (let i = 0; i < displayItems.length; i += ITEMS_PER_PAGE) {
+                const pageItems = displayItems.slice(i, i + ITEMS_PER_PAGE);
+                const pageIndex = Math.floor(i / ITEMS_PER_PAGE) + 1;
+
+                pages.push(
+                    <PageWrapper
+                        key={`page-${pageIndex}`}
+                        state={reportState}
+                        pageIndex={pageIndex}
+                        totalPages={totalPages}
+                        isGenerating={isGenerating}
+                    >
+                        <div className="flex flex-col gap-5 h-full pb-6">
+                            {/* Custom PDF Header */}
+                            <div className="flex flex-col border-b-2 border-slate-900 pb-3 mt-4">
+                                <h1 className="text-[12pt] font-black uppercase tracking-tight text-slate-900 mb-1">
+                                    {reportType === 'completo' ? 'RELATÓRIO COMPLETO DE PROCEDIMENTOS' : 'RELATÓRIO DE PACIENTES NA FILA DE ESPERA'}
+                                </h1>
+                                <div className="flex items-center justify-between text-[8pt] font-bold text-slate-700">
+                                    <div className="flex items-center gap-6">
+                                        <div>
+                                            <span className="text-slate-400 font-semibold mr-1 uppercase text-[7pt]">Emissor:</span>
+                                            <span className="text-slate-800">{currentUser.name}</span>
+                                        </div>
+                                        <div>
+                                            <span className="text-slate-400 font-semibold mr-1 uppercase text-[7pt]">Total de Registros:</span>
+                                            <span className="text-slate-800">{displayItems.filter(item => item.type === 'booking').length}</span>
+                                        </div>
+                                    </div>
+                                    <div className="text-[7.5pt] font-mono bg-slate-100 border border-slate-200 px-2 py-0.5 rounded text-slate-600">
+                                        Emissão: {new Date().toLocaleString('pt-BR')}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Items Table */}
+                            <div className="border border-slate-200 rounded-xl overflow-hidden flex flex-col mt-1">
+                                <table className="w-full text-left border-collapse">
+                                    <thead className="bg-slate-900 text-white">
+                                        <tr className="text-[7.5pt] font-black uppercase tracking-wider">
+                                            {reportType === 'completo' ? (
+                                                <>
+                                                    <th className="px-4 py-2 w-[40%] border-r border-slate-700">Paciente</th>
+                                                    <th className="px-4 py-2 w-[35%] border-r border-slate-700">Procedimento/Exame</th>
+                                                    <th className="px-4 py-2 text-center w-[25%]">Data Agendada</th>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <th className="px-4 py-2 text-center w-[12%] border-r border-slate-700">Posição</th>
+                                                    <th className="px-4 py-2 w-[45%] border-r border-slate-700">Paciente</th>
+                                                    <th className="px-4 py-2 text-center w-[20%] border-r border-slate-700">Prioridade</th>
+                                                    <th className="px-4 py-2 text-center w-[23%]">Registrado em</th>
+                                                </>
+                                            )}
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 uppercase text-[7.5pt] font-semibold text-slate-700">
+                                        {pageItems.map((item, idx) => {
+                                            if (item.type === 'proc_header') {
+                                                return (
+                                                    <tr key={`proc-${idx}`} className="bg-sky-50/70">
+                                                        <td colSpan={reportType === 'completo' ? 3 : 4} className="px-4 py-1.5 text-[8pt] font-black text-sky-800 tracking-wider">
+                                                            {item.label}
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            }
+                                            if (item.type === 'priority_header') {
+                                                return (
+                                                    <tr key={`prio-${idx}`} className="bg-slate-100/80">
+                                                        <td colSpan={reportType === 'completo' ? 3 : 4} className="px-4 py-1 text-[7.5pt] font-extrabold text-slate-600 pl-6">
+                                                            {item.label}
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            }
+                                            if (item.type === 'status_header') {
+                                                return (
+                                                    <tr key={`stat-${idx}`} className="bg-slate-50/50">
+                                                        <td colSpan={reportType === 'completo' ? 3 : 4} className="px-4 py-0.5 text-[7pt] font-extrabold text-slate-400 pl-8">
+                                                            {item.label}
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            }
+
+                                            const b = item.data;
+                                            const cpfFormatted = b.paciente?.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4") || '';
+                                            
+                                            if (reportType === 'completo') {
+                                                return (
+                                                    <tr key={`b-${b.id}`} className="hover:bg-slate-50/30">
+                                                        <td className="px-4 py-1.5 font-bold border-r border-slate-100">
+                                                            <div className="font-extrabold text-slate-900">{b.paciente?.name}</div>
+                                                            <div className="text-[6.5pt] text-slate-400 font-medium">CPF: {cpfFormatted}</div>
+                                                        </td>
+                                                        <td className="px-4 py-1.5 border-r border-slate-100">
+                                                            <div className="font-bold text-slate-800">{b.procedimento?.name}</div>
+                                                        </td>
+                                                        <td className="px-4 py-1.5 text-center font-mono text-slate-600">
+                                                            {formatDateBr(b.appointment_date)}
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            } else {
+                                                return (
+                                                    <tr key={`b-${b.id}`} className="hover:bg-slate-50/30">
+                                                        <td className="px-4 py-1.5 text-center font-black border-r border-slate-100 text-amber-600">
+                                                            {queuePositions[b.id]}º
+                                                        </td>
+                                                        <td className="px-4 py-1.5 font-bold border-r border-slate-100">
+                                                            <div className="font-extrabold text-slate-900">{b.paciente?.name}</div>
+                                                            <div className="text-[6.5pt] text-slate-400 font-medium">CPF: {cpfFormatted}</div>
+                                                        </td>
+                                                        <td className="px-4 py-1.5 text-center border-r border-slate-100">
+                                                            <span className={`inline-block px-1.5 py-0.5 rounded text-[6.5pt] font-black text-white ${
+                                                                b.priority === 'Urgência' ? 'bg-rose-500' : b.is_retorno ? 'bg-teal-500' : 'bg-slate-400'
+                                                            }`}>
+                                                                {b.priority === 'Urgência' ? 'URG' : b.is_retorno ? 'RET' : 'NOR'}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-4 py-1.5 text-center font-mono text-slate-500">
+                                                            {b.created_at ? new Date(b.created_at).toLocaleDateString('pt-BR') : '-'}
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            }
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </PageWrapper>
+                );
+            }
         }
         return pages;
     };

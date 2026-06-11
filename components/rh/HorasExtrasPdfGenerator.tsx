@@ -98,7 +98,7 @@ export const HorasExtrasPdfGenerator: React.FC<HorasExtrasPdfGeneratorProps> = (
     }
 
     const ITEMS_PER_PAGE = 18;
-    const totalPages = Math.ceil(displayItems.length / ITEMS_PER_PAGE);
+    const totalPages = Math.max(1, Math.ceil(displayItems.length / ITEMS_PER_PAGE));
 
     const reportState = {
         ...state,
@@ -113,13 +113,9 @@ export const HorasExtrasPdfGenerator: React.FC<HorasExtrasPdfGeneratorProps> = (
 
     const renderPages = () => {
         const pages = [];
-        for (let i = 0; i < displayItems.length; i += ITEMS_PER_PAGE) {
-            const pageItems = displayItems.slice(i, i + ITEMS_PER_PAGE);
-            const pageIndex = Math.floor(i / ITEMS_PER_PAGE) + 1;
-            const isLastPage = pageIndex === totalPages;
-
+        if (displayItems.length === 0) {
             pages.push(
-                <PageWrapper key={`page-${pageIndex}`} state={reportState} pageIndex={pageIndex} totalPages={totalPages} isGenerating={isGenerating}>
+                <PageWrapper key="page-empty" state={reportState} pageIndex={1} totalPages={1} isGenerating={isGenerating}>
                     <div className="flex flex-col gap-6 h-full pb-8">
                         {/* Compact Header */}
                         <div className="flex flex-col border-b-2 border-slate-900 pb-3 mb-2 mt-4">
@@ -139,7 +135,7 @@ export const HorasExtrasPdfGenerator: React.FC<HorasExtrasPdfGeneratorProps> = (
 
                         {/* Table */}
                         <div>
-                            <div className="border border-slate-200 rounded-lg overflow-hidden flex flex-col mt-0">
+                            <div className="border border-slate-200 rounded-lg overflow-hidden flex flex-col mt-0 bg-white">
                                 <table className="w-full text-left border-collapse">
                                     <thead className="bg-slate-900 text-white">
                                         <tr className="text-[8pt] font-black uppercase tracking-widest">
@@ -149,71 +145,150 @@ export const HorasExtrasPdfGenerator: React.FC<HorasExtrasPdfGeneratorProps> = (
                                             <th className="px-5 py-2 text-center w-[15%]">Adic. Noturno</th>
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-slate-100 uppercase">
-                                        {pageItems.map((item, idx) => {
-                                            if (item.type === 'header') {
-                                                return (
-                                                    <tr key={`header-${idx}`} className="bg-slate-200">
-                                                        <td colSpan={3} className="px-5 py-2 text-[8pt] font-black text-slate-900 border-y border-slate-300 uppercase tracking-tighter">
-                                                            {item.title}
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            }
-                                            const entry = item.data;
-                                            return (
-                                                <tr key={idx} className="text-[8pt] font-bold text-slate-700 hover:bg-slate-50/50">
-                                                    <td className="px-5 py-1.5 font-black text-slate-900 border-r border-slate-100">{entry.name}</td>
-                                                    <td className="px-5 py-1.5 font-medium border-r border-slate-100 text-slate-500">{entry.jobTitle}</td>
-                                                    <td className="px-5 py-1.5 text-center font-mono text-fuchsia-700 border-r border-slate-100">{entry.hours ? `${entry.hours}h` : '-'}</td>
-                                                    <td className="px-5 py-1.5 text-center font-mono text-indigo-700 bg-slate-50/50">{entry.adicionalNoturno ? `${entry.adicionalNoturno}h` : '-'}</td>
-                                                </tr>
-                                            );
-                                        })}
+                                    <tbody>
+                                        <tr>
+                                            <td colSpan={4} className="px-5 py-8 text-center text-slate-400 font-bold text-[8.5pt] normal-case">
+                                                Nenhum registro de horas extras encontrado para este setor/mês.
+                                            </td>
+                                        </tr>
                                     </tbody>
                                 </table>
                             </div>
                         </div>
 
-                        {/* Signature Block - Only on the last page */}
-                        {isLastPage && (
-                            <div className="mt-8 mb-6 pt-16 flex flex-col items-center text-center relative pointer-events-none">
-                                <div className="absolute -top-6 z-0 opacity-90 mix-blend-multiply filter blur-[0.3px]">
-                                    <div className="w-52 h-16 border-[2px] border-emerald-600/60 rounded-lg flex items-center justify-center p-1.5 rotate-[-2deg] relative ">
-                                        {/* Inner Border */}
-                                        <div className="absolute inset-0.5 border border-emerald-600/30 rounded-md"></div>
-
-                                        {/* Content */}
-                                        <div className="flex flex-col items-center justify-center pointer-events-none">
-                                            <div className="flex items-center gap-1.5 mb-0.5">
-                                                <div className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></div>
-                                                <span className="text-[10px] font-[900] text-emerald-700 uppercase tracking-tighter font-serif">ASSINADO DIGITALMENTE</span>
-                                            </div>
-                                            <div className="text-[6px] font-bold text-emerald-800 uppercase tracking-widest flex flex-col items-center leading-tight">
-                                                <span>Autenticado via Token 2FA</span>
-                                                <span className="mt-0.5 font-mono text-[7px] text-emerald-900 bg-emerald-100/50 px-1 rounded">{record.created_at ? new Date(record.created_at).toLocaleString('pt-BR') : new Date().toLocaleString('pt-BR')}</span>
-                                                <span className="text-[5px] text-emerald-600 mt-0.5">ID: {(record.id || 'N/A').substring(0, 18)}...</span>
-                                            </div>
+                        {/* Signature Block */}
+                        <div className="mt-8 mb-6 pt-16 flex flex-col items-center text-center relative pointer-events-none">
+                            <div className="absolute -top-6 z-0 opacity-90 mix-blend-multiply filter blur-[0.3px]">
+                                <div className="w-52 h-16 border-[2px] border-emerald-600/60 rounded-lg flex items-center justify-center p-1.5 rotate-[-2deg] relative ">
+                                    <div className="absolute inset-0.5 border border-emerald-600/30 rounded-md"></div>
+                                    <div className="flex flex-col items-center justify-center pointer-events-none">
+                                        <div className="flex items-center gap-1.5 mb-0.5">
+                                            <div className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></div>
+                                            <span className="text-[10px] font-[900] text-emerald-700 uppercase tracking-tighter font-serif">ASSINADO DIGITALMENTE</span>
                                         </div>
-
-                                        {/* Checkmark Background Watermark */}
-                                        <svg className="absolute w-8 h-8 text-emerald-200/40 -z-10" viewBox="0 0 24 24" fill="currentColor">
-                                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
-                                        </svg>
+                                        <div className="text-[6px] font-bold text-emerald-800 uppercase tracking-widest flex flex-col items-center leading-tight">
+                                            <span>Autenticado via Token 2FA</span>
+                                            <span className="mt-0.5 font-mono text-[7px] text-emerald-900 bg-emerald-100/50 px-1 rounded">{record.created_at ? new Date(record.created_at).toLocaleString('pt-BR') : new Date().toLocaleString('pt-BR')}</span>
+                                            <span className="text-[5px] text-emerald-600 mt-0.5">ID: {(record.id || 'N/A').substring(0, 18)}...</span>
+                                        </div>
                                     </div>
-                                </div>
-
-                                {/* Signature Line Area */}
-                                <div className="w-80 border-t border-slate-900 pt-3 flex flex-col gap-0.5 relative z-10 px-2 mt-2">
-                                    <p className="font-bold uppercase text-[9pt] tracking-wide text-slate-900 whitespace-normal leading-tight">{record.signature_name}</p>
-                                    <p className="text-[8pt] text-slate-600 font-medium whitespace-normal leading-tight">{record.signature_role}</p>
-                                    <p className="text-[6pt] text-slate-400 uppercase tracking-[0.1em] whitespace-normal leading-tight">{record.signature_sector}</p>
+                                    <svg className="absolute w-8 h-8 text-emerald-200/40 -z-10" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+                                    </svg>
                                 </div>
                             </div>
-                        )}
+                            <div className="w-80 border-t border-slate-900 pt-3 flex flex-col gap-0.5 relative z-10 px-2 mt-2">
+                                <p className="font-bold uppercase text-[9pt] tracking-wide text-slate-900 whitespace-normal leading-tight">{record.signature_name}</p>
+                                <p className="text-[8pt] text-slate-600 font-medium whitespace-normal leading-tight">{record.signature_role}</p>
+                                <p className="text-[6pt] text-slate-400 uppercase tracking-[0.1em] whitespace-normal leading-tight">{record.signature_sector}</p>
+                            </div>
+                        </div>
                     </div>
                 </PageWrapper>
             );
+        } else {
+            for (let i = 0; i < displayItems.length; i += ITEMS_PER_PAGE) {
+                const pageItems = displayItems.slice(i, i + ITEMS_PER_PAGE);
+                const pageIndex = Math.floor(i / ITEMS_PER_PAGE) + 1;
+                const isLastPage = pageIndex === totalPages;
+
+                pages.push(
+                    <PageWrapper key={`page-${pageIndex}`} state={reportState} pageIndex={pageIndex} totalPages={totalPages} isGenerating={isGenerating}>
+                        <div className="flex flex-col gap-6 h-full pb-8">
+                            {/* Compact Header */}
+                            <div className="flex flex-col border-b-2 border-slate-900 pb-3 mb-2 mt-4">
+                                <h1 className="text-[13pt] font-black uppercase tracking-tight text-slate-900 mb-2">
+                                    RELATÓRIO DE HORAS EXTRAS
+                                </h1>
+                                <div className="flex items-center justify-between text-[9pt] font-bold text-slate-700">
+                                    <div className="flex items-center gap-6">
+                                        <div><span className="text-slate-500 font-medium mr-1 uppercase tracking-wider text-[7pt]">Mês de Referência:</span><span className="text-[10pt]">{record.month}</span></div>
+                                        <div><span className="text-slate-500 font-medium mr-1 uppercase tracking-wider text-[7pt]">Secretaria / Setor:</span><span className="text-[10pt]">{record.sector}</span></div>
+                                    </div>
+                                    <div className="text-[8pt] font-mono bg-slate-100 border border-slate-200 px-2.5 py-1 rounded text-slate-600">
+                                        Emissão: {new Date().toLocaleDateString('pt-BR')}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Table */}
+                            <div>
+                                <div className="border border-slate-200 rounded-lg overflow-hidden flex flex-col mt-0">
+                                    <table className="w-full text-left border-collapse">
+                                        <thead className="bg-slate-900 text-white">
+                                            <tr className="text-[8pt] font-black uppercase tracking-widest">
+                                                <th className="px-5 py-2 w-[40%] border-r border-slate-700">Colaborador</th>
+                                                <th className="px-5 py-2 w-[30%] border-r border-slate-700">Cargo / Função</th>
+                                                <th className="px-5 py-2 text-center w-[15%] border-r border-slate-700">Qtd. Horas</th>
+                                                <th className="px-5 py-2 text-center w-[15%]">Adic. Noturno</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100 uppercase">
+                                            {pageItems.map((item, idx) => {
+                                                if (item.type === 'header') {
+                                                    return (
+                                                        <tr key={`header-${idx}`} className="bg-slate-200">
+                                                            <td colSpan={3} className="px-5 py-2 text-[8pt] font-black text-slate-900 border-y border-slate-300 uppercase tracking-tighter">
+                                                                {item.title}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                }
+                                                const entry = item.data;
+                                                return (
+                                                    <tr key={idx} className="text-[8pt] font-bold text-slate-700 hover:bg-slate-50/50">
+                                                        <td className="px-5 py-1.5 font-black text-slate-900 border-r border-slate-100">{entry.name}</td>
+                                                        <td className="px-5 py-1.5 font-medium border-r border-slate-100 text-slate-500">{entry.jobTitle}</td>
+                                                        <td className="px-5 py-1.5 text-center font-mono text-fuchsia-700 border-r border-slate-100">{entry.hours ? `${entry.hours}h` : '-'}</td>
+                                                        <td className="px-5 py-1.5 text-center font-mono text-indigo-700 bg-slate-50/50">{entry.adicionalNoturno ? `${entry.adicionalNoturno}h` : '-'}</td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            {/* Signature Block - Only on the last page */}
+                            {isLastPage && (
+                                <div className="mt-8 mb-6 pt-16 flex flex-col items-center text-center relative pointer-events-none">
+                                    <div className="absolute -top-6 z-0 opacity-90 mix-blend-multiply filter blur-[0.3px]">
+                                        <div className="w-52 h-16 border-[2px] border-emerald-600/60 rounded-lg flex items-center justify-center p-1.5 rotate-[-2deg] relative ">
+                                            {/* Inner Border */}
+                                            <div className="absolute inset-0.5 border border-emerald-600/30 rounded-md"></div>
+
+                                            {/* Content */}
+                                            <div className="flex flex-col items-center justify-center pointer-events-none">
+                                                <div className="flex items-center gap-1.5 mb-0.5">
+                                                    <div className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></div>
+                                                    <span className="text-[10px] font-[900] text-emerald-700 uppercase tracking-tighter font-serif">ASSINADO DIGITALMENTE</span>
+                                                </div>
+                                                <div className="text-[6px] font-bold text-emerald-800 uppercase tracking-widest flex flex-col items-center leading-tight">
+                                                    <span>Autenticado via Token 2FA</span>
+                                                    <span className="mt-0.5 font-mono text-[7px] text-emerald-900 bg-emerald-100/50 px-1 rounded">{record.created_at ? new Date(record.created_at).toLocaleString('pt-BR') : new Date().toLocaleString('pt-BR')}</span>
+                                                    <span className="text-[5px] text-emerald-600 mt-0.5">ID: {(record.id || 'N/A').substring(0, 18)}...</span>
+                                                </div>
+                                            </div>
+
+                                            {/* Checkmark Background Watermark */}
+                                            <svg className="absolute w-8 h-8 text-emerald-200/40 -z-10" viewBox="0 0 24 24" fill="currentColor">
+                                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+                                            </svg>
+                                        </div>
+                                    </div>
+
+                                    {/* Signature Line Area */}
+                                    <div className="w-80 border-t border-slate-900 pt-3 flex flex-col gap-0.5 relative z-10 px-2 mt-2">
+                                        <p className="font-bold uppercase text-[9pt] tracking-wide text-slate-900 whitespace-normal leading-tight">{record.signature_name}</p>
+                                        <p className="text-[8pt] text-slate-600 font-medium whitespace-normal leading-tight">{record.signature_role}</p>
+                                        <p className="text-[6pt] text-slate-400 uppercase tracking-[0.1em] whitespace-normal leading-tight">{record.signature_sector}</p>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </PageWrapper>
+                );
+            }
         }
         return pages;
     };
