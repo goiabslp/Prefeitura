@@ -27,6 +27,11 @@ import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import { ConsultaPdfGenerator } from './ConsultaPdfGenerator';
 
+const formatPatientName = (patient?: ConsultaPaciente | null) => {
+    if (!patient) return '';
+    return patient.nickname ? `${patient.name} (${patient.nickname})` : patient.name;
+};
+
 interface NovoAgendamentoScreenProps {
     currentUser: User;
     onBack: () => void;
@@ -789,7 +794,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                         <div className="grid grid-cols-2 gap-x-6 gap-y-3.5 text-xs font-bold text-slate-500">
                             <div className="space-y-0.5">
                                 <span className="text-[9px] uppercase tracking-wider text-slate-400 block font-extrabold">Paciente</span>
-                                <span className="text-slate-800 uppercase font-black truncate block">{createdBooking.paciente?.name || selectedPatient?.name}</span>
+                                <span className="text-slate-800 uppercase font-black truncate block">{formatPatientName(createdBooking.paciente || selectedPatient)}</span>
                             </div>
                             
                             <div className="space-y-0.5">
@@ -1072,7 +1077,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                                     }`}
                                                 >
                                                     <div>
-                                                        <div className="font-extrabold text-slate-800 text-sm group-hover/card:text-slate-900 transition-colors">{patient.name}</div>
+                                                        <div className="font-extrabold text-slate-800 text-sm group-hover/card:text-slate-900 transition-colors">{formatPatientName(patient)}</div>
                                                         <div className="flex items-center gap-4 text-xs text-slate-400 mt-1.5 font-bold uppercase tracking-wider">
                                                             <span className="flex items-center gap-1"><UserIcon className="w-3.5 h-3.5 text-slate-300" /> CPF: {patient.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}</span>
                                                             <span>Nasc: {new Date(patient.birth_date).toLocaleDateString('pt-BR')}</span>
@@ -1234,7 +1239,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                             </div>
                             <div className="px-4 py-2 bg-sky-50 border border-sky-100 rounded-xl flex items-center gap-2">
                                 <UserIcon className="w-4 h-4 text-sky-600" />
-                                <span className="text-[10px] text-sky-700 font-extrabold uppercase tracking-wide">Paciente: {selectedPatient?.name}</span>
+                                <span className="text-[10px] text-sky-700 font-extrabold uppercase tracking-wide">Paciente: {formatPatientName(selectedPatient)}</span>
                             </div>
                         </div>
 
@@ -1311,7 +1316,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
 
                             {/* Right Col: Date & Quantity */}
                             <div className="flex flex-col justify-between p-4 bg-slate-50/50 border border-slate-100 rounded-3xl min-h-0">
-                                <div className="space-y-3 flex-1 min-h-0 pb-1.5">
+                                <div className="space-y-3 flex-1 overflow-y-auto pr-1 pb-1.5 custom-scrollbar min-h-0">
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                         <div>
                                             <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">Data da Solicitação</label>
@@ -1328,28 +1333,28 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                             <div className="relative">
                                                 <button
                                                     type="button"
-                                                    disabled={isNormalWaitlistOnly}
+                                                    disabled={!selectedProcedure || isNormalWaitlistOnly}
                                                     onClick={() => {
-                                                        if (!selectedProcedure) {
-                                                            setErrorMessage('Por favor, selecione um procedimento primeiro.');
-                                                            return;
-                                                        }
                                                         setIsCalendarOpen(true);
                                                     }}
                                                     className={`w-full rounded-xl border p-2.5 text-xs font-bold text-left flex items-center justify-between shadow-sm transition-all ${
-                                                        isNormalWaitlistOnly
+                                                        !selectedProcedure
+                                                        ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed shadow-none'
+                                                        : isNormalWaitlistOnly
                                                         ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed shadow-none'
                                                         : 'border-emerald-600 bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-500/10 focus:ring-emerald-500/20 focus:ring-4 outline-none'
                                                     }`}
                                                 >
                                                     <span>
-                                                        {isNormalWaitlistOnly
+                                                        {!selectedProcedure
+                                                            ? 'Selecione um procedimento'
+                                                            : isNormalWaitlistOnly
                                                             ? 'Fila de espera (Não há vagas normais disponíveis)'
                                                             : bookingDate 
                                                                 ? `${new Date(bookingDate + 'T12:00:00').toLocaleDateString('pt-BR')}${bookingTime ? ` às ${bookingTime}` : ''}`
                                                                 : 'Selecione a Data'}
                                                     </span>
-                                                    <Calendar className={`w-4 h-4 ${isNormalWaitlistOnly ? 'text-slate-400' : 'text-white'}`} />
+                                                    <Calendar className={`w-4 h-4 ${(!selectedProcedure || isNormalWaitlistOnly) ? 'text-slate-400' : 'text-white'}`} />
                                                 </button>
                                             </div>
                                         </div>
@@ -1388,7 +1393,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
 
                                     {/* Selection summary formatted as a premium ticket */}
                                     {selectedProcedure && (
-                                        <div className="relative p-3.5 bg-gradient-to-b from-white to-slate-50/50 border border-slate-200/60 rounded-2xl space-y-2 shadow-md shadow-slate-100/40 overflow-hidden group">
+                                        <div className="relative p-3 bg-gradient-to-b from-white to-slate-50/50 border border-slate-200/60 rounded-2xl space-y-2 shadow-md shadow-slate-100/40 overflow-hidden group">
                                             {/* Lateral ticket circle cutouts */}
                                             <div className="absolute top-1/2 -left-2.5 w-5 h-5 bg-slate-100 border-r border-slate-200/60 rounded-full -translate-y-1/2"></div>
                                             <div className="absolute top-1/2 -right-2.5 w-5 h-5 bg-slate-100 border-l border-slate-200/60 rounded-full -translate-y-1/2"></div>
@@ -1397,7 +1402,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                                 <Ticket className="w-3 h-3 text-sky-500" />
                                                 Resumo do Voucher
                                             </h5>
-                                            <div className="space-y-1.5 pt-0.5 text-xs">
+                                            <div className="space-y-1 pt-0.5 text-[11px]">
                                                 <div className="flex justify-between items-center">
                                                     <span className="font-bold text-slate-400">Procedimento:</span>
                                                     <span className="font-black text-slate-800 truncate max-w-[170px] uppercase">{selectedProcedure.name}</span>
@@ -1435,14 +1440,14 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                                     }`}>{bookingPriority}</span>
                                                 </div>
                                                 {isNormalWaitlistOnly ? (
-                                                    <div className="text-[10px] font-bold text-amber-600 bg-amber-50 border border-amber-100 p-2.5 rounded-xl mt-2 flex items-center gap-1.5 col-span-2 shadow-sm animate-pulse">
-                                                        <AlertTriangle className="w-4 h-4 shrink-0 text-amber-500" />
-                                                        <span>Atenção: Não há vagas disponíveis. O paciente será registrado na Fila de Espera.</span>
+                                                    <div className="text-[9.5px] font-bold text-amber-600 bg-amber-50 border border-amber-100 p-2 rounded-xl mt-1.5 flex items-center gap-1.5 col-span-2 shadow-sm">
+                                                        <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-500" />
+                                                        <span>Sem vagas normais. Paciente irá para a fila de espera.</span>
                                                     </div>
                                                 ) : getAvailableSlots(selectedProcedure, bookingPriority, bookingDate) <= 0 ? (
-                                                    <div className="text-[10px] font-bold text-amber-600 bg-amber-50 border border-amber-100 p-2.5 rounded-xl mt-2 flex items-center gap-1.5 col-span-2 shadow-sm animate-pulse">
-                                                        <AlertTriangle className="w-4 h-4 shrink-0 text-amber-500" />
-                                                        <span>Atenção: Não há vagas disponíveis. O paciente será registrado na Fila de Espera.</span>
+                                                    <div className="text-[9.5px] font-bold text-amber-600 bg-amber-50 border border-amber-100 p-2 rounded-xl mt-1.5 flex items-center gap-1.5 col-span-2 shadow-sm">
+                                                        <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-500" />
+                                                        <span>Sem vagas normais. Paciente irá para a fila de espera.</span>
                                                     </div>
                                                 ) : null}
                                             </div>
@@ -1490,7 +1495,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                     <div className="space-y-3 pt-2">
                                         <div>
                                             <span className="block text-[8px] font-black text-slate-400 uppercase tracking-wider">Nome Completo</span>
-                                            <span className="text-sm font-black text-slate-800 uppercase">{selectedPatient?.name}</span>
+                                            <span className="text-sm font-black text-slate-800 uppercase">{formatPatientName(selectedPatient)}</span>
                                         </div>
                                         <div className="grid grid-cols-2 gap-4">
                                             <div>
@@ -1644,7 +1649,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
                                                 <div>
                                                     <div className="font-extrabold text-slate-800 text-xs uppercase">
-                                                        {b.paciente?.name}
+                                                        {formatPatientName(b.paciente)}
                                                     </div>
                                                     <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-1 font-bold">
                                                         <span>CPF: {b.paciente?.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}</span>

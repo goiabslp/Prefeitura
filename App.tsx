@@ -3204,8 +3204,8 @@ const App: React.FC = () => {
             onClose={() => setToast(prev => ({ ...prev, isVisible: false }))}
           />
 
-          {/* Chat Components - Only for authenticated users */}
-          {currentUser && (
+          {/* Chat Components - Only for authenticated users and not on 'Consultas' pages */}
+          {currentUser && currentView !== 'consultas' && (
             <>
               <ChatWidget />
               <ChatWindow />

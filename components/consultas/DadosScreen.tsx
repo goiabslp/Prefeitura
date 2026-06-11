@@ -4,6 +4,11 @@ import { ArrowLeft, Users, Calendar, Settings, BarChart3, Plus, Edit2, Search, C
 import * as db from '../../services/consultasService';
 import { ResponsiveContainer, AreaChart, XAxis, YAxis, Tooltip, Area, CartesianGrid } from 'recharts';
 
+const formatPatientName = (patient?: ConsultaPaciente | null) => {
+    if (!patient) return '';
+    return patient.nickname ? `${patient.name} (${patient.nickname})` : patient.name;
+};
+
 interface DadosScreenProps {
     currentUser: User;
     onBack: () => void;
@@ -776,7 +781,7 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                                     <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-700">
                                         {filteredPatients.map(p => (
                                             <tr key={p.id} className="hover:bg-slate-50/20">
-                                                <td className="p-4 font-extrabold text-slate-900">{p.name}</td>
+                                                <td className="p-4 font-extrabold text-slate-900">{formatPatientName(p)}</td>
                                                 <td className="p-4">{p.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}</td>
                                                 <td className="p-4">{new Date(p.birth_date + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
                                                 <td className="p-4 text-right">
@@ -916,7 +921,7 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                                                                     {slots.map(v => {
                                                                         const activeBooking = slotAssignments.get(v.id);
                                                                         const dynamicStatus = activeBooking ? activeBooking.status : 'Disponível';
-                                                                        const patientName = activeBooking?.paciente?.name;
+                                                                        const patientName = activeBooking?.paciente ? formatPatientName(activeBooking.paciente) : undefined;
 
                                                                         const statusColors = (() => {
                                                                             switch (dynamicStatus) {
@@ -1160,7 +1165,7 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                                         {filteredHistory.map(h => (
                                             <tr key={h.id} className="hover:bg-slate-50/20">
                                                 <td className="p-4">
-                                                    <div className="font-extrabold text-slate-900">{h.paciente?.name || 'Sistema'}</div>
+                                                    <div className="font-extrabold text-slate-900">{h.paciente ? formatPatientName(h.paciente) : 'Sistema'}</div>
                                                     <div className="text-[10px] text-slate-400">CPF: {h.paciente?.cpf}</div>
                                                 </td>
                                                 <td className="p-4">
@@ -1442,7 +1447,7 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                         <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                             <div>
                                 <h3 className="font-extrabold text-slate-900 text-base">Histórico Clínico</h3>
-                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">{selectedPatient.name}</p>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">{formatPatientName(selectedPatient)}</p>
                             </div>
                             <button onClick={() => setIsHistoryOpen(false)} className="p-2 hover:bg-slate-200 rounded-xl text-slate-400 hover:text-slate-700 transition-colors">
                                 <X className="w-5 h-5" />

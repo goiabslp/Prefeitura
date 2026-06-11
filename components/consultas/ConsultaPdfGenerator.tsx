@@ -99,7 +99,7 @@ export const ConsultaPdfGenerator: React.FC<ConsultaPdfGeneratorProps> = ({
                                         <div className="space-y-2 text-xs">
                                             <div>
                                                 <span className="block text-[7pt] font-bold uppercase text-slate-400 tracking-wider">Nome Completo</span>
-                                                <span className="font-extrabold text-slate-800 text-sm">{patient.name}</span>
+                                                <span className="font-extrabold text-slate-800 text-sm">{patient.nickname ? `${patient.name} (${patient.nickname})` : patient.name}</span>
                                             </div>
                                             <div>
                                                 <span className="block text-[7pt] font-bold uppercase text-slate-400 tracking-wider">CPF</span>

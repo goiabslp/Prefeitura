@@ -433,7 +433,7 @@ export const ConsultasReportPdfGenerator: React.FC<ConsultasReportPdfGeneratorPr
                                                 return (
                                                     <tr key={`b-${b.id}`} className="hover:bg-slate-50/30">
                                                         <td className="px-4 py-1.5 font-bold border-r border-slate-100">
-                                                            <div className="font-extrabold text-slate-900">{b.paciente?.name}</div>
+                                                            <div className="font-extrabold text-slate-900">{b.paciente?.nickname ? `${b.paciente.name} (${b.paciente.nickname})` : b.paciente?.name}</div>
                                                             <div className="text-[6.5pt] text-slate-400 font-medium">CPF: {cpfFormatted}</div>
                                                         </td>
                                                         <td className="px-4 py-1.5 border-r border-slate-100">
@@ -451,7 +451,7 @@ export const ConsultasReportPdfGenerator: React.FC<ConsultasReportPdfGeneratorPr
                                                             {queuePositions[b.id]}º
                                                         </td>
                                                         <td className="px-4 py-1.5 font-bold border-r border-slate-100">
-                                                            <div className="font-extrabold text-slate-900">{b.paciente?.name}</div>
+                                                            <div className="font-extrabold text-slate-900">{b.paciente?.nickname ? `${b.paciente.name} (${b.paciente.nickname})` : b.paciente?.name}</div>
                                                             <div className="text-[6.5pt] text-slate-400 font-medium">CPF: {cpfFormatted}</div>
                                                         </td>
                                                         <td className="px-4 py-1.5 text-center border-r border-slate-100">

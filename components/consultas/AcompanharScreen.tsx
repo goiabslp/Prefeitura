@@ -1,12 +1,17 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { User, ConsultaAgendamento, ConsultaProcedimento, AppState } from '../../types';
+import { User, ConsultaAgendamento, ConsultaProcedimento, AppState, ConsultaPaciente } from '../../types';
 import { ArrowLeft, Search, Filter, Calendar, CheckCircle2, XCircle, Trash2, Loader2, Sparkles, Clock, FileDown, UserX, Repeat, X } from 'lucide-react';
 import * as db from '../../services/consultasService';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import { ConsultaPdfGenerator } from './ConsultaPdfGenerator';
 import { ConsultasReportPdfGenerator } from './ConsultasReportPdfGenerator';
+
+const formatPatientName = (patient?: ConsultaPaciente | null) => {
+    if (!patient) return '';
+    return patient.nickname ? `${patient.name} (${patient.nickname})` : patient.name;
+};
 
 interface AcompanharScreenProps {
     currentUser: User;
@@ -505,7 +510,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                                         : (booking.created_at ? new Date(booking.created_at).toLocaleDateString('pt-BR') : '-')}
                                                 </td>
                                                 <td className="p-4">
-                                                    <div className="font-extrabold text-slate-900">{booking.paciente?.name || 'Carregando...'}</div>
+                                                    <div className="font-extrabold text-slate-900">{booking.paciente ? formatPatientName(booking.paciente) : 'Carregando...'}</div>
                                                     <div className="text-[10px] text-slate-400 mt-0.5 font-bold">
                                                         CPF: {booking.paciente?.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}
                                                     </div>
@@ -740,7 +745,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                             <div className="p-3.5 bg-slate-50 border border-slate-200/50 rounded-2xl space-y-2 text-xs font-bold text-slate-600">
                                 <div className="flex justify-between">
                                     <span className="text-slate-400">Paciente:</span>
-                                    <span className="text-slate-800 uppercase font-black">{retornoBooking.paciente?.name}</span>
+                                    <span className="text-slate-800 uppercase font-black">{formatPatientName(retornoBooking.paciente)}</span>
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="text-slate-400">Procedimento:</span>
@@ -925,7 +930,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                                                                             {bookingsGroup.map(b => (
                                                                                                 <tr key={b.id} className="hover:bg-slate-50/40">
                                                                                                     <td className="px-4 py-1.5 font-bold">
-                                                                                                        <div className="font-extrabold text-slate-900">{b.paciente?.name}</div>
+                                                                                                        <div className="font-extrabold text-slate-900">{formatPatientName(b.paciente)}</div>
                                                                                                         <div className="text-[9px] text-slate-400 font-bold mt-0.5">
                                                                                                             CPF: {b.paciente?.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}
                                                                                                         </div>
@@ -1004,7 +1009,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                                                                     {queuePositions[b.id]}º
                                                                                 </td>
                                                                                 <td className="px-4 py-2 font-bold">
-                                                                                    <div className="font-extrabold text-slate-900">{b.paciente?.name}</div>
+                                                                                    <div className="font-extrabold text-slate-900">{formatPatientName(b.paciente)}</div>
                                                                                     <div className="text-[9px] text-slate-400 font-bold mt-0.5">
                                                                                         CPF: {b.paciente?.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}
                                                                                     </div>
