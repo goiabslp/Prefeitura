@@ -1715,7 +1715,7 @@ const App: React.FC = () => {
         id: Date.now().toString(),
         protocol: protocolString,
         title: appState.content.title,
-        status: activeBlock === 'compras' ? 'payment_account' : 'pending',
+        status: 'pending',
         createdAt: new Date().toISOString(),
         userId: currentUser.id,
         userName: currentUser.name,
@@ -2343,7 +2343,7 @@ const App: React.FC = () => {
 
     // RULE: Admin approval/rejection only allowed if current status is "Em Aprovação"
     if (orderToUpdate.blockType === 'compras' && (status === 'approved' || status === 'rejected')) {
-      const isEmAprovacao = !orderToUpdate.status || orderToUpdate.status === 'pending' || orderToUpdate.status === 'awaiting_approval';
+      const isEmAprovacao = !orderToUpdate.status || orderToUpdate.status === 'pending' || orderToUpdate.status === 'awaiting_approval' || orderToUpdate.status === 'payment_account';
       if (!isEmAprovacao) {
         showToast('Ação Bloqueada: O fluxo deste pedido já avançou para compras e não permite reavaliação administrativa.', 'error');
         return;
@@ -2360,14 +2360,11 @@ const App: React.FC = () => {
     let targetStatus = status;
     const isPurchase = orderToUpdate.blockType === 'compras';
 
-    // If admin is approving a new order (pending/awaiting), force it to payment_account status for account verification/selection
-    if (isPurchase && status === 'approved' && (orderToUpdate.status === 'pending' || !orderToUpdate.status || orderToUpdate.status === 'awaiting_approval')) {
-      targetStatus = 'payment_account';
-    }
+    // Account verification/selection is obsolete; route approval directly to 'approved' status.
 
     const newMovement: StatusMovement = {
       statusLabel: targetStatus === 'approved' ? 'Aprovação Administrativa' :
-        (targetStatus === 'payment_account' ? 'Aprovação: Pendente de Conta' :
+        (targetStatus === 'payment_account' ? 'Aprovação' :
           (status === 'rejected' ? 'Rejeição' : `Status alterado para ${status}`)),
       date: new Date().toISOString(),
       userName: currentUser.name,

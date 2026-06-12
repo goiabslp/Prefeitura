@@ -22,9 +22,25 @@ const supabaseUrl = process.env.VITE_SUPABASE_URL;
 const supabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-async function check() {
-    const { data, error } = await supabase.from('consultas_procedimentos').select('code').limit(1);
-    console.log("Error:", error);
-    console.log("Data:", data);
+async function inspect(tableName) {
+    console.log(`\n--- Inspecting columns for table: ${tableName} ---`);
+    const { data, error } = await supabase.from(tableName).select('*').limit(1);
+    if (error) {
+        console.error(`Error querying ${tableName}:`, error.message);
+        return;
+    }
+    if (data && data.length > 0) {
+        console.log(`Columns in ${tableName}:`, Object.keys(data[0]));
+        console.log(`Sample row:`, JSON.stringify(data[0], null, 2));
+    } else {
+        console.log(`No rows in ${tableName}.`);
+    }
 }
-check();
+
+async function run() {
+    await inspect('purchase_orders');
+    await inspect('oficios');
+    await inspect('service_requests');
+}
+
+run();

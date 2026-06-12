@@ -7,7 +7,7 @@ import { handleSupabaseError } from '../utils/errorUtils';
 export const getAllPurchaseOrders = async (lightweight = true, page = 0, limit = 50, searchTerm = '', status?: string, purchaseStatus?: string): Promise<Order[]> => {
     // ... select specific columns
     const columns = lightweight
-        ? `id, protocol, title, status, purchase_status, status_history, created_at, user_id, user_name, completion_forecast, budget_file_url, reqName:document_snapshot->content->>requesterName, reqSector:document_snapshot->content->>requesterSector, reqPriority:document_snapshot->content->>priority, reqAccount:document_snapshot->content->>selectedAccount`
+        ? `id, protocol, title, status, purchase_status, status_history, created_at, user_id, user_name, completion_forecast, budget_file_url, attachments, profiles:user_id(sector)`
         : '*';
 
     let query = supabase
@@ -106,18 +106,19 @@ export const getAllPurchaseOrders = async (lightweight = true, page = 0, limit =
                 headerLogoHeight: 40,
                 homeLogoPosition: 'left' as any
             },
+            isLightweight: true,
             content: {
                 title: item.title,
-                requesterName: item.reqName || item.document_snapshot?.content?.requesterName,
-                requesterSector: item.reqSector || item.document_snapshot?.content?.requesterSector,
-                priority: item.reqPriority || item.document_snapshot?.content?.priority,
-                selectedAccount: item.reqAccount || item.document_snapshot?.content?.selectedAccount
+                requesterName: item.user_name,
+                requesterSector: item.profiles?.sector || 'Sem Setor',
+                priority: 'Normal',
+                selectedAccount: undefined
             }
         } as any : item.document_snapshot,
         budgetFileUrl: item.budget_file_url,
         attachments: item.attachments,
         completionForecast: item.completion_forecast,
-        requestingSector: item.requester_sector
+        requestingSector: item.profiles?.sector || 'Sem Setor'
     }));
 };
 
@@ -260,7 +261,7 @@ export const updateOrderStatus = async (id: string, status: string, historyEntry
 
     // RULE: Admin approval/rejection only allowed if current status is "Em Aprovação" (pending/awaiting_approval)
     if (status === 'approved' || status === 'rejected') {
-        const isEmAprovacao = !current?.status || current.status === 'pending' || current.status === 'awaiting_approval';
+        const isEmAprovacao = !current?.status || current.status === 'pending' || current.status === 'awaiting_approval' || current.status === 'payment_account';
         if (!isEmAprovacao) {
             throw new Error("Validação de Segurança: A aprovação ou rejeição só é permitida enquanto o pedido está em fase de aprovação inicial.");
         }

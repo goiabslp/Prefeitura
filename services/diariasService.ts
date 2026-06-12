@@ -4,14 +4,13 @@ import { Order } from '../types';
 import * as counterService from './counterService';
 
 export const getAllServiceRequests = async (lightweight = true, page = 0, pageSize = 1000, searchTerm = ''): Promise<Order[]> => {
+    const columns = lightweight
+        ? 'id, protocol, title, status, status_history, created_at, user_id, user_name, payment_status, payment_date'
+        : '*';
+
     let query = supabase
         .from('service_requests')
-        .select(`
-            id, protocol, title, status, status_history, created_at, user_id, user_name, payment_status, payment_date
-            ${lightweight
-                ? ', requester_name:document_snapshot->content->>requesterName, requester_role:document_snapshot->content->>requesterRole, destination:document_snapshot->content->>destination, departure_date:document_snapshot->content->>departureDateTime, return_date:document_snapshot->content->>returnDateTime, requester_sector:document_snapshot->content->>requesterSector, sub_type:document_snapshot->content->>subType, priority:document_snapshot->content->>priority, authorized_by:document_snapshot->content->>authorizedBy, requested_value:document_snapshot->content->>requestedValue, description_reason:document_snapshot->content->>descriptionReason, lodging_count:document_snapshot->content->>lodgingCount, distance_km:document_snapshot->content->>distanceKm, payment_forecast:document_snapshot->content->>paymentForecast, signature_name:document_snapshot->content->>signatureName, signature_role:document_snapshot->content->>signatureRole, signature_sector:document_snapshot->content->>signatureSector, show_signatures:document_snapshot->content->>showDiariaSignatures, use_digital:document_snapshot->content->>useDigitalSignature'
-                : ', document_snapshot'}
-        `)
+        .select(columns)
         .order('created_at', { ascending: false });
 
     if (searchTerm) {
@@ -83,28 +82,28 @@ export const getAllServiceRequests = async (lightweight = true, page = 0, pageSi
             content: {
                 title: item.title,
                 protocol: item.protocol, // CRITICAL: Include protocol in document content
-                subType: item.sub_type,   // CRITICAL: Include subType in document content
+                subType: undefined,
                 body: '',
                 leftBlockText: '',
                 rightBlockText: '',
-                requesterName: item.requester_name,
-                requesterRole: item.requester_role,
-                destination: item.destination,
-                departureDateTime: item.departure_date,
-                returnDateTime: item.return_date,
-                requesterSector: item.requester_sector,
-                priority: item.priority,
-                authorizedBy: item.authorized_by,
-                requestedValue: item.requested_value,
-                descriptionReason: item.description_reason,
-                lodgingCount: Number(item.lodging_count) || 0,
-                distanceKm: Number(item.distance_km) || 0,
-                paymentForecast: item.payment_forecast,
-                signatureName: item.signature_name || '',
-                signatureRole: item.signature_role || '',
-                signatureSector: item.signature_sector || '',
-                showDiariaSignatures: item.show_signatures === 'true',
-                useDigitalSignature: item.use_digital === 'true'
+                requesterName: item.user_name,
+                requesterRole: '',
+                destination: 'Destino n/a',
+                departureDateTime: undefined,
+                returnDateTime: undefined,
+                requesterSector: undefined,
+                priority: 'Normal',
+                authorizedBy: '',
+                requestedValue: '',
+                descriptionReason: '',
+                lodgingCount: 0,
+                distanceKm: 0,
+                paymentForecast: undefined,
+                signatureName: '',
+                signatureRole: '',
+                signatureSector: '',
+                showDiariaSignatures: false,
+                useDigitalSignature: false
             }
         } : item.document_snapshot
     }));

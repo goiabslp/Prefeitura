@@ -259,7 +259,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
             case 'completed':
                 return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-100 text-[9px] font-black uppercase tracking-wider"><CheckCircle2 className="w-3 h-3" /> Aprovado</span>;
             case 'payment_account':
-                return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-100 text-[9px] font-black uppercase tracking-wider"><RotateCcw className="w-3 h-3 animate-spin-slow" /> Conta de Pagamento</span>;
+                return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-100 text-[9px] font-black uppercase tracking-wider"><RotateCcw className="w-3 h-3 animate-spin-slow" /> Aprovação</span>;
             case 'rejected':
                 return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-100 text-[9px] font-black uppercase tracking-wider"><XCircle className="w-3 h-3" /> Rejeitado</span>;
             case 'pending':
@@ -407,7 +407,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
         const currentStatus = order.purchaseStatus || 'recebido';
         const config = purchaseStatusMap[currentStatus as keyof typeof purchaseStatusMap] || purchaseStatusMap.recebido;
         const isApproved = order.status === 'approved';
-        const isEmAprovacao = !order.status || order.status === 'pending' || order.status === 'awaiting_approval';
+        const isEmAprovacao = !order.status || order.status === 'pending' || order.status === 'awaiting_approval' || order.status === 'payment_account';
 
         const isLockedForUser = currentStatus === 'aprovacao_orcamento' && !isAdmin;
         const canClick = (isAdmin && isEmAprovacao) || (isComprasUser && !isLockedForUser && isApproved);
@@ -566,7 +566,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                             {purchaseStatusFilter === 'all' ? 'Status' :
                                                 [
                                                     { id: 'all', label: 'Todos' },
-                                                    { id: 'payment_account', label: 'Conta de Pagamento' },
+                                                    { id: 'payment_account', label: 'Aprovação' },
                                                     { id: 'recebido', label: 'Pedido Recebido' },
                                                     { id: 'coletando_orcamento', label: 'Orçamento' },
                                                     { id: 'coletando_dotacao', label: 'Dotação' },
@@ -593,7 +593,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                     <div className="max-h-[60vh] overflow-y-auto custom-scrollbar px-2 space-y-0.5">
                                                         {[
                                                             { id: 'all', label: 'Todos os Pedidos' },
-                                                            { id: 'payment_account', label: 'Conta de Pagamento' },
+                                                            { id: 'payment_account', label: 'Aprovação' },
                                                             { id: 'recebido', label: 'Pedido Recebido' },
                                                             { id: 'coletando_orcamento', label: 'Orçamento' },
                                                             { id: 'coletando_dotacao', label: 'Dotação' },
@@ -1253,7 +1253,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                         >
                             <div className="relative shadow-[0_20px_50px_rgba(0,0,0,0.3)] animate-scale-up origin-top">
                                 {/* Show Loading if fetching full details for Lightweight modules */}
-                                {((activeBlock === 'oficio' && previewOrder && !fullOficio) ||
+                                {((activeBlock === 'oficio' && previewOrder && (!fullOficio || (previewOrder.documentSnapshot as any)?.isLightweight)) ||
                                     (activeBlock === 'diarias' && previewOrder && (!fullServiceRequest || (previewOrder.documentSnapshot as any)?.isLightweight))) ? (
                                     <div className="flex flex-col items-center justify-center h-[60vh] gap-4">
                                         <div className="relative">

@@ -594,7 +594,7 @@ export const OrderDetailsScreen: React.FC<OrderDetailsScreenProps> = ({
                                     }}
                                     className="text-[9px] font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full border border-indigo-200 uppercase tracking-wide flex items-center gap-1.5 w-fit hover:bg-indigo-600 hover:text-white transition-all animate-pulse"
                                 >
-                                    <Landmark className="w-3 h-3" /> Conta de Pagamento
+                                    <Landmark className="w-3 h-3" /> Aprovação
                                 </button>
                             )}
                         </div>

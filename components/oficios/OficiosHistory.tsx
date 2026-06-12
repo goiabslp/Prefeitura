@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { 
     ArrowLeft, Loader2, Calendar, MapPin, Users, User as UserIcon, 
     RefreshCw, FileText, Search, Hash as HashIcon, Trash2, Edit2, 
-    Eye, Edit3, FileDown, Plus 
+    Eye, Edit3, FileDown, Plus, AlertCircle
 } from 'lucide-react';
 import { Order, User } from '../../types';
 import { useInfiniteOficios, useUpdateOficioDescription } from '../../hooks/useOficios';

@@ -4,8 +4,7 @@ import { Order } from '../types';
 
 export const getAllOficios = async (lightweight = true, page = 0, limit = 50, searchTerm = ''): Promise<Order[]> => {
     const columns = lightweight
-        ? `id, protocol, title, status, status_history, created_at, user_id, user_name, description,
-           requester_sector:document_snapshot->content->>requesterSector`
+        ? `id, protocol, title, status, status_history, created_at, user_id, user_name, description`
         : '*';
 
     let query = supabase
@@ -76,12 +75,13 @@ export const getAllOficios = async (lightweight = true, page = 0, limit = 50, se
                 headerLogoHeight: 40,
                 homeLogoPosition: 'left' as any
             },
+            isLightweight: true,
             content: {
-                requesterSector: item.requester_sector
+                requesterSector: undefined
             }
         } as any : item.document_snapshot,
         description: item.description,
-        requestingSector: item.requester_sector
+        requestingSector: undefined
     }));
 };
 
