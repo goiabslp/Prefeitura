@@ -23,6 +23,7 @@ import * as entityService from './services/entityService';
 import * as oficiosService from './services/oficiosService';
 import * as settingsService from './services/settingsService';
 import * as db from './services/dbService';
+import { auditLogService } from './services/auditLogService';
 import {
   INITIAL_STATE,
   DEFAULT_USERS,
@@ -68,6 +69,7 @@ import { ProcessStepper } from './components/common/ProcessStepper';
 import { ActionProcessingModal, ProcessingStage } from './components/modals/ActionProcessingModal';
 
 import { SystemAccessControl } from './components/admin/SystemAccessControl';
+import { SystemLogs } from './components/admin/SystemLogs';
 import { GlobalLoading } from './components/common/GlobalLoading';
 
 import { ToastNotification, ToastType } from './components/common/ToastNotification';
@@ -122,6 +124,7 @@ const VIEW_TO_PATH: Record<string, string> = {
   'admin:ui': '/Admin/Interface',
   'admin:design': '/Admin/Design',
   'admin:access_control': '/Admin/ControleAcesso',
+  'admin:logs': '/Admin/logs',
   'tasks-dashboard': '/Tarefas/MinhasTarefas',
   'tracking:oficio': '/Historico/Oficio',
   'tracking:compras': '/Historico/Compras',
@@ -935,11 +938,17 @@ const App: React.FC = () => {
   // --- PERSISTENT ROUTING LOGIC ---
   useEffect(() => {
     const restoreStateFromUrl = () => {
-      const path = window.location.pathname;
-      const state = PATH_TO_STATE[path];
+      const rawPath = window.location.pathname;
+      const path = rawPath.replace(/\/$/, '').toLowerCase() || '/';
+
+      // Look up path case-insensitively and ignoring trailing slash
+      const matchedEntry = Object.entries(PATH_TO_STATE).find(
+        ([key]) => key.replace(/\/$/, '').toLowerCase() === path
+      );
+      const state = matchedEntry ? matchedEntry[1] : null;
 
       if (state) {
-        console.log("Restoring state from URL:", path, state);
+        console.log("Restoring state from URL:", rawPath, state);
 
         // 1. Set Main View
         if (state.view === 'licitacao-new') {
@@ -956,40 +965,40 @@ const App: React.FC = () => {
           setCurrentView(state.view as any);
         }
 
-        // 2. Handle Sub-States
+        // 2. Handle Sub-States & Sidebar Synchronization
         if (state.view === 'vehicle-scheduling') {
-          // 'vehicle-scheduling' keys in VIEW_TO_PATH are like 'vehicle-scheduling:vs_history'
-          // The 'sub' part in PATH_TO_STATE comes from 'vehicle-scheduling:vs_history' -> view='vehicle-scheduling', sub='vs_history'
           if (state.sub) setActiveBlock(state.sub);
-          else setActiveBlock('agendamento'); // Default if just /AgendamentoVeiculos
+          else setActiveBlock('agendamento');
+          setIsAdminSidebarOpen(false);
         }
         else if (state.view === 'admin') {
-          if (state.sub) setAdminTab(state.sub);
+          if (state.sub) {
+            setAdminTab(state.sub);
+            setIsAdminSidebarOpen(state.sub === 'design' || state.sub === 'ui');
+          } else {
+            setAdminTab(null);
+            setIsAdminSidebarOpen(false);
+          }
         }
         else if (state.view === 'abastecimento') {
-          // 'abastecimento:new' -> sub='new'
           if (state.sub) {
             setAppState(prev => ({ ...prev, view: state.sub }));
           } else {
-            // Default for '/Abastecimento' -> usually dashboard or menu?
-            // Looking at VIEW_TO_PATH: 'abastecimento': '/Abastecimento' -> sub is undefined
-            // If sub is undefined, maybe default to 'menu' or 'dashboard'?
-            // Let's assume 'menu' (which is default view usually) or 'dashboard'
-            // For now, if sub is undefined, we might just leave appState.view as is or set to default.
-            // But 'abastecimento:dashboard' -> '/Abastecimento/DashboardAbastecimento'
             setActiveBlock('abastecimento');
           }
+          setIsAdminSidebarOpen(false);
         }
         else if (state.view === 'editor') {
           if (state.sub) setActiveBlock(state.sub);
+          setIsAdminSidebarOpen(true);
         }
         else if (state.view === 'tracking') {
           if (state.sub) setActiveBlock(state.sub);
-          // We might need to handle 'lastListView' here too if needed
+          setIsAdminSidebarOpen(false);
         }
         else if (state.view === 'licitacao-screening' || state.view === 'licitacao-all') {
-          // Active block is typically 'licitacao' for these
           setActiveBlock('licitacao');
+          setIsAdminSidebarOpen(false);
         }
         else if (state.view === 'tarefas') {
           if (state.sub === 'dashboard') setCurrentView('tarefas:dashboard' as any); // Wait, View is tasks-dashboard in mapping?
@@ -1141,6 +1150,130 @@ const App: React.FC = () => {
     }
   }, [currentUser, currentView, authLoading, isLoginTransitioning]);
 
+  // --- TRACKING LOGS EFFECTS ---
+  // 1. Navigation Tracking
+  useEffect(() => {
+    if (currentUser) {
+      const getFriendlyViewName = (view: string) => {
+        switch (view) {
+          case 'home': return 'Página Inicial';
+          case 'login': return 'Login';
+          case 'editor': return 'Criar Documento';
+          case 'tracking': return 'Histórico / Acompanhamento';
+          case 'admin': return 'Painel Administrativo';
+          case 'order-details': return 'Detalhes do Pedido';
+          case 'vehicle-scheduling': return 'Agendamento de Veículos';
+          case 'abastecimento': return 'Gestão de Abastecimento';
+          case 'rh': return 'Recursos Humanos';
+          case 'tarefas': return 'Minhas Tarefas';
+          case 'calendario': return 'Calendário';
+          case 'projetos': return 'Projetos';
+          case 'marketing': return 'Marketing';
+          case 'licitacao': return 'Licitação';
+          case 'consultas': return 'Consultas Médicas';
+          case 'farmacia': return 'Farmácia Popular';
+          default: return view;
+        }
+      };
+
+      const getFriendlyBlockName = (block: string) => {
+        switch (block) {
+          case 'oficio': return 'Ofícios';
+          case 'compras': return 'Compras';
+          case 'diarias': return 'Diárias';
+          case 'licitacao': return 'Licitações';
+          case 'farmacia': return 'Farmácia';
+          case 'agendamento': return 'Agendamento';
+          case 'abastecimento': return 'Abastecimento';
+          default: return block;
+        }
+      };
+
+      const friendlyView = getFriendlyViewName(currentView);
+      const friendlyBlock = activeBlock ? getFriendlyBlockName(activeBlock) : '';
+      const description = friendlyBlock 
+        ? `Acessou o módulo: ${friendlyBlock} (${friendlyView})` 
+        : `Acessou a tela: ${friendlyView}`;
+
+      auditLogService.logAction({
+        action_type: 'navigation',
+        module: activeBlock || 'geral',
+        description,
+        details: { view: currentView, block: activeBlock }
+      });
+    }
+  }, [currentView, activeBlock, currentUser]);
+
+  // 2. Global Click Tracking
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const handleGlobalClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      let interactiveEl = target.closest('button, a, input, select, textarea, [role="button"]') as HTMLElement | null;
+      
+      // Heuristic: if we didn't find a standard interactive element, check if the clicked element or any parent has cursor: pointer style
+      if (!interactiveEl) {
+        let current: HTMLElement | null = target;
+        while (current && current !== document.body) {
+          const style = window.getComputedStyle(current);
+          if (style.cursor === 'pointer') {
+            interactiveEl = current;
+            break;
+          }
+          current = current.parentElement;
+        }
+      }
+
+      if (interactiveEl) {
+        const tagName = interactiveEl.tagName.toLowerCase();
+        let elementText = '';
+
+        if (tagName === 'input' || tagName === 'textarea') {
+          const input = interactiveEl as HTMLInputElement | HTMLTextAreaElement;
+          elementText = input.placeholder || input.name || input.id || input.value || '';
+        } else if (tagName === 'select') {
+          const select = interactiveEl as HTMLSelectElement;
+          elementText = select.name || select.id || select.value || '';
+        } else {
+          elementText = interactiveEl.textContent?.trim().replace(/\s+/g, ' ').substring(0, 100) || '';
+        }
+
+        const elementId = interactiveEl.id || '';
+        const elementRole = interactiveEl.getAttribute('role') || '';
+        const elementTitle = interactiveEl.getAttribute('title') || '';
+        const elementAriaLabel = interactiveEl.getAttribute('aria-label') || '';
+        const label = elementText || elementTitle || elementAriaLabel || elementId || elementRole || 'elemento';
+
+        if (interactiveEl.getAttribute('type') === 'password') {
+          return;
+        }
+
+        const displayLabel = label.substring(0, 80);
+
+        auditLogService.logAction({
+          action_type: 'click',
+          module: activeBlock || 'geral',
+          description: `Clique em: "${displayLabel}" (${tagName})`,
+          details: {
+            tagName,
+            id: elementId,
+            text: elementText.substring(0, 200),
+            role: elementRole,
+            title: elementTitle,
+            ariaLabel: elementAriaLabel,
+            path: window.location.pathname,
+            view: currentView,
+            block: activeBlock
+          }
+        });
+      }
+    };
+
+    window.addEventListener('click', handleGlobalClick, true);
+    return () => window.removeEventListener('click', handleGlobalClick, true);
+  }, [currentView, activeBlock, currentUser]);
+
   // --- SYSTEM AUTO-REFRESH ROUTINE (07:00, 12:00, 18:00) ---
   const initialMountCheck = useRef(true);
   const pendingWarningShown = useRef(false);
@@ -1201,9 +1334,17 @@ const App: React.FC = () => {
       }
 
       if (needsUpdate) {
+        // Preserva as credenciais de acesso salvas antes de limpar o localStorage
+        const savedUser = localStorage.getItem('remember_user');
+        const savedPass = localStorage.getItem('remember_pass');
+
         // Atualização debaixo dos panos: limpa cache e atualiza a flag silenciosamente
         localStorage.clear();
         sessionStorage.clear();
+
+        // Restaura as credenciais salvas
+        if (savedUser) localStorage.setItem('remember_user', savedUser);
+        if (savedPass) localStorage.setItem('remember_pass', savedPass);
 
         localStorage.setItem(WINDOW_KEY, currentWindow);
         if (needsForcedUpdate && systemUpdateTarget) {
@@ -1227,6 +1368,7 @@ const App: React.FC = () => {
         if (warningDiv) warningDiv.remove();
 
         // Forçar desconexão
+        auditLogService.clearCache();
         signOut();
 
         setTimeout(() => {
@@ -1522,6 +1664,14 @@ const App: React.FC = () => {
         }
       }
 
+      // Log editing action
+      auditLogService.logAction({
+        action_type: 'action',
+        module: finalOrder.blockType || 'geral',
+        description: `Editou o documento: "${finalOrder.title || 'documento'}" (${finalOrder.protocol})`,
+        details: { id: finalOrder.id, protocol: finalOrder.protocol, title: finalOrder.title, type: finalOrder.blockType }
+      });
+
       setAppState(updatedSnapshot);
       clearDraft();
       setIsFinalizedView(true);
@@ -1732,6 +1882,14 @@ const App: React.FC = () => {
 
           await comprasService.savePurchaseOrder(finalOrder);
 
+          // Log creation action
+          auditLogService.logAction({
+            action_type: 'action',
+            module: 'compras',
+            description: `Criou o pedido de compra: "${finalOrder.title || 'documento'}" (${protocolString})`,
+            details: { id: finalOrder.id, protocol: protocolString, title: finalOrder.title, type: 'compras' }
+          });
+
           // STEP 5: SUCCESS/REDIRECT
           setPurchaseLoadingState(prev => ({ ...prev, title: 'Sucesso!', message: 'Pedido registrado. Redirecionando...' }));
           await new Promise(resolve => setTimeout(resolve, 800)); // Small delay to let user see success
@@ -1759,6 +1917,14 @@ const App: React.FC = () => {
         setOrders(prev => [finalOrder, ...prev]);
         try {
           const savedOrder = await diariasService.saveServiceRequest(finalOrder);
+
+          // Log creation action
+          auditLogService.logAction({
+            action_type: 'action',
+            module: 'diarias',
+            description: `Criou a solicitação de diária: "${finalOrder.title || 'documento'}" (${savedOrder.protocol})`,
+            details: { id: savedOrder.id, protocol: savedOrder.protocol, title: finalOrder.title, type: 'diarias' }
+          });
 
           // Update state if protocol was changed during save (retry logic)
           if (savedOrder.protocol !== finalOrder.protocol) {
@@ -1791,6 +1957,14 @@ const App: React.FC = () => {
         try {
           await licitacaoService.saveLicitacaoProcess(finalOrder);
 
+          // Log creation action
+          auditLogService.logAction({
+            action_type: 'action',
+            module: 'licitacao',
+            description: `Criou o processo de licitação: "${finalOrder.title || 'documento'}" (${protocolString})`,
+            details: { id: finalOrder.id, protocol: protocolString, title: finalOrder.title, type: 'licitacao' }
+          });
+
           setAppState(finalSnapshot);
           clearDraft();
           setCurrentView('licitacao-all');
@@ -1810,6 +1984,15 @@ const App: React.FC = () => {
         try {
           console.log("Saving new Oficio via Mutation...", finalOrder);
           await createOficioMutation.mutateAsync(finalOrder);
+
+          // Log creation action
+          auditLogService.logAction({
+            action_type: 'action',
+            module: 'oficio',
+            description: `Criou o ofício: "${finalOrder.title || 'documento'}" (${protocolString})`,
+            details: { id: finalOrder.id, protocol: protocolString, title: finalOrder.title, type: 'oficio' }
+          });
+
           console.log("Oficio Saved Successfully.");
         } catch (err) {
           console.error("Failed to save Oficio:", err);
@@ -1933,6 +2116,14 @@ const App: React.FC = () => {
       } else {
         await deleteOficioMutation.mutateAsync(id);
       }
+
+      // Log delete action
+      auditLogService.logAction({
+        action_type: 'action',
+        module: resolvedBlockType || 'geral',
+        description: `Excluiu o documento: "${targetOrder?.title || 'documento'}" (${targetOrder?.protocol || id})`,
+        details: { id, protocol: targetOrder?.protocol, title: targetOrder?.title, type: resolvedBlockType }
+      });
 
       // 4. Success UI Update (After confirm)
       setOrders(p => p.filter(o => o.id !== id));
@@ -2273,6 +2464,14 @@ const App: React.FC = () => {
       statusHistory: [...(orderToUpdate.statusHistory || []), newMovement]
     };
 
+    // Log status update action
+    auditLogService.logAction({
+      action_type: 'action',
+      module: orderToUpdate.blockType || 'geral',
+      description: `Alterou status do documento: "${orderToUpdate.title || 'documento'}" (${orderToUpdate.protocol}) para "${newMovement.statusLabel}"`,
+      details: { protocol: orderToUpdate.protocol, title: orderToUpdate.title, newStatus: targetStatus, type: orderToUpdate.blockType, justification }
+    });
+
     // 3. Optimistic Update (Immediate UI Refresh)
     const updateList = (list: Order[]) => {
       const exists = list.some(o => o.id === updatedOrder.id);
@@ -2393,6 +2592,14 @@ const App: React.FC = () => {
       completionForecast: completionForecast || orderToUpdate.completionForecast,
       statusHistory: [...(orderToUpdate.statusHistory || []), newMovement]
     } as Order;
+
+    // Log purchase status update action
+    auditLogService.logAction({
+      action_type: 'action',
+      module: 'compras',
+      description: `Alterou status de compra do pedido: "${orderToUpdate.title || 'documento'}" (${orderToUpdate.protocol}) para "${purchaseStatus}"`,
+      details: { protocol: orderToUpdate.protocol, title: orderToUpdate.title, newPurchaseStatus: purchaseStatus, type: 'compras', justification }
+    });
 
     // 3. Optimistic Update (IMMEDIATE)
     const updateList = (list: Order[]) => {
@@ -2573,6 +2780,14 @@ const App: React.FC = () => {
     setIsDownloading(true);
     const element = document.getElementById('preview-scaler');
     if (!element) return;
+
+    auditLogService.logAction({
+      action_type: 'download',
+      module: activeBlock || 'geral',
+      description: `Download de PDF: "${appState.content.title || 'documento'}"`,
+      details: { title: appState.content.title, type: activeBlock }
+    });
+
     const opt = { margin: 0, filename: `${appState.content.title || 'documento'}.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2, useCORS: true, letterRendering: true, scrollY: 0, scrollX: 0 }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }, pagebreak: { mode: 'css' } };
     // @ts-ignore
     window.html2pdf().from(element).set(opt).save().finally(() => setIsDownloading(false));
@@ -2639,6 +2854,13 @@ const App: React.FC = () => {
     setIsDownloading(true);
     setSnapshotToDownload(snapshot);
     setBlockTypeToDownload(forcedBlockType || fullOrder.blockType);
+
+    auditLogService.logAction({
+      action_type: 'download',
+      module: fullOrder.blockType || 'geral',
+      description: `Download de PDF do histórico: "${order.title || 'documento'}"`,
+      details: { title: order.title, orderId: order.id, type: fullOrder.blockType }
+    });
     setTimeout(async () => {
       const element = document.getElementById('background-preview-scaler');
       if (!element) return;
@@ -2690,6 +2912,13 @@ const App: React.FC = () => {
     setSnapshotToDownload(tempSnapshot);
     setBlockTypeToDownload('licitacao');
 
+    auditLogService.logAction({
+      action_type: 'download',
+      module: 'licitacao',
+      description: `Download do PDF da etapa "${stageName}" do processo: "${content.title || 'licitacao'}"`,
+      details: { title: content.title, stageIndex: viewIdx, stageName }
+    });
+
     setTimeout(async () => {
       const element = document.getElementById('background-preview-scaler');
       if (!element) return;
@@ -2704,12 +2933,21 @@ const App: React.FC = () => {
 
   const handleOpenAdmin = (tab?: string | null) => {
     setCurrentView('admin');
-    setAdminTab(tab || null);
-    setIsAdminSidebarOpen(true);
+    const targetTab = tab || null;
+    setAdminTab(targetTab);
+    setIsAdminSidebarOpen(targetTab !== null && targetTab !== 'dashboard');
     setIsFinalizedView(false);
   };
 
   const handleLogout = async () => {
+    if (currentUser) {
+      await auditLogService.logAction({
+        action_type: 'logout',
+        module: 'auth',
+        description: `Logout efetuado com sucesso pelo usuário ${currentUser.name}`
+      });
+    }
+    auditLogService.clearCache();
     await signOut();
     clearDraft(); // Clear draft on logout
     try {
@@ -3256,8 +3494,8 @@ const App: React.FC = () => {
             onClose={() => setToast(prev => ({ ...prev, isVisible: false }))}
           />
 
-          {/* Chat Components - Only for authenticated users and not on 'Consultas' or 'Farmacia' pages */}
-          {currentUser && currentView !== 'consultas' && currentView !== 'farmacia' && (
+          {/* Chat Components - Only for authenticated users and not on 'Consultas', 'Farmacia' or Admin Logs pages */}
+          {currentUser && currentView !== 'consultas' && currentView !== 'farmacia' && !(currentView === 'admin' && adminTab === 'logs') && (
             <>
               <ChatWidget />
               <ChatWindow />
@@ -3288,7 +3526,12 @@ const App: React.FC = () => {
 
                 <div className="flex-1 flex overflow-hidden h-full relative">
                   {(() => {
-                    return !isFinalizedView && adminTab !== 'system_update' && adminTab !== 'fleet' && adminTab !== '2fa' && adminTab !== 'users' && adminTab !== 'entities' && adminTab !== 'access_control' && (currentView !== 'admin' || adminTab !== null) && (
+                    const shouldRenderSidebar = !isFinalizedView && (
+                      currentView === 'editor' || 
+                      (currentView === 'admin' && (adminTab === 'design' || adminTab === 'ui'))
+                    );
+
+                    return shouldRenderSidebar && (
                       <AdminSidebar
                         state={appState}
                         onUpdate={setAppState}
@@ -3304,10 +3547,10 @@ const App: React.FC = () => {
                         isReadOnly={activeBlock === 'licitacao' ? (editingOrder?.status === 'completed' || editingOrder?.status === 'approved') : (editingOrder?.status === 'approved' || editingOrder?.status === 'completed')}
                         orderStatus={editingOrder?.status}
                       />
-                    )
+                    );
                   })()}
                   <main className="flex-1 h-full overflow-hidden flex flex-col relative bg-slate-50">
-                    {currentView === 'admin' && adminTab === null ? (
+                    {currentView === 'admin' && (adminTab === null || adminTab === 'dashboard') ? (
                       <div className="flex-1 overflow-y-auto custom-scrollbar p-8">
                         <AdminDashboard
                           currentUser={currentUser}
@@ -3492,6 +3735,8 @@ const App: React.FC = () => {
                       <AdminDocumentPreview state={appState} />
                     ) : currentView === 'admin' && adminTab === 'access_control' ? (
                       <SystemAccessControl onBack={() => setAdminTab(null)} />
+                    ) : currentView === 'admin' && adminTab === 'logs' ? (
+                      <SystemLogs onBack={() => setAdminTab(null)} />
                     ) : (
                       <div className={(activeBlock === 'compras' || activeBlock === 'diarias') && currentView === 'editor' ? 'fixed left-[-9999px] top-0 pointer-events-none opacity-0' : 'w-full h-full'}>
                         <DocumentPreview ref={componentRef} state={appState} isGenerating={isDownloading} mode={currentView === 'admin' ? 'admin' : 'editor'} blockType={activeBlock} onRemoveImage={handleRemoveImage} />

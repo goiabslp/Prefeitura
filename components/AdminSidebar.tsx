@@ -288,6 +288,15 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
             </div>
           )}
 
+          {activeTab === 'logs' && (
+            <div className="animate-fade-in">
+              {renderSectionHeader('Logs de Auditoria', 'Monitore as ações dos usuários no sistema')}
+              <p className="text-sm text-slate-500 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm font-medium">
+                A tela detalhada de logs de auditoria está disponível na tela principal ao lado.
+              </p>
+            </div>
+          )}
+
           {activeTab === 'signatures' && (
             <div className="animate-fade-in">
               {renderSectionHeader('Assinaturas', 'Gerencie quem assina os documentos gerados')}

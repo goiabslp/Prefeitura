@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Users, User as UserIcon, PenTool, Home, Palette, Briefcase, Network, Truck, ShieldCheck, Shield, RefreshCw } from 'lucide-react';
+import { Users, User as UserIcon, PenTool, Home, Palette, Briefcase, Network, Truck, ShieldCheck, Shield, RefreshCw, FileText } from 'lucide-react';
 import { User } from '../../types';
 
 interface AdminMenuProps {
@@ -33,6 +33,14 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({ currentUser, onTabChange }
       description: 'Veículos leves, pesados e acessórios',
       icon: <Truck className="w-6 h-6 text-blue-600" />,
       colorClass: 'bg-blue-50 border-blue-100 hover:border-blue-300 shadow-sm',
+      adminOnly: true
+    },
+    {
+      id: 'logs',
+      title: 'Logs de Auditoria',
+      description: 'Monitore ações e cliques dos usuários',
+      icon: <FileText className="w-6 h-6 text-slate-600" />,
+      colorClass: 'bg-slate-50 border-slate-100 hover:border-slate-300 shadow-sm',
       adminOnly: true
     },
     {

@@ -4,6 +4,7 @@ import { User, Lock, ArrowRight, FileText, ShieldCheck, CheckCircle2, Eye, EyeOf
 import { UIConfig } from '../types';
 import { getCachedImage, IMAGE_KEYS } from '../services/cacheService';
 import { supabase } from '../services/supabaseClient';
+import { auditLogService } from '../services/auditLogService';
 
 interface LoginScreenProps {
   onLogin: (username: string, password: string) => Promise<{ error?: any; data?: any }>;
@@ -74,6 +75,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, uiConfig, onL
           localStorage.removeItem('remember_pass');
         }
 
+        // Registrar log de login
+        auditLogService.logAction({
+          action_type: 'login',
+          module: 'auth',
+          description: `Login efetuado com sucesso pelo usuário ${username.toUpperCase()}`,
+          details: { email: emailToUse }
+        });
+
         // Show modern loading screen upon successful login
         setIsUpdatingSystem(true);
         
@@ -126,122 +135,80 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, uiConfig, onL
   const logoHeight = uiConfig?.loginLogoHeight || 80;
 
   return (
-    <div className="min-h-screen font-sans flex items-center justify-center p-4 relative overflow-hidden bg-[#0a0c10]">
+    <div className="h-screen w-screen font-sans flex items-center justify-center p-3 sm:p-6 relative overflow-hidden bg-[#07090e]">
 
-      {/* Background Dinâmico com Esferas Animadas */}
-      <div className="absolute inset-0 z-0 overflow-hidden">
-        <div className="absolute top-[-10%] left-[-5%] w-[40%] h-[40%] bg-indigo-600/20 rounded-full blur-[120px] animate-pulse"></div>
-        <div className="absolute bottom-[10%] right-[-5%] w-[35%] h-[35%] bg-purple-600/15 rounded-full blur-[100px] animate-bounce" style={{ animationDuration: '8s' }}></div>
-        <div className="absolute top-[40%] left-[20%] w-[15%] h-[15%] bg-blue-500/10 rounded-full blur-[80px] animate-pulse"></div>
+      {/* Background Dinâmico com Auroras Animadas */}
+      <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-[-20%] left-[-10%] w-[55%] h-[55%] bg-indigo-600/10 rounded-full blur-[140px] animate-[pulse_12s_infinite_alternate]"></div>
+        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-purple-600/10 rounded-full blur-[130px] animate-[pulse_15s_infinite_alternate_2s]"></div>
+        <div className="absolute top-[30%] left-[20%] w-[30%] h-[30%] bg-blue-500/5 rounded-full blur-[100px] animate-[pulse_10s_infinite_alternate_1s]"></div>
 
-        <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(#ffffff 1px, transparent 1px)', backgroundSize: '32px 32px' }}></div>
+        {/* Subtle dot matrix pattern */}
+        <div className="absolute inset-0 opacity-[0.02] mix-blend-overlay" style={{ backgroundImage: 'radial-gradient(#ffffff 1px, transparent 1px)', backgroundSize: '24px 24px' }}></div>
       </div>
 
-      <div className={`w-full max-w-5xl grid lg:grid-cols-2 bg-[#161b22]/40 backdrop-blur-2xl rounded-[2.5rem] shadow-[0_0_50px_rgba(0,0,0,0.5)] border border-white/5 overflow-hidden transition-all duration-1000 transform ${isVisible ? 'translate-y-0 opacity-100' : 'translate-y-12 opacity-0'} relative z-10`}>
+      <div className={`w-full max-w-[450px] bg-[#10141d]/55 backdrop-blur-3xl rounded-[2.5rem] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.8)] border border-white/10 overflow-hidden transition-all duration-1000 transform ${isVisible ? 'translate-y-0 opacity-100' : 'translate-y-12 opacity-0'} relative z-10`}>
 
-        {/* Lado Esquerdo - Branding & Info */}
-        <div className="hidden lg:flex flex-col justify-between p-12 bg-gradient-to-br from-indigo-600/10 to-transparent relative overflow-hidden">
-          <div className="relative z-10">
-            <div className="flex items-center gap-3 mb-16">
-              <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-600/20">
-                <FileText className="w-6 h-6 text-white" />
-              </div>
-            </div>
-
-            <div className="space-y-2 mb-10">
-              <h2 className="text-4xl xl:text-5xl font-black text-white leading-[1.1] tracking-tight">
-                Soluções Digitais
-              </h2>
-              <h2 className="text-3xl xl:text-4xl font-bold text-indigo-400/90 leading-[1.1] tracking-tight">
-                para a Gestão Pública
-              </h2>
-              <h2 className="text-2xl xl:text-3xl font-semibold text-white/40 leading-[1.1] tracking-tight uppercase">
-                Municipal
-              </h2>
-            </div>
-
-            <div className="space-y-6">
-              {[
-                { icon: <ShieldCheck className="w-5 h-5" />, text: "Segurança de dados ponta a ponta" },
-                { icon: <CheckCircle2 className="w-5 h-5" />, text: "Padronização visual automática" }
-              ].map((item, idx) => (
-                <div key={idx} className="flex items-center gap-4 text-indigo-100/70 animate-fade-in" style={{ animationDelay: `${idx * 200}ms` }}>
-                  <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-indigo-400">
-                    {item.icon}
-                  </div>
-                  <p className="text-sm font-medium">{item.text}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="relative z-10 mt-auto pt-12 border-t border-white/5">
-            <p className="text-xs text-white/30 font-bold uppercase tracking-[0.2em]">Tecnologia Municipal 4.0</p>
-          </div>
-          <div className="absolute -bottom-20 -right-20 w-64 h-64 bg-indigo-500/5 rounded-full blur-3xl"></div>
-        </div>
-
-        {/* Lado Direito - Form de Login */}
-        <div className="p-8 lg:p-16 flex flex-col justify-center bg-white/[0.02]">
-          <div className="mb-10 text-center">
-
+        {/* Form de Login */}
+        <div className="p-6 sm:p-10 flex flex-col justify-center bg-white/[0.01] max-h-[90dvh] overflow-y-auto scrollbar-slim">
+          <div className="mb-6 xl:mb-8 text-center flex flex-col items-center">
             {logoUrl ? (
-              <div className="mb-8 flex justify-center">
+              <div className="mb-4 flex justify-center max-h-[75px] xl:max-h-[90px] overflow-hidden">
                 <img
                   src={getCachedImage(logoUrl, IMAGE_KEYS.loginLogoUrl) || logoUrl}
                   alt="Logo"
-                  style={{ height: `${logoHeight}px` }}
-                  className="object-contain drop-shadow-[0_10px_20px_rgba(0,0,0,0.3)]"
+                  style={{ height: 'auto', maxHeight: '100%', maxWidth: '220px' }}
+                  className="object-contain drop-shadow-[0_8px_16px_rgba(0,0,0,0.4)]"
                 />
               </div>
             ) : (
-              <h1 className="text-3xl font-bold text-white mb-2">Bem-vindo</h1>
+              <h1 className="text-2xl xl:text-3xl font-bold text-white mb-2">Bem-vindo</h1>
             )}
-            <p className="text-slate-400 font-medium">Faça login para gerenciar seus documentos.</p>
+            <p className="text-slate-400 text-xs xl:text-sm font-medium">Faça login para gerenciar seus documentos.</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="space-y-2">
-              <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Usuário</label>
+          <form onSubmit={handleSubmit} className="space-y-4 xl:space-y-5">
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Usuário</label>
               <div className="relative group">
                 <input
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value.toUpperCase())}
-                  className="w-full pl-12 pr-4 py-4 bg-white/5 border border-white/10 rounded-2xl text-white placeholder-slate-600 focus:bg-white/[0.08] focus:border-indigo-500/50 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all duration-300"
-                  placeholder="Seu usuário de acesso"
+                  className="w-full pl-11 pr-4 py-3 bg-white/[0.03] border border-white/10 rounded-xl text-white placeholder-slate-600 focus:bg-white/[0.06] focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all duration-300 text-sm"
+                  placeholder="SEU USUÁRIO DE ACESSO"
                 />
-                <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500 group-focus-within:text-indigo-400 transition-colors" />
+                <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-indigo-400 transition-colors" />
               </div>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <div className="flex justify-between items-center px-1">
-                <label className="text-xs font-black text-slate-500 uppercase tracking-widest">Senha</label>
-                <button type="button" className="text-[10px] font-bold text-indigo-400 hover:text-indigo-300 transition-colors uppercase tracking-wider">Esqueceu a senha?</button>
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Senha</label>
+                <button type="button" className="text-[9px] font-bold text-indigo-400 hover:text-indigo-300 transition-colors uppercase tracking-wider">Esqueceu a senha?</button>
               </div>
               <div className="relative group">
                 <input
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-12 pr-12 py-4 bg-white/5 border border-white/10 rounded-2xl text-white placeholder-slate-600 focus:bg-white/[0.08] focus:border-indigo-500/50 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all duration-300"
+                  className="w-full pl-11 pr-11 py-3 bg-white/[0.03] border border-white/10 rounded-xl text-white placeholder-slate-600 focus:bg-white/[0.06] focus:border-indigo-500/50 focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all duration-300 text-sm"
                   placeholder="••••••••"
                 />
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500 group-focus-within:text-indigo-400 transition-colors" />
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-indigo-400 transition-colors" />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-indigo-400 transition-colors focus:outline-none"
-                  tabIndex={-1} // Prevent tabbing to this button before submit
+                  tabIndex={-1}
                 >
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  {showPassword ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
                 </button>
               </div>
             </div>
 
             <div className="flex items-center justify-between px-1">
-              <label className="flex items-center gap-3 cursor-pointer group">
+              <label className="flex items-center gap-2.5 cursor-pointer group">
                 <div className="relative">
                   <input
                     type="checkbox"
@@ -249,15 +216,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, uiConfig, onL
                     checked={rememberMe}
                     onChange={(e) => setRememberMe(e.target.checked)}
                   />
-                  <div className={`w-10 h-5 rounded-full transition-colors duration-300 ${rememberMe ? 'bg-indigo-600' : 'bg-white/10'}`}></div>
-                  <div className={`absolute left-1 top-1 w-3 h-3 bg-white rounded-full transition-transform duration-300 ${rememberMe ? 'translate-x-5' : 'translate-x-0'}`}></div>
+                  <div className={`w-8 h-4 rounded-full transition-colors duration-300 ${rememberMe ? 'bg-indigo-500' : 'bg-white/10'}`}></div>
+                  <div className={`absolute left-0.5 top-0.5 w-3 h-3 bg-white rounded-full transition-transform duration-300 ${rememberMe ? 'translate-x-4' : 'translate-x-0'}`}></div>
                 </div>
-                <span className="text-xs font-bold text-slate-400 group-hover:text-slate-200 transition-colors uppercase tracking-widest">Manter conectado</span>
+                <span className="text-[10px] font-bold text-slate-400 group-hover:text-slate-200 transition-colors uppercase tracking-widest">Manter conectado</span>
               </label>
             </div>
 
             {error && (
-              <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-bold text-center animate-shake flex items-center justify-center gap-2">
+              <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-[11px] font-bold text-center animate-shake flex items-center justify-center gap-2">
                 <div className="w-1.5 h-1.5 bg-red-500 rounded-full"></div>
                 {error}
               </div>
@@ -266,24 +233,24 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, uiConfig, onL
             <button
               type="submit"
               disabled={loading}
-              className="w-full relative group overflow-hidden"
+              className="w-full relative group overflow-hidden rounded-xl shadow-lg shadow-indigo-600/10 hover:shadow-indigo-600/20 transition-all duration-300 active:scale-[0.98]"
             >
-              <div className="absolute inset-0 bg-gradient-to-r from-indigo-600 to-purple-600 transition-all duration-500 group-hover:scale-110"></div>
-              <div className="relative py-4 rounded-2xl flex items-center justify-center gap-2 text-white font-bold transition-transform active:scale-95">
+              <div className="absolute inset-0 bg-gradient-to-r from-indigo-500 to-purple-600 transition-all duration-500 group-hover:scale-105"></div>
+              <div className="relative py-3 flex items-center justify-center gap-2 text-white text-sm font-bold tracking-wider uppercase">
                 {loading ? (
-                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                 ) : (
                   <>
                     Entrar no Sistema
-                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                    <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
                   </>
                 )}
               </div>
             </button>
           </form>
 
-          <div className="mt-12 text-center">
-            <p className="text-[10px] text-slate-600 font-bold uppercase tracking-[0.3em]">Ambiente Seguro Certificado</p>
+          <div className="mt-8 text-center">
+            <p className="text-[9px] text-slate-600 font-bold uppercase tracking-[0.3em]">Ambiente Seguro Certificado</p>
           </div>
         </div>
       </div>
@@ -297,6 +264,21 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, uiConfig, onL
         }
         .animate-shake {
           animation: shake 0.3s ease-in-out;
+        }
+        
+        /* Custom slim scrollbar for internal scroll */
+        .scrollbar-slim::-webkit-scrollbar {
+          width: 4px;
+        }
+        .scrollbar-slim::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .scrollbar-slim::-webkit-scrollbar-thumb {
+          background: rgba(255, 255, 255, 0.08);
+          border-radius: 9999px;
+        }
+        .scrollbar-slim::-webkit-scrollbar-thumb:hover {
+          background: rgba(255, 255, 255, 0.15);
         }
       `}} />
 
