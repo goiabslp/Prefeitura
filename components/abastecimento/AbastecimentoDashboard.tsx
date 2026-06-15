@@ -10,6 +10,7 @@ import { AppState, Vehicle, Sector } from '../../types';
 import { supabase } from '../../services/supabaseClient';
 import { uploadFile } from '../../services/storageService';
 import { generateEmpenhoReportPDF } from '../../utils/empenhoReportGenerator';
+import { formatLocalDate } from '../../utils/dateUtils';
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
     BarChart, Bar, PieChart, Pie, Cell, AreaChart, Area
@@ -2837,7 +2838,7 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
                                     </td>
                                     <td className="px-6 py-4">
                                         <div className="flex flex-col gap-1">
-                                            <span className="text-xs font-bold text-slate-700">🗓️ {history.start_date ? new Date(history.start_date).toLocaleDateString() : 'Início'} - {history.end_date ? new Date(history.end_date).toLocaleDateString() : 'Fim'}</span>
+                                            <span className="text-xs font-bold text-slate-700">🗓️ {history.start_date ? formatLocalDate(history.start_date) : 'Início'} - {history.end_date ? formatLocalDate(history.end_date) : 'Fim'}</span>
                                             <span className="text-[10px] font-medium text-slate-500">🏢 {history.station || 'Todos os Postos'} • 🏭 {history.sector || 'Todos os Setores'}</span>
                                             <span className="text-[10px] font-medium text-slate-500">🚗 {history.vehicle || 'Todos'} • ⛽ {history.fuel_type || 'Todos'}</span>
                                         </div>
