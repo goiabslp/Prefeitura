@@ -43,7 +43,21 @@ const normalizeDiariasSnapshot = (item: any, docSnapshotInput: any): any => {
 
 export const getAllServiceRequests = async (lightweight = true, page = 0, pageSize = 1000, searchTerm = ''): Promise<Order[]> => {
     const columns = lightweight
-        ? 'id, protocol, title, status, status_history, created_at, user_id, user_name, payment_status, payment_date, document_snapshot'
+        ? 'id, protocol, title, status, status_history, created_at, user_id, user_name, payment_status, payment_date, ' +
+          'reqName:document_snapshot->content->>requesterName, ' +
+          'reqNameLegacy:document_snapshot->>requesterName, ' +
+          'reqNameUnderscore:document_snapshot->content->>requester_name, ' +
+          'reqNameLegacyUnderscore:document_snapshot->>requester_name, ' +
+          'dest:document_snapshot->content->>destination, ' +
+          'destLegacy:document_snapshot->>destination, ' +
+          'depDate:document_snapshot->content->>departureDateTime, ' +
+          'depDateLegacy:document_snapshot->>departureDateTime, ' +
+          'depDateUnderscore:document_snapshot->content->>departure_date, ' +
+          'depDateLegacyUnderscore:document_snapshot->>departure_date, ' +
+          'retDate:document_snapshot->content->>returnDateTime, ' +
+          'retDateLegacy:document_snapshot->>returnDateTime, ' +
+          'retDateUnderscore:document_snapshot->content->>return_date, ' +
+          'retDateLegacyUnderscore:document_snapshot->>return_date'
         : '*';
 
     let query = supabase
@@ -68,20 +82,107 @@ export const getAllServiceRequests = async (lightweight = true, page = 0, pageSi
         return [];
     }
 
-    return data.map((item: any) => ({
-        id: item.id,
-        protocol: item.protocol,
-        title: item.title,
-        status: item.status,
-        paymentStatus: item.payment_status,
-        paymentDate: item.payment_date,
-        statusHistory: item.status_history,
-        createdAt: item.created_at,
-        userId: item.user_id,
-        userName: item.user_name,
-        blockType: 'diarias',
-        documentSnapshot: normalizeDiariasSnapshot(item, item.document_snapshot)
-    }));
+    return data.map((item: any) => {
+        if (lightweight) {
+            const reqName = item.reqName || item.reqNameLegacy || item.reqNameUnderscore || item.reqNameLegacyUnderscore || item.user_name || '';
+            const destination = item.dest || item.destLegacy || 'Destino n/a';
+            const departureDateTime = item.depDate || item.depDateLegacy || item.depDateUnderscore || item.depDateLegacyUnderscore || undefined;
+            const returnDateTime = item.retDate || item.retDateLegacy || item.retDateUnderscore || item.retDateLegacyUnderscore || undefined;
+
+            return {
+                id: item.id,
+                protocol: item.protocol,
+                title: item.title,
+                status: item.status,
+                paymentStatus: item.payment_status,
+                paymentDate: item.payment_date,
+                statusHistory: item.status_history,
+                createdAt: item.created_at,
+                userId: item.user_id,
+                userName: item.user_name,
+                blockType: 'diarias',
+                documentSnapshot: {
+                    branding: {
+                        logoUrl: null,
+                        primaryColor: '#4f46e5',
+                        secondaryColor: '#0f172a',
+                        fontFamily: 'font-sans' as any,
+                        logoWidth: 76,
+                        logoAlignment: 'left' as any,
+                        watermark: {
+                            enabled: false,
+                            imageUrl: null,
+                            opacity: 20,
+                            size: 55,
+                            grayscale: true
+                        }
+                    },
+                    document: {
+                        headerText: '',
+                        footerText: '',
+                        city: '',
+                        showDate: true,
+                        showPageNumbers: true,
+                        showSignature: false,
+                        showLeftBlock: true,
+                        showRightBlock: true,
+                        titleStyle: { size: 12, color: '#000000', alignment: 'left' as any },
+                        leftBlockStyle: { size: 10, color: '#000000' },
+                        rightBlockStyle: { size: 10, color: '#000000' }
+                    },
+                    ui: {
+                        loginLogoUrl: null,
+                        loginLogoHeight: 80,
+                        headerLogoUrl: null,
+                        headerLogoHeight: 40,
+                        homeLogoPosition: 'left' as any
+                    },
+                    isLightweight: true,
+                    content: {
+                        title: item.title,
+                        protocol: item.protocol,
+                        subType: undefined,
+                        body: '',
+                        leftBlockText: '',
+                        rightBlockText: '',
+                        requesterName: reqName,
+                        requesterRole: '',
+                        destination: destination,
+                        departureDateTime: departureDateTime,
+                        returnDateTime: returnDateTime,
+                        requesterSector: undefined,
+                        priority: 'Normal',
+                        authorizedBy: '',
+                        requestedValue: '',
+                        descriptionReason: '',
+                        lodgingCount: 0,
+                        distanceKm: 0,
+                        paymentForecast: undefined,
+                        signatureName: '',
+                        signatureRole: '',
+                        signatureSector: '',
+                        showDiariaSignatures: false,
+                        useDigitalSignature: false
+                    }
+                }
+            };
+        }
+
+        return {
+            id: item.id,
+            protocol: item.protocol,
+            title: item.title,
+            status: item.status,
+            paymentStatus: item.payment_status,
+            paymentDate: item.payment_date,
+            statusHistory: item.status_history,
+            createdAt: item.created_at,
+            userId: item.user_id,
+            userName: item.user_name,
+            blockType: 'diarias',
+            documentSnapshot: normalizeDiariasSnapshot(item, item.document_snapshot)
+        };
+    });
 };
 
 export const getServiceRequestById = async (id: string): Promise<Order> => {
