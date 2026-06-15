@@ -744,6 +744,8 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
     });
     const [pendingFilters, setPendingFilters] = useState({ ...appliedFilters });
     const [reportHistory, setReportHistory] = useState<AbastecimentoReportHistory[]>([]);
+    const [selectedHistoryReport, setSelectedHistoryReport] = useState<AbastecimentoReportHistory | null>(null);
+    const [showHistoryPrintPreview, setShowHistoryPrintPreview] = useState(false);
     const [selectedSector, setSelectedSector] = useState<string>(() => {
         if (user?.role === 'admin') return 'all';
         const userSector = sectors.find(s => s.id === user?.sectorId);
@@ -1457,6 +1459,156 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
             grandTotalValue
         };
     }, [allRecords, appliedFilters, vehicles, sectors]);
+
+    const historyReportData = useMemo(() => {
+        if (!selectedHistoryReport) return null;
+
+        // Process all records to include derived sector/plate
+        const processedRecords = allRecords.map(r => {
+            const veh = vehicles.find(v =>
+                (v.plate && v.plate === r.vehicle) ||
+                (`${v.model} - ${v.brand}` === r.vehicle) ||
+                (v.plate && r.vehicle.includes(v.plate))
+            );
+            const s = sectors.find(sec => sec.id === veh?.sectorId);
+            return {
+                ...r,
+                derivedSector: s?.name || 'Não Identificado',
+                derivedPlate: veh?.plate || 'S/P'
+            };
+        });
+
+        // Filter by record_ids if available, otherwise fallback to filters
+        let filtered = [];
+        if (selectedHistoryReport.record_ids && selectedHistoryReport.record_ids.length > 0) {
+            filtered = processedRecords.filter(r => selectedHistoryReport.record_ids?.includes(r.id));
+        } else {
+            // Fallback filtering logic
+            filtered = processedRecords.filter(r => {
+                const rDate = new Date(r.date);
+                const parseLocalDate = (dateStr: string) => {
+                    const [y, m, d] = dateStr.split('-').map(Number);
+                    return new Date(y, m - 1, d);
+                };
+
+                const start = selectedHistoryReport.start_date ? parseLocalDate(selectedHistoryReport.start_date) : null;
+                const end = selectedHistoryReport.end_date ? parseLocalDate(selectedHistoryReport.end_date) : null;
+
+                if (start) {
+                    start.setHours(0, 0, 0, 0);
+                    if (rDate < start) return false;
+                }
+                if (end) {
+                    end.setHours(23, 59, 59, 999);
+                    if (rDate > end) return false;
+                }
+
+                const fuel = r.fuelType?.toLowerCase() || '';
+                const isArla = fuel.includes('arla');
+                const arlaSelected = selectedHistoryReport.fuel_type?.toLowerCase().includes('arla');
+                if (isArla && !arlaSelected) return false;
+
+                if (selectedHistoryReport.station && r.station !== selectedHistoryReport.station) return false;
+                if (selectedHistoryReport.sector && !r.derivedSector.toLowerCase().includes(selectedHistoryReport.sector.toLowerCase())) return false;
+                if (selectedHistoryReport.vehicle && r.vehicle !== selectedHistoryReport.vehicle) return false;
+                if (selectedHistoryReport.fuel_type) {
+                    const allowedTypes = selectedHistoryReport.fuel_type.split(',');
+                    const hasMatch = allowedTypes.some((f: string) => fuel.includes(f.trim().toLowerCase()));
+                    if (!hasMatch) return false;
+                }
+                if (selectedHistoryReport.payment_status && selectedHistoryReport.payment_status !== 'all') {
+                    const pStatus = r.payment_status || 'Em Aberto';
+                    if (pStatus !== selectedHistoryReport.payment_status) return false;
+                }
+                return true;
+            });
+        }
+
+        // Compute aggregations
+        const totalLitersByFuel: Record<string, number> = {};
+        const totalValueBySector: Record<string, number> = {};
+        const totalValueByFuel: Record<string, number> = {};
+        const sectorFuelBreakdown: Record<string, {
+            dieselLiters: number;
+            dieselValue: number;
+            gasolinaLiters: number;
+            gasolinaValue: number;
+            otherLiters: number;
+            otherValue: number;
+            totalValue: number;
+        }> = {};
+        const plateFuelSummary: Record<string, {
+            plate: string;
+            sector: string;
+            fuelType: string;
+            totalLiters: number;
+            totalValue: number;
+        }> = {};
+        let grandTotalLiters = 0;
+        let grandTotalValue = 0;
+
+        filtered.forEach(r => {
+            const fuel = r.fuelType.split(' - ')[0];
+            const fuelLower = fuel.toLowerCase();
+            totalLitersByFuel[fuel] = (totalLitersByFuel[fuel] || 0) + r.liters;
+            totalValueByFuel[fuel] = (totalValueByFuel[fuel] || 0) + r.cost;
+            grandTotalLiters += r.liters;
+            grandTotalValue += r.cost;
+
+            const plate = r.derivedPlate;
+            const sectorName = r.derivedSector;
+            const plateFuelKey = `${plate}-${fuel}`;
+            if (!plateFuelSummary[plateFuelKey]) {
+                plateFuelSummary[plateFuelKey] = {
+                    plate,
+                    sector: sectorName,
+                    fuelType: fuel,
+                    totalLiters: 0,
+                    totalValue: 0
+                };
+            }
+            plateFuelSummary[plateFuelKey].totalLiters += r.liters;
+            plateFuelSummary[plateFuelKey].totalValue += r.cost;
+
+            totalValueBySector[sectorName] = (totalValueBySector[sectorName] || 0) + r.cost;
+
+            if (!sectorFuelBreakdown[sectorName]) {
+                sectorFuelBreakdown[sectorName] = {
+                    dieselLiters: 0, dieselValue: 0,
+                    gasolinaLiters: 0, gasolinaValue: 0,
+                    otherLiters: 0, otherValue: 0,
+                    totalValue: 0
+                };
+            }
+            if (fuelLower.includes('diesel')) {
+                sectorFuelBreakdown[sectorName].dieselLiters += r.liters;
+                sectorFuelBreakdown[sectorName].dieselValue += r.cost;
+            } else if (fuelLower.includes('gasolina')) {
+                sectorFuelBreakdown[sectorName].gasolinaLiters += r.liters;
+                sectorFuelBreakdown[sectorName].gasolinaValue += r.cost;
+            } else {
+                sectorFuelBreakdown[sectorName].otherLiters += r.liters;
+                sectorFuelBreakdown[sectorName].otherValue += r.cost;
+            }
+            sectorFuelBreakdown[sectorName].totalValue += r.cost;
+        });
+
+        return {
+            records: filtered,
+            totalLitersByFuel,
+            totalValueBySector,
+            totalValueByFuel,
+            sectorFuelBreakdown,
+            plateFuelSummary,
+            grandTotalLiters,
+            grandTotalValue
+        };
+    }, [allRecords, selectedHistoryReport, vehicles, sectors]);
+
+    const handleDownloadHistoryReport = (history: AbastecimentoReportHistory) => {
+        setSelectedHistoryReport(history);
+        setShowHistoryPrintPreview(true);
+    };
 
     const renderSectorView = () => (
         <div className="space-y-6 animate-fade-in pb-20">
@@ -2670,6 +2822,7 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
                                 <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-wider">Filtros (Período / Posto / Setor)</th>
                                 <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-wider">Usuário</th>
                                 <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-wider">Situação de Pagamento</th>
+                                <th className="px-6 py-4 text-center text-[10px] font-black text-slate-400 uppercase tracking-wider">Ações</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -2708,11 +2861,21 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
                                             <option value="Pago">Pago</option>
                                         </select>
                                     </td>
+                                    <td className="px-6 py-4 text-center">
+                                        <button
+                                            onClick={() => handleDownloadHistoryReport(history)}
+                                            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-md transition-all active:scale-95 inline-flex items-center justify-center gap-2 text-xs"
+                                            title="Baixar PDF"
+                                        >
+                                            <Download className="w-4 h-4" />
+                                            <span>PDF</span>
+                                        </button>
+                                    </td>
                                 </tr>
                             ))}
                             {reportHistory.length === 0 && (
                                 <tr>
-                                    <td colSpan={4} className="px-6 py-12 text-center text-slate-400">
+                                    <td colSpan={5} className="px-6 py-12 text-center text-slate-400">
                                         Nenhum histórico de relatório salvo.
                                     </td>
                                 </tr>
@@ -3411,6 +3574,28 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
                     persons={persons}
                     gasStations={gasStations}
                     onClose={() => setShowPrintPreview(false)}
+                />
+            )}
+
+            {showHistoryPrintPreview && selectedHistoryReport && historyReportData && (
+                <AbastecimentoReportPDF
+                    data={historyReportData}
+                    filters={{
+                        startDate: selectedHistoryReport.start_date || '',
+                        endDate: selectedHistoryReport.end_date || '',
+                        station: selectedHistoryReport.station || 'all',
+                        sector: selectedHistoryReport.sector || 'all',
+                        vehicle: selectedHistoryReport.vehicle || 'all',
+                        fuelType: selectedHistoryReport.fuel_type ? selectedHistoryReport.fuel_type.split(',') : ['all']
+                    }}
+                    state={state}
+                    mode={selectedHistoryReport.report_type}
+                    persons={persons}
+                    gasStations={gasStations}
+                    onClose={() => {
+                        setShowHistoryPrintPreview(false);
+                        setSelectedHistoryReport(null);
+                    }}
                 />
             )}
         </div>
