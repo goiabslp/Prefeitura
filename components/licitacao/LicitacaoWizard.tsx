@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Check, ChevronRight, Gavel, Plus, Trash2, FileText, FileSignature, AlertCircle, Save, Loader2, CheckCircle2, ShoppingCart, Minus, ChevronDown, FolderOpen, Download, CreditCard } from 'lucide-react';
 import { User } from '../../types';
 import { useCreateLicitacaoProcessCompleto, useDeleteLicitacaoDocument } from '../../hooks/useLicitacaoModule';
@@ -6,6 +6,55 @@ import { TwoFactorModal } from '../TwoFactorModal';
 import { LicitacaoDocumentModal } from './LicitacaoDocumentModal';
 import { ConfirmModal } from '../modals/ConfirmModal';
 import { ToastNotification, ToastType } from '../common/ToastNotification';
+
+const AutoResizingTextarea: React.FC<{
+    value: string;
+    onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
+    disabled?: boolean;
+    placeholder?: string;
+    className?: string;
+}> = ({ value, onChange, disabled, placeholder, className }) => {
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+    const adjustHeight = () => {
+        const textarea = textareaRef.current;
+        if (textarea) {
+            textarea.style.height = 'auto';
+            textarea.style.height = `${textarea.scrollHeight + 6}px`;
+        }
+    };
+
+    useEffect(() => {
+        adjustHeight();
+    }, [value]);
+
+    useEffect(() => {
+        const textarea = textareaRef.current;
+        if (!textarea) return;
+
+        const observer = new ResizeObserver(() => {
+            adjustHeight();
+        });
+        observer.observe(textarea);
+
+        return () => {
+            observer.disconnect();
+        };
+    }, []);
+
+    return (
+        <textarea
+            ref={textareaRef}
+            value={value}
+            onChange={onChange}
+            disabled={disabled}
+            placeholder={placeholder}
+            className={className}
+            rows={1}
+            style={{ resize: 'none', overflow: 'hidden', display: 'block' }}
+        />
+    );
+};
 
 interface LicitacaoWizardProps {
     currentUser: User;
@@ -442,13 +491,12 @@ export const LicitacaoWizard: React.FC<LicitacaoWizardProps> = ({ currentUser, o
                                                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 ml-1 flex items-center gap-2">
                                                         Descrição do Item
                                                     </label>
-                                                    <input
-                                                        type="text"
+                                                    <AutoResizingTextarea
                                                         value={item.descricao}
                                                         disabled={readOnly}
                                                         onChange={(e) => updateItem(item.id, 'descricao', e.target.value)}
                                                         placeholder="Ex: Material de escritório..."
-                                                        className={`w-full text-base sm:text-lg font-medium text-slate-800 bg-transparent border-b-2 outline-none transition-all py-2 sm:py-1 ${!item.descricao.trim() ? 'border-red-300 hover:border-red-400 focus:border-red-500 focus:bg-red-50/50 placeholder:text-red-300' : 'border-slate-100 hover:border-slate-300 focus:border-emerald-500 focus:bg-slate-50/50 placeholder:text-slate-300'}`}
+                                                        className={`w-full text-xs sm:text-sm font-medium text-slate-800 bg-transparent border-b-2 outline-none transition-colors py-2 sm:py-1 ${!item.descricao.trim() ? 'border-red-300 hover:border-red-400 focus:border-red-500 focus:bg-red-50/50 placeholder:text-red-300' : 'border-slate-100 hover:border-slate-300 focus:border-emerald-500 focus:bg-slate-50/50 placeholder:text-slate-300'}`}
                                                     />
                                                     {!item.descricao.trim() && (
                                                         <span className="text-[10px] text-red-500 font-bold tracking-widest uppercase mt-1.5 block">
