@@ -210,6 +210,7 @@ export interface FarmaciaMedicamento {
   tipo?: string;
   dosagem?: string;
   fornecedor?: string;
+  principio_ativo?: string;
   criado_em?: string;
   atualizado_em?: string;
 }

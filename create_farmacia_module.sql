@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS public.farmacia_medicamentos (
     tipo TEXT,
     dosagem TEXT,
     fornecedor TEXT,
+    principio_ativo TEXT,
     criado_em TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     atualizado_em TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );

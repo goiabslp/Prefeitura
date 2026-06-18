@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { User, FarmaciaMedicamento, FarmaciaMovimentacao, ConsultaPaciente } from '../../types';
-import { ArrowLeft, User as UserIcon, Calendar, ClipboardList, CheckCircle2, AlertTriangle, Search, Loader2, History, X } from 'lucide-react';
+import { User, FarmaciaMedicamento, FarmaciaMovimentacao, ConsultaPaciente, AppState } from '../../types';
+import { ArrowLeft, User as UserIcon, Calendar, ClipboardList, CheckCircle2, AlertTriangle, Search, Loader2, History, X, FileDown, Pill, ShieldCheck, FileText } from 'lucide-react';
 import * as db from '../../services/farmaciaService';
 import { getPacientes, createPaciente } from '../../services/consultasService';
+import { jsPDF } from 'jspdf';
+import html2canvas from 'html2canvas';
+import { FarmaciaPdfGenerator } from './FarmaciaPdfGenerator';
 
 interface RetirarScreenProps {
     currentUser: User;
@@ -14,7 +17,8 @@ interface RetirarScreenProps {
 export const RetirarScreen: React.FC<RetirarScreenProps> = ({
     currentUser,
     onBack,
-    onNavigate
+    onNavigate,
+    appState
 }) => {
     // DB Data states
     const [medicamentos, setMedicamentos] = useState<FarmaciaMedicamento[]>([]);
@@ -23,13 +27,20 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
 
+    // Helper to get local date time formatted for datetime-local (YYYY-MM-DDTHH:mm:ss)
+    const getFormattedDateTimeLocal = () => {
+        const d = new Date();
+        const pad = (n: number) => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    };
+
     // Form inputs
     const [patientName, setPatientName] = useState('');
     const [patientCpf, setPatientCpf] = useState('');
     const [isPatientUnlocked, setIsPatientUnlocked] = useState(false);
     const [selectedMedId, setSelectedMedId] = useState('');
     const [quantity, setQuantity] = useState('');
-    const [withdrawalDate, setWithdrawalDate] = useState(new Date().toISOString().split('T')[0]);
+    const [withdrawalDate, setWithdrawalDate] = useState(getFormattedDateTimeLocal());
     const [observacoes, setObservacoes] = useState('');
 
     // Autocomplete dropdown UI states
@@ -45,10 +56,19 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
     const [pendingCpf, setPendingCpf] = useState('');
     const [newPatientName, setNewPatientName] = useState('');
     const [newPatientBirthDate, setNewPatientBirthDate] = useState('');
+    const [newPatientNickname, setNewPatientNickname] = useState('');
+    const [newPatientPhone, setNewPatientPhone] = useState('');
+    const [newPatientNeighborhood, setNewPatientNeighborhood] = useState('');
+    const [newPatientStreet, setNewPatientStreet] = useState('');
+    const [newPatientCity, setNewPatientCity] = useState('SÃO JOSÉ DO GOIABAL -MG');
     const [registering, setRegistering] = useState(false);
 
     // Success notification modal state
     const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
+    const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+    const [createdMov, setCreatedMov] = useState<FarmaciaMovimentacao | null>(null);
+    const [isGenerating, setIsGenerating] = useState(false);
+    const [printingMov, setPrintingMov] = useState<FarmaciaMovimentacao | null>(null);
 
     // Medicamento modal selection states
     const [isMedModalOpen, setIsMedModalOpen] = useState(false);
@@ -89,6 +109,13 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
         };
     }, []);
 
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setWithdrawalDate(getFormattedDateTimeLocal());
+        }, 1000);
+        return () => clearInterval(interval);
+    }, []);
+
     // Filter patients suggestion list
     const patientSuggestions = useMemo(() => {
         if (!patientSearchQuery) return [];
@@ -102,17 +129,16 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
     // Filter medicine suggestion list
     const medSuggestions = useMemo(() => {
         if (!medSearchQuery) {
-            // Show first 8 available medicines if no query entered yet
-            return medicamentos.filter(m => m.quantidade > 0).slice(0, 8);
+            // Show first 8 medicines if no query entered yet
+            return medicamentos.slice(0, 8);
         }
         const query = medSearchQuery.toLowerCase();
         return medicamentos.filter(m => 
-            m.quantidade > 0 && (
-                m.nome.toLowerCase().includes(query) || 
-                (m.dosagem || '').toLowerCase().includes(query) || 
-                m.lote.toLowerCase().includes(query) ||
-                m.categoria.toLowerCase().includes(query)
-            )
+            m.nome.toLowerCase().includes(query) || 
+            (m.dosagem || '').toLowerCase().includes(query) || 
+            m.lote.toLowerCase().includes(query) ||
+            m.categoria.toLowerCase().includes(query) ||
+            (m.principio_ativo || '').toLowerCase().includes(query)
         ).slice(0, 8);
     }, [medicamentos, medSearchQuery]);
 
@@ -125,8 +151,8 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
 
     // Filtered list of medicines for select modal
     const modalMedOptions = useMemo(() => {
-        // Show only medicines in stock (quantidade > 0)
-        let list = medicamentos.filter(m => m.quantidade > 0);
+        // Show all medicines
+        let list = [...medicamentos];
         
         // Filter by category tab
         if (medModalCategory !== 'TODOS') {
@@ -141,6 +167,7 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                 m.lote.toLowerCase().includes(query) ||
                 (m.dosagem || '').toLowerCase().includes(query) ||
                 (m.fornecedor || '').toLowerCase().includes(query) ||
+                (m.principio_ativo || '').toLowerCase().includes(query) ||
                 m.categoria.toLowerCase().includes(query)
             );
         }
@@ -152,8 +179,20 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
     const patientWithdrawals = useMemo(() => {
         const nameQuery = patientName.trim().toLowerCase();
         const cpfQuery = patientCpf.replace(/\D/g, '');
+        const today = new Date();
+        const todayYear = today.getFullYear();
+        const todayMonth = today.getMonth();
+        const todayDay = today.getDate();
 
         return recentWithdrawals.filter(w => {
+            if (!w.data) return false;
+            const wDateObj = new Date(w.data);
+            const isToday = wDateObj.getDate() === todayDay &&
+                            wDateObj.getMonth() === todayMonth &&
+                            wDateObj.getFullYear() === todayYear;
+
+            if (!isToday) return false;
+
             const matchesCpf = cpfQuery ? (w.paciente_cpf || '').includes(cpfQuery) : false;
             const matchesName = nameQuery ? (w.paciente_nome || '').toLowerCase().includes(nameQuery) : false;
 
@@ -180,7 +219,8 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
         if (clean.length === 11) {
             const found = pacientes.find(p => p.cpf.replace(/\D/g, '') === clean);
             if (found) {
-                setPatientName(found.name);
+                const displayName = found.nickname ? `${found.name} (${found.nickname})` : found.name;
+                setPatientName(displayName);
                 setIsPatientUnlocked(true);
             } else {
                 setPatientName('');
@@ -194,8 +234,72 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
         }
     };
 
-    // Confirm withdrawal / checkout handler
-    const handleSubmit = async (e: React.FormEvent) => {
+    // Format Phone Input: (00) 00000-0000 or (00) 0000-0000
+    const handlePhoneChange = (val: string) => {
+        const clean = val.replace(/\D/g, '');
+        let formatted = '';
+        if (clean.length <= 2) {
+            formatted = clean;
+        } else if (clean.length <= 6) {
+            formatted = `(${clean.slice(0, 2)}) ${clean.slice(2)}`;
+        } else if (clean.length <= 10) {
+            formatted = `(${clean.slice(0, 2)}) ${clean.slice(2, 6)}-${clean.slice(6)}`;
+        } else {
+            formatted = `(${clean.slice(0, 2)}) ${clean.slice(2, 7)}-${clean.slice(7, 11)}`;
+        }
+        setNewPatientPhone(formatted);
+    };
+
+    // Download Receipt PDF
+    const handleDownloadPdf = async (mov?: FarmaciaMovimentacao | null) => {
+        const targetMov = mov || createdMov;
+        if (!targetMov) return;
+        setIsGenerating(true);
+        setPrintingMov(targetMov);
+
+        // Allow template portal to render
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        try {
+            const container = document.getElementById('farmacia-pdf-content');
+            if (!container) {
+                console.error("PDF container not found");
+                return;
+            }
+
+            const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+            const canvas = await html2canvas(container, {
+                scale: 2,
+                useCORS: true,
+                allowTaint: true,
+                logging: false,
+                backgroundColor: '#ffffff',
+                scrollY: 0,
+                scrollX: 0,
+                width: container.offsetWidth,
+                height: container.offsetHeight
+            });
+
+            const imgData = canvas.toDataURL('image/jpeg', 0.98);
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+
+            pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+
+            const protocol = targetMov.id.substring(0, 8).toUpperCase();
+            pdf.save(`Comprovante-Retirada-Farmacia-${protocol}.pdf`);
+        } catch (error) {
+            console.error('Erro ao gerar PDF do agendamento:', error);
+            alert('Não foi possível gerar o PDF no momento.');
+        } finally {
+            setIsGenerating(false);
+            setPrintingMov(null);
+        }
+    };
+
+    // Pre-submit validation to open confirmation modal
+    const handlePreSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (!patientName || !patientCpf || !selectedMedId || !quantity || !withdrawalDate) {
             alert('Por favor, preencha todos os campos obrigatórios.');
@@ -213,8 +317,18 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
             return;
         }
 
-        if (selectedMed.quantidade < qtyNum) {
-            alert(`Estoque insuficiente. Quantidade disponível: ${selectedMed.quantidade} ${selectedMed.unidade}`);
+        setIsConfirmModalOpen(true);
+    };
+
+    // Real checkout / save handler
+    const handleConfirmSubmit = async () => {
+        if (!patientName || !patientCpf || !selectedMedId || !quantity || !withdrawalDate) {
+            alert('Por favor, preencha todos os campos obrigatórios.');
+            return;
+        }
+
+        const qtyNum = parseInt(quantity, 10);
+        if (isNaN(qtyNum) || qtyNum <= 0 || !selectedMed) {
             return;
         }
 
@@ -229,7 +343,7 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
             m.id === selectedMedId ? { ...m, quantidade: m.quantidade - qtyNum } : m
         ));
 
-        // Create mock local movement log
+        // Create mock local movement log for optimistic UI
         const optimisticLog: FarmaciaMovimentacao = {
             id: 'optimistic-id-' + Date.now(),
             medicamento_id: selectedMedId,
@@ -245,10 +359,18 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
             paciente_cpf: patientCpf.replace(/\D/g, ''),
             responsavel_nome: currentUser.name,
             responsavel_id: currentUser.id,
-            data: new Date(withdrawalDate + 'T12:00:00').toISOString(),
+            data: new Date(withdrawalDate).toISOString(),
             observacoes: observacoes
         };
         setRecentWithdrawals(prev => [optimisticLog, ...prev]);
+
+        // Keep copy of values to clear or restore
+        const savedPatientName = patientName;
+        const savedPatientCpf = patientCpf;
+        const savedSelectedMed = selectedMed;
+        const savedQuantity = quantity;
+        const savedWithdrawalDate = withdrawalDate;
+        const savedObservacoes = observacoes;
 
         // Clear form fields immediately for crisp UX
         setQuantity('');
@@ -260,30 +382,40 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
         setIsPatientUnlocked(false);
 
         try {
-            await db.registrarMovimentacao({
-                medicamento_id: selectedMedId,
+            const result = await db.registrarMovimentacao({
+                medicamento_id: savedSelectedMed.id,
                 tipo: 'Saída',
                 quantidade: qtyNum,
-                medicamento_nome: selectedMed.nome,
-                medicamento_categoria: selectedMed.categoria,
-                medicamento_tipo: selectedMed.tipo,
-                medicamento_dosagem: selectedMed.dosagem,
-                lote: selectedMed.lote,
-                validade: selectedMed.validade,
-                paciente_nome: patientName,
-                paciente_cpf: patientCpf.replace(/\D/g, ''),
+                medicamento_nome: savedSelectedMed.nome,
+                medicamento_categoria: savedSelectedMed.categoria,
+                medicamento_tipo: savedSelectedMed.tipo,
+                medicamento_dosagem: savedSelectedMed.dosagem,
+                lote: savedSelectedMed.lote,
+                validade: savedSelectedMed.validade,
+                paciente_nome: savedPatientName,
+                paciente_cpf: savedPatientCpf.replace(/\D/g, ''),
                 responsavel_nome: currentUser.name,
                 responsavel_id: currentUser.id,
-                observacoes: observacoes
+                data: new Date(savedWithdrawalDate).toISOString(),
+                observacoes: savedObservacoes
             });
 
             // Trigger visual refresh of all local caches
             await loadData(true);
+            setIsConfirmModalOpen(false);
+            setCreatedMov(result);
             setIsSuccessModalOpen(true);
         } catch (err: any) {
             // Revert optimistic updates on error
             setMedicamentos(originalMedState);
             setRecentWithdrawals(originalRecentMovsState);
+            // Restore form values so the user doesn't lose inputs
+            setPatientName(savedPatientName);
+            setPatientCpf(savedPatientCpf);
+            setSelectedMedId(savedSelectedMed.id);
+            setQuantity(savedQuantity);
+            setObservacoes(savedObservacoes);
+            setIsPatientUnlocked(true);
             alert(err.message || 'Erro ao registrar a retirada.');
         } finally {
             setSaving(false);
@@ -302,6 +434,20 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
         if (parts.length !== 3) return d;
         const [year, month, day] = parts;
         return `${day}/${month}/${year}`;
+    };
+
+    const formatDateTimeBr = (d: string) => {
+        if (!d) return '';
+        const dateObj = new Date(d);
+        if (isNaN(dateObj.getTime())) return d;
+        const pad = (n: number) => String(n).padStart(2, '0');
+        const day = pad(dateObj.getDate());
+        const month = pad(dateObj.getMonth() + 1);
+        const year = dateObj.getFullYear();
+        const hours = pad(dateObj.getHours());
+        const minutes = pad(dateObj.getMinutes());
+        const seconds = pad(dateObj.getSeconds());
+        return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
     };
 
     return (
@@ -323,7 +469,7 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                     </button>
                 </div>
 
-                <form onSubmit={handleSubmit} className="flex-1 flex flex-col justify-between gap-4 min-h-0 overflow-hidden">
+                <form onSubmit={handlePreSubmit} className="flex-1 flex flex-col justify-between gap-4 min-h-0 overflow-hidden">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 min-h-0 overflow-y-auto md:overflow-visible pr-1 custom-scrollbar">
                         {/* Column 1 */}
                         <div className="space-y-4">
@@ -371,7 +517,8 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                                 key={p.id}
                                                 type="button"
                                                 onMouseDown={() => {
-                                                    setPatientName(p.name);
+                                                    const displayName = p.nickname ? `${p.name} (${p.nickname})` : p.name;
+                                                    setPatientName(displayName);
                                                     handleCpfChange(p.cpf);
                                                     setShowPatientDropdown(false);
                                                 }}
@@ -423,7 +570,6 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                         value={quantity}
                                         onChange={(e) => setQuantity(e.target.value)}
                                         min="1"
-                                        max={selectedMed ? selectedMed.quantidade : undefined}
                                         required
                                     />
                                     {selectedMed && (
@@ -441,10 +587,11 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                             <div>
                                 <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Data</label>
                                 <input
-                                    type="date"
-                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm text-slate-900 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold cursor-pointer"
+                                    type="datetime-local"
+                                    step="1"
+                                    className="w-full rounded-xl border border-slate-200 bg-slate-100 py-3 px-4 text-sm text-slate-500 font-bold outline-none cursor-not-allowed shadow-inner"
                                     value={withdrawalDate}
-                                    onChange={(e) => setWithdrawalDate(e.target.value)}
+                                    readOnly
                                     required
                                 />
                             </div>
@@ -483,7 +630,7 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                 Processando...
                             </>
                         ) : (
-                            'Confirmar Retirada'
+                            'Finalizar Atendimento'
                         )}
                     </button>
                 </form>
@@ -497,7 +644,7 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                         <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
                             <div>
                                 <h3 className="font-extrabold text-slate-800 uppercase text-[11px] tracking-wider">
-                                    Histórico de Dispensações
+                                    Histórico de Dispensações de Hoje
                                 </h3>
                                 {patientName ? (
                                     <p className="text-[9px] text-pink-600 font-bold uppercase mt-0.5">
@@ -505,7 +652,7 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                     </p>
                                 ) : (
                                     <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">
-                                        Digite o nome do paciente no formulário para filtrar
+                                        Mostrando apenas retiradas realizadas na data de hoje
                                     </p>
                                 )}
                             </div>
@@ -536,7 +683,7 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                             {patientWithdrawals.map(w => (
                                                 <tr key={w.id} className="hover:bg-slate-50/30 transition-colors">
                                                     <td className="p-3 text-slate-500 font-mono">
-                                                        {formatDateBr(w.data)}
+                                                        {formatDateTimeBr(w.data)}
                                                     </td>
                                                     <td className="p-3">
                                                         <div className="font-extrabold text-slate-850 uppercase">{w.paciente_nome}</div>
@@ -579,9 +726,9 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                             ) : (
                                 <div className="py-12 flex flex-col items-center justify-center text-slate-400">
                                     <ClipboardList className="w-12 h-12 mb-2 opacity-20 text-slate-500" />
-                                    <h4 className="text-xs font-extrabold text-slate-700">Nenhum registro encontrado</h4>
+                                    <h4 className="text-xs font-extrabold text-slate-700">Nenhum registro encontrado hoje</h4>
                                     <p className="text-[9px] text-slate-500 text-center mt-0.5 font-medium">
-                                        {patientName ? `Não encontramos retiradas para o paciente "${patientName}".` : "Nenhum histórico disponível."}
+                                        {patientName ? `Não encontramos retiradas de hoje para o paciente "${patientName}".` : "Nenhuma retirada realizada na data de hoje."}
                                     </p>
                                 </div>
                             )}
@@ -593,7 +740,7 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
             {/* NEW PATIENT REGISTRATION MODAL */}
             {isRegModalOpen && (
                 <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200/50 flex flex-col">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden border border-slate-200/50 flex flex-col animate-in zoom-in-95 duration-200">
                         {/* Header */}
                         <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
                             <div>
@@ -608,6 +755,13 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                 onClick={() => {
                                     setIsRegModalOpen(false);
                                     setPatientCpf('');
+                                    setNewPatientName('');
+                                    setNewPatientNickname('');
+                                    setNewPatientBirthDate('');
+                                    setNewPatientPhone('');
+                                    setNewPatientNeighborhood('');
+                                    setNewPatientStreet('');
+                                    setNewPatientCity('SÃO JOSÉ DO GOIABAL -MG');
                                 }}
                                 className="p-1.5 hover:bg-slate-200 rounded-lg text-slate-500 transition-colors"
                             >
@@ -619,7 +773,7 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                         <form
                             onSubmit={async (e) => {
                                 e.preventDefault();
-                                if (!newPatientName || !pendingCpf || !newPatientBirthDate) {
+                                if (!newPatientName || !pendingCpf || !newPatientBirthDate || !newPatientCity) {
                                     alert('Por favor, preencha todos os campos obrigatórios.');
                                     return;
                                 }
@@ -627,19 +781,30 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                 try {
                                     const created = await createPaciente({
                                         name: newPatientName,
+                                        nickname: newPatientNickname.trim() || undefined,
                                         cpf: pendingCpf.replace(/\D/g, ''),
-                                        birth_date: newPatientBirthDate
+                                        birth_date: newPatientBirthDate,
+                                        phone: newPatientPhone.trim() || undefined,
+                                        neighborhood: newPatientNeighborhood.trim() || undefined,
+                                        street: newPatientStreet.trim() || undefined,
+                                        city: newPatientCity.trim() || undefined
                                     });
                                     if (created) {
                                         // Update local patients state list
                                         setPacientes(prev => [...prev, created]);
                                         // Set values to form and unlock
-                                        setPatientName(created.name);
+                                        const displayName = created.nickname ? `${created.name} (${created.nickname})` : created.name;
+                                        setPatientName(displayName);
                                         setPatientCpf(pendingCpf);
                                         setIsPatientUnlocked(true);
                                         // Clear registration states
                                         setNewPatientName('');
+                                        setNewPatientNickname('');
                                         setNewPatientBirthDate('');
+                                        setNewPatientPhone('');
+                                        setNewPatientNeighborhood('');
+                                        setNewPatientStreet('');
+                                        setNewPatientCity('SÃO JOSÉ DO GOIABAL -MG');
                                         setIsRegModalOpen(false);
                                     } else {
                                         alert('Erro ao cadastrar paciente.');
@@ -650,51 +815,115 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                     setRegistering(false);
                                 }
                             }}
-                            className="p-6 space-y-4 text-left"
+                            className="p-5 space-y-3.5 text-left"
                         >
-                            {/* CPF (read-only) */}
-                            <div>
-                                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">CPF do Paciente</label>
-                                <input
-                                    type="text"
-                                    className="w-full rounded-xl border border-slate-200 bg-slate-100 py-3 px-4 text-sm text-slate-500 font-mono font-bold outline-none cursor-not-allowed"
-                                    value={pendingCpf}
-                                    disabled
-                                />
+                            {/* Linha 1: CPF e Nome Completo */}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                <div className="md:col-span-1">
+                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">CPF do Paciente</label>
+                                    <input
+                                        type="text"
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-100 py-2.5 px-3.5 text-xs text-slate-500 font-mono font-bold outline-none cursor-not-allowed shadow-inner"
+                                        value={pendingCpf}
+                                        disabled
+                                    />
+                                </div>
+                                <div className="md:col-span-2">
+                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">Nome Completo *</label>
+                                    <input
+                                        type="text"
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 px-3.5 text-xs text-slate-900 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold uppercase shadow-inner"
+                                        placeholder="Nome Completo do Paciente"
+                                        value={newPatientName}
+                                        onChange={(e) => setNewPatientName(e.target.value.toUpperCase())}
+                                        required
+                                    />
+                                </div>
                             </div>
 
-                            {/* Nome Completo */}
-                            <div>
-                                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Nome Completo</label>
-                                <input
-                                    type="text"
-                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm text-slate-900 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold uppercase"
-                                    placeholder="Nome Completo do Paciente"
-                                    value={newPatientName}
-                                    onChange={(e) => setNewPatientName(e.target.value.toUpperCase())}
-                                    required
-                                />
+                            {/* Linha 2: Apelido, Data de Nascimento e Telefone */}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">Apelido</label>
+                                    <input
+                                        type="text"
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 px-3.5 text-xs text-slate-900 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold uppercase shadow-inner"
+                                        placeholder="Ex: Netinho"
+                                        value={newPatientNickname}
+                                        onChange={(e) => setNewPatientNickname(e.target.value.toUpperCase())}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">Data de Nascimento *</label>
+                                    <input
+                                        type="date"
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 px-3.5 text-xs text-slate-900 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold cursor-pointer shadow-inner"
+                                        value={newPatientBirthDate}
+                                        onChange={(e) => setNewPatientBirthDate(e.target.value)}
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">Telefone</label>
+                                    <input
+                                        type="text"
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 px-3.5 text-xs text-slate-900 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold shadow-inner"
+                                        placeholder="(00) 00000-0000"
+                                        value={newPatientPhone}
+                                        onChange={(e) => handlePhoneChange(e.target.value)}
+                                    />
+                                </div>
                             </div>
 
-                            {/* Data de Nascimento */}
-                            <div>
-                                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Data de Nascimento</label>
-                                <input
-                                    type="date"
-                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm text-slate-900 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold cursor-pointer"
-                                    value={newPatientBirthDate}
-                                    onChange={(e) => setNewPatientBirthDate(e.target.value)}
-                                    required
-                                />
+                            {/* Linha 3: Rua, Bairro e Cidade */}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">Rua</label>
+                                    <input
+                                        type="text"
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 px-3.5 text-xs text-slate-900 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold uppercase shadow-inner"
+                                        placeholder="Ex: Rua Principal, 10"
+                                        value={newPatientStreet}
+                                        onChange={(e) => setNewPatientStreet(e.target.value.toUpperCase())}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">Bairro</label>
+                                    <input
+                                        type="text"
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 px-3.5 text-xs text-slate-900 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold uppercase shadow-inner"
+                                        placeholder="Ex: Centro"
+                                        value={newPatientNeighborhood}
+                                        onChange={(e) => setNewPatientNeighborhood(e.target.value.toUpperCase())}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">Cidade *</label>
+                                    <input
+                                        type="text"
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 px-3.5 text-xs text-slate-900 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold uppercase shadow-inner"
+                                        placeholder="Ex: São José do Goiabal - MG"
+                                        value={newPatientCity}
+                                        onChange={(e) => setNewPatientCity(e.target.value.toUpperCase())}
+                                        required
+                                    />
+                                </div>
                             </div>
 
                             {/* Action Buttons */}
-                            <div className="flex gap-3 pt-2">
+                            <div className="flex gap-3 pt-4">
                                 <button
                                     type="button"
                                     onClick={() => {
                                         setIsRegModalOpen(false);
                                         setPatientCpf('');
+                                        setNewPatientName('');
+                                        setNewPatientNickname('');
+                                        setNewPatientBirthDate('');
+                                        setNewPatientPhone('');
+                                        setNewPatientNeighborhood('');
+                                        setNewPatientStreet('');
+                                        setNewPatientCity('SÃO JOSÉ DO GOIABAL -MG');
                                     }}
                                     className="flex-1 py-3 rounded-xl border border-slate-200 text-slate-700 font-extrabold text-xs uppercase tracking-wider hover:bg-slate-50 transition-all active:scale-98"
                                 >
@@ -719,30 +948,252 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                     </div>
                 </div>
             )}
-            {/* SUCCESS MODAL */}
-            {isSuccessModalOpen && (
-                <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden border border-slate-200/50 p-6 flex flex-col items-center text-center transform transition-all duration-300 scale-100">
-                        <div className="w-16 h-16 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center mb-4 text-emerald-500 shadow-inner animate-bounce">
-                            <CheckCircle2 className="w-8 h-8" />
+            {/* CONFIRMATION MODAL (PRÉ-SALVAMENTO) - DESIGN PREMIUM MODERNIZADO */}
+            {isConfirmModalOpen && selectedMed && (
+                <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-md transition-all">
+                    <div className="bg-white rounded-[32px] shadow-[0_25px_50px_-12px_rgba(0,0,0,0.15)] w-full max-w-md overflow-hidden border border-slate-100 flex flex-col animate-in fade-in zoom-in-95 slide-in-from-bottom-8 duration-300 ease-out max-h-[92vh]">
+                        {/* Header com Gradiente Moderno */}
+                        <div className="p-5 border-b border-slate-50 flex justify-between items-center bg-gradient-to-r from-slate-50 via-white to-pink-50/20 shrink-0">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-pink-500 to-rose-500 flex items-center justify-center text-white shadow-[0_8px_16px_-4px_rgba(219,39,119,0.3)] shrink-0 animate-pulse">
+                                    <AlertTriangle className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <h3 className="font-black text-slate-800 uppercase text-xs tracking-wider">
+                                        Confirmar Atendimento
+                                    </h3>
+                                    <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5 tracking-tight">
+                                        Revise os dados da retirada
+                                    </p>
+                                </div>
+                            </div>
                         </div>
-                        <h3 className="font-extrabold text-slate-800 text-sm uppercase tracking-wider mb-2">
-                            Dispensação Realizada!
-                        </h3>
-                        <p className="text-[11px] text-slate-500 font-semibold mb-6">
-                            A retirada do medicamento foi registrada e o estoque foi atualizado com sucesso.
-                        </p>
-                        <button
-                            onClick={() => {
-                                setIsSuccessModalOpen(false);
-                                onNavigate('farmacia');
-                            }}
-                            className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-black text-[11px] uppercase tracking-wider rounded-xl transition-all shadow-md hover:shadow-lg active:scale-98"
-                        >
-                            Ok, Voltar
-                        </button>
+
+                        {/* Content Body */}
+                        <div className="p-6 flex-1 flex flex-col justify-between gap-5 overflow-hidden text-left bg-gradient-to-b from-white to-slate-50/50 relative">
+                            {saving && (
+                                <div className="absolute inset-0 bg-white/90 backdrop-blur-sm z-50 flex flex-col items-center justify-center gap-3.5 animate-in fade-in duration-200">
+                                    <div className="relative flex items-center justify-center">
+                                        <div className="w-14 h-14 rounded-full border-4 border-slate-100 border-t-pink-600 animate-spin"></div>
+                                        <Pill className="w-6 h-6 text-pink-600 absolute animate-pulse" />
+                                    </div>
+                                    <div className="text-center">
+                                        <span className="block text-slate-800 font-black text-xs uppercase tracking-widest">
+                                            Finalizando Atendimento
+                                        </span>
+                                        <span className="block text-slate-400 text-[9px] font-bold uppercase mt-1">
+                                            Registrando no sistema...
+                                        </span>
+                                    </div>
+                                </div>
+                            )}
+                            <div className="space-y-3.5 flex-1 flex flex-col justify-center">
+                                {/* Paciente (Apelido), CPF */}
+                                <div className="bg-white hover:bg-slate-50/50 border border-slate-100 p-3.5 rounded-2xl shadow-sm transition-all flex items-start gap-3 group">
+                                    <div className="w-8 h-8 rounded-xl bg-pink-50 text-pink-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                                        <UserIcon className="w-4 h-4" />
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                        <span className="block text-[8px] font-black uppercase text-slate-400 tracking-wider mb-0.5">Beneficiário</span>
+                                        <div className="text-xs font-black text-slate-800 uppercase break-words whitespace-normal leading-tight">
+                                            {patientName} {
+                                                (() => {
+                                                    const p = pacientes.find(pat => pat.cpf.replace(/\D/g, '') === patientCpf.replace(/\D/g, ''));
+                                                    return p?.nickname ? `(${p.nickname})` : '';
+                                                })()
+                                            }
+                                        </div>
+                                        <div className="text-[10px] text-slate-500 font-mono font-bold mt-0.5">
+                                            CPF: {patientCpf}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Medicamento (Lote/Categoria) */}
+                                <div className="bg-white hover:bg-slate-50/50 border border-slate-100 p-3.5 rounded-2xl shadow-sm transition-all flex items-start gap-3 group">
+                                    <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                                        <Pill className="w-4 h-4" />
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                        <span className="block text-[8px] font-black uppercase text-slate-400 tracking-wider mb-0.5">Medicamento (Lote/Categoria)</span>
+                                        <div className="text-xs font-black text-slate-800 uppercase break-words whitespace-normal leading-tight">
+                                            {selectedMed.nome} {selectedMed.dosagem ? `(${selectedMed.dosagem})` : ''} {selectedMed.tipo ? `• ${selectedMed.tipo}` : ''}
+                                        </div>
+                                        <div className="text-[10px] text-slate-500 font-semibold mt-0.5">
+                                            Lote: <span className="font-mono font-bold text-slate-700">{selectedMed.lote}</span> • Categoria: <span className="font-bold text-slate-700">{selectedMed.categoria}</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Quantidade e Data/Hora */}
+                                <div className="grid grid-cols-2 gap-3.5">
+                                    <div className="bg-white hover:bg-slate-50/50 border border-slate-100 p-3.5 rounded-2xl shadow-sm transition-all flex items-center gap-2.5 group">
+                                        <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                                            <CheckCircle2 className="w-4 h-4" />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <span className="block text-[8px] font-black uppercase text-slate-400 tracking-wider">Quantidade</span>
+                                            <span className="font-black text-slate-800 text-xs">
+                                                {quantity} <span className="text-[10px] font-bold text-slate-400 lowercase">{selectedMed.unidade || 'un'}</span>
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-white hover:bg-slate-50/50 border border-slate-100 p-3.5 rounded-2xl shadow-sm transition-all flex items-center gap-2.5 group">
+                                        <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                                            <Calendar className="w-4 h-4" />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <span className="block text-[8px] font-black uppercase text-slate-400 tracking-wider">Data / Hora</span>
+                                            <span className="font-mono font-bold text-slate-700 text-[10px] block truncate">
+                                                {formatDateTimeBr(new Date(withdrawalDate).toISOString())}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Observações / Receita (caso haja) */}
+                                {observacoes && observacoes.trim() && (
+                                    <div className="bg-white hover:bg-slate-50/50 border border-slate-100 p-3.5 rounded-2xl shadow-sm transition-all flex items-start gap-3 group">
+                                        <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                                            <FileText className="w-4 h-4" />
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <span className="block text-[8px] font-black uppercase text-slate-400 tracking-wider mb-0.5">Observações / Receita</span>
+                                            <p className="text-slate-600 text-[11px] font-semibold leading-relaxed max-h-[44px] overflow-hidden text-ellipsis whitespace-pre-line">
+                                                {observacoes}
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Responsável pela Entrega */}
+                                <div className="bg-white hover:bg-slate-50/50 border border-slate-100 p-3.5 rounded-2xl shadow-sm transition-all flex items-center gap-3 group">
+                                    <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                                        <ShieldCheck className="w-4 h-4" />
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                        <span className="block text-[8px] font-black uppercase text-slate-400 tracking-wider mb-0.5">Responsável pela Entrega</span>
+                                        <span className="font-bold text-slate-700 text-xs block truncate">{currentUser.name}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Action Buttons */}
+                            <div className="flex gap-3.5 pt-2 shrink-0">
+                                <button
+                                    onClick={() => handleConfirmSubmit()}
+                                    disabled={saving}
+                                    className="flex-1 py-3 bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-700 hover:to-rose-700 disabled:from-pink-400 disabled:to-rose-400 text-white font-black text-xs uppercase tracking-widest rounded-2xl transition-all shadow-[0_8px_20px_-6px_rgba(219,39,119,0.4)] hover:shadow-[0_12px_24px_-4px_rgba(219,39,119,0.5)] active:scale-98 flex items-center justify-center gap-2 cursor-pointer"
+                                >
+                                    {saving ? (
+                                        <>
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                            Salvando...
+                                        </>
+                                    ) : (
+                                        'Confirmar e Finalizar'
+                                    )}
+                                </button>
+                                <button
+                                    onClick={() => setIsConfirmModalOpen(false)}
+                                    className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs uppercase tracking-wider rounded-2xl transition-all active:scale-98 shadow-sm"
+                                >
+                                    Voltar e Corrigir
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
+            )}
+
+            {/* SUCCESS MODAL (SIMPLES E DIRETO) - DESIGN PREMIUM MODERNIZADO */}
+            {isSuccessModalOpen && createdMov && (
+                <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-md transition-all">
+                    <div className="bg-white rounded-[32px] shadow-[0_25px_50px_-12px_rgba(0,0,0,0.15)] w-full max-w-sm overflow-hidden border border-slate-100 flex flex-col animate-in fade-in zoom-in-95 slide-in-from-bottom-8 duration-300 ease-out">
+                        <div className="p-7 text-center space-y-5 bg-gradient-to-b from-white to-slate-50/50">
+                            {/* Icone e Efeito de Pulsar */}
+                            <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-emerald-500 to-teal-500 flex items-center justify-center text-white shadow-[0_12px_24px_-6px_rgba(16,185,129,0.4)] mx-auto animate-bounce duration-1000">
+                                <CheckCircle2 className="w-9 h-9" />
+                            </div>
+                            
+                            <div>
+                                <h3 className="font-black text-slate-800 uppercase text-xs tracking-wider font-extrabold">
+                                    Atendimento Finalizado!
+                                </h3>
+                                <p className="text-[11px] text-slate-505 font-semibold mt-2.5 leading-relaxed">
+                                    A retirada foi registrada no sistema com sucesso. O comprovante está pronto para download abaixo.
+                                </p>
+                            </div>
+
+                            <div className="bg-slate-50 border border-slate-100 py-2.5 px-4 rounded-2xl text-[10px] font-mono font-black text-slate-600 inline-flex items-center gap-1.5 mx-auto shadow-inner">
+                                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>
+                                Protocolo: {createdMov.id.substring(0, 8).toUpperCase()}
+                            </div>
+
+                            <div className="flex flex-col gap-3 pt-3">
+                                <button
+                                    onClick={() => handleDownloadPdf()}
+                                    disabled={isGenerating}
+                                    className="w-full py-3 bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-700 hover:to-rose-700 disabled:from-pink-400 disabled:to-rose-400 text-white font-black text-xs uppercase tracking-widest rounded-2xl transition-all shadow-[0_8px_20px_-6px_rgba(219,39,119,0.4)] hover:shadow-[0_12px_24px_-4px_rgba(219,39,119,0.5)] active:scale-98 flex items-center justify-center gap-2 cursor-pointer"
+                                >
+                                    {isGenerating ? (
+                                        <>
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                            Gerando PDF...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <FileDown className="w-4.5 h-4.5" />
+                                            Baixar PDF do Comprovante
+                                        </>
+                                    )}
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setIsSuccessModalOpen(false);
+                                        setCreatedMov(null);
+                                        onNavigate('farmacia');
+                                    }}
+                                    className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs uppercase tracking-wider rounded-2xl transition-all active:scale-98"
+                                >
+                                    Ok, Voltar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* PDF Portal Rendering */}
+            {printingMov && (
+                <FarmaciaPdfGenerator
+                    movimentacaoId={printingMov.id}
+                    pacienteNome={printingMov.paciente_nome || ''}
+                    pacienteCpf={printingMov.paciente_cpf || ''}
+                    pacienteApelido={
+                        (() => {
+                            const p = pacientes.find(pat => pat.cpf.replace(/\D/g, '') === printingMov.paciente_cpf);
+                            return p?.nickname;
+                        })()
+                    }
+                    medicamentoNome={printingMov.medicamento_nome}
+                    medicamentoCategoria={printingMov.medicamento_categoria}
+                    medicamentoDosagem={printingMov.medicamento_dosagem}
+                    medicamentoTipo={printingMov.medicamento_tipo}
+                    lote={printingMov.lote}
+                    quantidade={printingMov.quantidade}
+                    unidade={
+                        (() => {
+                            const m = medicamentos.find(med => med.id === printingMov.medicamento_id);
+                            return m?.unidade || 'Unidade';
+                        })()
+                    }
+                    data={printingMov.data}
+                    observacoes={printingMov.observacoes}
+                    currentUser={currentUser}
+                    state={appState}
+                />
             )}
 
             {/* MEDICAMENTO SELECT MODAL */}
@@ -845,6 +1296,11 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                                         {med.tipo && (
                                                             <span className="px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded bg-slate-100 text-slate-500">
                                                                 {med.tipo}
+                                                            </span>
+                                                        )}
+                                                        {med.principio_ativo && (
+                                                            <span className="px-1.5 py-0.5 text-[8px] font-extrabold uppercase tracking-wider rounded bg-emerald-50 text-emerald-700 border border-emerald-100">
+                                                                P.Ativo: {med.principio_ativo}
                                                             </span>
                                                         )}
                                                         <span className="px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded bg-slate-50 border border-slate-200 text-slate-500 font-mono">

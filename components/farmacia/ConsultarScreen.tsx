@@ -70,10 +70,11 @@ export const ConsultarScreen: React.FC<ConsultarScreenProps> = ({
         const term = searchQuery.trim().toLowerCase();
         if (!term) return [];
 
-        // Filter medicamentos matching query (name or lote)
+        // Filter medicamentos matching query (name or lote or principio_ativo)
         const matched = medicamentos.filter(med => 
             med.nome.toLowerCase().includes(term) || 
-            med.lote.toLowerCase().includes(term)
+            med.lote.toLowerCase().includes(term) ||
+            (med.principio_ativo && med.principio_ativo.toLowerCase().includes(term))
         );
 
         // Group by name and dosage (case insensitive key)
@@ -257,7 +258,7 @@ export const ConsultarScreen: React.FC<ConsultarScreenProps> = ({
                                         </div>
 
                                         {/* Medicine Name */}
-                                        <h4 className="font-extrabold text-slate-800 text-lg leading-snug uppercase mb-4 tracking-tight flex items-baseline gap-1.5 flex-wrap group-hover:text-pink-600 transition-colors">
+                                        <h4 className="font-extrabold text-slate-800 text-lg leading-snug uppercase mb-1 tracking-tight flex items-baseline gap-1.5 flex-wrap group-hover:text-pink-600 transition-colors">
                                             {result.nome}
                                             {result.dosagem && (
                                                 <span className="text-pink-600 font-black text-lg ml-1">
@@ -265,6 +266,11 @@ export const ConsultarScreen: React.FC<ConsultarScreenProps> = ({
                                                 </span>
                                             )}
                                         </h4>
+                                        {result.lotes[0]?.principio_ativo && (
+                                            <div className="text-[10px] text-slate-500 font-bold uppercase mb-4 tracking-wider flex items-center gap-1">
+                                                <span className="text-slate-400">P. Ativo:</span> {result.lotes[0].principio_ativo}
+                                            </div>
+                                        )}
                                         
                                         {/* Lotes list breakdown */}
                                         <div className="border-t border-slate-100/60 pt-4 mt-1 flex-1 flex flex-col">

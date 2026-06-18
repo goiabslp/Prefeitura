@@ -143,7 +143,7 @@ export const getMovimentacoes = async (filters?: MovimentacaoFilters): Promise<F
 };
 
 export const registrarMovimentacao = async (
-    mov: Omit<FarmaciaMovimentacao, 'id' | 'data' | 'criado_em'>
+    mov: Omit<FarmaciaMovimentacao, 'id' | 'criado_em'> & { data?: string }
 ): Promise<FarmaciaMovimentacao> => {
     try {
         if (mov.medicamento_id) {
@@ -158,9 +158,6 @@ export const registrarMovimentacao = async (
 
             let newQty = med.quantidade;
             if (mov.tipo === 'Saída') {
-                if (med.quantidade < mov.quantidade) {
-                    throw new Error(`Estoque insuficiente para o medicamento "${med.nome}". Quantidade disponível: ${med.quantidade} ${med.unidade || 'unidades'}`);
-                }
                 newQty = med.quantidade - mov.quantidade;
             } else if (mov.tipo === 'Entrada') {
                 newQty = med.quantidade + mov.quantidade;

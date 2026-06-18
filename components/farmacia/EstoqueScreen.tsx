@@ -9,6 +9,25 @@ interface EstoqueScreenProps {
     appState: any;
 }
 
+const parseDosagem = (dosagemStr: string | undefined | null) => {
+    if (!dosagemStr) return { valor: '', tipo: 'mg' };
+    
+    const tipos = ['mg/5 mL', 'mcg/mL', 'mg/mL', 'g/mL', 'mcg (µg)', 'mcg', 'µg', 'mg', 'g', 'kg'];
+    
+    for (const t of tipos) {
+        if (dosagemStr.endsWith(t)) {
+            const valor = dosagemStr.slice(0, -t.length).trim();
+            let tipoNormalizado = t;
+            if (t === 'mcg' || t === 'µg') {
+                tipoNormalizado = 'mcg (µg)';
+            }
+            return { valor, tipo: tipoNormalizado };
+        }
+    }
+    
+    return { valor: dosagemStr, tipo: 'mg' };
+};
+
 export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
     currentUser,
     onBack
@@ -41,13 +60,68 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
     const [limiteMinimo, setLimiteMinimo] = useState('10');
     const [fornecedor, setFornecedor] = useState('');
     const [tipo, setTipo] = useState('Comprimido');
-    const [dosagem, setDosagem] = useState('');
+    const [dosagemValor, setDosagemValor] = useState('');
+    const [tipoDosagem, setTipoDosagem] = useState('mg');
+    const [principioAtivo, setPrincipioAtivo] = useState('');
     const [saving, setSaving] = useState(false);
+    const [showSuggestions, setShowSuggestions] = useState(false);
 
-    // Adjustment form inputs
-    const [adjustQty, setAdjustQty] = useState('');
-    const [adjustType, setAdjustType] = useState<'Entrada' | 'Ajuste'>('Entrada');
-    const [adjustReason, setAdjustReason] = useState('');
+    const uniqueMedicaments = useMemo(() => {
+        const seen = new Set<string>();
+        const list: { id: string; nome: string; dosagem: string; tipo: string; lote: string; codigoSequencial: string; principio_ativo: string }[] = [];
+        
+        // Ordena deterministicamente por criado_em / ID para atribuição estável da sequência
+        const sortedMeds = [...medicamentos].sort((a, b) => {
+            const dateA = a.criado_em ? new Date(a.criado_em).getTime() : 0;
+            const dateB = b.criado_em ? new Date(b.criado_em).getTime() : 0;
+            if (dateA !== dateB) return dateA - dateB;
+            return a.id.localeCompare(b.id);
+        });
+
+        let seqCount = 1;
+        sortedMeds.forEach(m => {
+            const key = `${m.nome.toUpperCase()} - ${m.dosagem?.toUpperCase() || ''} - ${m.tipo?.toUpperCase() || ''}`;
+            if (!seen.has(key)) {
+                seen.add(key);
+                const codigoPad = String(seqCount).padStart(5, '0');
+                seqCount++;
+                list.push({
+                    id: m.id,
+                    nome: m.nome.toUpperCase(),
+                    dosagem: m.dosagem || '',
+                    tipo: m.tipo || '',
+                    lote: m.lote || '',
+                    codigoSequencial: codigoPad,
+                    principio_ativo: m.principio_ativo || ''
+                });
+            }
+        });
+        
+        return list.sort((a, b) => a.nome.localeCompare(b.nome));
+    }, [medicamentos]);
+
+    const medicamentCodes = useMemo(() => {
+        const map: Record<string, string> = {};
+        uniqueMedicaments.forEach(u => {
+            const key = `${u.nome.toUpperCase()} - ${u.dosagem?.toUpperCase() || ''} - ${u.tipo?.toUpperCase() || ''}`;
+            map[key] = u.codigoSequencial;
+        });
+        return map;
+    }, [uniqueMedicaments]);
+
+    const nameSuggestions = useMemo(() => {
+        if (!nome.trim()) return [];
+        const term = nome.toUpperCase();
+        return uniqueMedicaments.filter(m => 
+            m.nome.includes(term) || 
+            (m.principio_ativo && m.principio_ativo.toUpperCase().includes(term))
+        );
+    }, [nome, uniqueMedicaments]);
+
+    const [selectedExistingMed, setSelectedExistingMed] = useState<{ id: string; nome: string; dosagem: string; tipo: string; lote: string; codigoSequencial: string; principio_ativo: string } | null>(null);
+
+    const isExistingMed = !!selectedExistingMed;
+
 
     // Permissions
     const isAdmin = currentUser.role === 'admin';
@@ -124,14 +198,19 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
     const filteredMedicamentos = useMemo(() => {
         if (!searchTerm.trim()) return medicamentos;
         const term = searchTerm.toLowerCase();
-        return medicamentos.filter(med => 
-            med.nome.toLowerCase().includes(term) ||
-            med.lote.toLowerCase().includes(term) ||
-            med.categoria.toLowerCase().includes(term) ||
-            (med.fornecedor && med.fornecedor.toLowerCase().includes(term)) ||
-            (med.tipo && med.tipo.toLowerCase().includes(term))
-        );
-    }, [medicamentos, searchTerm]);
+        return medicamentos.filter(med => {
+            const key = `${med.nome.toUpperCase()} - ${med.dosagem?.toUpperCase() || ''} - ${med.tipo?.toUpperCase() || ''}`;
+            const code = medicamentCodes[key] || '';
+            
+            return med.nome.toLowerCase().includes(term) ||
+                med.lote.toLowerCase().includes(term) ||
+                med.categoria.toLowerCase().includes(term) ||
+                code.toLowerCase().includes(term) ||
+                (med.principio_ativo && med.principio_ativo.toLowerCase().includes(term)) ||
+                (med.fornecedor && med.fornecedor.toLowerCase().includes(term)) ||
+                (med.tipo && med.tipo.toLowerCase().includes(term));
+        });
+    }, [medicamentos, searchTerm, medicamentCodes]);
 
     // --- CRUD ACTIONS ---
 
@@ -145,7 +224,10 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
         setLimiteMinimo('10');
         setFornecedor('');
         setTipo('Comprimido');
-        setDosagem('');
+        setDosagemValor('');
+        setTipoDosagem('mg');
+        setPrincipioAtivo('');
+        setSelectedExistingMed(null);
         setIsAddModalOpen(true);
     };
 
@@ -156,55 +238,83 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
             return;
         }
 
-        const isDuplicate = medicamentos.some(med => 
+        const dosagemConcatenada = dosagemValor ? `${dosagemValor}${tipoDosagem}` : '';
+
+        // Procura por um lote exatamente idêntico (mesmo Nome, Tipo, Dosagem E Lote)
+        const existingLote = medicamentos.find(med => 
             med.nome.toUpperCase() === nome.toUpperCase() &&
             (med.tipo || '').toUpperCase() === tipo.toUpperCase() &&
-            (med.dosagem || '').toUpperCase() === (dosagem || '').toUpperCase()
+            (med.dosagem || '').toUpperCase() === (dosagemConcatenada || '').toUpperCase() &&
+            med.lote.toUpperCase() === lote.toUpperCase()
         );
-
-        if (isDuplicate) {
-            alert(`Já existe um medicamento cadastrado com o mesmo Nome ("${nome.toUpperCase()}"), Tipo ("${tipo}") e Dosagem ("${dosagem || 'Sem Dosagem'}").`);
-            return;
-        }
 
         setSaving(true);
         try {
             const qtyNum = parseInt(quantidade, 10);
             const limitNum = parseInt(limiteMinimo, 10);
-            
-            const newMed = await db.createMedicamento({
-                nome: nome.toUpperCase(),
-                categoria,
-                quantidade: 0,
-                unidade,
-                validade,
-                lote: lote.toUpperCase(),
-                limite_minimo: limitNum,
-                tipo,
-                dosagem: dosagem || undefined,
-                fornecedor: fornecedor || undefined
-            });
 
-            if (newMed) {
-                // Log the initial stock entry
+            if (existingLote) {
+                // Se o lote exato já existe, apenas atualiza validade/categoria/principio_ativo e soma a quantidade via movimentação de entrada
+                await db.updateMedicamento(existingLote.id, {
+                    validade,
+                    categoria,
+                    principio_ativo: principioAtivo.toUpperCase() || undefined
+                });
+
                 await db.registrarMovimentacao({
-                    medicamento_id: newMed.id,
+                    medicamento_id: existingLote.id,
                     tipo: 'Entrada',
                     quantidade: qtyNum,
-                    medicamento_nome: newMed.nome,
-                    medicamento_categoria: newMed.categoria,
-                    medicamento_tipo: newMed.tipo,
-                    medicamento_dosagem: newMed.dosagem,
-                    lote: newMed.lote,
-                    validade: newMed.validade,
+                    medicamento_nome: existingLote.nome,
+                    medicamento_categoria: categoria,
+                    medicamento_tipo: existingLote.tipo,
+                    medicamento_dosagem: existingLote.dosagem,
+                    lote: lote.toUpperCase(),
+                    validade: validade,
                     responsavel_nome: currentUser.name,
                     responsavel_id: currentUser.id,
-                    observacoes: 'Cadastro inicial de lote'
+                    observacoes: 'Entrada de novo estoque para lote existente'
                 });
-                alert('Medicamento cadastrado com sucesso!');
-                setIsAddModalOpen(false);
-                loadData(true);
+
+                alert('Estoque adicionado ao lote existente com sucesso!');
+            } else {
+                // Se é um novo lote de um medicamento existente, ou um medicamento completamente novo:
+                // criamos um novo registro de lote no estoque
+                const newMed = await db.createMedicamento({
+                    nome: nome.toUpperCase(),
+                    categoria,
+                    quantidade: 0,
+                    unidade,
+                    validade,
+                    lote: lote.toUpperCase(),
+                    limite_minimo: limitNum,
+                    tipo,
+                    dosagem: dosagemConcatenada || undefined,
+                    fornecedor: fornecedor || undefined,
+                    principio_ativo: principioAtivo.toUpperCase() || undefined
+                });
+
+                if (newMed) {
+                    await db.registrarMovimentacao({
+                        medicamento_id: newMed.id,
+                        tipo: 'Entrada',
+                        quantidade: qtyNum,
+                        medicamento_nome: newMed.nome,
+                        medicamento_categoria: newMed.categoria,
+                        medicamento_tipo: newMed.tipo,
+                        medicamento_dosagem: newMed.dosagem,
+                        lote: newMed.lote,
+                        validade: newMed.validade,
+                        responsavel_nome: currentUser.name,
+                        responsavel_id: currentUser.id,
+                        observacoes: 'Cadastro de novo lote'
+                    });
+                    alert('Lote cadastrado com sucesso!');
+                }
             }
+            setIsAddModalOpen(false);
+            setSelectedExistingMed(null);
+            loadData(true);
         } catch (error: any) {
             alert(error.message || 'Erro ao cadastrar medicamento.');
         } finally {
@@ -222,7 +332,11 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
         setLimiteMinimo(med.limite_minimo.toString());
         setFornecedor(med.fornecedor || '');
         setTipo(med.tipo || 'Comprimido');
-        setDosagem(med.dosagem || '');
+        setPrincipioAtivo(med.principio_ativo || '');
+        
+        const parsed = parseDosagem(med.dosagem);
+        setDosagemValor(parsed.valor);
+        setTipoDosagem(parsed.tipo);
         setIsEditModalOpen(true);
     };
 
@@ -230,15 +344,17 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
         e.preventDefault();
         if (!selectedMed) return;
 
+        const dosagemConcatenada = dosagemValor ? `${dosagemValor}${tipoDosagem}` : '';
+
         const isDuplicate = medicamentos.some(med => 
             med.id !== selectedMed.id &&
             med.nome.toUpperCase() === nome.toUpperCase() &&
             (med.tipo || '').toUpperCase() === tipo.toUpperCase() &&
-            (med.dosagem || '').toUpperCase() === (dosagem || '').toUpperCase()
+            (med.dosagem || '').toUpperCase() === (dosagemConcatenada || '').toUpperCase()
         );
 
         if (isDuplicate) {
-            alert(`Já existe outro medicamento cadastrado com o mesmo Nome ("${nome.toUpperCase()}"), Tipo ("${tipo}") e Dosagem ("${dosagem || 'Sem Dosagem'}").`);
+            alert(`Já existe outro medicamento cadastrado com o mesmo Nome ("${nome.toUpperCase()}"), Tipo ("${tipo}") e Dosagem ("${dosagemConcatenada || 'Sem Dosagem'}").`);
             return;
         }
 
@@ -252,10 +368,11 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                 lote: lote.toUpperCase(),
                 limite_minimo: parseInt(limiteMinimo, 10),
                 tipo,
-                dosagem: dosagem || undefined,
-                fornecedor: fornecedor || undefined
+                dosagem: dosagemConcatenada || undefined,
+                fornecedor: fornecedor || undefined,
+                principio_ativo: principioAtivo.toUpperCase() || undefined
             });
-            alert('Medicamento atualizado com sucesso!');
+            alert('Medicamento updated com sucesso!');
             setIsEditModalOpen(false);
             loadData(true);
         } catch (error: any) {
@@ -278,55 +395,11 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
         }
     };
 
-    // --- STOCK CONTROL / ADJUSTMENTS ---
+    // --- STOCK CONTROL / VIEW DETAILS ---
 
     const handleOpenAdjustModal = (med: FarmaciaMedicamento) => {
         setSelectedMed(med);
-        setAdjustQty('');
-        setAdjustType('Entrada');
-        setAdjustReason('');
         setIsAdjustModalOpen(true);
-    };
-
-    const handleAdjust = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!selectedMed || !adjustQty) return;
-        
-        const qtyNum = parseInt(adjustQty, 10);
-        if (isNaN(qtyNum) || qtyNum <= 0) {
-            alert('Digite uma quantidade inteira válida maior que zero.');
-            return;
-        }
-
-        if (adjustType === 'Ajuste' && !canApprove) {
-            alert('Apenas usuários com permissão de aprovação podem registrar ajustes manuais diretos de estoque.');
-            return;
-        }
-
-        setSaving(true);
-        try {
-            await db.registrarMovimentacao({
-                medicamento_id: selectedMed.id,
-                tipo: adjustType,
-                quantidade: qtyNum,
-                medicamento_nome: selectedMed.nome,
-                medicamento_categoria: selectedMed.categoria,
-                medicamento_tipo: selectedMed.tipo,
-                medicamento_dosagem: selectedMed.dosagem,
-                lote: selectedMed.lote,
-                validade: selectedMed.validade,
-                responsavel_nome: currentUser.name,
-                responsavel_id: currentUser.id,
-                observacoes: adjustReason || (adjustType === 'Entrada' ? 'Entrada manual de estoque' : 'Ajuste manual de estoque')
-            });
-            alert('Operação de estoque registrada com sucesso!');
-            setIsAdjustModalOpen(false);
-            loadData(true);
-        } catch (error: any) {
-            alert(error.message || 'Erro ao registrar movimentação.');
-        } finally {
-            setSaving(false);
-        }
     };
 
     const getStockBadgeColor = (med: FarmaciaMedicamento) => {
@@ -419,9 +492,17 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                                             <td className="p-3">
                                                 <div className="font-extrabold text-slate-800 uppercase">{med.nome}</div>
                                                 <div className="flex flex-wrap gap-1 mt-1">
+                                                    <span className="inline-block px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider rounded bg-slate-800 text-white">
+                                                        Cód: {medicamentCodes[`${med.nome.toUpperCase()} - ${med.dosagem?.toUpperCase() || ''} - ${med.tipo?.toUpperCase() || ''}`] || '00000'}
+                                                    </span>
                                                     <span className="inline-block px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded bg-pink-50 text-pink-600">
                                                         {med.categoria}
                                                     </span>
+                                                    {med.principio_ativo && (
+                                                        <span className="inline-block px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded bg-emerald-50 text-emerald-700 border border-emerald-100">
+                                                            P.Ativo: {med.principio_ativo}
+                                                        </span>
+                                                    )}
                                                     {med.dosagem && (
                                                         <span className="inline-block px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded bg-pink-50 text-pink-700 border border-pink-100">
                                                             {med.dosagem}
@@ -448,15 +529,13 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                                             </td>
                                             <td className="p-3 text-right">
                                                 <div className="flex items-center justify-end gap-2">
-                                                    {canCreate && (
-                                                        <button
-                                                            onClick={() => handleOpenAdjustModal(med)}
-                                                            className="px-2 py-1 text-[9px] font-black uppercase bg-pink-50 text-pink-600 hover:bg-pink-100 border border-pink-200/50 rounded-lg"
-                                                            title="Entrada / Ajuste manual de estoque"
-                                                        >
-                                                            Estoque
-                                                        </button>
-                                                    )}
+                                                    <button
+                                                        onClick={() => handleOpenAdjustModal(med)}
+                                                        className="px-2 py-1 text-[9px] font-black uppercase bg-pink-50 text-pink-600 hover:bg-pink-100 border border-pink-200/50 rounded-lg"
+                                                        title="Visualizar detalhes do lote"
+                                                    >
+                                                        Estoque
+                                                    </button>
                                                     {canEdit && (
                                                         <button
                                                             onClick={() => handleOpenEditModal(med)}
@@ -501,17 +580,102 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                             </button>
                         </div>
                         <form onSubmit={handleCreate} className="p-6 space-y-5">
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                {/* Row 1 */}
-                                <div className="md:col-span-2">
-                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Nome do Medicamento *</label>
+                            {/* Linha 1: Nome do Medicamento */}
+                            <div className="w-full relative">
+                                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Nome do Medicamento *</label>
+                                <input 
+                                    type="text" 
+                                    className={`w-full rounded-xl border border-slate-200 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold text-slate-900 uppercase ${
+                                        isExistingMed ? 'bg-slate-150 cursor-not-allowed opacity-60 text-slate-500' : 'bg-slate-50'
+                                    }`}
+                                    placeholder="Ex: PARACETAMOL"
+                                    value={nome} 
+                                    onChange={e => {
+                                        setNome(e.target.value);
+                                        setShowSuggestions(true);
+                                    }}
+                                    onFocus={() => setShowSuggestions(true)}
+                                    required 
+                                    disabled={isExistingMed}
+                                />
+                                {isExistingMed && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setSelectedExistingMed(null);
+                                            setNome('');
+                                            setDosagemValor('');
+                                            setTipo('Comprimido');
+                                            setCategoria('CBAF');
+                                            setTipoDosagem('mg');
+                                            setPrincipioAtivo('');
+                                        }}
+                                        className="absolute right-2.5 bottom-2.5 text-slate-400 hover:text-rose-500 transition-colors flex items-center gap-1 text-[10px] font-bold uppercase bg-white hover:bg-rose-50 px-2 py-1 rounded-lg border border-slate-200 shadow-sm z-10"
+                                    >
+                                        <X className="w-3 h-3" />
+                                        Limpar
+                                    </button>
+                                )}
+                                {showSuggestions && nameSuggestions.length > 0 && (
+                                    <>
+                                        <div className="fixed inset-0 z-40" onClick={() => setShowSuggestions(false)} />
+                                        <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 max-h-48 overflow-y-auto py-0.5 animate-in fade-in slide-in-from-top-1 duration-100 divide-y divide-emerald-500/20">
+                                            {nameSuggestions.map((sug) => (
+                                                <button
+                                                    key={`${sug.nome}-${sug.dosagem}-${sug.tipo}`}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setSelectedExistingMed(sug);
+                                                        setNome(sug.nome);
+                                                        if (sug.tipo) setTipo(sug.tipo);
+                                                        const parsed = parseDosagem(sug.dosagem);
+                                                        setDosagemValor(parsed.valor);
+                                                        setTipoDosagem(parsed.tipo);
+                                                        setPrincipioAtivo(sug.principio_ativo || '');
+                                                        
+                                                        const match = medicamentos.find(m => 
+                                                            m.nome.toUpperCase() === sug.nome.toUpperCase() &&
+                                                            (m.tipo || '').toUpperCase() === sug.tipo.toUpperCase() &&
+                                                            (m.dosagem || '').toUpperCase() === sug.dosagem.toUpperCase()
+                                                        );
+                                                        if (match) {
+                                                            setCategoria(match.categoria);
+                                                        }
+                                                        setShowSuggestions(false);
+                                                    }}
+                                                    className="w-full text-left px-4 py-2.5 text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 transition-colors uppercase flex justify-between items-center"
+                                                >
+                                                    <span>{sug.nome} <span className="text-[9px] opacity-75 font-normal ml-1.5 bg-white/20 px-1.5 py-0.5 rounded">(Cód: {sug.codigoSequencial})</span></span>
+                                                    <div className="flex items-center gap-1.5">
+                                                        {sug.principio_ativo && (
+                                                            <span className="text-[8px] opacity-90 font-bold bg-white/10 px-2 py-0.5 rounded border border-white/10 italic">
+                                                                P.Ativo: {sug.principio_ativo.toUpperCase()}
+                                                            </span>
+                                                        )}
+                                                        <span className="text-[10px] opacity-90 font-bold bg-white/20 px-2 py-0.5 rounded-full">
+                                                            {sug.dosagem ? sug.dosagem.toUpperCase() : 'Sem Dosagem'} {sug.tipo ? `• ${sug.tipo.toUpperCase()}` : ''}
+                                                        </span>
+                                                    </div>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+
+                            {/* Linha 2: Princípio Ativo, Lote * */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Princípio Ativo</label>
                                     <input 
                                         type="text" 
-                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold text-slate-900 uppercase" 
-                                        placeholder="Ex: PARACETAMOL"
-                                        value={nome} 
-                                        onChange={e => setNome(e.target.value)} 
-                                        required 
+                                        className={`w-full rounded-xl border border-slate-200 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold uppercase ${
+                                            isExistingMed ? 'bg-slate-150 cursor-not-allowed opacity-60 text-slate-500' : 'bg-slate-50 text-slate-900'
+                                        }`}
+                                        placeholder="Ex: DIPIRONA SÓDICA"
+                                        value={principioAtivo} 
+                                        onChange={e => setPrincipioAtivo(e.target.value)}
+                                        disabled={isExistingMed}
                                     />
                                 </div>
                                 <div>
@@ -525,24 +689,137 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                                         required 
                                     />
                                 </div>
+                            </div>
 
-                                {/* Row 2 */}
+                            {/* Linha 3: Tipo *, Validade * */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {/* Custom Tipo Select */}
+                                <div className="relative">
+                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Tipo *</label>
+                                    <div 
+                                        onClick={() => {
+                                            if (isExistingMed) return;
+                                            setIsAddTipoOpen(!isAddTipoOpen);
+                                            setIsAddCatOpen(false);
+                                        }}
+                                        className={`w-full rounded-xl border border-slate-200 py-3 px-4 text-sm text-slate-900 focus-within:border-pink-500 focus-within:ring-2 focus-within:ring-pink-500/10 outline-none transition-all font-semibold flex justify-between items-center select-none ${
+                                            isExistingMed ? 'bg-slate-150 cursor-not-allowed opacity-60' : 'bg-slate-50 cursor-pointer focus-within:bg-white'
+                                        }`}
+                                    >
+                                        <span>{tipo}</span>
+                                        {!isExistingMed && <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform ${isAddTipoOpen ? 'rotate-90' : ''}`} />}
+                                    </div>
+
+                                    {isAddTipoOpen && (
+                                        <>
+                                            <div className="fixed inset-0 z-40" onClick={() => setIsAddTipoOpen(false)} />
+                                            <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200/80 rounded-xl shadow-xl z-50 overflow-hidden py-1 animate-in fade-in slide-in-from-top-1 duration-100">
+                                                {['Comprimido', 'Frasco', 'Ampola', 'Creme', 'Outros'].map((t) => (
+                                                    <button
+                                                        key={t}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setTipo(t);
+                                                            setIsAddTipoOpen(false);
+                                                        }}
+                                                        className={`w-full text-left px-4 py-2.5 text-xs font-semibold hover:bg-slate-50 transition-colors flex justify-between items-center ${
+                                                            tipo === t ? 'text-pink-650 bg-pink-50/10 font-bold' : 'text-slate-700'
+                                                        }`}
+                                                    >
+                                                        <span>{t}</span>
+                                                        {tipo === t && <CheckCircle2 className="w-3.5 h-3.5 text-pink-600" />}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                                <div>
+                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Validade *</label>
+                                    <input 
+                                        type="date" 
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold text-slate-900 cursor-pointer" 
+                                        value={validade} 
+                                        onChange={e => setValidade(e.target.value)} 
+                                        required 
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Linha 4: Dosagem, Tipo Dosagem, Unidades * */}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div>
+                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Dosagem (Ex: 500, 10)</label>
+                                    <input 
+                                        type="text" 
+                                        className={`w-full rounded-xl border border-slate-200 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold ${
+                                            isExistingMed ? 'bg-slate-150 cursor-not-allowed opacity-60 text-slate-500' : 'bg-slate-50 text-slate-900'
+                                        }`}
+                                        placeholder="Ex: 500" 
+                                        value={dosagemValor} 
+                                        onChange={e => setDosagemValor(e.target.value)} 
+                                        disabled={isExistingMed}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Tipo Dosagem</label>
+                                    <select 
+                                        className={`w-full rounded-xl border border-slate-200 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold ${
+                                            isExistingMed ? 'bg-slate-150 cursor-not-allowed opacity-60 text-slate-500' : 'bg-slate-50 text-slate-900 cursor-pointer'
+                                        }`}
+                                        value={tipoDosagem}
+                                        onChange={e => setTipoDosagem(e.target.value)}
+                                        disabled={isExistingMed}
+                                    >
+                                        <optgroup label="Sólidos / Outros">
+                                            <option value="mcg (µg)">mcg (µg)</option>
+                                            <option value="mg">mg</option>
+                                            <option value="g">g</option>
+                                            <option value="kg">kg</option>
+                                        </optgroup>
+                                        <optgroup label="Líquidos">
+                                            <option value="mg/mL">mg/mL</option>
+                                            <option value="g/mL">g/mL</option>
+                                            <option value="mcg/mL">mcg/mL</option>
+                                            <option value="mg/5 mL">mg/5 mL</option>
+                                        </optgroup>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Unidades *</label>
+                                    <input 
+                                        type="number" 
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-bold text-slate-900" 
+                                        placeholder="0"
+                                        value={quantidade} 
+                                        onChange={e => setQuantidade(e.target.value)} 
+                                        min="0" 
+                                        required 
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Linha 5: Categoria * */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {/* Custom Categoria Select */}
                                 <div className="relative">
                                     <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Categoria *</label>
                                     <div 
                                         onClick={() => {
+                                            if (isExistingMed) return;
                                             setIsAddCatOpen(!isAddCatOpen);
                                             setIsAddTipoOpen(false);
                                         }}
-                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm text-slate-900 focus-within:bg-white focus-within:border-pink-500 focus-within:ring-2 focus-within:ring-pink-500/10 outline-none transition-all font-semibold cursor-pointer flex justify-between items-center select-none"
+                                        className={`w-full rounded-xl border border-slate-200 py-3 px-4 text-sm text-slate-900 focus-within:border-pink-500 focus-within:ring-2 focus-within:ring-pink-500/10 outline-none transition-all font-semibold flex justify-between items-center select-none ${
+                                            isExistingMed ? 'bg-slate-150 cursor-not-allowed opacity-60' : 'bg-slate-50 cursor-pointer focus-within:bg-white'
+                                        }`}
                                     >
                                         <span>
                                             {categoria === 'CBAF' && 'Componente Básico (CBAF)'}
                                             {categoria === 'CESAF' && 'Componente Estratégico (CESAF)'}
                                             {categoria === 'CEAF' && 'Componente Especializado (CEAF)'}
                                         </span>
-                                        <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform ${isAddCatOpen ? 'rotate-90' : ''}`} />
+                                        {!isExistingMed && <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform ${isAddCatOpen ? 'rotate-90' : ''}`} />}
                                     </div>
 
                                     {isAddCatOpen && (
@@ -573,113 +850,6 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                                         </>
                                     )}
                                 </div>
-
-                                {/* Custom Tipo Select */}
-                                <div className="relative">
-                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Tipo *</label>
-                                    <div 
-                                        onClick={() => {
-                                            setIsAddTipoOpen(!isAddTipoOpen);
-                                            setIsAddCatOpen(false);
-                                        }}
-                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm text-slate-900 focus-within:bg-white focus-within:border-pink-500 focus-within:ring-2 focus-within:ring-pink-500/10 outline-none transition-all font-semibold cursor-pointer flex justify-between items-center select-none"
-                                    >
-                                        <span>{tipo}</span>
-                                        <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform ${isAddTipoOpen ? 'rotate-90' : ''}`} />
-                                    </div>
-
-                                    {isAddTipoOpen && (
-                                        <>
-                                            <div className="fixed inset-0 z-40" onClick={() => setIsAddTipoOpen(false)} />
-                                            <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200/80 rounded-xl shadow-xl z-50 overflow-hidden py-1 animate-in fade-in slide-in-from-top-1 duration-100">
-                                                {['Comprimido', 'Frasco', 'Ampola', 'Creme', 'Outros'].map((t) => (
-                                                    <button
-                                                        key={t}
-                                                        type="button"
-                                                        onClick={() => {
-                                                            setTipo(t);
-                                                            setIsAddTipoOpen(false);
-                                                        }}
-                                                        className={`w-full text-left px-4 py-2.5 text-xs font-semibold hover:bg-slate-50 transition-colors flex justify-between items-center ${
-                                                            tipo === t ? 'text-pink-650 bg-pink-50/10 font-bold' : 'text-slate-700'
-                                                        }`}
-                                                    >
-                                                        <span>{t}</span>
-                                                        {tipo === t && <CheckCircle2 className="w-3.5 h-3.5 text-pink-600" />}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </>
-                                    )}
-                                </div>
-                                <div>
-                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Dosagem (Ex: 500mg, 10ml)</label>
-                                    <input 
-                                        type="text" 
-                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold text-slate-900" 
-                                        placeholder="Ex: 500mg" 
-                                        value={dosagem} 
-                                        onChange={e => setDosagem(e.target.value)} 
-                                    />
-                                </div>
-
-                                {/* Row 3 */}
-                                <div>
-                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Quantidade Inicial *</label>
-                                    <input 
-                                        type="number" 
-                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-bold text-slate-900" 
-                                        placeholder="0"
-                                        value={quantidade} 
-                                        onChange={e => setQuantidade(e.target.value)} 
-                                        min="0" 
-                                        required 
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Unidade *</label>
-                                    <input 
-                                        type="text" 
-                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold text-slate-900" 
-                                        placeholder="Ex: Comprimidos"
-                                        value={unidade} 
-                                        onChange={e => setUnidade(e.target.value)} 
-                                        required 
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Limite Mínimo de Alerta *</label>
-                                    <input 
-                                        type="number" 
-                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-bold text-slate-900" 
-                                        value={limiteMinimo} 
-                                        onChange={e => setLimiteMinimo(e.target.value)} 
-                                        min="0" 
-                                        required 
-                                    />
-                                </div>
-
-                                {/* Row 4 */}
-                                <div>
-                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Validade *</label>
-                                    <input 
-                                        type="date" 
-                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold text-slate-900 cursor-pointer" 
-                                        value={validade} 
-                                        onChange={e => setValidade(e.target.value)} 
-                                        required 
-                                    />
-                                </div>
-                                <div className="md:col-span-2">
-                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Fornecedor</label>
-                                    <input 
-                                        type="text" 
-                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold text-slate-900" 
-                                        placeholder="Ex: MedSul Distribuidora"
-                                        value={fornecedor} 
-                                        onChange={e => setFornecedor(e.target.value)} 
-                                    />
-                                </div>
                             </div>
                             <button type="submit" disabled={saving} className="w-full py-3.5 bg-pink-600 hover:bg-pink-700 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-md active:scale-98">
                                 {saving ? 'Salvando...' : 'Cadastrar Medicamento'}
@@ -703,16 +873,67 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                             </button>
                         </div>
                         <form onSubmit={handleUpdate} className="p-6 space-y-5">
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                {/* Row 1 */}
-                                <div className="md:col-span-2">
-                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Nome do Medicamento *</label>
+                            {/* Linha 1: Nome do Medicamento */}
+                            <div className="w-full relative">
+                                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Nome do Medicamento *</label>
+                                <input 
+                                    type="text" 
+                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold text-slate-900 uppercase" 
+                                    value={nome} 
+                                    onChange={e => {
+                                        setNome(e.target.value);
+                                        setShowSuggestions(true);
+                                    }}
+                                    onFocus={() => setShowSuggestions(true)}
+                                    required 
+                                />
+                                {showSuggestions && nameSuggestions.length > 0 && (
+                                    <>
+                                        <div className="fixed inset-0 z-40" onClick={() => setShowSuggestions(false)} />
+                                        <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 max-h-48 overflow-y-auto py-0.5 animate-in fade-in slide-in-from-top-1 duration-100 divide-y divide-emerald-500/20">
+                                            {nameSuggestions.map((sug) => (
+                                                <button
+                                                    key={`${sug.nome}-${sug.dosagem}-${sug.tipo}`}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setNome(sug.nome);
+                                                        if (sug.tipo) setTipo(sug.tipo);
+                                                        const parsed = parseDosagem(sug.dosagem);
+                                                        setDosagemValor(parsed.valor);
+                                                        setTipoDosagem(parsed.tipo);
+                                                        setPrincipioAtivo(sug.principio_ativo || '');
+                                                        setShowSuggestions(false);
+                                                    }}
+                                                    className="w-full text-left px-4 py-2.5 text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 transition-colors uppercase flex justify-between items-center"
+                                                >
+                                                    <span>{sug.nome} <span className="text-[9px] opacity-75 font-normal ml-1.5 bg-white/20 px-1.5 py-0.5 rounded">(Cód: {sug.codigoSequencial})</span></span>
+                                                    <div className="flex items-center gap-1.5">
+                                                        {sug.principio_ativo && (
+                                                            <span className="text-[8px] opacity-90 font-bold bg-white/10 px-2 py-0.5 rounded border border-white/10 italic">
+                                                                P.Ativo: {sug.principio_ativo.toUpperCase()}
+                                                            </span>
+                                                        )}
+                                                        <span className="text-[10px] opacity-90 font-bold bg-white/20 px-2 py-0.5 rounded-full">
+                                                            {sug.dosagem ? sug.dosagem.toUpperCase() : 'Sem Dosagem'} {sug.tipo ? `• ${sug.tipo.toUpperCase()}` : ''}
+                                                        </span>
+                                                    </div>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+
+                            {/* Linha 2: Princípio Ativo, Lote * */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Princípio Ativo</label>
                                     <input 
                                         type="text" 
                                         className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold text-slate-900 uppercase" 
-                                        value={nome} 
-                                        onChange={e => setNome(e.target.value)} 
-                                        required 
+                                        placeholder="Ex: DIPIRONA SÓDICA"
+                                        value={principioAtivo} 
+                                        onChange={e => setPrincipioAtivo(e.target.value)} 
                                     />
                                 </div>
                                 <div>
@@ -725,8 +946,96 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                                         required 
                                     />
                                 </div>
+                            </div>
 
-                                {/* Row 2 */}
+                            {/* Linha 3: Tipo *, Validade * */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {/* Custom Tipo Select */}
+                                <div className="relative">
+                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Tipo *</label>
+                                    <div 
+                                        onClick={() => {
+                                            setIsEditTipoOpen(!isEditTipoOpen);
+                                            setIsEditCatOpen(false);
+                                        }}
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm text-slate-900 focus-within:bg-white focus-within:border-pink-500 focus-within:ring-2 focus-within:ring-pink-500/10 outline-none transition-all font-semibold cursor-pointer flex justify-between items-center select-none"
+                                    >
+                                        <span>{tipo}</span>
+                                        <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform ${isEditTipoOpen ? 'rotate-90' : ''}`} />
+                                    </div>
+
+                                    {isEditTipoOpen && (
+                                        <>
+                                            <div className="fixed inset-0 z-40" onClick={() => setIsEditTipoOpen(false)} />
+                                            <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200/80 rounded-xl shadow-xl z-50 overflow-hidden py-1 animate-in fade-in slide-in-from-top-1 duration-100">
+                                                {['Comprimido', 'Frasco', 'Ampola', 'Creme', 'Outros'].map((t) => (
+                                                    <button
+                                                        key={t}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setTipo(t);
+                                                            setIsEditTipoOpen(false);
+                                                        }}
+                                                        className={`w-full text-left px-4 py-2.5 text-xs font-semibold hover:bg-slate-50 transition-colors flex justify-between items-center ${
+                                                            tipo === t ? 'text-pink-650 bg-pink-50/10 font-bold' : 'text-slate-700'
+                                                        }`}
+                                                    >
+                                                        <span>{t}</span>
+                                                        {tipo === t && <CheckCircle2 className="w-3.5 h-3.5 text-pink-600" />}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                                <div>
+                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Validade *</label>
+                                    <input 
+                                        type="date" 
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold text-slate-900 cursor-pointer" 
+                                        value={validade} 
+                                        onChange={e => setValidade(e.target.value)} 
+                                        required 
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Linha 4: Dosagem, Tipo Dosagem */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Dosagem (Ex: 500, 10)</label>
+                                    <input 
+                                        type="text" 
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold text-slate-900" 
+                                        value={dosagemValor} 
+                                        onChange={e => setDosagemValor(e.target.value)} 
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Tipo Dosagem</label>
+                                    <select 
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3.5 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold text-slate-900 cursor-pointer"
+                                        value={tipoDosagem}
+                                        onChange={e => setTipoDosagem(e.target.value)}
+                                    >
+                                        <optgroup label="Sólidos / Outros">
+                                            <option value="mcg (µg)">mcg (µg)</option>
+                                            <option value="mg">mg</option>
+                                            <option value="g">g</option>
+                                            <option value="kg">kg</option>
+                                        </optgroup>
+                                        <optgroup label="Líquidos">
+                                            <option value="mg/mL">mg/mL</option>
+                                            <option value="g/mL">g/mL</option>
+                                            <option value="mcg/mL">mcg/mL</option>
+                                            <option value="mg/5 mL">mg/5 mL</option>
+                                        </optgroup>
+                                    </select>
+                                </div>
+                            </div>
+
+                            {/* Linha 5: Categoria * */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {/* Custom Categoria Select */}
                                 <div className="relative">
                                     <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Categoria *</label>
@@ -773,98 +1082,6 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                                         </>
                                     )}
                                 </div>
-
-                                {/* Custom Tipo Select */}
-                                <div className="relative">
-                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Tipo *</label>
-                                    <div 
-                                        onClick={() => {
-                                            setIsEditTipoOpen(!isEditTipoOpen);
-                                            setIsEditCatOpen(false);
-                                        }}
-                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm text-slate-900 focus-within:bg-white focus-within:border-pink-500 focus-within:ring-2 focus-within:ring-pink-500/10 outline-none transition-all font-semibold cursor-pointer flex justify-between items-center select-none"
-                                    >
-                                        <span>{tipo}</span>
-                                        <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform ${isEditTipoOpen ? 'rotate-90' : ''}`} />
-                                    </div>
-
-                                    {isEditTipoOpen && (
-                                        <>
-                                            <div className="fixed inset-0 z-40" onClick={() => setIsEditTipoOpen(false)} />
-                                            <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200/80 rounded-xl shadow-xl z-50 overflow-hidden py-1 animate-in fade-in slide-in-from-top-1 duration-100">
-                                                {['Comprimido', 'Frasco', 'Ampola', 'Creme', 'Outros'].map((t) => (
-                                                    <button
-                                                        key={t}
-                                                        type="button"
-                                                        onClick={() => {
-                                                            setTipo(t);
-                                                            setIsEditTipoOpen(false);
-                                                        }}
-                                                        className={`w-full text-left px-4 py-2.5 text-xs font-semibold hover:bg-slate-50 transition-colors flex justify-between items-center ${
-                                                            tipo === t ? 'text-pink-650 bg-pink-50/10 font-bold' : 'text-slate-700'
-                                                        }`}
-                                                    >
-                                                        <span>{t}</span>
-                                                        {tipo === t && <CheckCircle2 className="w-3.5 h-3.5 text-pink-600" />}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </>
-                                    )}
-                                </div>
-                                <div>
-                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Dosagem (Ex: 500mg, 10ml)</label>
-                                    <input 
-                                        type="text" 
-                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold text-slate-900" 
-                                        value={dosagem} 
-                                        onChange={e => setDosagem(e.target.value)} 
-                                    />
-                                </div>
-
-                                {/* Row 3 */}
-                                <div>
-                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Limite Mínimo de Alerta *</label>
-                                    <input 
-                                        type="number" 
-                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-bold text-slate-900" 
-                                        value={limiteMinimo} 
-                                        onChange={e => setLimiteMinimo(e.target.value)} 
-                                        min="0" 
-                                        required 
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Unidade *</label>
-                                    <input 
-                                        type="text" 
-                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold text-slate-900" 
-                                        value={unidade} 
-                                        onChange={e => setUnidade(e.target.value)} 
-                                        required 
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Validade *</label>
-                                    <input 
-                                        type="date" 
-                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold text-slate-900 cursor-pointer" 
-                                        value={validade} 
-                                        onChange={e => setValidade(e.target.value)} 
-                                        required 
-                                    />
-                                </div>
-
-                                {/* Row 4 */}
-                                <div className="md:col-span-3">
-                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Fornecedor</label>
-                                    <input 
-                                        type="text" 
-                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold text-slate-900" 
-                                        value={fornecedor} 
-                                        onChange={e => setFornecedor(e.target.value)} 
-                                    />
-                                </div>
                             </div>
                             <button type="submit" disabled={saving} className="w-full py-3.5 bg-pink-600 hover:bg-pink-700 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-md active:scale-98">
                                 {saving ? 'Salvando...' : 'Salvar Alterações'}
@@ -874,45 +1091,124 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                 </div>
             )}
 
-            {/* ADJUST STOCK MODAL */}
+            {/* VIEW STOCK DETAILS MODAL */}
             {isAdjustModalOpen && selectedMed && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200/50">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200/50 flex flex-col animate-in zoom-in-95 duration-200">
+                        {/* Modal Header */}
                         <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                            <h3 className="font-extrabold text-slate-800 uppercase text-xs tracking-wide">
-                                Movimentação manual de lote: {selectedMed.nome}
-                            </h3>
-                            <button onClick={() => setIsAdjustModalOpen(false)} className="p-1 hover:bg-slate-200 rounded-lg text-slate-500"><X className="w-5 h-5" /></button>
-                        </div>
-                        <form onSubmit={handleAdjust} className="p-6 space-y-4">
                             <div>
-                                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">Tipo de Operação *</label>
-                                <select className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs focus:bg-white focus:border-pink-500 outline-none font-semibold text-slate-900" value={adjustType} onChange={e => setAdjustType(e.target.value as any)}>
-                                    <option value="Entrada">Entrada (Adiciona quantidade ao estoque atual)</option>
-                                    {canApprove && <option value="Ajuste">Ajuste Manual Direto (Força quantidade exata)</option>}
-                                </select>
+                                <h3 className="font-extrabold text-slate-800 uppercase text-xs tracking-wide">
+                                    Consulta de Lote
+                                </h3>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">
+                                    Informações detalhadas do estoque
+                                </p>
                             </div>
-                            <div>
-                                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">
-                                    {adjustType === 'Entrada' ? 'Quantidade a Adicionar *' : 'Nova Quantidade em Estoque *'}
-                                </label>
-                                <div className="relative">
-                                    <input type="number" className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs focus:bg-white focus:border-pink-500 outline-none font-bold text-slate-900 pr-16" value={adjustQty} onChange={e => setAdjustQty(e.target.value)} min="1" required />
-                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">{selectedMed.unidade}</span>
+                            <button 
+                                onClick={() => setIsAdjustModalOpen(false)} 
+                                className="p-1.5 hover:bg-slate-200 rounded-lg text-slate-500 transition-colors"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        {/* Modal Body */}
+                        <div className="p-6 space-y-6">
+                            {/* Medicine Header */}
+                            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 flex flex-col gap-2">
+                                <span className="text-[8px] font-black uppercase tracking-wider bg-slate-800 text-white self-start px-2 py-0.5 rounded">
+                                    Cód: {medicamentCodes[`${selectedMed.nome.toUpperCase()} - ${selectedMed.dosagem?.toUpperCase() || ''} - ${selectedMed.tipo?.toUpperCase() || ''}`] || '00000'}
+                                </span>
+                                <h4 className="font-extrabold text-slate-900 text-base uppercase leading-snug">
+                                    {selectedMed.nome} {selectedMed.dosagem && <span className="text-pink-600">{selectedMed.dosagem}</span>}
+                                </h4>
+                                {selectedMed.principio_ativo && (
+                                    <div className="text-[10px] text-slate-550 font-bold uppercase tracking-wider flex items-center gap-1">
+                                        <span className="text-slate-400">P. Ativo:</span> {selectedMed.principio_ativo}
+                                    </div>
+                                )}
+                                <span className="text-[10px] text-pink-655 font-bold uppercase mt-1">
+                                    {selectedMed.categoria === 'CBAF' && 'Componente Básico (CBAF)'}
+                                    {selectedMed.categoria === 'CESAF' && 'Componente Estratégico (CESAF)'}
+                                    {selectedMed.categoria === 'CEAF' && 'Componente Especializado (CEAF)'}
+                                </span>
+                            </div>
+
+                            {/* Details Grid */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="bg-slate-50/50 border border-slate-100 rounded-2xl p-3.5 flex flex-col justify-between">
+                                    <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1">Quantidade</span>
+                                    <span className="text-lg font-black text-slate-800">
+                                        {selectedMed.quantidade} <span className="text-[11px] font-bold text-slate-450">{selectedMed.unidade}</span>
+                                    </span>
+                                </div>
+
+                                <div className="bg-slate-50/50 border border-slate-100 rounded-2xl p-3.5 flex flex-col justify-between">
+                                    <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1">Tipo</span>
+                                    <span className="text-sm font-extrabold text-slate-700 uppercase">
+                                        {selectedMed.tipo || 'Comprimido'}
+                                    </span>
+                                </div>
+
+                                <div className="bg-slate-50/50 border border-slate-100 rounded-2xl p-3.5 flex flex-col justify-between">
+                                    <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1">Lote</span>
+                                    <span className="text-sm font-bold font-mono text-slate-600 uppercase">
+                                        {selectedMed.lote}
+                                    </span>
+                                </div>
+
+                                <div className="bg-slate-50/50 border border-slate-100 rounded-2xl p-3.5 flex flex-col justify-between">
+                                    <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1">Validade</span>
+                                    <span className={`text-sm font-bold ${
+                                        new Date(selectedMed.validade).getTime() <= Date.now() 
+                                            ? 'text-rose-500' 
+                                            : 'text-slate-700'
+                                    }`}>
+                                        {formatDateBr(selectedMed.validade)}
+                                    </span>
                                 </div>
                             </div>
-                            <div>
-                                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">Justificativa / Motivo *</label>
-                                <textarea className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs focus:bg-white focus:border-pink-500 outline-none font-semibold text-slate-900 min-h-[70px]" placeholder="Ex: Compra emergencial, ajuste de inventário rotativo..." value={adjustReason} onChange={e => setAdjustReason(e.target.value)} required />
-                            </div>
-                            <div className="bg-slate-50 border border-slate-200/50 rounded-xl p-3 text-[10px] font-semibold text-slate-400 flex items-start gap-2">
-                                <Info className="w-3.5 h-3.5 text-slate-500 shrink-0 mt-0.5" />
-                                <span>Esta movimentação alterará a contagem física do estoque do lote "{selectedMed.lote}" e será registrada permanentemente no histórico.</span>
-                            </div>
-                            <button type="submit" disabled={saving} className="w-full py-2.5 bg-pink-600 hover:bg-pink-700 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-md">
-                                {saving ? 'Registrando...' : 'Salvar Movimentação'}
+
+                            {/* Warning or Status banner */}
+                            {new Date(selectedMed.validade).getTime() <= Date.now() ? (
+                                <div className="bg-rose-50 border border-rose-100 rounded-2xl p-3 flex items-start gap-2.5 text-[10px] font-semibold text-rose-700">
+                                    <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                                    <span>Este lote está vencido e não deve ser dispensado aos pacientes. Promova o descarte correto do estoque.</span>
+                                </div>
+                            ) : selectedMed.quantidade === 0 ? (
+                                <div className="bg-rose-50 border border-rose-100 rounded-2xl p-3 flex items-start gap-2.5 text-[10px] font-semibold text-rose-700">
+                                    <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                                    <span>Este lote está zerado (sem unidades disponíveis no estoque atual).</span>
+                                </div>
+                            ) : selectedMed.quantidade <= selectedMed.limite_minimo ? (
+                                <div className="bg-amber-50 border border-amber-100 rounded-2xl p-3 flex items-start gap-2.5 text-[10px] font-semibold text-amber-700">
+                                    <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                                    <span>Estoque em nível crítico (igual ou menor que o limite de alerta estabelecido de {selectedMed.limite_minimo} unidades).</span>
+                                </div>
+                            ) : (
+                                <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-3 flex items-start gap-2.5 text-[10px] font-semibold text-emerald-700">
+                                    <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                                    <span>Lote em situação regular. Estoque disponível e validade vigente.</span>
+                                </div>
+                            )}
+
+                            {selectedMed.fornecedor && (
+                                <div className="text-[10px] text-slate-400 font-semibold italic text-center">
+                                    Fornecedor registrado: {selectedMed.fornecedor}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Modal Footer */}
+                        <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end shrink-0">
+                            <button
+                                onClick={() => setIsAdjustModalOpen(false)}
+                                className="px-5 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-extrabold text-xs uppercase tracking-widest rounded-xl transition-all shadow-sm active:scale-98"
+                            >
+                                Fechar Consulta
                             </button>
-                        </form>
+                        </div>
                     </div>
                 </div>
             )}
