@@ -923,6 +923,9 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                       {
                         title: 'Licitação',
                         permissions: [
+                          { id: 'parent_licitacao', label: 'Módulo Geral' },
+                          { id: 'parent_licitacao_processos', label: 'Processos' },
+                          { id: 'parent_licitacao_triagem', label: 'Triagem' }
                         ],
                         color: 'purple'
                       },
