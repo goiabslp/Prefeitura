@@ -73,6 +73,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
     const updateAccountMutation = useUpdatePurchaseOrderAccount();
     const [localOptimisticUpdates, setLocalOptimisticUpdates] = useState<Record<string, Partial<Order>>>({});
     const [successOrderId, setSuccessOrderId] = useState<string | null>(null);
+    const [hoveredTooltip, setHoveredTooltip] = useState<{ text: string; type: 'licitacao' | 'compras' | 'diarias'; x: number; y: number } | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [purchaseStatusFilter, setPurchaseStatusFilter] = useState('all');
     const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
@@ -750,7 +751,10 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
 
 
                                         return (
-                                            <div key={order.id} className="grid grid-cols-1 desktop:grid-cols-12 gap-4 px-8 py-5 hover:bg-slate-50/80 transition-colors items-center">
+                                            <div
+                                                key={order.id}
+                                                className="grid grid-cols-1 desktop:grid-cols-12 gap-4 px-8 py-5 hover:bg-slate-50/80 transition-colors items-center"
+                                            >
                                                 {isLicitacao ? (
                                                     <>
                                                         <div className="md:col-span-2 flex flex-col justify-center gap-1">
@@ -767,7 +771,24 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                                 {(content as any)?.objeto || content?.description || <span className="italic text-slate-400">Objeto não especificado</span>}
                                                             </span>
                                                         </div>
-                                                        <div className="md:col-span-3 flex flex-col justify-center pr-4">
+                                                        <div
+                                                            className="md:col-span-3 flex flex-col justify-center pr-4 cursor-help"
+                                                            onMouseEnter={(e) => {
+                                                                const text = order.title || (order.documentSnapshot?.content as any)?.objeto;
+                                                                if (text) {
+                                                                    const rect = e.currentTarget.getBoundingClientRect();
+                                                                    setHoveredTooltip({
+                                                                        text,
+                                                                        type: 'licitacao',
+                                                                        x: rect.left + rect.width / 2,
+                                                                        y: rect.top - 8
+                                                                    });
+                                                                }
+                                                            }}
+                                                            onMouseLeave={() => {
+                                                                setHoveredTooltip(null);
+                                                            }}
+                                                        >
                                                             <span className="text-xs font-bold text-slate-700 truncate">{content?.requesterName || order.userName || 'Sem Solicitante'}</span>
                                                             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate flex items-center gap-1 mt-0.5">
                                                                 <Network className="w-3 h-3" /> {content?.requesterSector || order.requestingSector || 'Sem Setor'}
@@ -880,7 +901,30 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                     </>
                                                 )}
 
-                                                <div className={`${isDiarias ? 'md:col-span-4' : isCompras ? 'md:col-span-3 text-center' : activeBlock === 'oficio' ? 'md:col-span-3' : 'md:col-span-6'}`}>
+                                                <div
+                                                    className={`${isDiarias ? 'md:col-span-4 cursor-help' : isCompras ? 'md:col-span-3 text-center cursor-help' : activeBlock === 'oficio' ? 'md:col-span-3' : 'md:col-span-6'}`}
+                                                    onMouseEnter={(e) => {
+                                                        const text = isDiarias
+                                                            ? (order.documentSnapshot?.content as any)?.descriptionReason
+                                                            : isCompras
+                                                                ? order.title
+                                                                : null;
+                                                        if (text) {
+                                                            const rect = e.currentTarget.getBoundingClientRect();
+                                                            setHoveredTooltip({
+                                                                text,
+                                                                type: isCompras ? 'compras' : 'diarias',
+                                                                x: rect.left + rect.width / 2,
+                                                                y: rect.top - 8
+                                                            });
+                                                        }
+                                                    }}
+                                                    onMouseLeave={() => {
+                                                        if (isDiarias || isCompras) {
+                                                            setHoveredTooltip(null);
+                                                        }
+                                                    }}
+                                                >
                                                     <h3 className="text-sm font-bold text-slate-800 leading-tight">
                                                         {isDiarias ? (
                                                             <div className="flex flex-col">
@@ -1839,6 +1883,40 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                     isAdmin={isAdmin}
                     isSuccess={successOrderId === accountSelectionOrder?.id}
                 />,
+                document.body
+            )}
+
+            {createPortal(
+                <AnimatePresence>
+                    {hoveredTooltip && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 8, scale: 0.95 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: 8, scale: 0.95 }}
+                            transition={{ duration: 0.12, ease: 'easeOut' }}
+                            style={{
+                                position: 'fixed',
+                                left: hoveredTooltip.x,
+                                top: hoveredTooltip.y,
+                                transform: 'translate(-50%, -100%)',
+                                zIndex: 99999,
+                                pointerEvents: 'none',
+                            }}
+                            className="bg-slate-900/95 backdrop-blur-md border border-slate-800 text-white text-xs px-4 py-3 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.3)] max-w-sm text-center leading-relaxed flex flex-col gap-1 items-center font-sans"
+                        >
+                            <span className="text-[9px] text-indigo-400 uppercase tracking-widest font-black">
+                                {hoveredTooltip.type === 'licitacao'
+                                    ? 'Finalidade do Processo'
+                                    : hoveredTooltip.type === 'compras'
+                                        ? 'Objeto / Título do Pedido'
+                                        : 'Justificativa Resumida'}
+                            </span>
+                            <span className="text-slate-100 font-bold leading-normal">{hoveredTooltip.text}</span>
+                            {/* Tooltip arrow */}
+                            <div className="w-2 h-2 bg-slate-900/95 border-r border-b border-slate-800 rotate-45 absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2" />
+                        </motion.div>
+                    )}
+                </AnimatePresence>,
                 document.body
             )}
         </>

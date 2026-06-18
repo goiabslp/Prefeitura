@@ -418,7 +418,11 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                             const oficioNumber = oficioMatch ? oficioMatch[1] : '---';
 
                                             return (
-                                                <div key={order.id} className="bg-white rounded-2xl border border-slate-200/60 p-5 flex flex-col gap-5 shadow-sm hover:shadow-xl hover:border-blue-200/50 hover:-translate-y-0.5 transition-all duration-300 relative overflow-hidden group">
+                                                <div
+                                                    key={order.id}
+                                                    className="bg-white rounded-2xl border border-slate-200/60 p-5 flex flex-col gap-5 shadow-sm hover:shadow-xl hover:border-blue-200/50 hover:-translate-y-0.5 transition-all duration-300 relative overflow-hidden group"
+                                                    title={order.title || (order.documentSnapshot?.content as any)?.objeto || 'Finalidade não especificada'}
+                                                >
                                                     <div className="absolute top-0 left-0 w-1 rounded-l-2xl h-full bg-gradient-to-b from-blue-500 to-indigo-600 opacity-80 group-hover:opacity-100 transition-opacity" />
 
                                                     <div className="grid grid-cols-1 md:grid-cols-7 gap-4 items-center">
@@ -543,7 +547,19 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                         }
 
                                         return (
-                                            <div key={order.id} className="grid grid-cols-1 md:grid-cols-12 gap-4 px-8 py-5 hover:bg-slate-50/80 transition-colors items-center">
+                                            <div
+                                                key={order.id}
+                                                className="grid grid-cols-1 md:grid-cols-12 gap-4 px-8 py-5 hover:bg-slate-50/80 transition-colors items-center"
+                                                title={
+                                                    isLicitacao
+                                                        ? (order.title || (order.documentSnapshot?.content as any)?.objeto || 'Finalidade não especificada')
+                                                        : isCompras
+                                                            ? (order.title || 'Objeto não especificado')
+                                                            : isDiarias
+                                                                ? ((order.documentSnapshot?.content as any)?.descriptionReason || 'Justificativa não especificada')
+                                                                : undefined
+                                                }
+                                            >
                                                 {/* Date Cell for Compras */}
                                                 {isCompras && (
                                                     <div className="md:col-span-1 flex justify-center">

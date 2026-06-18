@@ -109,7 +109,11 @@ export const LicitacaoList: React.FC<LicitacaoListProps> = ({ currentUser, onBac
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             {filteredProcesses?.map((process) => (
-                                <div key={process.id} className="group bg-white rounded-3xl p-6 border border-slate-100 shadow-[0_4px_20px_rgb(0,0,0,0.02)] hover:shadow-[0_10px_30px_rgb(0,0,0,0.06)] hover:-translate-y-1 transition-all duration-300 relative overflow-hidden flex flex-col cursor-pointer">
+                                <div 
+                                    key={process.id} 
+                                    className="group bg-white rounded-3xl p-6 border border-slate-100 shadow-[0_4px_20px_rgb(0,0,0,0.02)] hover:shadow-[0_10px_30px_rgb(0,0,0,0.06)] hover:-translate-y-1 transition-all duration-300 relative overflow-hidden flex flex-col cursor-pointer"
+                                    title={process.finalidade || 'Finalidade não especificada'}
+                                >
                                     <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                                     
                                     <div className="flex justify-between items-start mb-4">

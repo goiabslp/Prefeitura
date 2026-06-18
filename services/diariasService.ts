@@ -57,7 +57,11 @@ export const getAllServiceRequests = async (lightweight = true, page = 0, pageSi
           'retDate:document_snapshot->content->>returnDateTime, ' +
           'retDateLegacy:document_snapshot->>returnDateTime, ' +
           'retDateUnderscore:document_snapshot->content->>return_date, ' +
-          'retDateLegacyUnderscore:document_snapshot->>return_date'
+          'retDateLegacyUnderscore:document_snapshot->>return_date, ' +
+          'descReason:document_snapshot->content->>descriptionReason, ' +
+          'descReasonLegacy:document_snapshot->>descriptionReason, ' +
+          'descReasonUnderscore:document_snapshot->content->>description_reason, ' +
+          'descReasonLegacyUnderscore:document_snapshot->>description_reason'
         : '*';
 
     let query = supabase
@@ -88,6 +92,7 @@ export const getAllServiceRequests = async (lightweight = true, page = 0, pageSi
             const destination = item.dest || item.destLegacy || 'Destino n/a';
             const departureDateTime = item.depDate || item.depDateLegacy || item.depDateUnderscore || item.depDateLegacyUnderscore || undefined;
             const returnDateTime = item.retDate || item.retDateLegacy || item.retDateUnderscore || item.retDateLegacyUnderscore || undefined;
+            const descReason = item.descReason || item.descReasonLegacy || item.descReasonUnderscore || item.descReasonLegacyUnderscore || '';
 
             return {
                 id: item.id,
@@ -154,7 +159,7 @@ export const getAllServiceRequests = async (lightweight = true, page = 0, pageSi
                         priority: 'Normal',
                         authorizedBy: '',
                         requestedValue: '',
-                        descriptionReason: '',
+                        descriptionReason: descReason,
                         lodgingCount: 0,
                         distanceKm: 0,
                         paymentForecast: undefined,
