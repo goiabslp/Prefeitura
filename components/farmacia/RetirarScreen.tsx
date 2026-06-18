@@ -470,10 +470,9 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                 </div>
 
                 <form onSubmit={handlePreSubmit} className="flex-1 flex flex-col justify-between gap-4 min-h-0 overflow-hidden">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 min-h-0 overflow-y-auto md:overflow-visible pr-1 custom-scrollbar">
-                        {/* Column 1 */}
-                        <div className="space-y-4">
-                            {/* CPF */}
+                    <div className="space-y-4 min-h-0 overflow-y-auto pr-1 custom-scrollbar">
+                        {/* Linha 1: CPF do Paciente + Medicamento */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">CPF do Paciente</label>
                                 <input
@@ -486,7 +485,33 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                 />
                             </div>
 
-                            {/* Patient search & name */}
+                            <div>
+                                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Medicamento (Lote/Categoria)</label>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setMedModalSearch('');
+                                        setMedModalCategory('TODOS');
+                                        setIsMedModalOpen(true);
+                                    }}
+                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm text-slate-900 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold uppercase cursor-pointer flex justify-between items-center select-none text-left"
+                                >
+                                    {selectedMed ? (
+                                        <span className="text-slate-900 font-extrabold truncate">
+                                            {selectedMed.nome} {selectedMed.dosagem ? `(${selectedMed.dosagem})` : ''} - Lote: {selectedMed.lote} (Disp: {selectedMed.quantidade} {selectedMed.unidade})
+                                        </span>
+                                    ) : (
+                                        <span className="text-slate-400 normal-case font-medium">
+                                            Selecione o medicamento...
+                                        </span>
+                                    )}
+                                    <Search className="w-4 h-4 text-slate-400 shrink-0 ml-2" />
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Linha 2: Paciente + Quantidade */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="relative">
                                 <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Paciente</label>
                                 <input
@@ -534,32 +559,6 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                 )}
                             </div>
 
-                            {/* Medicamento Batch selection */}
-                            <div>
-                                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Medicamento (Lote/Categoria)</label>
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setMedModalSearch('');
-                                        setMedModalCategory('TODOS');
-                                        setIsMedModalOpen(true);
-                                    }}
-                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm text-slate-900 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold uppercase cursor-pointer flex justify-between items-center select-none text-left"
-                                >
-                                    {selectedMed ? (
-                                        <span className="text-slate-900 font-extrabold truncate">
-                                            {selectedMed.nome} {selectedMed.dosagem ? `(${selectedMed.dosagem})` : ''} - Lote: {selectedMed.lote} (Disp: {selectedMed.quantidade} {selectedMed.unidade})
-                                        </span>
-                                    ) : (
-                                        <span className="text-slate-400 normal-case font-medium">
-                                            Selecione o medicamento...
-                                        </span>
-                                    )}
-                                    <Search className="w-4 h-4 text-slate-400 shrink-0 ml-2" />
-                                </button>
-                            </div>
-
-                            {/* Quantidade */}
                             <div>
                                 <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Quantidade</label>
                                 <div className="relative">
@@ -581,40 +580,15 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                             </div>
                         </div>
 
-                        {/* Column 2 */}
-                        <div className="space-y-4 flex flex-col justify-between">
-                            {/* Data */}
-                            <div>
-                                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Data</label>
-                                <input
-                                    type="datetime-local"
-                                    step="1"
-                                    className="w-full rounded-xl border border-slate-200 bg-slate-100 py-3 px-4 text-sm text-slate-500 font-bold outline-none cursor-not-allowed shadow-inner"
-                                    value={withdrawalDate}
-                                    readOnly
-                                    required
-                                />
-                            </div>
-
-                            {/* Observações */}
-                            <div className="flex-1 flex flex-col">
-                                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Observações / Receita</label>
-                                <textarea
-                                    className="w-full flex-1 rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm text-slate-900 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold min-h-[60px] md:min-h-0"
-                                    placeholder="Ex: Receita do Dr. João, validade 6 meses..."
-                                    value={observacoes}
-                                    onChange={(e) => setObservacoes(e.target.value)}
-                                />
-                            </div>
-
-                            {/* Responsável read-only */}
-                            <div>
-                                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Responsável pela Entrega</label>
-                                <div className="w-full rounded-xl border border-slate-200 bg-slate-100 py-3 px-4 text-sm text-slate-500 font-bold flex items-center gap-2 shadow-inner">
-                                    <UserIcon className="w-4 h-4 text-slate-400" />
-                                    {currentUser.name}
-                                </div>
-                            </div>
+                        {/* Linha 3: Observações / Receita */}
+                        <div>
+                            <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Observações / Receita</label>
+                            <textarea
+                                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm text-slate-900 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold min-h-[80px]"
+                                placeholder="Ex: Receita do Dr. João, validade 6 meses..."
+                                value={observacoes}
+                                onChange={(e) => setObservacoes(e.target.value)}
+                            />
                         </div>
                     </div>
 
