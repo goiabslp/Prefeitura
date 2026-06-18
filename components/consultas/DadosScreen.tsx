@@ -234,6 +234,20 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
         }
     };
 
+    const handleDeleteProcedure = async (procId: string) => {
+        if (!window.confirm('Deseja realmente excluir este procedimento? Esta ação não pode ser desfeita.')) return;
+        setLoading(true);
+        try {
+            await db.deleteProcedimento(procId);
+            await fetchTabContent();
+        } catch (err: any) {
+            console.error('Error deleting procedure:', err);
+            alert(err.message || 'Erro ao deletar procedimento.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const getDaysInMonth = (date: Date) => {
         const year = date.getFullYear();
         const month = date.getMonth();
@@ -282,6 +296,7 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
     const [procType, setProcType] = useState<'Exame' | 'Consulta' | 'Cirurgia'>('Exame');
     const [procQty, setProcQty] = useState(0);
     const [procStatus, setProcStatus] = useState<'Ativo' | 'Inativo'>('Ativo');
+    const [procRecurso, setProcRecurso] = useState<'Não Se Aplica' | 'FM' | 'PPI'>('Não Se Aplica');
     const [procError, setProcError] = useState('');
 
     // History Log
@@ -453,7 +468,8 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                     name: procName,
                     code: procCode,
                     type: procType,
-                    status: procStatus
+                    status: procStatus,
+                    recurso: procRecurso
                 });
             } else {
                 await db.createProcedimento({
@@ -462,7 +478,8 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                     type: procType,
                     total_quantity: 0,
                     available_quantity: 0,
-                    status: procStatus
+                    status: procStatus,
+                    recurso: procRecurso
                 });
             }
             setIsProcModalOpen(false);
@@ -523,6 +540,7 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
             setProcType(proc.type);
             setProcQty(proc.available_quantity);
             setProcStatus(proc.status);
+            setProcRecurso(proc.recurso || 'Não Se Aplica');
         } else {
             setProcName('');
             // Auto-generate unique sequential 4-digit code
@@ -535,6 +553,7 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
             setProcType('Exame');
             setProcQty(0);
             setProcStatus('Ativo');
+            setProcRecurso('Não Se Aplica');
         }
         setProcError('');
         setIsProcModalOpen(true);
@@ -866,6 +885,11 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                                                         }`}>
                                                             {selectedProc.type}
                                                         </span>
+                                                        {selectedProc.recurso && selectedProc.recurso !== 'Não Se Aplica' && (
+                                                            <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-amber-50 text-amber-600 border border-amber-100">
+                                                                {selectedProc.recurso}
+                                                            </span>
+                                                        )}
                                                     </div>
                                                     <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-0.5">Gestão de Vagas por Horário</p>
                                                 </div>
@@ -1078,6 +1102,11 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                                                                 <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${typeConfig.colorClass} border`}>
                                                                     {p.type}
                                                                 </span>
+                                                                {p.recurso && p.recurso !== 'Não Se Aplica' && (
+                                                                    <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-amber-50 text-amber-600 border border-amber-100">
+                                                                        {p.recurso}
+                                                                    </span>
+                                                                )}
                                                             </div>
                                                             <h4 className="font-extrabold text-slate-800 text-sm sm:text-base truncate group-hover:text-sky-700 transition-colors">
                                                                 {p.name}
@@ -1117,6 +1146,13 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                                                                 title="Editar Procedimento"
                                                             >
                                                                 <Edit2 className="w-4 h-4" />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDeleteProcedure(p.id)}
+                                                                className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-slate-200/60 rounded-xl transition-all"
+                                                                title="Excluir Procedimento"
+                                                            >
+                                                                <Trash2 className="w-4 h-4" />
                                                             </button>
                                                             <div className="hidden sm:flex p-2 text-slate-300 group-hover:text-sky-500 transition-colors">
                                                                 <ChevronRight className="w-5 h-5 transform group-hover:translate-x-1 transition-transform" />
@@ -1364,16 +1400,48 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                                     {procError}
                                 </div>
                             )}
-                            <div>
+                            <div className="relative group">
                                 <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Nome do Procedimento</label>
                                 <input
                                     type="text"
-                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none transition-all text-xs font-semibold"
-                                    placeholder="Ex: Hemograma Completo ou Consulta Geral"
+                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none transition-all text-xs font-semibold uppercase"
+                                    placeholder="EX: HEMOGRAMA COMPLETO OU CONSULTA GERAL"
                                     value={procName}
-                                    onChange={(e) => setProcName(e.target.value)}
+                                    onChange={(e) => setProcName(e.target.value.toUpperCase())}
                                     required
                                 />
+                                {procName && (
+                                    <div className="absolute left-0 top-full mt-1 w-full bg-white rounded-xl shadow-2xl border border-slate-100 max-h-48 overflow-y-auto hidden group-focus-within:block hover:block z-50 custom-scrollbar animate-slide-up">
+                                        {procedures.filter(p => 
+                                            p.name.toLowerCase().includes(procName.toLowerCase()) && 
+                                            (!editingProc || p.id !== editingProc.id)
+                                        ).length > 0 && (
+                                            procedures.filter(p => 
+                                                p.name.toLowerCase().includes(procName.toLowerCase()) && 
+                                                (!editingProc || p.id !== editingProc.id)
+                                            ).map(p => (
+                                                <button
+                                                    key={p.id}
+                                                    type="button"
+                                                    onMouseDown={(e) => {
+                                                        e.preventDefault(); // Evita a perda de foco imediata do input
+                                                        setSelectedProc(p);
+                                                        setIsProcModalOpen(false);
+                                                    }}
+                                                    className="w-full text-left px-4 py-3 hover:bg-sky-50 text-slate-700 text-xs font-semibold border-b border-slate-50 last:border-0 flex items-center justify-between group/item transition-colors"
+                                                >
+                                                    <span className="flex items-center gap-2">
+                                                        <span className="w-1.5 h-1.5 rounded-full bg-sky-500"></span>
+                                                        {p.name}
+                                                    </span>
+                                                    <span className="text-[9px] text-sky-600 font-black uppercase tracking-wider opacity-0 group-hover/item:opacity-100 transition-opacity">
+                                                        Ir para Vagas
+                                                    </span>
+                                                </button>
+                                            ))
+                                        )}
+                                    </div>
+                                )}
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
@@ -1399,22 +1467,36 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                                     />
                                 </div>
                             </div>
-                            <div>
-                                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Status</label>
-                                <div className="flex gap-4">
-                                    {['Ativo', 'Inativo'].map(st => (
-                                        <label key={st} className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700">
-                                            <input
-                                                type="radio"
-                                                name="procStatus"
-                                                value={st}
-                                                checked={procStatus === st}
-                                                onChange={() => setProcStatus(st as 'Ativo' | 'Inativo')}
-                                                className="w-4 h-4 text-sky-600 border-slate-300 focus:ring-sky-500"
-                                            />
-                                            {st}
-                                        </label>
-                                    ))}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Recurso</label>
+                                    <select
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none transition-all text-xs font-semibold appearance-none cursor-pointer"
+                                        value={procRecurso}
+                                        onChange={(e) => setProcRecurso(e.target.value as 'Não Se Aplica' | 'FM' | 'PPI')}
+                                    >
+                                        <option value="Não Se Aplica">Não Se Aplica</option>
+                                        <option value="FM">FM</option>
+                                        <option value="PPI">PPI</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Status</label>
+                                    <div className="flex gap-4 pt-3">
+                                        {['Ativo', 'Inativo'].map(st => (
+                                            <label key={st} className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700">
+                                                <input
+                                                    type="radio"
+                                                    name="procStatus"
+                                                    value={st}
+                                                    checked={procStatus === st}
+                                                    onChange={() => setProcStatus(st as 'Ativo' | 'Inativo')}
+                                                    className="w-4 h-4 text-sky-600 border-slate-300 focus:ring-sky-500"
+                                                />
+                                                {st}
+                                            </label>
+                                        ))}
+                                    </div>
                                 </div>
                             </div>
                             <div className="pt-4 border-t border-slate-50 flex justify-end gap-3 shrink-0">

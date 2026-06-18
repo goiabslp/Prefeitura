@@ -203,6 +203,28 @@ export const updateProcedimento = async (id: string, updates: Partial<ConsultaPr
     }
 };
 
+export const deleteProcedimento = async (id: string): Promise<boolean> => {
+    try {
+        const { error, count } = await supabase
+            .from('consultas_procedimentos')
+            .delete({ count: 'exact' })
+            .eq('id', id);
+
+        if (error) throw error;
+        if (count === 0) {
+            throw new Error('Nenhum registro foi excluído. Verifique se o registro existe.');
+        }
+        return true;
+    } catch (error: any) {
+        const appError = handleSupabaseError(error);
+        console.error('[consultasService] deleteProcedimento Error:', appError.message);
+        if (error.code === '23503') {
+            throw new Error('Não é possível excluir este procedimento pois existem vagas ou agendamentos vinculados a ele.');
+        }
+        throw appError;
+    }
+};
+
 // --- AGENDAMENTOS ---
 
 export interface AgendamentoFilters {

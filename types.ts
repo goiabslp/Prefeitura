@@ -539,6 +539,7 @@ export interface ConsultaProcedimento {
   available_quantity: number;
   total_quantity: number;
   status: 'Ativo' | 'Inativo';
+  recurso?: 'Não Se Aplica' | 'FM' | 'PPI';
   created_at?: string;
   updated_at?: string;
 }
