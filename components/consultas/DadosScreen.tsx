@@ -461,6 +461,19 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
             return;
         }
 
+        // Validação local de duplicidade (mesmo nome, tipo e recurso)
+        const isDuplicate = procedures.some(p => 
+            p.name.trim().toUpperCase() === procName.trim().toUpperCase() &&
+            p.type === procType &&
+            (p.recurso || 'Não Se Aplica') === procRecurso &&
+            (!editingProc || p.id !== editingProc.id)
+        );
+
+        if (isDuplicate) {
+            setProcError('Já existe um procedimento cadastrado com o mesmo nome, tipo e recurso.');
+            return;
+        }
+
         setLoading(true);
         try {
             if (editingProc) {
@@ -485,7 +498,11 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
             setIsProcModalOpen(false);
             fetchTabContent();
         } catch (err: any) {
-            setProcError(err.message || 'Erro ao salvar procedimento.');
+            if (err.message && (err.message.includes('unique_procedimento_nome_tipo_recurso') || err.message.includes('unique constraint') || err.message.includes('duplicate key'))) {
+                setProcError('Já existe um procedimento cadastrado com o mesmo nome, tipo e recurso.');
+            } else {
+                setProcError(err.message || 'Erro ao salvar procedimento.');
+            }
         } finally {
             setLoading(false);
         }
