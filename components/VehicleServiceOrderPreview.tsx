@@ -139,7 +139,7 @@ export const VehicleServiceOrderPreview: React.FC<VehicleServiceOrderPreviewProp
                     {/* Document Scale Wrapper */}
                     <div className={`${isGenerating ? 'bg-white p-0' : 'bg-slate-200/50 p-8 rounded-[2rem] shadow-2xl'} overflow-hidden w-full flex justify-center`}>
                         <div id="os-preview-content" className={`${isGenerating ? 'scale-100 transform-none' : 'scale-[0.6] sm:scale-[0.7] md:scale-[0.8] lg:scale-[0.9]'} origin-top transition-all duration-300 bg-white`}>
-                            <PageWrapper state={previewState} pageIndex={0} totalPages={1} isGenerating={isGenerating}>
+                            <PageWrapper state={previewState} pageIndex={0} totalPages={2} isGenerating={isGenerating}>
                                 <div className="flex flex-col gap-3 mt-2 relative">
                                     {/* Watermark for Cancelled */}
                                     {schedule.status === 'cancelado' && (
@@ -338,6 +338,75 @@ export const VehicleServiceOrderPreview: React.FC<VehicleServiceOrderPreviewProp
                                         </div>
                                     </div>
 
+                                </div>
+                            </PageWrapper>
+
+                            <div className="html2pdf__page-break" style={{ pageBreakBefore: 'always' }} />
+
+                            <PageWrapper state={previewState} pageIndex={1} totalPages={2} isGenerating={isGenerating}>
+                                <div className="flex flex-col gap-3 mt-1 relative">
+                                    <h3 className="text-[10pt] font-black text-slate-800 uppercase tracking-widest text-center border-b border-slate-200 pb-2">
+                                        CHECKLIST DO VEÍCULO
+                                    </h3>
+
+                                    {/* Hora de Entrada e Entrega */}
+                                    <div className="grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                                        <div className="flex items-center justify-between px-2">
+                                            <span className="text-[8pt] font-black text-slate-500 uppercase tracking-wider">Hora de Entrada no Veículo:</span>
+                                            <span className="text-[9pt] font-mono font-bold text-slate-700">______ : ______ h</span>
+                                        </div>
+                                        <div className="flex items-center justify-between px-2 border-l border-slate-200">
+                                            <span className="text-[8pt] font-black text-slate-500 uppercase tracking-wider">Hora de Entrega do Veículo:</span>
+                                            <span className="text-[9pt] font-mono font-bold text-slate-700">______ : ______ h</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Tabela do Checklist */}
+                                    <div className="border border-slate-200 rounded-xl overflow-hidden mt-1 bg-white">
+                                        <table className="w-full text-left border-collapse">
+                                            <thead>
+                                                <tr className="bg-slate-100 border-b border-slate-200 text-[6pt] font-black uppercase tracking-widest text-slate-500">
+                                                    <th className="p-1.5 pl-4">Item Verificado</th>
+                                                    <th className="p-1.5 text-center w-16">SIM</th>
+                                                    <th className="p-1.5 text-center w-28">NÃO ADEQUADO</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100 text-[7pt] text-slate-700 font-bold">
+                                                {[
+                                                    "Combustível suficiente",
+                                                    "Óleo do motor",
+                                                    "Água do radiador",
+                                                    "Funcionamento dos faróis",
+                                                    "Funcionamento das lanternas",
+                                                    "Funcionamento das setas",
+                                                    "Funcionamento das luzes de freio",
+                                                    "Pneus em bom estado",
+                                                    "Calibragem dos pneus",
+                                                    "Estepe em condições de uso",
+                                                    "Macaco",
+                                                    "Chave de roda",
+                                                    "Triângulo de sinalização",
+                                                    "Cintos de segurança",
+                                                    "Limpadores de para-brisa",
+                                                    "Limpeza geral do veículo",
+                                                    "Ausência de avarias aparentes"
+                                                ].map((item, index) => (
+                                                    <tr key={index} className="hover:bg-slate-50/50">
+                                                        <td className="p-1 pl-4 uppercase font-bold text-slate-800">{item}</td>
+                                                        <td className="p-1 text-center text-slate-300 text-lg font-light">☐</td>
+                                                        <td className="p-1 text-center text-slate-300 text-lg font-light">☐</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                    {/* Assinatura */}
+                                    <div className="mt-4 pt-6 border-t border-dashed border-slate-200 flex flex-col items-center">
+                                        <p className="text-[8pt] font-black text-slate-600 uppercase tracking-widest">
+                                            Assinatura do Motorista: ___________________________________________
+                                        </p>
+                                    </div>
                                 </div>
                             </PageWrapper>
                         </div>
