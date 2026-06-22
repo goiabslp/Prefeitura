@@ -811,6 +811,14 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                             >
                                                                 <Eye className="w-5 h-5 group-hover:scale-110 transition-transform" />
                                                             </button>
+                                                            <button
+                                                                onClick={() => handleDownload(order)}
+                                                                disabled={downloadingId === order.id}
+                                                                className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all shadow-sm group"
+                                                                title="Download PDF do Pedido"
+                                                            >
+                                                                {downloadingId === order.id ? <Loader2 className="w-5 h-5 animate-spin" /> : <FileDown className="w-5 h-5 group-hover:scale-110 transition-transform" />}
+                                                            </button>
                                                             {(order.documentSnapshot?.content as any)?.finalDocumentUrl && (
                                                                 <a
                                                                     href={(order.documentSnapshot?.content as any)?.finalDocumentUrl}

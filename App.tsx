@@ -195,6 +195,15 @@ const mapLicitacaoProcessToOrder = (process: any): Order => {
   else if (process.status === 'Concluído' || process.status === 'completed') mappedStatus = 'completed';
   else if (process.status === 'Rejeitado' || process.status === 'rejected') mappedStatus = 'rejected';
 
+  const sig = process.assinatura || (process.licitacao_assinaturas && process.licitacao_assinaturas.length > 0 ? process.licitacao_assinaturas[0] : null);
+  const digitalSignature = sig ? {
+    enabled: true,
+    method: '2FA_VERIFIED',
+    ip: sig.ip_address || 'Client-Device',
+    date: sig.data_assinatura || sig.created_at || new Date().toISOString(),
+    id: sig.id || '2FA_VERIFIED'
+  } : undefined;
+
   return {
     id: process.id,
     protocol: process.protocolo || process.id,
@@ -210,11 +219,19 @@ const mapLicitacaoProcessToOrder = (process: any): Order => {
         objeto: process.finalidade,
         prioridade: process.prioridade,
         requesterName: process.solicitante_nome,
+        requesterRole: process.solicitante_cargo,
         requesterSector: process.solicitante_setor,
         justificativa: process.justificativa?.texto || (process.licitacao_justificativas ? (Array.isArray(process.licitacao_justificativas) ? process.licitacao_justificativas[0]?.texto : process.licitacao_justificativas.texto) : undefined),
         itens: process.itens || process.licitacao_itens, // Keep as undefined when not fetched yet
         finalDocumentUrl: process.assinatura ? 'true' : null,
-        fase: process.fase
+        fase: process.fase,
+        resolucaoDescricao: process.resolucao_descricao,
+        resolucaoNumero: process.resolucao_numero,
+        fichaOrcamentaria: process.ficha_orcamentaria,
+        digitalSignature,
+        signatureName: process.solicitante_nome,
+        signatureRole: process.solicitante_cargo || 'Solicitante',
+        signatureSector: process.solicitante_setor || 'Geral'
       }
     }
   } as unknown as Order;
@@ -2741,8 +2758,8 @@ const App: React.FC = () => {
         } else if (order.blockType === 'licitacao') {
           const fetched = await licitacaoService.getLicitacaoProcessById(order.id);
           if (fetched) {
-            fullOrder = fetched as any;
-            setLicitacaoProcesses(prev => prev.map(o => o.id === fullOrder.id ? fullOrder : o));
+            fullOrder = mapLicitacaoProcessToOrder(fetched);
+            setLicitacaoProcesses(prev => prev.map(o => o.id === fullOrder.id ? fetched : o));
           }
         }
 
@@ -2764,8 +2781,15 @@ const App: React.FC = () => {
     const snapshot = (needsFetch ? fullOrder.documentSnapshot : forcedSnapshot) || fullOrder.documentSnapshot;
     if (!snapshot) return;
 
+    const enrichedSnapshot = {
+      ...snapshot,
+      branding: snapshot.branding || appState.branding,
+      document: snapshot.document || appState.document,
+      ui: snapshot.ui || appState.ui
+    };
+
     setIsDownloading(true);
-    setSnapshotToDownload(snapshot);
+    setSnapshotToDownload(enrichedSnapshot);
     setBlockTypeToDownload(forcedBlockType || fullOrder.blockType);
 
     auditLogService.logAction({
