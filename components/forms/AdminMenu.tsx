@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Users, User as UserIcon, PenTool, Home, Palette, Briefcase, Network, Truck, ShieldCheck, Shield, RefreshCw, FileText } from 'lucide-react';
+import { Users, User as UserIcon, PenTool, Home, Palette, Briefcase, Network, Truck, ShieldCheck, Shield, RefreshCw, FileText, Tv } from 'lucide-react';
 import { User } from '../../types';
 
 interface AdminMenuProps {
@@ -50,6 +50,14 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({ currentUser, onTabChange }
       icon: <ShieldCheck className="w-6 h-6 text-emerald-600" />,
       colorClass: 'bg-emerald-50 border-emerald-100 hover:border-emerald-300 shadow-sm',
       adminOnly: false // All users should be able to configure their own 2FA
+    },
+    {
+      id: 'remote_access',
+      title: 'Acesso Remoto',
+      description: 'Compartilhamento de tela em tempo real',
+      icon: <Tv className="w-6 h-6 text-indigo-600" />,
+      colorClass: 'bg-indigo-50 border-indigo-100 hover:border-indigo-300 shadow-sm',
+      adminOnly: false
     },
     {
       id: 'access_control',

@@ -70,6 +70,7 @@ import { ActionProcessingModal, ProcessingStage } from './components/modals/Acti
 
 import { SystemAccessControl } from './components/admin/SystemAccessControl';
 import { SystemLogs } from './components/admin/SystemLogs';
+import { RemoteAccessScreen } from './components/admin/RemoteAccessScreen';
 import { GlobalLoading } from './components/common/GlobalLoading';
 
 import { ToastNotification, ToastType } from './components/common/ToastNotification';
@@ -3672,6 +3673,8 @@ const App: React.FC = () => {
                       <AdminDocumentPreview state={appState} />
                     ) : currentView === 'admin' && adminTab === 'access_control' ? (
                       <SystemAccessControl onBack={() => setAdminTab(null)} />
+                    ) : currentView === 'admin' && adminTab === 'remote_access' ? (
+                      <RemoteAccessScreen currentUser={currentUser!} onBack={() => setAdminTab(null)} onTabChange={(tab) => setAdminTab(tab)} />
                     ) : currentView === 'admin' && adminTab === 'logs' ? (
                       <SystemLogs onBack={() => setAdminTab(null)} />
                     ) : (
