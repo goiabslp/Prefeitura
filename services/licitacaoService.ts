@@ -24,43 +24,68 @@ export const createLicitacaoProcessCompleto = async (payload: {
     justificativa: Partial<LicitacaoJustificativa>;
     assinatura?: Partial<LicitacaoAssinatura>;
 }): Promise<LicitacaoProcesso | null> => {
-    try {
-        // 1. Create process
-        const processo = await createLicitacaoProcess({
-            ...payload.processo,
-            protocolo: await generateLicitacaoProtocol()
-        });
-        
-        if (!processo) throw new Error("Failed to create process");
+    let retries = 5;
+    let lastError: any = null;
 
-        // 2. Create items
-        if (payload.itens.length > 0) {
-            const itemsToCreate = payload.itens.map(item => ({
-                ...item,
-                processo_id: processo.id
-            }));
-            await createLicitacaoItems(itemsToCreate);
-        }
+    while (retries > 0) {
+        try {
+            // Generate protocol for this attempt
+            const protocolo = await generateLicitacaoProtocol();
 
-        // 3. Create justificativa
-        await upsertLicitacaoJustificativa({
-            ...payload.justificativa,
-            processo_id: processo.id
-        });
+            // 1. Create process
+            const processo = await createLicitacaoProcess({
+                ...payload.processo,
+                protocolo
+            });
+            
+            if (!processo) throw new Error("Failed to create process");
 
-        // 4. Create assinatura if provided
-        if (payload.assinatura) {
-            await signLicitacaoProcess({
-                ...payload.assinatura,
+            // 2. Create items
+            if (payload.itens.length > 0) {
+                const itemsToCreate = payload.itens.map(item => ({
+                    ...item,
+                    processo_id: processo.id
+                }));
+                await createLicitacaoItems(itemsToCreate);
+            }
+
+            // 3. Create justificativa
+            await upsertLicitacaoJustificativa({
+                ...payload.justificativa,
                 processo_id: processo.id
             });
-        }
 
-        return processo;
-    } catch (error) {
-        console.error("Error in createLicitacaoProcessCompleto:", error);
-        throw error;
+            // 4. Create assinatura if provided
+            if (payload.assinatura) {
+                await signLicitacaoProcess({
+                    ...payload.assinatura,
+                    processo_id: processo.id
+                });
+            }
+
+            return processo;
+        } catch (error: any) {
+            lastError = error;
+            
+            // Check if error is unique constraint violation for protocol (PostgreSQL code 23505)
+            const isDuplicateKey = error && (
+                error.code === '23505' || 
+                (error.message && error.message.includes('unique constraint') && error.message.includes('protocolo'))
+            );
+
+            if (isDuplicateKey && retries > 1) {
+                console.warn(`Protocol collision detected. Retrying with a new protocol... (${retries - 1} retries left)`);
+                retries--;
+                // Wait a small random delay to avoid concurrent conflict loops
+                await new Promise(resolve => setTimeout(resolve, Math.random() * 200 + 50));
+            } else {
+                console.error("Error in createLicitacaoProcessCompleto:", error);
+                throw error;
+            }
+        }
     }
+
+    throw lastError || new Error("Failed to create process after multiple retries due to protocol collisions.");
 };
 
 export const updateLicitacaoProcess = async (id: string, updates: Partial<LicitacaoProcesso>): Promise<LicitacaoProcesso | null> => {
@@ -255,15 +280,43 @@ export const deleteLicitacaoDocument = async (id: string, url?: string): Promise
 export const generateLicitacaoProtocol = async (): Promise<string> => {
     try {
         const year = new Date().getFullYear();
-        // Forma simples (usando contagem local da tabela)
-        const { count, error } = await supabase
+        // Busca os protocolos do ano atual ordenados para obter o maior número existente
+        const { data, error } = await supabase
             .from('licitacao_processos')
-            .select('*', { count: 'exact', head: true })
-            .gte('criado_em', `${year}-01-01T00:00:00Z`);
+            .select('protocolo')
+            .like('protocolo', `LIC-%/${year}`)
+            .order('protocolo', { ascending: false })
+            .limit(100);
             
         if (error) throw error;
         
-        const nextNumber = (count || 0) + 1;
+        let maxNumber = 0;
+        if (data && data.length > 0) {
+            data.forEach(row => {
+                const match = row.protocolo.match(/^LIC-(\d+)\/\d+$/);
+                if (match) {
+                    const num = parseInt(match[1], 10);
+                    if (num > maxNumber) {
+                        maxNumber = num;
+                    }
+                }
+            });
+        }
+        
+        // Se maxNumber for 0 mas tivermos dados ou se preferirmos um backup duplo,
+        // podemos usar count apenas se não encontramos nenhum protocolo formatado
+        if (maxNumber === 0) {
+            const { count, error: countError } = await supabase
+                .from('licitacao_processos')
+                .select('*', { count: 'exact', head: true })
+                .gte('criado_em', `${year}-01-01T00:00:00Z`);
+                
+            if (!countError && count !== null) {
+                maxNumber = count;
+            }
+        }
+        
+        const nextNumber = maxNumber + 1;
         return `LIC-${nextNumber.toString().padStart(4, '0')}/${year}`;
     } catch (error) {
         console.error("Error generating protocol:", error);
