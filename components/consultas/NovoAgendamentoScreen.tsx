@@ -68,6 +68,8 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
     const [newPatientStreet, setNewPatientStreet] = useState('');
     const [newPatientCity, setNewPatientCity] = useState('SÃO JOSÉ DO GOIABAL -MG');
     const [cpfError, setCpfError] = useState('');
+    const [showCpfNotFoundModal, setShowCpfNotFoundModal] = useState(false);
+    const [unregisteredCpf, setUnregisteredCpf] = useState('');
 
     // Step 2: Booking Details States
     const [procedures, setProcedures] = useState<ConsultaProcedimento[]>([]);
@@ -415,6 +417,16 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                 
                 setPatientResults(results);
                 setSearching(false);
+
+                // Ao pesquisar um CPF válido NÃO CADASTRADO, deve exibir um modal
+                const cleanQuery = query.replace(/\D/g, '');
+                if (cleanQuery.length === 11 && validateCPF(cleanQuery)) {
+                    const exists = results.some(p => p.cpf.replace(/\D/g, '') === cleanQuery);
+                    if (!exists) {
+                        setUnregisteredCpf(patientQuery);
+                        setShowCpfNotFoundModal(true);
+                    }
+                }
             } else {
                 setPatientResults([]);
             }
@@ -1825,6 +1837,63 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                     Defina todas as vagas para prosseguir
                                 </button>
                             )}
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
+            {/* MODAL: CPF NÃO CADASTRADO */}
+            {showCpfNotFoundModal && typeof document !== 'undefined' && createPortal(
+                <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/50 backdrop-blur-md animate-in fade-in duration-300">
+                    <div className="bg-white rounded-[2.5rem] shadow-[0_25px_70px_rgba(0,0,0,0.15)] w-full max-w-md overflow-hidden border border-slate-100 flex flex-col transform transition-all animate-in zoom-in-95 slide-in-from-bottom-8 duration-300">
+                        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 shrink-0">
+                            <div>
+                                <h3 className="text-sm font-black text-sky-600 uppercase tracking-wider flex items-center gap-1.5">
+                                    <UserPlus className="w-4 h-4" /> CPF não cadastrado
+                                </h3>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">Identificação do paciente</p>
+                            </div>
+                            <button 
+                                onClick={() => {
+                                    setShowCpfNotFoundModal(false);
+                                }} 
+                                className="p-2 hover:bg-slate-200 rounded-xl text-slate-400 hover:text-slate-700 transition-all hover:rotate-90 duration-300"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <p className="text-xs text-slate-600 font-semibold leading-relaxed">
+                                CPF não cadastrado, deseja cadastrá-lo?
+                            </p>
+                            <div className="p-4 bg-slate-50 border border-slate-200/50 rounded-2xl text-xs font-bold text-slate-700 shadow-inner flex justify-between items-center">
+                                <span className="text-slate-400 font-semibold">CPF pesquisado:</span>
+                                <span className="text-slate-800 font-black">
+                                    {unregisteredCpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4") || unregisteredCpf}
+                                </span>
+                            </div>
+                        </div>
+                        <div className="p-5 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 shrink-0">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowCpfNotFoundModal(false);
+                                }}
+                                className="px-5 py-3 bg-white border border-slate-200 hover:bg-slate-100 text-slate-600 font-extrabold rounded-2xl text-xs uppercase tracking-wider active:scale-95 transition-all"
+                            >
+                                Não
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowCpfNotFoundModal(false);
+                                    handleCpfChange(unregisteredCpf);
+                                    setIsRegistering(true);
+                                }}
+                                className="px-6 py-3 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white font-extrabold rounded-2xl text-xs uppercase tracking-wider active:scale-95 transition-all flex items-center gap-1.5 shadow-md shadow-sky-500/20"
+                            >
+                                Sim
+                            </button>
                         </div>
                     </div>
                 </div>,
