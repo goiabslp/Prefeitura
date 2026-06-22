@@ -755,13 +755,13 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                 try {
                                     const created = await createPaciente({
                                         name: newPatientName,
-                                        nickname: newPatientNickname.trim() || undefined,
+                                        nickname: newPatientNickname.trim() || null,
                                         cpf: pendingCpf.replace(/\D/g, ''),
                                         birth_date: newPatientBirthDate,
-                                        phone: newPatientPhone.trim() || undefined,
-                                        neighborhood: newPatientNeighborhood.trim() || undefined,
-                                        street: newPatientStreet.trim() || undefined,
-                                        city: newPatientCity.trim() || undefined
+                                        phone: newPatientPhone.trim() || null,
+                                        neighborhood: newPatientNeighborhood.trim() || null,
+                                        street: newPatientStreet.trim() || null,
+                                        city: newPatientCity.trim() || null
                                     });
                                     if (created) {
                                         // Update local patients state list

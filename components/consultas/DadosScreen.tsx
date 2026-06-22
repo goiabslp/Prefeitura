@@ -418,24 +418,24 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
             if (editingPatient) {
                 await db.updatePaciente(editingPatient.id, {
                     name: patName,
-                    nickname: patNickname.trim() || undefined,
+                    nickname: patNickname.trim() || null,
                     cpf: patCpf,
                     birth_date: patBirthDate,
-                    phone: patPhone.trim() || undefined,
-                    neighborhood: patNeighborhood.trim() || undefined,
-                    street: patStreet.trim() || undefined,
-                    city: patCity.trim() || undefined
+                    phone: patPhone.trim() || null,
+                    neighborhood: patNeighborhood.trim() || null,
+                    street: patStreet.trim() || null,
+                    city: patCity.trim() || null
                 });
             } else {
                 await db.createPaciente({
                     name: patName,
-                    nickname: patNickname.trim() || undefined,
+                    nickname: patNickname.trim() || null,
                     cpf: patCpf,
                     birth_date: patBirthDate,
-                    phone: patPhone.trim() || undefined,
-                    neighborhood: patNeighborhood.trim() || undefined,
-                    street: patStreet.trim() || undefined,
-                    city: patCity.trim() || undefined
+                    phone: patPhone.trim() || null,
+                    neighborhood: patNeighborhood.trim() || null,
+                    street: patStreet.trim() || null,
+                    city: patCity.trim() || null
                 });
             }
             setIsPatientModalOpen(false);

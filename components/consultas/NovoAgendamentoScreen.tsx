@@ -458,13 +458,13 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
         try {
             const newPatient = await db.createPaciente({
                 name: newPatientName,
-                nickname: newPatientNickname.trim() || undefined,
+                nickname: newPatientNickname.trim() || null,
                 cpf: newPatientCpf,
                 birth_date: newPatientBirthDate,
-                phone: newPatientPhone.trim() || undefined,
-                neighborhood: newPatientNeighborhood.trim() || undefined,
-                street: newPatientStreet.trim() || undefined,
-                city: newPatientCity.trim() || undefined
+                phone: newPatientPhone.trim() || null,
+                neighborhood: newPatientNeighborhood.trim() || null,
+                street: newPatientStreet.trim() || null,
+                city: newPatientCity.trim() || null
             });
 
             if (newPatient) {
