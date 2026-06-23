@@ -301,7 +301,10 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
         } else if (activeBlock === 'oficio') {
             hasPermission = true; // Oficios are visible to all users
         } else if (isLicitacao) {
-            hasPermission = isAdmin || isLicitacaoUser || order.userId === currentUser.id;
+            const orderSector = order.documentSnapshot?.content?.requesterSector || order.requestingSector || '';
+            const userSector = currentUser.sector || '';
+            const isSameSector = userSector !== '' && orderSector.trim().toLowerCase() === userSector.trim().toLowerCase();
+            hasPermission = isAdmin || isLicitacaoUser || order.userId === currentUser.id || isSameSector;
         } else {
             hasPermission = isAdmin || order.userId === currentUser.id;
         }
@@ -311,7 +314,10 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
         // LICITACAO: Filter Logic for "Processos"
         if (isLicitacao) {
             const isCreator = order.userId === currentUser.id;
-            if (isLicitacaoUser && !isAdmin && !isCreator) {
+            const orderSector = order.documentSnapshot?.content?.requesterSector || order.requestingSector || '';
+            const userSector = currentUser.sector || '';
+            const isSameSector = userSector !== '' && orderSector.trim().toLowerCase() === userSector.trim().toLowerCase();
+            if (isLicitacaoUser && !isAdmin && !isCreator && !isSameSector) {
                 // Usuários do setor de Licitação (não admins) só vêem pedidos aprovados dos outros
                 if (order.status !== 'approved' && order.status !== 'completed') return false;
             }

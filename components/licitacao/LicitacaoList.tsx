@@ -19,7 +19,25 @@ export const LicitacaoList: React.FC<LicitacaoListProps> = ({ currentUser, onBac
         const matchesSearch = process.finalidade.toLowerCase().includes(searchTerm.toLowerCase()) || 
                               process.protocolo?.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesStatus = statusFilter === 'Todos' || process.status === statusFilter;
-        return matchesSearch && matchesStatus;
+        
+        const isCreator = process.criado_por === currentUser.id;
+        const orderSector = process.solicitante_setor || '';
+        const userSector = currentUser.sector || '';
+        const isSameSector = userSector !== '' && orderSector.trim().toLowerCase() === userSector.trim().toLowerCase();
+        
+        const isLicitacaoUser = currentUser.role === 'licitacao';
+        const isAdmin = currentUser.role === 'admin';
+        
+        let hasPermission = isAdmin || isLicitacaoUser || isCreator || isSameSector;
+        
+        if (isLicitacaoUser && !isAdmin && !isCreator && !isSameSector) {
+            // Usuários do setor de Licitação (não admins) só vêem pedidos concluídos dos outros
+            if (process.status !== 'Concluído') {
+                hasPermission = false;
+            }
+        }
+        
+        return matchesSearch && matchesStatus && hasPermission;
     });
 
     const getStatusColor = (status: string) => {
