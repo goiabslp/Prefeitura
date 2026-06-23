@@ -44,7 +44,7 @@ import { AbastecimentoService } from './services/abastecimentoService';
 import * as taskService from './services/taskService';
 import { marketingSyncService } from './services/marketingSyncService';
 import { saveRhHorasExtras, updateRhHorasExtras } from './services/rhService';
-import { Send, CheckCircle2, X, Download, Save, FilePlus, Package, History, FileText, Settings, LogOut, ChevronRight, ChevronDown, Search, Filter, Upload, Trash2, Printer, Edit, ArrowLeft, Loader2, ShieldAlert } from 'lucide-react';
+import { Send, CheckCircle2, X, Download, Save, FilePlus, Package, History, FileText, Settings, LogOut, ChevronRight, ChevronDown, Search, Filter, Upload, Trash2, Printer, Edit, ArrowLeft, Loader2, ShieldAlert, MousePointer, Tv, Power, ShieldCheck } from 'lucide-react';
 
 // Components
 import { LoginScreen } from './components/LoginScreen';
@@ -108,6 +108,7 @@ import { LicitacaoDashboard } from './components/licitacao/LicitacaoDashboard';
 import { LicitacaoWizard } from './components/licitacao/LicitacaoWizard';
 import { LicitacaoList } from './components/licitacao/LicitacaoList';
 import { useLicitacaoProcesses, useUpdateLicitacaoProcess } from './hooks/useLicitacaoModule';
+import { remoteAccessService } from './services/remoteAccessService';
 
 const VIEW_TO_PATH: Record<string, string> = {
   'login': '/Login',
@@ -126,6 +127,7 @@ const VIEW_TO_PATH: Record<string, string> = {
   'admin:design': '/Admin/Design',
   'admin:access_control': '/Admin/ControleAcesso',
   'admin:logs': '/Admin/logs',
+  'admin:remote_access': '/Admin/AcessoRemoto',
   'tasks-dashboard': '/Tarefas/MinhasTarefas',
   'tracking:oficio': '/Historico/Oficio',
   'tracking:compras': '/Historico/Compras',
@@ -241,6 +243,15 @@ const mapLicitacaoProcessToOrder = (process: any): Order => {
 const App: React.FC = () => {
   // State controlling the active module view
   const [currentView, setCurrentView] = useState<'login' | 'home' | 'admin' | 'tracking' | 'editor' | 'vehicle-scheduling' | 'abastecimento' | 'agricultura' | 'obras' | 'order-details' | 'tasks-dashboard' | 'purchase-inventory' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'diarias-novo-evento' | 'diarias-lancamentos' | 'licitacao' | 'licitacao:new' | 'licitacao:view' | 'licitacao:details' | 'licitacao-all' | 'licitacao-screening' | 'consultas' | 'farmacia'>('login');
+  const [remoteAccessState, setRemoteAccessState] = useState<any>(null);
+
+  useEffect(() => {
+    const handleStateChange = (state: any) => {
+      setRemoteAccessState(state);
+    };
+    remoteAccessService.subscribe(handleStateChange);
+    return () => remoteAccessService.unsubscribe(handleStateChange);
+  }, []);
   const queryClient = useQueryClient();
   const { data: licitacaoProcessesData } = useLicitacaoProcesses();
 
@@ -4647,6 +4658,100 @@ const App: React.FC = () => {
           `}} />
         </div>,
         document.body
+      )}
+
+      {/* Remote Access Global Cursor and Ripples */}
+      {remoteAccessState?.mode === 'host' && remoteAccessState.remoteCursor?.visible && (
+        <div 
+          className="fixed pointer-events-none z-[99999] transition-all duration-75 flex items-center gap-2"
+          style={{ 
+            left: `${remoteAccessState.remoteCursor.x * 100}vw`, 
+            top: `${remoteAccessState.remoteCursor.y * 100}vh`,
+            transform: 'translate(-50%, -50%)'
+          }}
+        >
+          <div className="relative">
+            <Send className="w-5 h-5 text-rose-500 fill-rose-500 rotate-[135deg] drop-shadow-lg" />
+            {remoteAccessState.remoteCursor.label && (
+              <span className="absolute left-4 top-4 px-2 py-0.5 bg-rose-500 text-white text-[9px] font-black uppercase rounded shadow-lg whitespace-nowrap">
+                {remoteAccessState.remoteCursor.label}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {remoteAccessState?.mode === 'host' && remoteAccessState.lastClick && (
+        <div 
+          key={remoteAccessState.lastClick.timestamp}
+          className="fixed pointer-events-none z-[99998] w-12 h-12 rounded-full border-4 border-rose-500/80 bg-rose-500/20"
+          style={{ 
+            left: `${remoteAccessState.lastClick.x * 100}vw`, 
+            top: `${remoteAccessState.lastClick.y * 100}vh`,
+            transform: 'translate(-50%, -50%)',
+            animation: 'ping 1s cubic-bezier(0, 0, 0.2, 1) infinite'
+          }}
+        />
+      )}
+
+      {/* Painel Flutuante Ativo para o Host (Transmissor) - Sempre visível se a transmissão estiver ativa */}
+      {remoteAccessState && remoteAccessState.connectionState !== 'idle' && remoteAccessState.mode === 'host' && (
+        <div className="fixed bottom-6 right-6 z-[9999] bg-slate-900/95 border border-slate-800 backdrop-blur-md text-white px-5 py-4 rounded-3xl shadow-2xl flex flex-col gap-3 min-w-[280px] animate-fade-in select-none">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+            <div className="flex items-center gap-2">
+              <span className={`h-2.5 w-2.5 rounded-full ${remoteAccessState.connectionState === 'connected' ? 'bg-emerald-500' : 'bg-indigo-500'} animate-pulse`} />
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-200">
+                {remoteAccessState.connectionState === 'connected' ? 'Suporte Conectado' : 'Transmitindo Tela'}
+              </span>
+            </div>
+            <span className="text-[10px] font-mono font-bold bg-slate-800 px-2 py-0.5 rounded text-indigo-400">
+              Cód: {remoteAccessState.accessCode}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {/* Botão Permitir / Revogar Controle */}
+            <button
+              onClick={() => remoteAccessService.grantMouseControl(!remoteAccessState.isMouseControlGranted)}
+              className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl font-bold text-[10px] uppercase tracking-wider transition-all active:scale-95 ${
+                remoteAccessState.isMouseControlGranted
+                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-600/15'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+              }`}
+            >
+              <MousePointer className="w-3.5 h-3.5" />
+              <span>{remoteAccessState.isMouseControlGranted ? 'Bloquear Controle' : 'Permitir Controle'}</span>
+            </button>
+
+            {/* Botão Encerrar */}
+            <button
+              onClick={() => remoteAccessService.stopSession()}
+              className="flex items-center justify-center gap-1.5 px-3 py-2.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-bold rounded-xl text-[10px] uppercase tracking-wider transition-all shadow-lg shadow-rose-600/15"
+            >
+              <Power className="w-3.5 h-3.5" />
+              <span>Encerrar</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Painel Flutuante Ativo para o Client (Suporte/Visualizador) - Visível apenas fora da tela de suporte */}
+      {remoteAccessState && remoteAccessState.connectionState !== 'idle' && remoteAccessState.mode === 'client' && (currentView !== 'admin' || adminTab !== 'remote_access') && (
+        <div className="fixed bottom-6 left-6 z-[80] bg-slate-900 border border-slate-800 text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-4 animate-fade-in select-none">
+          <div className="flex items-center gap-2 cursor-pointer" onClick={() => { setCurrentView('admin'); setAdminTab('remote_access'); }}>
+            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-[10px] font-black uppercase tracking-widest text-slate-300 hover:text-white transition-colors flex items-center gap-1">
+              <Tv className="w-3 h-3" />
+              Suporte Ativo (Cód: {remoteAccessState.inputCode}) - Clique para Abrir
+            </span>
+          </div>
+          <button 
+            onClick={() => remoteAccessService.stopSession()}
+            className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-bold rounded-xl text-[9px] uppercase tracking-wider transition-all"
+          >
+            Encerrar
+          </button>
+        </div>
       )}
     </NotificationProvider >
   );
