@@ -180,7 +180,8 @@ const VIEW_TO_PATH: Record<string, string> = {
   'farmacia:retirar': '/FarmaciaPopular/Retirar',
   'farmacia:estoque': '/FarmaciaPopular/Estoque',
   'farmacia:dados': '/FarmaciaPopular/Dados',
-  'farmacia:historico': '/FarmaciaPopular/Historico'
+  'farmacia:historico': '/FarmaciaPopular/Historico',
+  'farmacia:dashboard': '/FarmaciaPopular/Dashboard'
 };
 
 const PATH_TO_STATE: Record<string, any> = Object.fromEntries(
@@ -4360,6 +4361,9 @@ const App: React.FC = () => {
                   } else if (view === 'farmacia:historico') {
                     setAppState(prev => ({ ...prev, view: 'historico' }));
                     window.history.pushState({}, '', '/FarmaciaPopular/Historico');
+                  } else if (view === 'farmacia:dashboard') {
+                    setAppState(prev => ({ ...prev, view: 'dashboard' }));
+                    window.history.pushState({}, '', '/FarmaciaPopular/Dashboard');
                   } else if (view === 'farmacia') {
                     setAppState(prev => ({ ...prev, view: undefined }));
                     window.history.pushState({}, '', '/FarmaciaPopular');

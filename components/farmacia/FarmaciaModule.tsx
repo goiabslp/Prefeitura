@@ -2,12 +2,13 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { User, AppState, FarmaciaMedicamento, FarmaciaMovimentacao } from '../../types';
 import { ArrowLeft, Pill, Search, ClipboardList, Package, Settings, History, AlertTriangle, X, Info } from 'lucide-react';
 import * as db from '../../services/farmaciaService';
-import { FarmaciaDashboard } from './FarmaciaDashboard.tsx';
-import { ConsultarScreen } from './ConsultarScreen.tsx';
-import { RetirarScreen } from './RetirarScreen.tsx';
-import { EstoqueScreen } from './EstoqueScreen.tsx';
-import { DadosScreen } from './DadosScreen.tsx';
-import { HistoricoScreen } from './HistoricoScreen.tsx';
+import { FarmaciaDashboard } from './FarmaciaDashboard';
+import { ConsultarScreen } from './ConsultarScreen';
+import { RetirarScreen } from './RetirarScreen';
+import { EstoqueScreen } from './EstoqueScreen';
+import { DadosScreen } from './DadosScreen';
+import { HistoricoScreen } from './HistoricoScreen';
+import { DashboardScreen } from './DashboardScreen';
 
 interface FarmaciaModuleProps {
     currentView: string;
@@ -217,6 +218,19 @@ export const FarmaciaModule: React.FC<FarmaciaModuleProps> = ({
                         Estoque
                     </button>
                 )}
+                {canAccessDados && (
+                    <button
+                        onClick={() => onNavigate('farmacia:dashboard')}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all uppercase tracking-wider ${
+                            subView === 'dashboard'
+                                ? 'bg-pink-600 text-white shadow-md shadow-pink-500/20'
+                                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                        }`}
+                    >
+                        <History className="w-3.5 h-3.5" />
+                        Dashboard
+                    </button>
+                )}
             </div>
         );
     };
@@ -300,6 +314,12 @@ export const FarmaciaModule: React.FC<FarmaciaModuleProps> = ({
                     <HistoricoScreen
                         currentUser={currentUser}
                         onBack={() => onNavigate('farmacia')}
+                    />
+                ) : subView === 'dashboard' ? (
+                    <DashboardScreen
+                        currentUser={currentUser}
+                        onBack={() => onNavigate('farmacia')}
+                        onNavigate={onNavigate}
                     />
                 ) : (
                     <div className="text-center py-10 font-bold text-slate-400">Página Não Encontrada.</div>

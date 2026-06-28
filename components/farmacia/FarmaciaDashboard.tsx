@@ -33,7 +33,7 @@ export const FarmaciaDashboard: React.FC<FarmaciaDashboardProps> = ({
             </div>
 
             {/* Grid of Main Cards */}
-            <div className="w-full grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+            <div className="w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
                 {/* Card 1: Consultar */}
                 {canAccessConsultar ? (
                     <button
@@ -123,6 +123,36 @@ export const FarmaciaDashboard: React.FC<FarmaciaDashboardProps> = ({
                     <div className="w-full min-h-[200px] rounded-[2.5rem] bg-slate-100/60 border border-slate-200/50 flex flex-col items-center justify-center text-center p-6 opacity-60">
                         <Package className="w-8 h-8 text-slate-400 mb-2" />
                         <h3 className="text-lg font-bold text-slate-400 uppercase">Estoque Bloqueado</h3>
+                        <p className="text-xs text-slate-400 mt-1 max-w-[180px]">Sem permissão de acesso.</p>
+                    </div>
+                )}
+                {/* Card 4: Dashboard */}
+                {canAccessDados ? (
+                    <button
+                        onClick={() => onNavigate('farmacia:dashboard')}
+                        className="group relative w-full min-h-[200px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50 border border-slate-100 shadow-[0_10px_35px_rgba(0,0,0,0.03)] hover:shadow-[0_30px_70px_rgba(219,39,119,0.15)] hover:border-pink-200 hover:from-white hover:to-pink-50/20 hover:-translate-y-2 active:scale-98 transition-all duration-300 ease-out flex flex-col items-center justify-center text-center overflow-hidden p-6"
+                    >
+                        <div className="absolute top-0 right-0 w-36 h-36 bg-pink-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
+                        <div className="absolute bottom-0 left-0 w-24 h-24 bg-pink-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
+
+                        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-pink-500 to-rose-600 flex items-center justify-center mb-4 text-white group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-pink-500/30 ring-4 ring-white">
+                            <History className="w-6.5 h-6.5" />
+                        </div>
+
+                        <h3 className="text-xl font-extrabold text-slate-800 mb-1.5 group-hover:text-slate-900 tracking-tight uppercase">
+                            Dashboard
+                        </h3>
+                        <p className="text-xs font-bold text-slate-400 group-hover:text-pink-600 transition-colors uppercase tracking-widest leading-relaxed">
+                            Análises e Relatórios
+                        </p>
+                        <p className="text-[10px] text-slate-400 mt-2 max-w-[180px] font-medium leading-normal">
+                            Visão gerencial, gráficos de dispensação e análise de demanda futura.
+                        </p>
+                    </button>
+                ) : (
+                    <div className="w-full min-h-[200px] rounded-[2.5rem] bg-slate-100/60 border border-slate-200/50 flex flex-col items-center justify-center text-center p-6 opacity-60">
+                        <History className="w-8 h-8 text-slate-400 mb-2" />
+                        <h3 className="text-lg font-bold text-slate-400 uppercase">Dashboard Bloqueado</h3>
                         <p className="text-xs text-slate-400 mt-1 max-w-[180px]">Sem permissão de acesso.</p>
                     </div>
                 )}

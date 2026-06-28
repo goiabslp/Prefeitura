@@ -49,6 +49,8 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
     const [isAddTipoOpen, setIsAddTipoOpen] = useState(false);
     const [isEditCatOpen, setIsEditCatOpen] = useState(false);
     const [isEditTipoOpen, setIsEditTipoOpen] = useState(false);
+    const [isAddTipoDosagemOpen, setIsAddTipoDosagemOpen] = useState(false);
+    const [isEditTipoDosagemOpen, setIsEditTipoDosagemOpen] = useState(false);
 
     // Form inputs
     const [nome, setNome] = useState('');
@@ -217,10 +219,10 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
     const handleOpenAddModal = () => {
         setNome('');
         setCategoria('CBAF');
-        setQuantidade('');
+        setQuantidade('0');
         setUnidade('Unidade');
-        setValidade('');
-        setLote('');
+        setValidade('2099-12-31');
+        setLote('S/L');
         setLimiteMinimo('10');
         setFornecedor('');
         setTipo('Comprimido');
@@ -233,7 +235,7 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
 
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!nome || !quantidade || !validade || !lote || !limiteMinimo) {
+        if (!nome || !limiteMinimo) {
             alert('Preencha os campos obrigatórios.');
             return;
         }
@@ -273,6 +275,7 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                     validade: validade,
                     responsavel_nome: currentUser.name,
                     responsavel_id: currentUser.id,
+                    data: new Date().toISOString(),
                     observacoes: 'Entrada de novo estoque para lote existente'
                 });
 
@@ -307,6 +310,7 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                         validade: newMed.validade,
                         responsavel_nome: currentUser.name,
                         responsavel_id: currentUser.id,
+                        data: new Date().toISOString(),
                         observacoes: 'Cadastro de novo lote'
                     });
                     alert('Lote cadastrado com sucesso!');
@@ -570,12 +574,12 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
             {isAddModalOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
                     <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl overflow-hidden border border-slate-200/50 flex flex-col animate-in zoom-in-95 duration-200">
-                        <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                            <div>
-                                <h3 className="font-extrabold text-slate-800 uppercase text-sm tracking-wide">Cadastrar Novo Lote</h3>
+                        <div className="p-5 border-b border-slate-100 flex justify-center items-center relative bg-slate-50">
+                            <div className="text-center">
+                                <h3 className="font-black text-pink-600 uppercase text-xl tracking-wide">Novo Medicamento</h3>
                                 <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">Insira os dados do lote para alimentar o estoque</p>
                             </div>
-                            <button onClick={() => setIsAddModalOpen(false)} className="p-1.5 hover:bg-slate-200 rounded-lg text-slate-500 transition-colors">
+                            <button onClick={() => setIsAddModalOpen(false)} className="absolute right-5 p-1.5 hover:bg-slate-200 rounded-lg text-slate-500 transition-colors">
                                 <X className="w-5 h-5" />
                             </button>
                         </div>
@@ -663,7 +667,7 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                                 )}
                             </div>
 
-                            {/* Linha 2: Princípio Ativo, Lote * */}
+                            {/* Linha 2: Princípio Ativo, Tipo * */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Princípio Ativo</label>
@@ -678,33 +682,19 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                                         disabled={isExistingMed}
                                     />
                                 </div>
-                                <div>
-                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Lote *</label>
-                                    <input 
-                                        type="text" 
-                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-mono font-bold text-slate-900 uppercase" 
-                                        placeholder="Ex: A23" 
-                                        value={lote} 
-                                        onChange={e => setLote(e.target.value)} 
-                                        required 
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Linha 3: Tipo *, Validade * */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {/* Custom Tipo Select */}
-                                <div className="relative">
-                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Tipo *</label>
+                                <div className={`relative ${isAddTipoOpen ? 'z-50' : ''}`}>
+                                    <label className={`block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1 ${isAddTipoOpen ? 'relative z-50' : ''}`}>Tipo *</label>
                                     <div 
                                         onClick={() => {
                                             if (isExistingMed) return;
                                             setIsAddTipoOpen(!isAddTipoOpen);
                                             setIsAddCatOpen(false);
+                                            setIsAddTipoDosagemOpen(false);
                                         }}
                                         className={`w-full rounded-xl border border-slate-200 py-3 px-4 text-sm text-slate-900 focus-within:border-pink-500 focus-within:ring-2 focus-within:ring-pink-500/10 outline-none transition-all font-semibold flex justify-between items-center select-none ${
                                             isExistingMed ? 'bg-slate-150 cursor-not-allowed opacity-60' : 'bg-slate-50 cursor-pointer focus-within:bg-white'
-                                        }`}
+                                        } ${isAddTipoOpen ? 'relative z-50' : ''}`}
                                     >
                                         <span>{tipo}</span>
                                         {!isExistingMed && <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform ${isAddTipoOpen ? 'rotate-90' : ''}`} />}
@@ -712,7 +702,7 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
 
                                     {isAddTipoOpen && (
                                         <>
-                                            <div className="fixed inset-0 z-40" onClick={() => setIsAddTipoOpen(false)} />
+                                            <div className="fixed inset-0 z-40 bg-slate-900/20 backdrop-blur-sm transition-all" onClick={() => setIsAddTipoOpen(false)} />
                                             <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200/80 rounded-xl shadow-xl z-50 overflow-hidden py-1 animate-in fade-in slide-in-from-top-1 duration-100">
                                                 {['Comprimido', 'Frasco', 'Ampola', 'Creme', 'Outros'].map((t) => (
                                                     <button
@@ -734,20 +724,10 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                                         </>
                                     )}
                                 </div>
-                                <div>
-                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Validade *</label>
-                                    <input 
-                                        type="date" 
-                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold text-slate-900 cursor-pointer" 
-                                        value={validade} 
-                                        onChange={e => setValidade(e.target.value)} 
-                                        required 
-                                    />
-                                </div>
                             </div>
 
-                            {/* Linha 4: Dosagem, Tipo Dosagem, Unidades * */}
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            {/* Linha 4: Dosagem, Tipo Dosagem */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Dosagem (Ex: 500, 10)</label>
                                     <input 
@@ -761,58 +741,60 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                                         disabled={isExistingMed}
                                     />
                                 </div>
-                                <div>
-                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Tipo Dosagem</label>
-                                    <select 
-                                        className={`w-full rounded-xl border border-slate-200 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold ${
-                                            isExistingMed ? 'bg-slate-150 cursor-not-allowed opacity-60 text-slate-500' : 'bg-slate-50 text-slate-900 cursor-pointer'
-                                        }`}
-                                        value={tipoDosagem}
-                                        onChange={e => setTipoDosagem(e.target.value)}
-                                        disabled={isExistingMed}
+                                <div className={`relative ${isAddTipoDosagemOpen ? 'z-50' : ''}`}>
+                                    <label className={`block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1 ${isAddTipoDosagemOpen ? 'relative z-50' : ''}`}>Tipo Dosagem</label>
+                                    <div 
+                                        onClick={() => {
+                                            if (isExistingMed) return;
+                                            setIsAddTipoDosagemOpen(!isAddTipoDosagemOpen);
+                                            setIsAddCatOpen(false);
+                                            setIsAddTipoOpen(false);
+                                        }}
+                                        className={`w-full rounded-xl border border-slate-200 py-3 px-4 text-sm text-slate-900 focus-within:border-pink-500 focus-within:ring-2 focus-within:ring-pink-500/10 outline-none transition-all font-semibold flex justify-between items-center select-none ${
+                                            isExistingMed ? 'bg-slate-150 cursor-not-allowed opacity-60 text-slate-500' : 'bg-slate-50 cursor-pointer focus-within:bg-white'
+                                        } ${isAddTipoDosagemOpen ? 'relative z-50' : ''}`}
                                     >
-                                        <optgroup label="Sólidos / Outros">
-                                            <option value="mcg (µg)">mcg (µg)</option>
-                                            <option value="mg">mg</option>
-                                            <option value="g">g</option>
-                                            <option value="kg">kg</option>
-                                        </optgroup>
-                                        <optgroup label="Líquidos">
-                                            <option value="mg/mL">mg/mL</option>
-                                            <option value="g/mL">g/mL</option>
-                                            <option value="mcg/mL">mcg/mL</option>
-                                            <option value="mg/5 mL">mg/5 mL</option>
-                                        </optgroup>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Unidades *</label>
-                                    <input 
-                                        type="number" 
-                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-bold text-slate-900" 
-                                        placeholder="0"
-                                        value={quantidade} 
-                                        onChange={e => setQuantidade(e.target.value)} 
-                                        min="0" 
-                                        required 
-                                    />
+                                        <span>{tipoDosagem}</span>
+                                        {!isExistingMed && <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform ${isAddTipoDosagemOpen ? 'rotate-90' : ''}`} />}
+                                    </div>
+                                    
+                                    {isAddTipoDosagemOpen && (
+                                        <>
+                                            <div className="fixed inset-0 z-40 bg-slate-900/20 backdrop-blur-sm transition-all" onClick={() => setIsAddTipoDosagemOpen(false)} />
+                                            <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200/80 rounded-xl shadow-xl z-50 max-h-[14rem] overflow-y-auto py-1 animate-in fade-in slide-in-from-top-1 duration-100">
+                                                <div className="px-4 py-2 text-[10px] font-black uppercase text-slate-400 tracking-wider">Sólidos / Outros</div>
+                                                {['mcg (µg)', 'mg', 'g', 'kg'].map(t => (
+                                                    <button key={t} type="button" onClick={() => { setTipoDosagem(t); setIsAddTipoDosagemOpen(false); }} className={`w-full text-left px-5 py-2 text-xs font-semibold hover:bg-slate-50 flex justify-between items-center ${tipoDosagem === t ? 'text-pink-650 bg-pink-50/10 font-bold' : 'text-slate-700'}`}>
+                                                        <span>{t}</span>{tipoDosagem === t && <CheckCircle2 className="w-3.5 h-3.5 text-pink-600" />}
+                                                    </button>
+                                                ))}
+                                                <div className="px-4 py-2 text-[10px] font-black uppercase text-slate-400 tracking-wider mt-1 border-t border-slate-100 pt-3">Líquidos</div>
+                                                {['mg/mL', 'g/mL', 'mcg/mL', 'mg/5 mL'].map(t => (
+                                                    <button key={t} type="button" onClick={() => { setTipoDosagem(t); setIsAddTipoDosagemOpen(false); }} className={`w-full text-left px-5 py-2 text-xs font-semibold hover:bg-slate-50 flex justify-between items-center ${tipoDosagem === t ? 'text-pink-650 bg-pink-50/10 font-bold' : 'text-slate-700'}`}>
+                                                        <span>{t}</span>{tipoDosagem === t && <CheckCircle2 className="w-3.5 h-3.5 text-pink-600" />}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
                             </div>
 
                             {/* Linha 5: Categoria * */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {/* Custom Categoria Select */}
-                                <div className="relative">
-                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Categoria *</label>
+                                <div className={`relative ${isAddCatOpen ? 'z-50' : ''}`}>
+                                    <label className={`block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1 ${isAddCatOpen ? 'relative z-50' : ''}`}>Categoria *</label>
                                     <div 
                                         onClick={() => {
                                             if (isExistingMed) return;
                                             setIsAddCatOpen(!isAddCatOpen);
                                             setIsAddTipoOpen(false);
+                                            setIsAddTipoDosagemOpen(false);
                                         }}
                                         className={`w-full rounded-xl border border-slate-200 py-3 px-4 text-sm text-slate-900 focus-within:border-pink-500 focus-within:ring-2 focus-within:ring-pink-500/10 outline-none transition-all font-semibold flex justify-between items-center select-none ${
                                             isExistingMed ? 'bg-slate-150 cursor-not-allowed opacity-60' : 'bg-slate-50 cursor-pointer focus-within:bg-white'
-                                        }`}
+                                        } ${isAddCatOpen ? 'relative z-50' : ''}`}
                                     >
                                         <span>
                                             {categoria === 'CBAF' && 'Componente Básico (CBAF)'}
@@ -824,8 +806,8 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
 
                                     {isAddCatOpen && (
                                         <>
-                                            <div className="fixed inset-0 z-40" onClick={() => setIsAddCatOpen(false)} />
-                                            <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200/80 rounded-xl shadow-xl z-50 overflow-hidden py-1 animate-in fade-in slide-in-from-top-1 duration-100">
+                                            <div className="fixed inset-0 z-40 bg-slate-900/20 backdrop-blur-sm transition-all" onClick={() => setIsAddCatOpen(false)} />
+                                            <div className="absolute left-0 right-0 bottom-full mb-1 bg-white border border-slate-200/80 rounded-xl shadow-xl z-50 overflow-hidden py-1 animate-in fade-in slide-in-from-bottom-1 duration-100">
                                                 {(['CBAF', 'CESAF', 'CEAF'] as const).map((cat) => (
                                                     <button
                                                         key={cat}
@@ -924,7 +906,7 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                                 )}
                             </div>
 
-                            {/* Linha 2: Princípio Ativo, Lote * */}
+                            {/* Linha 2: Princípio Ativo, Tipo * */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Princípio Ativo</label>
@@ -936,29 +918,16 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                                         onChange={e => setPrincipioAtivo(e.target.value)} 
                                     />
                                 </div>
-                                <div>
-                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Lote *</label>
-                                    <input 
-                                        type="text" 
-                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-mono font-bold text-slate-900 uppercase" 
-                                        value={lote} 
-                                        onChange={e => setLote(e.target.value)} 
-                                        required 
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Linha 3: Tipo *, Validade * */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {/* Custom Tipo Select */}
-                                <div className="relative">
-                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Tipo *</label>
+                                <div className={`relative ${isEditTipoOpen ? 'z-50' : ''}`}>
+                                    <label className={`block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1 ${isEditTipoOpen ? 'relative z-50' : ''}`}>Tipo *</label>
                                     <div 
                                         onClick={() => {
                                             setIsEditTipoOpen(!isEditTipoOpen);
                                             setIsEditCatOpen(false);
+                                            setIsEditTipoDosagemOpen(false);
                                         }}
-                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm text-slate-900 focus-within:bg-white focus-within:border-pink-500 focus-within:ring-2 focus-within:ring-pink-500/10 outline-none transition-all font-semibold cursor-pointer flex justify-between items-center select-none"
+                                        className={`w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm text-slate-900 focus-within:bg-white focus-within:border-pink-500 focus-within:ring-2 focus-within:ring-pink-500/10 outline-none transition-all font-semibold cursor-pointer flex justify-between items-center select-none ${isEditTipoOpen ? 'relative z-50' : ''}`}
                                     >
                                         <span>{tipo}</span>
                                         <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform ${isEditTipoOpen ? 'rotate-90' : ''}`} />
@@ -966,7 +935,7 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
 
                                     {isEditTipoOpen && (
                                         <>
-                                            <div className="fixed inset-0 z-40" onClick={() => setIsEditTipoOpen(false)} />
+                                            <div className="fixed inset-0 z-40 bg-slate-900/20 backdrop-blur-sm transition-all" onClick={() => setIsEditTipoOpen(false)} />
                                             <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200/80 rounded-xl shadow-xl z-50 overflow-hidden py-1 animate-in fade-in slide-in-from-top-1 duration-100">
                                                 {['Comprimido', 'Frasco', 'Ampola', 'Creme', 'Outros'].map((t) => (
                                                     <button
@@ -988,16 +957,6 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                                         </>
                                     )}
                                 </div>
-                                <div>
-                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Validade *</label>
-                                    <input 
-                                        type="date" 
-                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold text-slate-900 cursor-pointer" 
-                                        value={validade} 
-                                        onChange={e => setValidade(e.target.value)} 
-                                        required 
-                                    />
-                                </div>
                             </div>
 
                             {/* Linha 4: Dosagem, Tipo Dosagem */}
@@ -1011,40 +970,54 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                                         onChange={e => setDosagemValor(e.target.value)} 
                                     />
                                 </div>
-                                <div>
-                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Tipo Dosagem</label>
-                                    <select 
-                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3.5 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold text-slate-900 cursor-pointer"
-                                        value={tipoDosagem}
-                                        onChange={e => setTipoDosagem(e.target.value)}
+                                <div className={`relative ${isEditTipoDosagemOpen ? 'z-50' : ''}`}>
+                                    <label className={`block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1 ${isEditTipoDosagemOpen ? 'relative z-50' : ''}`}>Tipo Dosagem</label>
+                                    <div 
+                                        onClick={() => {
+                                            setIsEditTipoDosagemOpen(!isEditTipoDosagemOpen);
+                                            setIsEditCatOpen(false);
+                                            setIsEditTipoOpen(false);
+                                        }}
+                                        className={`w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm text-slate-900 focus-within:bg-white focus-within:border-pink-500 focus-within:ring-2 focus-within:ring-pink-500/10 outline-none transition-all font-semibold cursor-pointer flex justify-between items-center select-none ${isEditTipoDosagemOpen ? 'relative z-50' : ''}`}
                                     >
-                                        <optgroup label="Sólidos / Outros">
-                                            <option value="mcg (µg)">mcg (µg)</option>
-                                            <option value="mg">mg</option>
-                                            <option value="g">g</option>
-                                            <option value="kg">kg</option>
-                                        </optgroup>
-                                        <optgroup label="Líquidos">
-                                            <option value="mg/mL">mg/mL</option>
-                                            <option value="g/mL">g/mL</option>
-                                            <option value="mcg/mL">mcg/mL</option>
-                                            <option value="mg/5 mL">mg/5 mL</option>
-                                        </optgroup>
-                                    </select>
+                                        <span>{tipoDosagem}</span>
+                                        <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform ${isEditTipoDosagemOpen ? 'rotate-90' : ''}`} />
+                                    </div>
+                                    
+                                    {isEditTipoDosagemOpen && (
+                                        <>
+                                            <div className="fixed inset-0 z-40 bg-slate-900/20 backdrop-blur-sm transition-all" onClick={() => setIsEditTipoDosagemOpen(false)} />
+                                            <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200/80 rounded-xl shadow-xl z-50 max-h-[14rem] overflow-y-auto py-1 animate-in fade-in slide-in-from-top-1 duration-100">
+                                                <div className="px-4 py-2 text-[10px] font-black uppercase text-slate-400 tracking-wider">Sólidos / Outros</div>
+                                                {['mcg (µg)', 'mg', 'g', 'kg'].map(t => (
+                                                    <button key={t} type="button" onClick={() => { setTipoDosagem(t); setIsEditTipoDosagemOpen(false); }} className={`w-full text-left px-5 py-2 text-xs font-semibold hover:bg-slate-50 flex justify-between items-center ${tipoDosagem === t ? 'text-pink-650 bg-pink-50/10 font-bold' : 'text-slate-700'}`}>
+                                                        <span>{t}</span>{tipoDosagem === t && <CheckCircle2 className="w-3.5 h-3.5 text-pink-600" />}
+                                                    </button>
+                                                ))}
+                                                <div className="px-4 py-2 text-[10px] font-black uppercase text-slate-400 tracking-wider mt-1 border-t border-slate-100 pt-3">Líquidos</div>
+                                                {['mg/mL', 'g/mL', 'mcg/mL', 'mg/5 mL'].map(t => (
+                                                    <button key={t} type="button" onClick={() => { setTipoDosagem(t); setIsEditTipoDosagemOpen(false); }} className={`w-full text-left px-5 py-2 text-xs font-semibold hover:bg-slate-50 flex justify-between items-center ${tipoDosagem === t ? 'text-pink-650 bg-pink-50/10 font-bold' : 'text-slate-700'}`}>
+                                                        <span>{t}</span>{tipoDosagem === t && <CheckCircle2 className="w-3.5 h-3.5 text-pink-600" />}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
                             </div>
 
                             {/* Linha 5: Categoria * */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {/* Custom Categoria Select */}
-                                <div className="relative">
-                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Categoria *</label>
+                                <div className={`relative ${isEditCatOpen ? 'z-50' : ''}`}>
+                                    <label className={`block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1 ${isEditCatOpen ? 'relative z-50' : ''}`}>Categoria *</label>
                                     <div 
                                         onClick={() => {
                                             setIsEditCatOpen(!isEditCatOpen);
                                             setIsEditTipoOpen(false);
+                                            setIsEditTipoDosagemOpen(false);
                                         }}
-                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm text-slate-900 focus-within:bg-white focus-within:border-pink-500 focus-within:ring-2 focus-within:ring-pink-500/10 outline-none transition-all font-semibold cursor-pointer flex justify-between items-center select-none"
+                                        className={`w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm text-slate-900 focus-within:bg-white focus-within:border-pink-500 focus-within:ring-2 focus-within:ring-pink-500/10 outline-none transition-all font-semibold cursor-pointer flex justify-between items-center select-none ${isEditCatOpen ? 'relative z-50' : ''}`}
                                     >
                                         <span>
                                             {categoria === 'CBAF' && 'Componente Básico (CBAF)'}
@@ -1056,8 +1029,8 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
 
                                     {isEditCatOpen && (
                                         <>
-                                            <div className="fixed inset-0 z-40" onClick={() => setIsEditCatOpen(false)} />
-                                            <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200/80 rounded-xl shadow-xl z-50 overflow-hidden py-1 animate-in fade-in slide-in-from-top-1 duration-100">
+                                            <div className="fixed inset-0 z-40 bg-slate-900/20 backdrop-blur-sm transition-all" onClick={() => setIsEditCatOpen(false)} />
+                                            <div className="absolute left-0 right-0 bottom-full mb-1 bg-white border border-slate-200/80 rounded-xl shadow-xl z-50 overflow-hidden py-1 animate-in fade-in slide-in-from-bottom-1 duration-100">
                                                 {(['CBAF', 'CESAF', 'CEAF'] as const).map((cat) => (
                                                     <button
                                                         key={cat}
