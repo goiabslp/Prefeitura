@@ -2,6 +2,13 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { User, FarmaciaMedicamento, FarmaciaMovimentacao } from '../../types';
 import { Package, Plus, Edit, Trash2, Calendar, AlertTriangle, ChevronRight, CheckCircle2, TrendingUp, Info, Loader2, Sparkles, SlidersHorizontal, X, XCircle, Search } from 'lucide-react';
 import * as db from '../../services/farmaciaService';
+import { useFarmaciaAlert } from './FarmaciaAlertContext';
+import { RAW_MEDS } from './medsToImportData';
+import { getMedsToImport } from './medsToImport';
+
+const FORMAS_FARMACEUTICAS = [
+  'Adesivo transdérmico', 'Aerossol oral', 'Cápsula', 'Cápsula de liberação prolongada', 'Cápsula de liberação retardada', 'Cápsula gelatinosa dura', 'Cápsula inalatória', 'Cápsula mole', 'Cápsula para inalação oral', 'Comprimido', 'Comprimido de liberação prolongada', 'Comprimido de liberação retardada', 'Comprimido dispersível', 'Comprimido mastigável', 'Comprimido orodispersível', 'Comprimido para suspensão', 'Comprimido para suspensão oral', 'Comprimido para uso tópico', 'Comprimido revestido', 'Comprimido solúvel', 'Comprimido sublingual', 'Comprimido vaginal', 'Comprimidos dispersíveis', 'Creme', 'Creme dermatológico', 'Creme vaginal', 'Dispositivo intrauterino (DIU)', 'Elixir', 'Emulsão oral', 'Enema', 'Frasco-ampola', 'Gel', 'Gel oral', 'Gel vaginal', 'Goma de mascar', 'Granulado oral', 'Granulado para suspensão oral', 'Granulado revestido de liberação prolongada', 'Grânulo para suspensão oral', 'Grânulos revestidos', 'Implante', 'Loção', 'Óleo para uso oral', 'Óvulo vaginal', 'Pasta', 'Pastilha', 'Pó', 'Pó estéril para solução injetável', 'Pó inalatório', 'Pó liofilizado para solução injetável', 'Pó liofilizado para solução para infusão', 'Pó liofilizado para suspensão injetável de liberação prolongada', 'Pó liófilizado para injetável', 'Pó para dispersão oral', 'Pó para inalação', 'Pó para inalação oral', 'Pó para solução injetável', 'Pó para solução oral', 'Pó para solução para infusão', 'Pó para solução para infusão e inalação', 'Pó para suspensão injetável', 'Pó para suspensão injetável de liberação prolongada', 'Pó para suspensão oral', 'Pomada', 'Pomada oftálmica', 'Solução', 'Solução aerossol', 'Solução bucal', 'Solução capilar', 'Solução inalatória', 'Solução injetável', 'Solução injetável de liberação prolongada', 'Solução injetável depot', 'Solução nasal', 'Solução oftálmica', 'Solução oral', 'Solução otológica', 'Solução para diluição para infusão', 'Solução para infusão', 'Solução para inalação', 'Solução para uso tópico', 'Solução retal', 'Solução spray', 'Solução spray nasal', 'Solução tópica', 'Suspensão aerossol', 'Suspensão injetável', 'Suspensão injetável de liberação prolongada', 'Suspensão injetável intratecal ou intrabrônquica', 'Suspensão oftálmica', 'Suspensão oral', 'Suspensão para inalação nasal', 'Tintura', 'Unidade', 'Xampu'
+];
 
 interface EstoqueScreenProps {
     currentUser: User;
@@ -32,11 +39,21 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
     currentUser,
     onBack
 }) => {
+    const { showAlert, showConfirm } = useFarmaciaAlert();
+
     // DB state
     const [medicamentos, setMedicamentos] = useState<FarmaciaMedicamento[]>([]);
     const [movimentacoes, setMovimentacoes] = useState<FarmaciaMovimentacao[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
+    
+    // Import state
+    const [isImporting, setIsImporting] = useState(false);
+    const [importProgress, setImportProgress] = useState({ total: 0, current: 0 });
+
+    // Pagination
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 100;
 
     // Modal control
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -132,6 +149,44 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
     const canDelete = currentUser.permissions?.includes('parent_farmacia_excluir') || isAdmin;
     const canApprove = currentUser.permissions?.includes('parent_farmacia_aprovar') || isAdmin;
 
+    const handleImportMeds = async () => {
+        const medsList = getMedsToImport(RAW_MEDS);
+        if (!medsList || medsList.length === 0) return;
+        
+        if (!window.confirm('Deseja iniciar a importação do Lote Inicial de Medicamentos? Essa operação pode demorar alguns minutos.')) return;
+        
+        setIsImporting(true);
+        setImportProgress({ total: medsList.length, current: 0 });
+        
+        try {
+            for (let i = 0; i < medsList.length; i++) {
+                const medData = medsList[i];
+                // Check if already exists to avoid duplicates and allow resuming
+                const exists = medicamentos.some(m => 
+                    m.nome === medData.nome && 
+                    m.dosagem === medData.dosagem && 
+                    m.tipo === medData.tipo &&
+                    m.principio_ativo === medData.principio_ativo
+                );
+                
+                if (!exists) {
+                    await db.createMedicamento(medData);
+                }
+                
+                setImportProgress({ total: medsList.length, current: i + 1 });
+            }
+            
+            showAlert('Importação do Lote Inicial concluída com sucesso!', 'success');
+            loadData(true);
+        } catch (error: any) {
+            console.error('Import error:', error);
+            showAlert('Ocorreu um erro durante a importação. A operação pode ter sido interrompida.', 'error');
+        } finally {
+            setIsImporting(false);
+            setImportProgress({ total: 0, current: 0 });
+        }
+    };
+
     const loadData = async (silent = false) => {
         if (!silent) setLoading(true);
         try {
@@ -165,12 +220,14 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
 
     // --- ANALYTICS DASHBOARD COMPUTATIONS ---
     const stats = useMemo(() => {
-        const totalItems = medicamentos.length;
-        const totalQty = medicamentos.reduce((acc, m) => acc + m.quantidade, 0);
-        const outOfStock = medicamentos.filter(m => m.quantidade === 0).length;
+        const ativos = medicamentos.filter(m => !(m.quantidade === 0 && m.lote === 'LOTE-INICIAL'));
+
+        const totalItems = ativos.length;
+        const totalQty = ativos.reduce((acc, m) => acc + m.quantidade, 0);
+        const outOfStock = ativos.filter(m => m.quantidade === 0).length;
         
         // Expiration in next 90 days
-        const nearExpiration = medicamentos.filter(m => {
+        const nearExpiration = ativos.filter(m => {
             const daysLeft = (new Date(m.validade).getTime() - Date.now()) / (1000 * 60 * 60 * 24);
             return daysLeft > 0 && daysLeft <= 90;
         }).length;
@@ -214,6 +271,19 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
         });
     }, [medicamentos, searchTerm, medicamentCodes]);
 
+    // Reset pagination when search changes
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm]);
+
+    // Paginated list
+    const paginatedMedicamentos = useMemo(() => {
+        const startIndex = (currentPage - 1) * itemsPerPage;
+        return filteredMedicamentos.slice(startIndex, startIndex + itemsPerPage);
+    }, [filteredMedicamentos, currentPage]);
+
+    const totalPages = Math.ceil(filteredMedicamentos.length / itemsPerPage);
+
     // --- CRUD ACTIONS ---
 
     const handleOpenAddModal = () => {
@@ -236,7 +306,7 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!nome || !limiteMinimo) {
-            alert('Preencha os campos obrigatórios.');
+            showAlert('Preencha os campos obrigatórios.', 'error');
             return;
         }
 
@@ -263,23 +333,25 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                     principio_ativo: principioAtivo.toUpperCase() || undefined
                 });
 
-                await db.registrarMovimentacao({
-                    medicamento_id: existingLote.id,
-                    tipo: 'Entrada',
-                    quantidade: qtyNum,
-                    medicamento_nome: existingLote.nome,
-                    medicamento_categoria: categoria,
-                    medicamento_tipo: existingLote.tipo,
-                    medicamento_dosagem: existingLote.dosagem,
-                    lote: lote.toUpperCase(),
-                    validade: validade,
-                    responsavel_nome: currentUser.name,
-                    responsavel_id: currentUser.id,
-                    data: new Date().toISOString(),
-                    observacoes: 'Entrada de novo estoque para lote existente'
-                });
+                if (qtyNum > 0) {
+                    await db.registrarMovimentacao({
+                        medicamento_id: existingLote.id,
+                        tipo: 'Entrada',
+                        quantidade: qtyNum,
+                        medicamento_nome: existingLote.nome,
+                        medicamento_categoria: categoria,
+                        medicamento_tipo: existingLote.tipo,
+                        medicamento_dosagem: existingLote.dosagem,
+                        lote: lote.toUpperCase(),
+                        validade: validade,
+                        responsavel_nome: currentUser.name,
+                        responsavel_id: currentUser.id,
+                        data: new Date().toISOString(),
+                        observacoes: 'Entrada de novo estoque para lote existente'
+                    });
+                }
 
-                alert('Estoque adicionado ao lote existente com sucesso!');
+                showAlert('Medicamento atualizado com sucesso!', 'success');
             } else {
                 // Se é um novo lote de um medicamento existente, ou um medicamento completamente novo:
                 // criamos um novo registro de lote no estoque
@@ -298,29 +370,31 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                 });
 
                 if (newMed) {
-                    await db.registrarMovimentacao({
-                        medicamento_id: newMed.id,
-                        tipo: 'Entrada',
-                        quantidade: qtyNum,
-                        medicamento_nome: newMed.nome,
-                        medicamento_categoria: newMed.categoria,
-                        medicamento_tipo: newMed.tipo,
-                        medicamento_dosagem: newMed.dosagem,
-                        lote: newMed.lote,
-                        validade: newMed.validade,
-                        responsavel_nome: currentUser.name,
-                        responsavel_id: currentUser.id,
-                        data: new Date().toISOString(),
-                        observacoes: 'Cadastro de novo lote'
-                    });
-                    alert('Lote cadastrado com sucesso!');
+                    if (qtyNum > 0) {
+                        await db.registrarMovimentacao({
+                            medicamento_id: newMed.id,
+                            tipo: 'Entrada',
+                            quantidade: qtyNum,
+                            medicamento_nome: newMed.nome,
+                            medicamento_categoria: newMed.categoria,
+                            medicamento_tipo: newMed.tipo,
+                            medicamento_dosagem: newMed.dosagem,
+                            lote: newMed.lote,
+                            validade: newMed.validade,
+                            responsavel_nome: currentUser.name,
+                            responsavel_id: currentUser.id,
+                            data: new Date().toISOString(),
+                            observacoes: 'Cadastro de novo lote'
+                        });
+                    }
+                    showAlert('Medicamento cadastrado com sucesso!', 'success');
                 }
             }
             setIsAddModalOpen(false);
             setSelectedExistingMed(null);
             loadData(true);
         } catch (error: any) {
-            alert(error.message || 'Erro ao cadastrar medicamento.');
+            showAlert(error.message || 'Erro ao cadastrar medicamento.', 'error');
         } finally {
             setSaving(false);
         }
@@ -350,15 +424,15 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
 
         const dosagemConcatenada = dosagemValor ? `${dosagemValor}${tipoDosagem}` : '';
 
-        const isDuplicate = medicamentos.some(med => 
+        const hasExactDuplicate = medicamentos.some(med => 
             med.id !== selectedMed.id &&
             med.nome.toUpperCase() === nome.toUpperCase() &&
             (med.tipo || '').toUpperCase() === tipo.toUpperCase() &&
             (med.dosagem || '').toUpperCase() === (dosagemConcatenada || '').toUpperCase()
         );
 
-        if (isDuplicate) {
-            alert(`Já existe outro medicamento cadastrado com o mesmo Nome ("${nome.toUpperCase()}"), Tipo ("${tipo}") e Dosagem ("${dosagemConcatenada || 'Sem Dosagem'}").`);
+        if (hasExactDuplicate) {
+            showAlert(`Já existe outro medicamento cadastrado com o mesmo Nome ("${nome.toUpperCase()}"), Tipo ("${tipo}") e Dosagem ("${dosagemConcatenada || 'Sem Dosagem'}").`, 'error');
             return;
         }
 
@@ -376,27 +450,30 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                 fornecedor: fornecedor || undefined,
                 principio_ativo: principioAtivo.toUpperCase() || undefined
             });
-            alert('Medicamento updated com sucesso!');
+            showAlert('Medicamento atualizado com sucesso!', 'success');
             setIsEditModalOpen(false);
             loadData(true);
         } catch (error: any) {
-            alert(error.message || 'Erro ao atualizar medicamento.');
+            showAlert(error.message || 'Erro ao atualizar medicamento.', 'error');
         } finally {
             setSaving(false);
         }
     };
 
     const handleDelete = async (id: string, name: string) => {
-        if (!window.confirm(`Deseja realmente excluir o lote de "${name}"? Esta ação removerá o lote do estoque.`)) return;
-        try {
-            const ok = await db.deleteMedicamento(id);
-            if (ok) {
-                alert('Medicamento excluído do estoque.');
+        showConfirm(`Deseja realmente excluir o lote de "${name}"? Esta ação removerá o lote do estoque.`, async () => {
+            try {
+                await db.deleteMedicamento(id);
+                if (selectedMed?.id === id) {
+                    setSelectedMed(null);
+                    setIsEditModalOpen(false);
+                }
+                showAlert('Medicamento excluído do estoque.', 'success');
                 loadData(true);
+            } catch (error: any) {
+                showAlert(error.message || 'Erro ao excluir medicamento.', 'error');
             }
-        } catch (error: any) {
-            alert(error.message || 'Erro ao excluir medicamento.');
-        }
+        });
     };
 
     // --- STOCK CONTROL / VIEW DETAILS ---
@@ -407,6 +484,7 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
     };
 
     const getStockBadgeColor = (med: FarmaciaMedicamento) => {
+        if (med.quantidade === 0 && med.lote === 'LOTE-INICIAL') return 'bg-slate-50 text-slate-500 border-slate-200'; // Inativo
         if (med.quantidade === 0) return 'bg-rose-50 text-rose-700 border-rose-100';
         if (med.quantidade <= med.limite_minimo) return 'bg-amber-50 text-amber-700 border-amber-100';
         return 'bg-emerald-50 text-emerald-700 border-emerald-100';
@@ -450,13 +528,21 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                     </div>
 
                     {canCreate && (
-                        <button
+                        <>
+                        <button 
+                            onClick={handleImportMeds}
+                            className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-md shrink-0 mr-2"
+                        >
+                            Importar Lote
+                        </button>
+                        <button 
                             onClick={handleOpenAddModal}
                             className="px-4 py-2 bg-pink-600 hover:bg-pink-700 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-md flex items-center gap-2 shrink-0"
                         >
                             <Plus className="w-4 h-4" />
                             Novo Medicamento
                         </button>
+                        </>
                     )}
                 </div>
             </div>
@@ -481,14 +567,14 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-700">
-                                {filteredMedicamentos.length === 0 ? (
+                                {paginatedMedicamentos.length === 0 ? (
                                     <tr>
                                         <td colSpan={5} className="p-8 text-center text-slate-400 font-semibold italic">
                                             Nenhum lote ou medicamento encontrado.
                                         </td>
                                     </tr>
                                 ) : (
-                                    filteredMedicamentos.map(med => {
+                                    paginatedMedicamentos.map(med => {
                                         const isExpired = new Date(med.validade).getTime() <= Date.now();
                                     const badgeClass = getStockBadgeColor(med);
                                     return (
@@ -496,6 +582,11 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                                             <td className="p-3">
                                                 <div className="font-extrabold text-slate-800 uppercase">{med.nome}</div>
                                                 <div className="flex flex-wrap gap-1 mt-1">
+                                                    {(med.quantidade === 0 && med.lote === 'LOTE-INICIAL') && (
+                                                        <span className="inline-block px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider rounded bg-slate-200 text-slate-500">
+                                                            INATIVO
+                                                        </span>
+                                                    )}
                                                     <span className="inline-block px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider rounded bg-slate-800 text-white">
                                                         Cód: {medicamentCodes[`${med.nome.toUpperCase()} - ${med.dosagem?.toUpperCase() || ''} - ${med.tipo?.toUpperCase() || ''}`] || '00000'}
                                                     </span>
@@ -567,6 +658,32 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                             </tbody>
                         </table>
                     </div>
+                    {totalPages > 1 && (
+                        <div className="flex items-center justify-between p-4 border-t border-slate-100 bg-slate-50/50 rounded-b-3xl">
+                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                                Mostrando {(currentPage - 1) * itemsPerPage + 1} a {Math.min(currentPage * itemsPerPage, filteredMedicamentos.length)} de {filteredMedicamentos.length} registros
+                            </span>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                    disabled={currentPage === 1}
+                                    className="px-3 py-1.5 text-[10px] uppercase tracking-wider font-black text-slate-600 bg-white border border-slate-200 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-pink-50 hover:text-pink-600 transition-colors"
+                                >
+                                    Anterior
+                                </button>
+                                <span className="text-[11px] font-black text-slate-700 px-2">
+                                    Página {currentPage} de {totalPages}
+                                </span>
+                                <button
+                                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                    disabled={currentPage === totalPages}
+                                    className="px-3 py-1.5 text-[10px] uppercase tracking-wider font-black text-slate-600 bg-white border border-slate-200 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-pink-50 hover:text-pink-600 transition-colors"
+                                >
+                                    Próxima
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -684,7 +801,7 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                                 </div>
                                 {/* Custom Tipo Select */}
                                 <div className={`relative ${isAddTipoOpen ? 'z-50' : ''}`}>
-                                    <label className={`block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1 ${isAddTipoOpen ? 'relative z-50' : ''}`}>Tipo *</label>
+                                    <label className={`block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1 ${isAddTipoOpen ? 'relative z-50' : ''}`}>Forma Farmacêutica *</label>
                                     <div 
                                         onClick={() => {
                                             if (isExistingMed) return;
@@ -703,8 +820,8 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                                     {isAddTipoOpen && (
                                         <>
                                             <div className="fixed inset-0 z-40 bg-slate-900/20 backdrop-blur-sm transition-all" onClick={() => setIsAddTipoOpen(false)} />
-                                            <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200/80 rounded-xl shadow-xl z-50 overflow-hidden py-1 animate-in fade-in slide-in-from-top-1 duration-100">
-                                                {['Comprimido', 'Frasco', 'Ampola', 'Creme', 'Outros'].map((t) => (
+                                            <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200/80 rounded-xl shadow-xl z-50 max-h-[14rem] overflow-y-auto py-1 animate-in fade-in slide-in-from-top-1 duration-100">
+                                                {FORMAS_FARMACEUTICAS.map((t) => (
                                                     <button
                                                         key={t}
                                                         type="button"
@@ -716,8 +833,8 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                                                             tipo === t ? 'text-pink-650 bg-pink-50/10 font-bold' : 'text-slate-700'
                                                         }`}
                                                     >
-                                                        <span>{t}</span>
-                                                        {tipo === t && <CheckCircle2 className="w-3.5 h-3.5 text-pink-600" />}
+                                                        <span className="truncate pr-2">{t}</span>
+                                                        {tipo === t && <CheckCircle2 className="w-3.5 h-3.5 text-pink-600 flex-shrink-0" />}
                                                     </button>
                                                 ))}
                                             </div>
@@ -761,7 +878,7 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                                     {isAddTipoDosagemOpen && (
                                         <>
                                             <div className="fixed inset-0 z-40 bg-slate-900/20 backdrop-blur-sm transition-all" onClick={() => setIsAddTipoDosagemOpen(false)} />
-                                            <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200/80 rounded-xl shadow-xl z-50 max-h-[14rem] overflow-y-auto py-1 animate-in fade-in slide-in-from-top-1 duration-100">
+                                            <div className="absolute left-0 right-0 bottom-full mb-1 bg-white border border-slate-200/80 rounded-xl shadow-xl z-50 max-h-[14rem] overflow-y-auto py-1 animate-in fade-in slide-in-from-bottom-1 duration-100">
                                                 <div className="px-4 py-2 text-[10px] font-black uppercase text-slate-400 tracking-wider">Sólidos / Outros</div>
                                                 {['mcg (µg)', 'mg', 'g', 'kg'].map(t => (
                                                     <button key={t} type="button" onClick={() => { setTipoDosagem(t); setIsAddTipoDosagemOpen(false); }} className={`w-full text-left px-5 py-2 text-xs font-semibold hover:bg-slate-50 flex justify-between items-center ${tipoDosagem === t ? 'text-pink-650 bg-pink-50/10 font-bold' : 'text-slate-700'}`}>
@@ -920,7 +1037,7 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                                 </div>
                                 {/* Custom Tipo Select */}
                                 <div className={`relative ${isEditTipoOpen ? 'z-50' : ''}`}>
-                                    <label className={`block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1 ${isEditTipoOpen ? 'relative z-50' : ''}`}>Tipo *</label>
+                                    <label className={`block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1 ${isEditTipoOpen ? 'relative z-50' : ''}`}>Forma Farmacêutica *</label>
                                     <div 
                                         onClick={() => {
                                             setIsEditTipoOpen(!isEditTipoOpen);
@@ -936,8 +1053,8 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                                     {isEditTipoOpen && (
                                         <>
                                             <div className="fixed inset-0 z-40 bg-slate-900/20 backdrop-blur-sm transition-all" onClick={() => setIsEditTipoOpen(false)} />
-                                            <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200/80 rounded-xl shadow-xl z-50 overflow-hidden py-1 animate-in fade-in slide-in-from-top-1 duration-100">
-                                                {['Comprimido', 'Frasco', 'Ampola', 'Creme', 'Outros'].map((t) => (
+                                            <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200/80 rounded-xl shadow-xl z-50 max-h-[14rem] overflow-y-auto py-1 animate-in fade-in slide-in-from-top-1 duration-100">
+                                                {FORMAS_FARMACEUTICAS.map((t) => (
                                                     <button
                                                         key={t}
                                                         type="button"
@@ -949,8 +1066,8 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                                                             tipo === t ? 'text-pink-650 bg-pink-50/10 font-bold' : 'text-slate-700'
                                                         }`}
                                                     >
-                                                        <span>{t}</span>
-                                                        {tipo === t && <CheckCircle2 className="w-3.5 h-3.5 text-pink-600" />}
+                                                        <span className="truncate pr-2">{t}</span>
+                                                        {tipo === t && <CheckCircle2 className="w-3.5 h-3.5 text-pink-600 flex-shrink-0" />}
                                                     </button>
                                                 ))}
                                             </div>
@@ -987,7 +1104,7 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                                     {isEditTipoDosagemOpen && (
                                         <>
                                             <div className="fixed inset-0 z-40 bg-slate-900/20 backdrop-blur-sm transition-all" onClick={() => setIsEditTipoDosagemOpen(false)} />
-                                            <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200/80 rounded-xl shadow-xl z-50 max-h-[14rem] overflow-y-auto py-1 animate-in fade-in slide-in-from-top-1 duration-100">
+                                            <div className="absolute left-0 right-0 bottom-full mb-1 bg-white border border-slate-200/80 rounded-xl shadow-xl z-50 max-h-[14rem] overflow-y-auto py-1 animate-in fade-in slide-in-from-bottom-1 duration-100">
                                                 <div className="px-4 py-2 text-[10px] font-black uppercase text-slate-400 tracking-wider">Sólidos / Outros</div>
                                                 {['mcg (µg)', 'mg', 'g', 'kg'].map(t => (
                                                     <button key={t} type="button" onClick={() => { setTipoDosagem(t); setIsEditTipoDosagemOpen(false); }} className={`w-full text-left px-5 py-2 text-xs font-semibold hover:bg-slate-50 flex justify-between items-center ${tipoDosagem === t ? 'text-pink-650 bg-pink-50/10 font-bold' : 'text-slate-700'}`}>

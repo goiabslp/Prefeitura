@@ -181,7 +181,11 @@ const VIEW_TO_PATH: Record<string, string> = {
   'farmacia:estoque': '/FarmaciaPopular/Estoque',
   'farmacia:dados': '/FarmaciaPopular/Dados',
   'farmacia:historico': '/FarmaciaPopular/Historico',
-  'farmacia:dashboard': '/FarmaciaPopular/Dashboard'
+  'farmacia:dashboard': '/FarmaciaPopular/Dashboard',
+  'farmacia:dashboard-geral': '/FarmaciaPopular/Dashboard/VisaoGeral',
+  'farmacia:dashboard-medicamentos': '/FarmaciaPopular/Dashboard/Medicamentos',
+  'farmacia:dashboard-pacientes': '/FarmaciaPopular/Dashboard/Pacientes',
+  'farmacia:dashboard-relatorios': '/FarmaciaPopular/Dashboard/Relatorios'
 };
 
 const PATH_TO_STATE: Record<string, any> = Object.fromEntries(
@@ -4362,8 +4366,20 @@ const App: React.FC = () => {
                     setAppState(prev => ({ ...prev, view: 'historico' }));
                     window.history.pushState({}, '', '/FarmaciaPopular/Historico');
                   } else if (view === 'farmacia:dashboard') {
-                    setAppState(prev => ({ ...prev, view: 'dashboard' }));
-                    window.history.pushState({}, '', '/FarmaciaPopular/Dashboard');
+                    setAppState(prev => ({ ...prev, view: 'dashboard-geral' }));
+                    window.history.pushState({}, '', '/FarmaciaPopular/Dashboard/VisaoGeral');
+                  } else if (view === 'farmacia:dashboard-geral') {
+                    setAppState(prev => ({ ...prev, view: 'dashboard-geral' }));
+                    window.history.pushState({}, '', '/FarmaciaPopular/Dashboard/VisaoGeral');
+                  } else if (view === 'farmacia:dashboard-medicamentos') {
+                    setAppState(prev => ({ ...prev, view: 'dashboard-medicamentos' }));
+                    window.history.pushState({}, '', '/FarmaciaPopular/Dashboard/Medicamentos');
+                  } else if (view === 'farmacia:dashboard-pacientes') {
+                    setAppState(prev => ({ ...prev, view: 'dashboard-pacientes' }));
+                    window.history.pushState({}, '', '/FarmaciaPopular/Dashboard/Pacientes');
+                  } else if (view === 'farmacia:dashboard-relatorios') {
+                    setAppState(prev => ({ ...prev, view: 'dashboard-relatorios' }));
+                    window.history.pushState({}, '', '/FarmaciaPopular/Dashboard/Relatorios');
                   } else if (view === 'farmacia') {
                     setAppState(prev => ({ ...prev, view: undefined }));
                     window.history.pushState({}, '', '/FarmaciaPopular');

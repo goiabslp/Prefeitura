@@ -6,13 +6,31 @@ import { handleSupabaseError } from '../utils/errorUtils';
 
 export const getMedicamentos = async (): Promise<FarmaciaMedicamento[]> => {
     try {
-        const { data, error } = await supabase
-            .from('farmacia_medicamentos')
-            .select('*')
-            .order('nome', { ascending: true });
+        let allData: FarmaciaMedicamento[] = [];
+        let from = 0;
+        const step = 1000;
+        let hasMore = true;
 
-        if (error) throw error;
-        return data || [];
+        while (hasMore) {
+            const { data, error } = await supabase
+                .from('farmacia_medicamentos')
+                .select('*')
+                .order('nome', { ascending: true })
+                .range(from, from + step - 1);
+
+            if (error) throw error;
+            
+            if (data && data.length > 0) {
+                allData = [...allData, ...data];
+                from += step;
+                if (data.length < step) {
+                    hasMore = false;
+                }
+            } else {
+                hasMore = false;
+            }
+        }
+        return allData;
     } catch (error) {
         const appError = handleSupabaseError(error);
         console.error('[farmaciaService] getMedicamentos Error:', appError.message);

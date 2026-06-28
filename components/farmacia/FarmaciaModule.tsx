@@ -9,6 +9,7 @@ import { EstoqueScreen } from './EstoqueScreen';
 import { DadosScreen } from './DadosScreen';
 import { HistoricoScreen } from './HistoricoScreen';
 import { DashboardScreen } from './DashboardScreen';
+import { FarmaciaAlertProvider } from './FarmaciaAlertContext';
 
 interface FarmaciaModuleProps {
     currentView: string;
@@ -236,6 +237,7 @@ export const FarmaciaModule: React.FC<FarmaciaModuleProps> = ({
     };
 
     return (
+        <FarmaciaAlertProvider>
         <div className="flex-1 w-full h-full bg-[#f8fafc] relative flex flex-col overflow-hidden min-h-0">
             {/* Header / Subnav container */}
             {subView !== 'consultar' && (
@@ -315,11 +317,12 @@ export const FarmaciaModule: React.FC<FarmaciaModuleProps> = ({
                         currentUser={currentUser}
                         onBack={() => onNavigate('farmacia')}
                     />
-                ) : subView === 'dashboard' ? (
+                ) : subView?.startsWith('dashboard') ? (
                     <DashboardScreen
                         currentUser={currentUser}
                         onBack={() => onNavigate('farmacia')}
                         onNavigate={onNavigate}
+                        subView={subView}
                     />
                 ) : (
                     <div className="text-center py-10 font-bold text-slate-400">Página Não Encontrada.</div>
@@ -459,5 +462,6 @@ export const FarmaciaModule: React.FC<FarmaciaModuleProps> = ({
                 </div>
             )}
         </div>
+        </FarmaciaAlertProvider>
     );
 };

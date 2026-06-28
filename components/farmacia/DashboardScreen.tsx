@@ -3,7 +3,7 @@ import { User, FarmaciaMedicamento, FarmaciaMovimentacao } from '../../types';
 import * as db from '../../services/farmaciaService';
 import {
     ArrowLeft, TrendingUp, TrendingDown, Users, Package, AlertTriangle, Activity, 
-    Calendar, CheckCircle2, AlertCircle, ShoppingCart, Info, PieChart
+    Calendar, CheckCircle2, AlertCircle, ShoppingCart, Info, PieChart, FileDown
 } from 'lucide-react';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -16,13 +16,30 @@ interface DashboardScreenProps {
     currentUser: User;
     onBack: () => void;
     onNavigate: (view: string) => void;
+    subView?: string;
 }
 
 export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     currentUser,
     onBack,
-    onNavigate
+    onNavigate,
+    subView
 }) => {
+    const initialTab = subView ? subView.replace('dashboard-', '').replace('dashboard', 'geral') : 'geral';
+    const [activeTab, setActiveTab] = useState(initialTab === 'dashboard' ? 'geral' : initialTab);
+    
+    // Sincronizar activeTab quando o subView mudar
+    useEffect(() => {
+        if (subView && subView.startsWith('dashboard')) {
+            const tab = subView.replace('dashboard-', '').replace('dashboard', 'geral');
+            setActiveTab(tab === 'dashboard' ? 'geral' : tab);
+        }
+    }, [subView]);
+
+    const handleTabChange = (tabId: string) => {
+        setActiveTab(tabId);
+        onNavigate(`farmacia:dashboard-${tabId}`);
+    };
     const [medicamentos, setMedicamentos] = useState<FarmaciaMedicamento[]>([]);
     const [movimentacoes, setMovimentacoes] = useState<FarmaciaMovimentacao[]>([]);
     const [loading, setLoading] = useState(true);
@@ -41,6 +58,38 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleExportCSV = () => {
+        const headers = ['Medicamento', 'Princípio Ativo', 'Categoria', 'Tipo', 'Dosagem', 'Lote', 'Validade', 'Fornecedor', 'Situação', 'Estoque', 'Unidade', 'Limite Mínimo'];
+        
+        const rows = lowStockAlerts.map(med => {
+            const situacao = med.quantidade === 0 ? 'Zerado' : 'Estoque Baixo';
+            return [
+                `"${med.nome}"`,
+                `"${med.principio_ativo || ''}"`,
+                `"${med.categoria}"`,
+                `"${med.tipo || ''}"`,
+                `"${med.dosagem || ''}"`,
+                `"${med.lote || ''}"`,
+                `"${med.validade || ''}"`,
+                `"${med.fornecedor || ''}"`,
+                `"${situacao}"`,
+                med.quantidade,
+                `"${med.unidade || 'un'}"`,
+                med.limite_minimo
+            ].join(',');
+        });
+
+        const csvContent = [headers.join(','), ...rows].join('\n');
+        const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `relatorio_estoque_critico_${format(new Date(), 'yyyy-MM-dd')}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
     };
 
     useEffect(() => {
@@ -187,7 +236,28 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 </div>
             </div>
 
-            {/* KPIs Grid */}
+            {/* Tabs */}
+            <div className="flex overflow-x-auto gap-2 mb-6 pb-2 custom-scrollbar">
+                {['geral', 'medicamentos', 'pacientes', 'relatorios'].map(tab => (
+                    <button
+                        key={tab}
+                        onClick={() => handleTabChange(tab)}
+                        className={`px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all whitespace-nowrap ${
+                            activeTab === tab
+                                ? 'bg-pink-600 text-white shadow-md shadow-pink-500/20'
+                                : 'bg-white text-slate-500 hover:bg-slate-50 border border-slate-200/60 hover:text-slate-900'
+                        }`}
+                    >
+                        {tab === 'geral' ? 'Visão Geral' : tab === 'relatorios' ? 'Relatórios' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                    </button>
+                ))}
+            </div>
+
+            {/* CONTEÚDO DAS ABAS */}
+            
+            {activeTab === 'geral' && (
+                <>
+                    {/* KPIs Grid */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                 {/* KPI 1 */}
                 <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm relative overflow-hidden group">
@@ -284,7 +354,11 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                     </div>
                 </div>
             </div>
+            </>
+            )}
 
+            {activeTab === 'medicamentos' && (
+            <>
             {/* Predictive Analysis Section */}
             <div className="bg-gradient-to-br from-indigo-50 to-white rounded-3xl p-6 border border-indigo-100 shadow-sm mb-8">
                 <div className="flex items-start justify-between mb-6">
@@ -351,8 +425,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                     )}
                 </div>
             </div>
-
-            {/* Listas Críticas Resumidas */}
+            
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Medicamentos Zerados */}
                 <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm">
@@ -378,8 +451,14 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                         )}
                     </div>
                 </div>
+            </div>
+            </>
+            )}
 
-                {/* Ultimos Pacientes Atendidos */}
+            {activeTab === 'pacientes' && (
+            <>
+            {/* Ultimos Pacientes Atendidos */}
+            <div className="grid grid-cols-1 gap-6">
                 <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm">
                     <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight mb-4 flex items-center gap-2">
                         <Users className="w-4 h-4 text-emerald-500" />
@@ -405,6 +484,83 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                     </div>
                 </div>
             </div>
+            </>
+            )}
+
+            {activeTab === 'relatorios' && (
+            <div className="space-y-6">
+                <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div>
+                        <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
+                            <Activity className="w-5 h-5 text-pink-500" />
+                            Relatórios Gerenciais
+                        </h3>
+                        <p className="text-slate-500 text-[10px] font-bold uppercase mt-1 tracking-widest">
+                            Medicamentos Zerados ou em Alerta
+                        </p>
+                    </div>
+                    <button 
+                        onClick={handleExportCSV}
+                        className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-800 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-2"
+                    >
+                        <FileDown className="w-4 h-4" />
+                        Baixar Relatório (CSV)
+                    </button>
+                </div>
+
+                <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm">
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="border-b border-slate-100">
+                                    <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Medicamento</th>
+                                    <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Lote & Validade</th>
+                                    <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Situação</th>
+                                    <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Estoque</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {lowStockAlerts.map(med => (
+                                    <tr key={med.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                                        <td className="p-4">
+                                            <div className="font-extrabold text-slate-800 text-xs">{med.nome}</div>
+                                            {med.principio_ativo && <div className="text-[10px] text-slate-500 font-medium">{med.principio_ativo}</div>}
+                                            <div className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">
+                                                {med.categoria} • {med.tipo} {med.dosagem ? `• ${med.dosagem}` : ''}
+                                            </div>
+                                        </td>
+                                        <td className="p-4">
+                                            <div className="text-xs font-bold text-slate-600">Lote: {med.lote}</div>
+                                            {med.validade && <div className="text-[10px] text-slate-400 mt-0.5">Val: {med.validade}</div>}
+                                            {med.fornecedor && <div className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">Forn: {med.fornecedor}</div>}
+                                        </td>
+                                        <td className="p-4 text-center">
+                                            {med.quantidade === 0 ? (
+                                                <span className="inline-flex items-center px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-wider bg-rose-100 text-rose-700">Zerado</span>
+                                            ) : (
+                                                <span className="inline-flex items-center px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-wider bg-amber-100 text-amber-700">Estoque Baixo</span>
+                                            )}
+                                        </td>
+                                        <td className="p-4 text-right">
+                                            <div className="flex items-end justify-end gap-1">
+                                                <span className={`font-black text-sm ${med.quantidade === 0 ? 'text-rose-600' : 'text-amber-600'}`}>{med.quantidade}</span>
+                                                <span className="text-[9px] font-bold text-slate-400 mb-0.5 lowercase">{med.unidade || 'un'}</span>
+                                            </div>
+                                            <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Mín: {med.limite_minimo}</div>
+                                        </td>
+                                    </tr>
+                                ))}
+                                {lowStockAlerts.length === 0 && (
+                                    <tr>
+                                        <td colSpan={4} className="p-8 text-center text-slate-400 text-xs font-bold uppercase tracking-wider">Nenhum medicamento em estado crítico.</td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            )}
 
         </div>
     );

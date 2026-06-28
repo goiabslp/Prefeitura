@@ -6,6 +6,7 @@ import { getPacientes, createPaciente } from '../../services/consultasService';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import { FarmaciaPdfGenerator } from './FarmaciaPdfGenerator';
+import { useFarmaciaAlert } from './FarmaciaAlertContext';
 
 interface RetirarScreenProps {
     currentUser: User;
@@ -20,6 +21,8 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
     onNavigate,
     appState
 }) => {
+    const { showAlert } = useFarmaciaAlert();
+
     // DB Data states
     const [medicamentos, setMedicamentos] = useState<FarmaciaMedicamento[]>([]);
     const [pacientes, setPacientes] = useState<ConsultaPaciente[]>([]);
@@ -291,7 +294,7 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
             pdf.save(`Comprovante-Retirada-Farmacia-${protocol}.pdf`);
         } catch (error) {
             console.error('Erro ao gerar PDF do agendamento:', error);
-            alert('Não foi possível gerar o PDF no momento.');
+            showAlert('Não foi possível gerar o PDF no momento.', 'error');
         } finally {
             setIsGenerating(false);
             setPrintingMov(null);
@@ -302,18 +305,18 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
     const handlePreSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (!patientName || !patientCpf || !selectedMedId || !quantity || !withdrawalDate) {
-            alert('Por favor, preencha todos os campos obrigatórios.');
+            showAlert('Por favor, preencha todos os campos obrigatórios.', 'error');
             return;
         }
 
         const qtyNum = parseInt(quantity, 10);
         if (isNaN(qtyNum) || qtyNum <= 0) {
-            alert('A quantidade deve ser um número inteiro maior que zero.');
+            showAlert('A quantidade deve ser um número inteiro maior que zero.', 'error');
             return;
         }
 
         if (!selectedMed) {
-            alert('Selecione um medicamento válido.');
+            showAlert('Selecione um medicamento válido.', 'error');
             return;
         }
 
@@ -323,7 +326,7 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
     // Real checkout / save handler
     const handleConfirmSubmit = async () => {
         if (!patientName || !patientCpf || !selectedMedId || !quantity || !withdrawalDate) {
-            alert('Por favor, preencha todos os campos obrigatórios.');
+            showAlert('Por favor, preencha todos os campos obrigatórios.', 'error');
             return;
         }
 
@@ -416,7 +419,7 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
             setQuantity(savedQuantity);
             setObservacoes(savedObservacoes);
             setIsPatientUnlocked(true);
-            alert(err.message || 'Erro ao registrar a retirada.');
+            showAlert(err.message || 'Erro ao registrar a retirada.', 'error');
         } finally {
             setSaving(false);
         }
@@ -748,7 +751,7 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                             onSubmit={async (e) => {
                                 e.preventDefault();
                                 if (!newPatientName || !pendingCpf || !newPatientBirthDate || !newPatientCity) {
-                                    alert('Por favor, preencha todos os campos obrigatórios.');
+                                    showAlert('Por favor, preencha todos os campos obrigatórios.', 'error');
                                     return;
                                 }
                                 setRegistering(true);
@@ -780,11 +783,12 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                         setNewPatientStreet('');
                                         setNewPatientCity('SÃO JOSÉ DO GOIABAL -MG');
                                         setIsRegModalOpen(false);
+                                        showAlert('Paciente cadastrado com sucesso!', 'success');
                                     } else {
-                                        alert('Erro ao cadastrar paciente.');
+                                        showAlert('Erro ao cadastrar paciente.', 'error');
                                     }
                                 } catch (err: any) {
-                                    alert(err.message || 'Erro ao cadastrar paciente.');
+                                    showAlert(err.message || 'Erro ao cadastrar paciente.', 'error');
                                 } finally {
                                     setRegistering(false);
                                 }

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { User } from '../../types';
 import { Settings, Plus, Trash2, ShieldCheck, Users, HelpCircle, Save, Loader2, Info } from 'lucide-react';
 import * as db from '../../services/farmaciaService';
+import { useFarmaciaAlert } from './FarmaciaAlertContext';
 
 interface DadosScreenProps {
     currentUser: User;
@@ -14,6 +15,8 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
     onBack,
     onNavigate
 }) => {
+    const { showAlert, showConfirm } = useFarmaciaAlert();
+
     // Config states
     const [categories, setCategories] = useState<string[]>(['CBAF', 'CESAF', 'CEAF']);
     const [suppliers, setSuppliers] = useState<string[]>([]);
@@ -52,9 +55,9 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
         setSaving(true);
         try {
             await db.saveFarmaciaConfig('limite_minimo_padrao', defaultMinLimit);
-            alert('Configuração de limite mínimo padrão salva!');
+            showAlert('Configuração de limite mínimo padrão salva!', 'success');
         } catch (error) {
-            alert('Erro ao salvar configuração.');
+            showAlert('Erro ao salvar configuração.', 'error');
         } finally {
             setSaving(false);
         }
@@ -65,7 +68,7 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
         if (!newCategory) return;
         const cat = newCategory.toUpperCase().trim();
         if (categories.includes(cat)) {
-            alert('Esta categoria já existe.');
+            showAlert('Esta categoria já existe.', 'error');
             return;
         }
         const updated = [...categories, cat];
@@ -76,13 +79,14 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
 
     const handleDeleteCategory = async (catToDelete: string) => {
         if (['CBAF', 'CESAF', 'CEAF'].includes(catToDelete)) {
-            alert('Categorias básicas do SUS (CBAF, CESAF, CEAF) são obrigatórias e não podem ser excluídas.');
+            showAlert('Categorias básicas do SUS (CBAF, CESAF, CEAF) são obrigatórias e não podem ser excluídas.', 'error');
             return;
         }
-        if (!window.confirm(`Excluir a categoria "${catToDelete}"?`)) return;
-        const updated = categories.filter(c => c !== catToDelete);
-        setCategories(updated);
-        await db.saveFarmaciaConfig('categorias', updated);
+        showConfirm(`Excluir a categoria "${catToDelete}"?`, async () => {
+            const updated = categories.filter(c => c !== catToDelete);
+            setCategories(updated);
+            await db.saveFarmaciaConfig('categorias', updated);
+        });
     };
 
     const handleAddSupplier = async (e: React.FormEvent) => {
@@ -90,7 +94,7 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
         if (!newSupplier) return;
         const sup = newSupplier.trim();
         if (suppliers.includes(sup)) {
-            alert('Este fornecedor já está cadastrado.');
+            showAlert('Este fornecedor já está cadastrado.', 'error');
             return;
         }
         const updated = [...suppliers, sup];
@@ -100,10 +104,11 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
     };
 
     const handleDeleteSupplier = async (supToDelete: string) => {
-        if (!window.confirm(`Remover fornecedor "${supToDelete}"?`)) return;
-        const updated = suppliers.filter(s => s !== supToDelete);
-        setSuppliers(updated);
-        await db.saveFarmaciaConfig('fornecedores', updated);
+        showConfirm(`Remover fornecedor "${supToDelete}"?`, async () => {
+            const updated = suppliers.filter(s => s !== supToDelete);
+            setSuppliers(updated);
+            await db.saveFarmaciaConfig('fornecedores', updated);
+        });
     };
 
     return (
