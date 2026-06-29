@@ -7,10 +7,13 @@ import {
 } from 'lucide-react';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-    LineChart, Line
+    LineChart, Line, PieChart as RechartsPieChart, Pie, Cell
 } from 'recharts';
 import { startOfMonth, endOfMonth, subMonths, isWithinInterval, parseISO, format, formatDistanceToNow, differenceInDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { jsPDF } from 'jspdf';
+import { savePurchaseOrder } from '../../services/comprasService';
+import { useNotification } from '../../contexts/NotificationContext';
 
 interface DashboardScreenProps {
     currentUser: User;
@@ -43,6 +46,13 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     const [medicamentos, setMedicamentos] = useState<FarmaciaMedicamento[]>([]);
     const [movimentacoes, setMovimentacoes] = useState<FarmaciaMovimentacao[]>([]);
     const [loading, setLoading] = useState(true);
+
+    const [reportView, setReportView] = useState<'alertas' | 'compras'>('alertas');
+    const [comprasSearch, setComprasSearch] = useState('');
+    const [selectedCompras, setSelectedCompras] = useState<Record<string, { quantidade: number, nome: string, unidade: string, lote: string }>>({});
+    const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
+    const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
+    const { addNotification } = useNotification();
 
     const loadData = async () => {
         try {
@@ -106,37 +116,32 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     const daysPassedThisMonth = differenceInDays(now, currentMonthStart) || 1; // avoid divide by zero
     const daysInCurrentMonth = differenceInDays(currentMonthEnd, currentMonthStart) + 1;
 
-    // Filters for current and last month (Saídas = Dispensações)
-    const currentMonthDispenses = movimentacoes.filter(m => 
-        m.tipo === 'Saída' && m.data && isWithinInterval(parseISO(m.data), { start: currentMonthStart, end: currentMonthEnd })
-    );
-
-    const lastMonthDispenses = movimentacoes.filter(m => 
-        m.tipo === 'Saída' && m.data && isWithinInterval(parseISO(m.data), { start: lastMonthStart, end: lastMonthEnd })
-    );
+    // ZERADO A PEDIDO DO USUÁRIO
+    const currentMonthDispenses: FarmaciaMovimentacao[] = []; 
+    const lastMonthDispenses: FarmaciaMovimentacao[] = [];
 
     // KPI 1: Total Medicamentos Entregues
-    const totalMedsCurrentMonth = currentMonthDispenses.reduce((acc, curr) => acc + curr.quantidade, 0);
-    const totalMedsLastMonth = lastMonthDispenses.reduce((acc, curr) => acc + curr.quantidade, 0);
-    const varMeds = totalMedsLastMonth === 0 ? 100 : ((totalMedsCurrentMonth - totalMedsLastMonth) / totalMedsLastMonth) * 100;
+    const totalMedsCurrentMonth = 0; // currentMonthDispenses.reduce((acc, curr) => acc + curr.quantidade, 0);
+    const totalMedsLastMonth = 0; // lastMonthDispenses.reduce((acc, curr) => acc + curr.quantidade, 0);
+    const varMeds = 0; // totalMedsLastMonth === 0 ? 100 : ((totalMedsCurrentMonth - totalMedsLastMonth) / totalMedsLastMonth) * 100;
 
     // KPI 2: Pacientes Atendidos (Unique CPFs or Names in 'Saída')
     const getUniquePatientsCount = (movs: FarmaciaMovimentacao[]) => {
         const unique = new Set(movs.filter(m => m.paciente_cpf || m.paciente_nome).map(m => m.paciente_cpf || m.paciente_nome));
         return unique.size;
     };
-    const totalPatientsCurrentMonth = getUniquePatientsCount(currentMonthDispenses);
-    const totalPatientsLastMonth = getUniquePatientsCount(lastMonthDispenses);
-    const varPatients = totalPatientsLastMonth === 0 ? 100 : ((totalPatientsCurrentMonth - totalPatientsLastMonth) / totalPatientsLastMonth) * 100;
+    const totalPatientsCurrentMonth = 0; // getUniquePatientsCount(currentMonthDispenses);
+    const totalPatientsLastMonth = 0; // getUniquePatientsCount(lastMonthDispenses);
+    const varPatients = 0; // totalPatientsLastMonth === 0 ? 100 : ((totalPatientsCurrentMonth - totalPatientsLastMonth) / totalPatientsLastMonth) * 100;
 
     // KPI 3: Estoque Crítico e Baixo
     const lowStockAlerts = useMemo(() => {
         // Simplified low stock calculation for dashboard (can be same logic as FarmaciaModule if needed)
         // Here we use a simpler threshold logic: if quantity < limit_minimo
-        return medicamentos.filter(med => med.quantidade <= med.limite_minimo);
+        return medicamentos.filter(med => med.quantidade <= med.limite_minimo && !(med.quantidade === 0 && med.lote === 'LOTE-INICIAL'));
     }, [medicamentos]);
 
-    const zeroStockAlerts = medicamentos.filter(med => med.quantidade === 0);
+    const zeroStockAlerts = medicamentos.filter(med => med.quantidade === 0 && med.lote !== 'LOTE-INICIAL');
 
     // CHart 1: Fluxo de Dispensação por Categoria no mês atual
     const dispensesByCategory = useMemo(() => {
@@ -205,6 +210,167 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         return recommendations.sort((a, b) => b.toBuy - a.toBuy);
     }, [medicamentos, movimentacoes, now, daysInCurrentMonth, daysPassedThisMonth]);
 
+    const renameStats = useMemo(() => {
+        const stats = {
+            CBAF: { total: 0, disponivel: 0, items: [] as FarmaciaMedicamento[] },
+            CESAF: { total: 0, disponivel: 0, items: [] as FarmaciaMedicamento[] },
+            CEAF: { total: 0, disponivel: 0, items: [] as FarmaciaMedicamento[] },
+            OUTROS: { total: 0, disponivel: 0, items: [] as FarmaciaMedicamento[] }
+        };
+
+        medicamentos.forEach(med => {
+            const cat = med.categoria?.toUpperCase() || 'OUTROS';
+            const group = stats[cat as keyof typeof stats] ? cat as keyof typeof stats : 'OUTROS';
+            
+            stats[group].total += 1;
+            if (med.quantidade > 0) {
+                stats[group].disponivel += 1;
+            }
+            stats[group].items.push(med);
+        });
+
+        return stats;
+    }, [medicamentos]);
+
+    const renameChartData = useMemo(() => {
+        return [
+            { name: 'CBAF', value: renameStats.CBAF.disponivel, total: renameStats.CBAF.total, fill: '#ec4899' }, // Pink
+            { name: 'CESAF', value: renameStats.CESAF.disponivel, total: renameStats.CESAF.total, fill: '#8b5cf6' }, // Purple
+            { name: 'CEAF', value: renameStats.CEAF.disponivel, total: renameStats.CEAF.total, fill: '#3b82f6' }, // Blue
+        ].filter(d => d.total > 0);
+    }, [renameStats]);
+
+    const handleOpenOrderModal = () => {
+        const itemIds = Object.keys(selectedCompras);
+        if (itemIds.length === 0) {
+            addNotification('Aviso', 'Selecione pelo menos um medicamento para o pedido', 'error');
+            return;
+        }
+        setIsOrderModalOpen(true);
+    };
+
+    const handleDownloadPDF = () => {
+        const itemIds = Object.keys(selectedCompras);
+        if (itemIds.length === 0) return;
+
+        const purchaseItems = itemIds.map(id => ({
+            id: crypto.randomUUID(),
+            name: selectedCompras[id].nome,
+            quantity: selectedCompras[id].quantidade,
+            unit: selectedCompras[id].unidade,
+            details: `Lote ref: ${selectedCompras[id].lote || 'N/A'}`
+        }));
+
+        const doc = new jsPDF();
+        doc.setFontSize(20);
+        doc.text('Pedido de Compras - Farmácia Popular', 20, 20);
+        doc.setFontSize(12);
+        doc.text(`Data: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, 20, 30);
+        doc.text(`Solicitante: ${currentUser.name}`, 20, 40);
+        
+        doc.setFontSize(14);
+        doc.text('Itens Solicitados:', 20, 60);
+        
+        let y = 70;
+        doc.setFontSize(10);
+        purchaseItems.forEach((item, index) => {
+            doc.text(`${index + 1}. ${item.name} - Qtd: ${item.quantity} ${item.unit}`, 20, y);
+            y += 10;
+            if (y > 280) {
+                doc.addPage();
+                y = 20;
+            }
+        });
+        
+        doc.save(`pedido_compras_farmacia_${format(new Date(), 'yyyyMMdd_HHmm')}.pdf`);
+    };
+
+    const handleSendOrder = async () => {
+        const itemIds = Object.keys(selectedCompras);
+        if (itemIds.length === 0) return;
+
+        setIsSubmittingOrder(true);
+        try {
+            const purchaseItems = itemIds.map(id => ({
+                id: crypto.randomUUID(),
+                name: selectedCompras[id].nome,
+                quantity: selectedCompras[id].quantidade,
+                unit: selectedCompras[id].unidade,
+                details: `Lote ref: ${selectedCompras[id].lote || 'N/A'}`,
+                category: 'Material de Uso',
+                isTendered: false
+            }));
+
+            const newOrder = {
+                id: crypto.randomUUID(), // Gerar ID local para evitar null violation
+                protocol: `FARM-${format(new Date(), 'yyyyMMdd')}-${Math.floor(Math.random() * 10000)}`,
+                title: `Pedido de Reposição - Farmácia (${format(new Date(), 'dd/MM/yyyy')})`,
+                status: 'pending',
+                purchaseStatus: 'budgeting', // initial status
+                createdAt: new Date().toISOString(),
+                userId: currentUser.id,
+                userName: currentUser.name,
+                blockType: 'compras',
+                description: 'Reposição de medicamentos para a Farmácia Popular. Solicitamos prioridade para manter o estoque regularizado e garantir o atendimento à população.',
+                documentSnapshot: {
+                    content: {
+                        requesterName: currentUser.name,
+                        requesterSector: 'Farmácia Popular',
+                        description: 'Reposição de medicamentos essenciais da RENAME que atingiram limite mínimo ou estão zerados no sistema da Farmácia Popular.',
+                        purchaseItems
+                    }
+                }
+            };
+
+            await savePurchaseOrder(newOrder as any);
+            addNotification('Sucesso', 'Pedido enviado com sucesso para o setor de Compras!', 'success');
+            setSelectedCompras({});
+            setIsOrderModalOpen(false);
+            setReportView('alertas');
+        } catch (error: any) {
+            console.error('Error closing order:', error);
+            addNotification('Erro', error.message || 'Erro ao enviar pedido', 'error');
+        } finally {
+            setIsSubmittingOrder(false);
+        }
+    };
+
+    const handleToggleItemSelection = (med: FarmaciaMedicamento) => {
+        setSelectedCompras(prev => {
+            const current = { ...prev };
+            if (current[med.id]) {
+                delete current[med.id];
+            } else {
+                current[med.id] = { quantidade: 1, nome: med.nome, unidade: med.unidade || 'un', lote: med.lote };
+            }
+            return current;
+        });
+    };
+
+    const handleItemQuantityChange = (medId: string, quantity: number) => {
+        setSelectedCompras(prev => {
+            if (!prev[medId]) return prev;
+            return {
+                ...prev,
+                [medId]: { ...prev[medId], quantidade: Math.max(1, quantity) }
+            };
+        });
+    };
+
+    const comprasFilteredMedicamentos = useMemo(() => {
+        const term = comprasSearch.toLowerCase().trim();
+        
+        // Só deve trazer os resultados mediante pesquisa.
+        // Se a busca estiver vazia, mostramos apenas os itens que o usuário JÁ selecionou
+        // para que ele possa revisar o pedido antes de fechar.
+        if (!term) {
+            return medicamentos.filter(med => !!selectedCompras[med.id]);
+        }
+        
+        return medicamentos.filter(med => {
+            return med.nome.toLowerCase().startsWith(term) || med.principio_ativo?.toLowerCase().startsWith(term);
+        });
+    }, [medicamentos, comprasSearch, selectedCompras]);
 
     if (loading) {
         return (
@@ -238,7 +404,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
             {/* Tabs */}
             <div className="flex overflow-x-auto gap-2 mb-6 pb-2 custom-scrollbar">
-                {['geral', 'medicamentos', 'pacientes', 'relatorios'].map(tab => (
+                {['geral', 'medicamentos', 'pacientes', 'relatorios', 'rename'].map(tab => (
                     <button
                         key={tab}
                         onClick={() => handleTabChange(tab)}
@@ -248,7 +414,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                                 : 'bg-white text-slate-500 hover:bg-slate-50 border border-slate-200/60 hover:text-slate-900'
                         }`}
                     >
-                        {tab === 'geral' ? 'Visão Geral' : tab === 'relatorios' ? 'Relatórios' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                        {tab === 'geral' ? 'Visão Geral' : tab === 'relatorios' ? 'Relatórios' : tab === 'rename' ? 'RENAME' : tab.charAt(0).toUpperCase() + tab.slice(1)}
                     </button>
                 ))}
             </div>
@@ -496,18 +662,46 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                             Relatórios Gerenciais
                         </h3>
                         <p className="text-slate-500 text-[10px] font-bold uppercase mt-1 tracking-widest">
-                            Medicamentos Zerados ou em Alerta
+                            {reportView === 'alertas' ? 'Medicamentos Zerados ou em Alerta' : 'Novo Pedido de Reposição'}
                         </p>
                     </div>
-                    <button 
-                        onClick={handleExportCSV}
-                        className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-800 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-2"
-                    >
-                        <FileDown className="w-4 h-4" />
-                        Baixar Relatório (CSV)
-                    </button>
+                    
+                    <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl">
+                        <button 
+                            onClick={() => setReportView('alertas')}
+                            className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors ${reportView === 'alertas' ? 'bg-white text-pink-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                        >
+                            Alertas de Estoque
+                        </button>
+                        <button 
+                            onClick={() => setReportView('compras')}
+                            className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors ${reportView === 'compras' ? 'bg-white text-pink-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                        >
+                            Pedido de Compras
+                        </button>
+                    </div>
+
+                    {reportView === 'alertas' ? (
+                        <button 
+                            onClick={handleExportCSV}
+                            className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-800 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-2"
+                        >
+                            <FileDown className="w-4 h-4" />
+                            Baixar Relatório (CSV)
+                        </button>
+                    ) : (
+                        <button 
+                            onClick={handleOpenOrderModal}
+                            disabled={isSubmittingOrder || Object.keys(selectedCompras).length === 0}
+                            className={`px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-2 ${Object.keys(selectedCompras).length > 0 ? 'bg-pink-600 hover:bg-pink-700 text-white shadow-md' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}
+                        >
+                            {isSubmittingOrder ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <ShoppingCart className="w-4 h-4" />}
+                            Fechar Pedido ({Object.keys(selectedCompras).length})
+                        </button>
+                    )}
                 </div>
 
+                {reportView === 'alertas' ? (
                 <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm">
                     <div className="overflow-x-auto">
                         <table className="w-full text-left border-collapse">
@@ -559,7 +753,235 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                         </table>
                     </div>
                 </div>
+                ) : (
+                <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm">
+                    <div className="mb-4">
+                        <input
+                            type="text"
+                            placeholder="Buscar medicamentos para adicionar ao pedido..."
+                            value={comprasSearch}
+                            onChange={(e) => setComprasSearch(e.target.value)}
+                            className="w-full pl-4 pr-4 py-3 border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 focus:outline-none focus:border-pink-500 bg-slate-50 focus:bg-white transition-all placeholder:text-slate-400"
+                        />
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="border-b border-slate-100">
+                                    <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest w-12">Sel</th>
+                                    <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Medicamento</th>
+                                    <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Situação</th>
+                                    <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Quantidade Solicitada</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {comprasFilteredMedicamentos.slice(0, 100).map(med => (
+                                    <tr key={med.id} className={`border-b border-slate-50 transition-colors ${selectedCompras[med.id] ? 'bg-pink-50/50' : 'hover:bg-slate-50/50'}`}>
+                                        <td className="p-4">
+                                            <input 
+                                                type="checkbox" 
+                                                checked={!!selectedCompras[med.id]}
+                                                onChange={() => handleToggleItemSelection(med)}
+                                                className="w-4 h-4 text-pink-600 rounded focus:ring-pink-500 border-slate-300"
+                                            />
+                                        </td>
+                                        <td className="p-4">
+                                            <div className="font-extrabold text-slate-800 text-xs">{med.nome}</div>
+                                            {med.principio_ativo && <div className="text-[10px] text-slate-500 font-medium">{med.principio_ativo}</div>}
+                                            <div className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">
+                                                {med.categoria} • {med.tipo} {med.dosagem ? `• ${med.dosagem}` : ''}
+                                            </div>
+                                        </td>
+                                        <td className="p-4 text-center">
+                                            {med.quantidade === 0 ? (
+                                                <span className="inline-flex items-center px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-wider bg-rose-100 text-rose-700">Zerado</span>
+                                            ) : med.quantidade <= med.limite_minimo ? (
+                                                <span className="inline-flex items-center px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-wider bg-amber-100 text-amber-700">Baixo</span>
+                                            ) : (
+                                                <span className="inline-flex items-center px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-700">OK</span>
+                                            )}
+                                            <div className="text-[9px] font-bold text-slate-400 mt-1">Estoque atual: {med.quantidade}</div>
+                                        </td>
+                                        <td className="p-4 text-right">
+                                            {selectedCompras[med.id] ? (
+                                                <div className="flex items-center justify-end gap-2">
+                                                    <input 
+                                                        type="number"
+                                                        min="1"
+                                                        value={selectedCompras[med.id].quantidade}
+                                                        onChange={(e) => handleItemQuantityChange(med.id, parseInt(e.target.value) || 1)}
+                                                        className="w-20 p-2 text-sm font-bold border border-slate-200 rounded-lg text-right focus:outline-none focus:border-pink-500"
+                                                    />
+                                                    <span className="text-[9px] font-bold text-slate-400 uppercase">{med.unidade || 'un'}</span>
+                                                </div>
+                                            ) : (
+                                                <span className="text-xs text-slate-300 italic">Selecione para pedir</span>
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))}
+                                {comprasFilteredMedicamentos.length === 0 && (
+                                    <tr>
+                                        <td colSpan={4} className="p-8 text-center text-slate-400 text-xs font-bold uppercase tracking-wider">Nenhum medicamento encontrado.</td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                )}
             </div>
+            )}
+            {activeTab === 'rename' && (
+                <div className="space-y-6">
+                    <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                        <div>
+                            <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
+                                <Activity className="w-5 h-5 text-pink-500" />
+                                Relação Nacional de Medicamentos Essenciais (RENAME)
+                            </h3>
+                            <p className="text-slate-500 text-[10px] font-bold uppercase mt-1 tracking-widest">
+                                Visão Geral de Disponibilidade por Categoria
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                        {/* Gráfico Donut */}
+                        <div className="md:col-span-1 bg-white rounded-3xl p-6 border border-slate-100 shadow-sm flex flex-col justify-center items-center">
+                            <h4 className="text-sm font-bold text-slate-700 uppercase mb-4 text-center">Disponibilidade Global</h4>
+                            <div className="w-full h-48">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <RechartsPieChart>
+                                        <Pie
+                                            data={renameChartData}
+                                            innerRadius={50}
+                                            outerRadius={70}
+                                            paddingAngle={5}
+                                            dataKey="value"
+                                        >
+                                            {renameChartData.map((entry, index) => (
+                                                <Cell key={`cell-${index}`} fill={entry.fill} />
+                                            ))}
+                                        </Pie>
+                                        <Tooltip formatter={(value: number, name: string, props: any) => [`${value} itens em estoque`, name]} />
+                                    </RechartsPieChart>
+                                </ResponsiveContainer>
+                            </div>
+                            <div className="flex flex-col gap-2 w-full mt-4">
+                                {renameChartData.map((entry, index) => (
+                                    <div key={index} className="flex justify-between items-center text-xs font-bold text-slate-600">
+                                        <div className="flex items-center gap-1">
+                                            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: entry.fill }}></div>
+                                            {entry.name}
+                                        </div>
+                                        <span>{Math.round((entry.value / entry.total) * 100)}%</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Detalhamento CBAF, CESAF, CEAF */}
+                        <div className="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-6">
+                            {[
+                                { title: 'Básico (CBAF)', id: 'CBAF', stats: renameStats.CBAF, color: 'text-pink-600', bg: 'bg-pink-100' },
+                                { title: 'Estratégico (CESAF)', id: 'CESAF', stats: renameStats.CESAF, color: 'text-purple-600', bg: 'bg-purple-100' },
+                                { title: 'Especializado (CEAF)', id: 'CEAF', stats: renameStats.CEAF, color: 'text-blue-600', bg: 'bg-blue-100' }
+                            ].map(cat => (
+                                <div key={cat.id} className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm flex flex-col h-full">
+                                    <h4 className={`text-sm font-black uppercase tracking-wider mb-2 ${cat.color}`}>{cat.title}</h4>
+                                    
+                                    <div className="flex justify-between items-end mb-4">
+                                        <div>
+                                            <div className="text-3xl font-black text-slate-800">
+                                                {cat.stats.total > 0 ? Math.round((cat.stats.disponivel / cat.stats.total) * 100) : 0}%
+                                            </div>
+                                            <div className="text-[10px] font-bold text-slate-400 uppercase">Em Estoque</div>
+                                        </div>
+                                        <div className="text-right">
+                                            <div className="text-sm font-bold text-slate-600">{cat.stats.disponivel} / {cat.stats.total}</div>
+                                            <div className="text-[10px] font-bold text-slate-400 uppercase">Itens Disponíveis</div>
+                                        </div>
+                                    </div>
+
+                                    {/* Lista de Medicamentos (mini) */}
+                                    <div className="flex-1 bg-slate-50 rounded-xl p-3 overflow-y-auto max-h-64 custom-scrollbar">
+                                        <div className="space-y-2">
+                                            {cat.stats.items.map(med => (
+                                                <div key={med.id} className="flex justify-between items-center p-2 bg-white rounded-lg border border-slate-100">
+                                                    <div>
+                                                        <div className="text-xs font-bold text-slate-700 truncate max-w-[120px]" title={med.nome}>{med.nome}</div>
+                                                    </div>
+                                                    <div>
+                                                        {med.quantidade > 0 ? (
+                                                            <span className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-emerald-100 text-emerald-700">OK</span>
+                                                        ) : (
+                                                            <span className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-rose-100 text-rose-700">Zero</span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            {cat.stats.items.length === 0 && (
+                                                <div className="text-xs text-slate-400 text-center py-4 font-semibold italic">Nenhum medicamento nesta categoria.</div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {isOrderModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+                    <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+                        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                            <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
+                                <ShoppingCart className="w-5 h-5 text-pink-600" />
+                                Resumo do Pedido de Compras
+                            </h3>
+                            <button onClick={() => setIsOrderModalOpen(false)} className="text-slate-400 hover:text-slate-600 font-bold p-2">
+                                X
+                            </button>
+                        </div>
+                        <div className="p-6 max-h-[60vh] overflow-y-auto custom-scrollbar">
+                            <table className="w-full text-left border-collapse">
+                                <thead>
+                                    <tr>
+                                        <th className="pb-3 text-xs font-black text-slate-400 uppercase tracking-wider border-b border-slate-100">Medicamento</th>
+                                        <th className="pb-3 text-xs font-black text-slate-400 uppercase tracking-wider border-b border-slate-100 text-right">Qtd Solicitada</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {Object.values(selectedCompras).map((item, index) => (
+                                        <tr key={index} className="border-b border-slate-50 last:border-0">
+                                            <td className="py-3 text-sm font-bold text-slate-700">{item.nome}</td>
+                                            <td className="py-3 text-sm font-bold text-slate-600 text-right">{item.quantidade} {item.unidade}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
+                            <button 
+                                onClick={handleDownloadPDF}
+                                className="px-5 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-2"
+                            >
+                                <FileDown className="w-4 h-4 text-slate-500" />
+                                Baixar PDF
+                            </button>
+                            <button 
+                                onClick={handleSendOrder}
+                                disabled={isSubmittingOrder}
+                                className="px-5 py-2.5 bg-pink-600 hover:bg-pink-700 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-2 shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {isSubmittingOrder ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <ShoppingCart className="w-4 h-4" />}
+                                Enviar para o Compras
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
 
         </div>

@@ -86,7 +86,9 @@ export const FarmaciaModule: React.FC<FarmaciaModuleProps> = ({
     // Filter low stock medicines based on rule:
     // 50% = (Estoque Anterior + Último Abastecimento) / 2
     const lowStockMedicamentos = useMemo(() => {
-        return medicamentos.map(med => {
+        return medicamentos
+            .filter(med => !(med.quantidade === 0 && med.lote === 'LOTE-INICIAL'))
+            .map(med => {
             const medMovs = movimentacoes
                 .filter(m => m.medicamento_id === med.id)
                 .sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime());

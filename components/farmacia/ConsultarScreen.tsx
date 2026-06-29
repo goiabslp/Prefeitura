@@ -72,13 +72,18 @@ export const ConsultarScreen: React.FC<ConsultarScreenProps> = ({
 
         // Filter medicamentos matching query (name or lote or principio_ativo)
         const matched = medicamentos.filter(med => {
-            // Medicamentos importados inicialmente começam com LOTE-INICIAL e quantidade 0 (inativos)
-            const isInativo = med.quantidade === 0 && med.lote === 'LOTE-INICIAL';
-            if (isInativo) return false;
+            // Não deve retornar medicamentos inativos ou com estoque zerado
+            if (med.quantidade === 0) return false;
 
-            return med.nome.toLowerCase().includes(term) || 
-                   med.lote.toLowerCase().includes(term) ||
-                   (med.principio_ativo && med.principio_ativo.toLowerCase().includes(term));
+            const matchAtStart = (str: string | undefined | null) => {
+                if (!str) return false;
+                const lowerStr = str.toLowerCase();
+                return lowerStr.startsWith(term) || lowerStr.includes(` ${term}`);
+            };
+
+            return matchAtStart(med.nome) || 
+                   matchAtStart(med.lote) ||
+                   matchAtStart(med.principio_ativo);
         });
 
         // Group by name and dosage (case insensitive key)

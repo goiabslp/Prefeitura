@@ -60,6 +60,8 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [isAdjustModalOpen, setIsAdjustModalOpen] = useState(false);
     const [selectedMed, setSelectedMed] = useState<FarmaciaMedicamento | null>(null);
+    const [isAddStockModalOpen, setIsAddStockModalOpen] = useState(false);
+    const [stockToAdd, setStockToAdd] = useState({ lote: '', validade: '', quantidade: '' });
 
     // Custom select dropdown states
     const [isAddCatOpen, setIsAddCatOpen] = useState(false);
@@ -476,6 +478,94 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
         });
     };
 
+    const handleCreateStock = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!selectedMed || !stockToAdd.lote || !stockToAdd.validade || !stockToAdd.quantidade) {
+            showAlert('Preencha os campos obrigatórios.', 'error');
+            return;
+        }
+
+        const qtyNum = parseInt(stockToAdd.quantidade, 10);
+        if (qtyNum <= 0) {
+            showAlert('Quantidade deve ser maior que zero.', 'error');
+            return;
+        }
+
+        const existingLote = medicamentos.find(med => 
+            med.nome.toUpperCase() === selectedMed.nome.toUpperCase() &&
+            (med.tipo || '').toUpperCase() === (selectedMed.tipo || '').toUpperCase() &&
+            (med.dosagem || '').toUpperCase() === (selectedMed.dosagem || '').toUpperCase() &&
+            med.lote.toUpperCase() === stockToAdd.lote.toUpperCase()
+        );
+
+        setSaving(true);
+        try {
+            if (existingLote) {
+                await db.updateMedicamento(existingLote.id, {
+                    validade: stockToAdd.validade
+                });
+
+                await db.registrarMovimentacao({
+                    medicamento_id: existingLote.id,
+                    tipo: 'Entrada',
+                    quantidade: qtyNum,
+                    medicamento_nome: existingLote.nome,
+                    medicamento_categoria: existingLote.categoria,
+                    medicamento_tipo: existingLote.tipo,
+                    medicamento_dosagem: existingLote.dosagem,
+                    lote: existingLote.lote,
+                    validade: stockToAdd.validade,
+                    responsavel_nome: currentUser.name,
+                    responsavel_id: currentUser.id,
+                    data: new Date().toISOString(),
+                    observacoes: 'Adição de estoque'
+                });
+
+                showAlert('Estoque adicionado com sucesso!', 'success');
+            } else {
+                const newMed = await db.createMedicamento({
+                    nome: selectedMed.nome,
+                    categoria: selectedMed.categoria,
+                    quantidade: 0,
+                    unidade: selectedMed.unidade,
+                    validade: stockToAdd.validade,
+                    lote: stockToAdd.lote.toUpperCase(),
+                    limite_minimo: selectedMed.limite_minimo,
+                    tipo: selectedMed.tipo,
+                    dosagem: selectedMed.dosagem,
+                    fornecedor: selectedMed.fornecedor,
+                    principio_ativo: selectedMed.principio_ativo
+                });
+
+                if (newMed) {
+                    await db.registrarMovimentacao({
+                        medicamento_id: newMed.id,
+                        tipo: 'Entrada',
+                        quantidade: qtyNum,
+                        medicamento_nome: newMed.nome,
+                        medicamento_categoria: newMed.categoria,
+                        medicamento_tipo: newMed.tipo,
+                        medicamento_dosagem: newMed.dosagem,
+                        lote: newMed.lote,
+                        validade: newMed.validade,
+                        responsavel_nome: currentUser.name,
+                        responsavel_id: currentUser.id,
+                        data: new Date().toISOString(),
+                        observacoes: 'Cadastro de novo lote'
+                    });
+                    showAlert('Novo lote adicionado com sucesso!', 'success');
+                }
+            }
+            setIsAddStockModalOpen(false);
+            setStockToAdd({ lote: '', validade: '', quantidade: '' });
+            loadData(true);
+        } catch (error: any) {
+            showAlert(error.message || 'Erro ao adicionar estoque.', 'error');
+        } finally {
+            setSaving(false);
+        }
+    };
+
     // --- STOCK CONTROL / VIEW DETAILS ---
 
     const handleOpenAdjustModal = (med: FarmaciaMedicamento) => {
@@ -528,13 +618,6 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                     </div>
 
                     {canCreate && (
-                        <>
-                        <button 
-                            onClick={handleImportMeds}
-                            className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-md shrink-0 mr-2"
-                        >
-                            Importar Lote
-                        </button>
                         <button 
                             onClick={handleOpenAddModal}
                             className="px-4 py-2 bg-pink-600 hover:bg-pink-700 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-md flex items-center gap-2 shrink-0"
@@ -542,7 +625,6 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                             <Plus className="w-4 h-4" />
                             Novo Medicamento
                         </button>
-                        </>
                     )}
                 </div>
             </div>
@@ -560,8 +642,6 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                             <thead>
                                 <tr className="bg-slate-50 border-b border-slate-100 text-[9px] font-black text-slate-400 uppercase tracking-wider">
                                     <th className="p-3">Medicamento / Categoria</th>
-                                    <th className="p-3">Lote</th>
-                                    <th className="p-3">Validade</th>
                                     <th className="p-3 text-center">Quantidade</th>
                                     <th className="p-3 text-right">Ações</th>
                                 </tr>
@@ -569,7 +649,7 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                             <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-700">
                                 {paginatedMedicamentos.length === 0 ? (
                                     <tr>
-                                        <td colSpan={5} className="p-8 text-center text-slate-400 font-semibold italic">
+                                        <td colSpan={3} className="p-8 text-center text-slate-400 font-semibold italic">
                                             Nenhum lote ou medicamento encontrado.
                                         </td>
                                     </tr>
@@ -609,13 +689,6 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                                                         </span>
                                                     )}
                                                 </div>
-                                            </td>
-                                            <td className="p-3 font-mono font-bold text-slate-500">{med.lote}</td>
-                                            <td className="p-3">
-                                                <span className={`${isExpired ? 'text-rose-500 font-bold' : 'text-slate-600'}`}>
-                                                    {formatDateBr(med.validade)}
-                                                    {isExpired && ' (Vencido)'}
-                                                </span>
                                             </td>
                                             <td className="p-3 text-center">
                                                 <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-black border ${badgeClass}`}>
@@ -1291,7 +1364,18 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                         </div>
 
                         {/* Modal Footer */}
-                        <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end shrink-0">
+                        <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-between items-center shrink-0">
+                            <button
+                                onClick={() => {
+                                    setIsAdjustModalOpen(false);
+                                    setStockToAdd({ lote: '', validade: '', quantidade: '' });
+                                    setIsAddStockModalOpen(true);
+                                }}
+                                className="px-5 py-2.5 bg-pink-600 hover:bg-pink-700 text-white font-extrabold text-xs uppercase tracking-widest rounded-xl transition-all shadow-sm flex items-center gap-2"
+                            >
+                                <Plus className="w-4 h-4" />
+                                Adicionar Estoque
+                            </button>
                             <button
                                 onClick={() => setIsAdjustModalOpen(false)}
                                 className="px-5 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-extrabold text-xs uppercase tracking-widest rounded-xl transition-all shadow-sm active:scale-98"
@@ -1299,6 +1383,68 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                                 Fechar Consulta
                             </button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ADD STOCK MODAL */}
+            {isAddStockModalOpen && selectedMed && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200/50 flex flex-col animate-in zoom-in-95 duration-200">
+                        <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                            <div>
+                                <h3 className="font-extrabold text-slate-800 uppercase text-xs tracking-wide">
+                                    Adicionar Estoque
+                                </h3>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">
+                                    {selectedMed.nome}
+                                </p>
+                            </div>
+                            <button 
+                                onClick={() => setIsAddStockModalOpen(false)} 
+                                className="p-1.5 hover:bg-slate-200 rounded-lg text-slate-500 transition-colors"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <form onSubmit={handleCreateStock} className="p-6 space-y-4">
+                            <div>
+                                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Lote *</label>
+                                <input 
+                                    type="text" 
+                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold text-slate-900 uppercase" 
+                                    placeholder="Ex: LOTE123"
+                                    value={stockToAdd.lote} 
+                                    onChange={e => setStockToAdd({...stockToAdd, lote: e.target.value})} 
+                                    required 
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Validade *</label>
+                                <input 
+                                    type="date" 
+                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold text-slate-900 uppercase" 
+                                    value={stockToAdd.validade} 
+                                    onChange={e => setStockToAdd({...stockToAdd, validade: e.target.value})} 
+                                    required 
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Quantidade *</label>
+                                <input 
+                                    type="number" 
+                                    min="1"
+                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold text-slate-900" 
+                                    placeholder="Ex: 100"
+                                    value={stockToAdd.quantidade} 
+                                    onChange={e => setStockToAdd({...stockToAdd, quantidade: e.target.value})} 
+                                    required 
+                                />
+                            </div>
+                            <button type="submit" disabled={saving} className="w-full mt-4 py-3.5 bg-pink-600 hover:bg-pink-700 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-md active:scale-98">
+                                {saving ? 'Adicionando...' : 'Confirmar Adição'}
+                            </button>
+                        </form>
                     </div>
                 </div>
             )}
