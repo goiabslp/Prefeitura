@@ -49,7 +49,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
     const [reportView, setReportView] = useState<'alertas' | 'compras'>('alertas');
     const [comprasSearch, setComprasSearch] = useState('');
-    const [selectedCompras, setSelectedCompras] = useState<Record<string, { quantidade: number, nome: string, unidade: string, lote: string }>>({});
+    const [selectedCompras, setSelectedCompras] = useState<Record<string, { quantidade: number, nome: string, unidade: string, lote: string, dosagem?: string, tipo?: string }>>({});
     const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
     const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
     const { addNotification } = useNotification();
@@ -253,13 +253,18 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         const itemIds = Object.keys(selectedCompras);
         if (itemIds.length === 0) return;
 
-        const purchaseItems = itemIds.map(id => ({
-            id: crypto.randomUUID(),
-            name: selectedCompras[id].nome,
-            quantity: selectedCompras[id].quantidade,
-            unit: selectedCompras[id].unidade,
-            details: `Lote ref: ${selectedCompras[id].lote || 'N/A'}`
-        }));
+        const purchaseItems = itemIds.map(id => {
+            const item = selectedCompras[id];
+            const fullName = [item.nome, item.dosagem, item.tipo].filter(Boolean).join(' • ');
+            
+            return {
+                id: crypto.randomUUID(),
+                name: fullName,
+                quantity: item.quantidade,
+                unit: item.unidade,
+                details: `Lote ref: ${item.lote || 'N/A'}`
+            };
+        });
 
         const doc = new jsPDF();
         doc.setFontSize(20);
@@ -291,15 +296,20 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
         setIsSubmittingOrder(true);
         try {
-            const purchaseItems = itemIds.map(id => ({
-                id: crypto.randomUUID(),
-                name: selectedCompras[id].nome,
-                quantity: selectedCompras[id].quantidade,
-                unit: selectedCompras[id].unidade,
-                details: `Lote ref: ${selectedCompras[id].lote || 'N/A'}`,
-                category: 'Material de Uso',
-                isTendered: false
-            }));
+            const purchaseItems = itemIds.map(id => {
+                const item = selectedCompras[id];
+                const fullName = [item.nome, item.dosagem, item.tipo].filter(Boolean).join(' • ');
+
+                return {
+                    id: crypto.randomUUID(),
+                    name: fullName,
+                    quantity: item.quantidade,
+                    unit: item.unidade,
+                    details: `Lote ref: ${item.lote || 'N/A'}`,
+                    category: 'Material de Uso',
+                    isTendered: false
+                };
+            });
 
             const newOrder = {
                 id: crypto.randomUUID(), // Gerar ID local para evitar null violation
@@ -341,7 +351,14 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
             if (current[med.id]) {
                 delete current[med.id];
             } else {
-                current[med.id] = { quantidade: 1, nome: med.nome, unidade: med.unidade || 'un', lote: med.lote };
+                current[med.id] = { 
+                    quantidade: 1, 
+                    nome: med.nome, 
+                    unidade: med.unidade || 'un', 
+                    lote: med.lote,
+                    dosagem: med.dosagem,
+                    tipo: med.tipo
+                };
             }
             return current;
         });
