@@ -117,6 +117,23 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     const canAccessFarmacia = (permissions.includes('parent_farmacia') || userRole === 'admin') && isModuleActive('parent_farmacia');
     const firstName = userName.split(' ')[0];
 
+    const getPendingCount = (blockType: string) => {
+        return orders.filter(o => {
+            if (o.blockType !== blockType) return false;
+            if (['completed', 'canceled', 'rejected', 'finishing', 'payment_account', 'paid'].includes(o.status)) return false;
+
+            // Depende diretamente do usuário logado
+            if (o.assigned_user_id === userId) return true;
+
+            // Depende do Administrador para aprovar/prosseguir
+            if (['pending', 'awaiting_approval'].includes(o.status) && (userRole === 'admin' || permissions.includes('parent_admin'))) {
+                return true;
+            }
+
+            return false;
+        }).length;
+    };
+
     // --- Helper Functions for Card Styling ---
     const getCardClass = (color: string, hideOnMobile: boolean = false) => {
         // Dynamic classes for hover states
@@ -415,26 +432,26 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                             {/* Modules Grid */}
                             <div className="grid grid-cols-2 desktop:grid-cols-3 xl:grid-cols-4 wide:grid-cols-5 gap-3 desktop:gap-4">
                                 {/* Operational Modules */}
-                                {canAccessOficio && renderModuleButton(() => setActiveBlock('oficio'), 'indigo', FileText, 'Ofícios', 'Geração e trâmite', '50ms', false)}
-                                {canAccessCompras && renderModuleButton(() => setActiveBlock('compras'), 'emerald', ShoppingCart, 'Compras', 'Pedidos e requisições', '100ms', false, 0)}
-                                {canAccessDiarias && renderModuleButton(() => setActiveBlock('diarias'), 'amber', Wallet, 'Diárias', 'Despesas', '150ms', false)}
-                                {canAccessLicitacao && renderModuleButton(() => setActiveBlock('licitacao'), 'blue', Gavel, 'Licitação', 'Processos', '200ms', false)}
+                                {canAccessOficio && renderModuleButton(() => setActiveBlock('oficio'), 'indigo', FileText, 'Ofícios', 'Geração e trâmite', '50ms', false, getPendingCount('oficio'))}
+                                {canAccessCompras && renderModuleButton(() => setActiveBlock('compras'), 'emerald', ShoppingCart, 'Compras', 'Pedidos e requisições', '100ms', false, getPendingCount('compras'))}
+                                {canAccessDiarias && renderModuleButton(() => setActiveBlock('diarias'), 'amber', Wallet, 'Diárias', 'Despesas', '150ms', false, getPendingCount('diarias'))}
+                                {canAccessLicitacao && renderModuleButton(() => setActiveBlock('licitacao'), 'blue', Gavel, 'Licitação', 'Processos', '200ms', false, getPendingCount('licitacao'))}
 
                                 {/* Management Modules */}
-                                {canAccessTarefas && renderModuleButton(() => setActiveBlock('tarefas'), 'pink', Activity, 'Tarefas', 'Atividades', '225ms', false)}
-                                {canAccessCalendario && renderModuleButton(() => onCalendario?.(), 'rose', CalendarDays, 'Calendário', 'Agenda', '235ms', false)}
-                                {canAccessRh && renderModuleButton(() => onRH?.(), 'fuchsia', Users, 'RH', 'Gestão', '240ms', false)}
-                                {canAccessProjetos && renderModuleButton(() => onProjetos?.(), 'teal', LayoutGrid, 'Projetos', 'Gestão', '245ms', false)}
-                                {canAccessMarketing && renderModuleButton(() => onMarketing?.(), 'teal', Megaphone, 'Marketing', 'Criativo', '248ms', false)}
-                                {canAccessConsultas && renderModuleButton(() => onConsultas?.(), 'sky', Activity, 'Consultas', 'Regulação e exames', '249ms', false)}
-                                {canAccessFarmacia && renderModuleButton(() => onFarmacia?.(), 'pink', Pill, 'Farmácia Popular', 'Medicamentos', '252ms', false)}
+                                {canAccessTarefas && renderModuleButton(() => setActiveBlock('tarefas'), 'pink', Activity, 'Tarefas', 'Atividades', '225ms', false, getPendingCount('tarefas'))}
+                                {canAccessCalendario && renderModuleButton(() => onCalendario?.(), 'rose', CalendarDays, 'Calendário', 'Agenda', '235ms', false, getPendingCount('calendario'))}
+                                {canAccessRh && renderModuleButton(() => onRH?.(), 'fuchsia', Users, 'RH', 'Gestão', '240ms', false, getPendingCount('rh'))}
+                                {canAccessProjetos && renderModuleButton(() => onProjetos?.(), 'teal', LayoutGrid, 'Projetos', 'Gestão', '245ms', false, getPendingCount('projetos'))}
+                                {canAccessMarketing && renderModuleButton(() => onMarketing?.(), 'teal', Megaphone, 'Marketing', 'Criativo', '248ms', false, getPendingCount('marketing'))}
+                                {canAccessConsultas && renderModuleButton(() => onConsultas?.(), 'sky', Activity, 'Consultas', 'Regulação e exames', '249ms', false, getPendingCount('consultas'))}
+                                {canAccessFarmacia && renderModuleButton(() => onFarmacia?.(), 'pink', Pill, 'Farmácia Popular', 'Medicamentos', '252ms', false, getPendingCount('farmacia'))}
 
-                                {canAccessScheduling && renderModuleButton(() => { setActiveBlock('agendamento'); onVehicleScheduling?.(); }, 'violet', CalendarRange, 'Veículos', 'Agendamento', '250ms', false)}
-                                {canAccessAbastecimento && renderModuleButton(() => setActiveBlock('abastecimento'), 'cyan', Droplet, 'Abastecimento', 'Combustível', '300ms', false)}
+                                {canAccessScheduling && renderModuleButton(() => { setActiveBlock('agendamento'); onVehicleScheduling?.(); }, 'violet', CalendarRange, 'Veículos', 'Agendamento', '250ms', false, getPendingCount('agendamento'))}
+                                {canAccessAbastecimento && renderModuleButton(() => setActiveBlock('abastecimento'), 'cyan', Droplet, 'Abastecimento', 'Combustível', '300ms', false, getPendingCount('abastecimento'))}
 
                                 {/* Field Modules */}
-                                {canAccessAgricultura && renderModuleButton(() => onAgricultura?.(), 'emerald', Sprout, 'Agricultura', 'Gestão rural', '350ms', false)}
-                                {canAccessObras && renderModuleButton(() => onObras?.(), 'orange', HardHat, 'Obras', 'Gestão de obras', '400ms', false)}
+                                {canAccessAgricultura && renderModuleButton(() => onAgricultura?.(), 'emerald', Sprout, 'Agricultura', 'Gestão rural', '350ms', false, getPendingCount('agricultura'))}
+                                {canAccessObras && renderModuleButton(() => onObras?.(), 'orange', HardHat, 'Obras', 'Gestão de obras', '400ms', false, getPendingCount('obras'))}
 
                                 {/* Admin Shortcut */}
                                 {canAccessFleet && renderModuleButton(() => onOpenAdmin('fleet'), 'slate', Car, 'Frotas', 'Gestão', '450ms', false)}
