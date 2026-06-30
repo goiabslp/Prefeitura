@@ -3795,7 +3795,16 @@ const App: React.FC = () => {
                 </div>
               </div>
             )}
-            {currentView === 'home' && (
+            {currentView === 'home' && (() => {
+              const allSystemOrders = Array.from(new Map([
+                ...orders.map(o => [o.id, o] as [string, Order]),
+                ...oficios.map(o => [o.id, o] as [string, Order]),
+                ...serviceRequests.map(o => [o.id, o] as [string, Order]),
+                ...tasks.map(o => [o.id, o] as [string, Order]),
+                ...mappedLicitacaoOrders.map(o => [o.id, o] as [string, Order])
+              ]).values());
+
+              return (
               <HomeScreen
                 onNewOrder={(block, isForceReset) => {
                   const target = block || 'oficio';
@@ -3870,12 +3879,12 @@ const App: React.FC = () => {
                 uiConfig={appState.ui}
                 permissions={currentUser?.permissions || []}
                 stats={{
-                  totalGenerated: orders.length,
-                  historyCount: orders.length, // Simplified
+                  totalGenerated: allSystemOrders.length,
+                  historyCount: allSystemOrders.length, // Simplified
                   activeUsers: users.length
                 }}
                 onLogout={() => signOut()}
-                orders={orders}
+                orders={allSystemOrders}
                 allUsers={users}
                 onViewOrder={(order) => {
                   setViewingOrder(order);
@@ -3893,7 +3902,8 @@ const App: React.FC = () => {
                   }
                 }}
               />
-            )}
+              );
+            })()}
             {/* Purchase Items Screen */}
             {currentView === 'purchase-inventory' && (
               <PurchaseItemsScreen
