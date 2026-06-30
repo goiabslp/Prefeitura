@@ -137,11 +137,8 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
         }
         const query = medSearchQuery.toLowerCase();
         return medicamentos.filter(m => 
-            m.nome.toLowerCase().includes(query) || 
-            (m.dosagem || '').toLowerCase().includes(query) || 
-            m.lote.toLowerCase().includes(query) ||
-            m.categoria.toLowerCase().includes(query) ||
-            (m.principio_ativo || '').toLowerCase().includes(query)
+            m.nome.toLowerCase().startsWith(query) || 
+            (m.principio_ativo || '').toLowerCase().startsWith(query)
         ).slice(0, 8);
     }, [medicamentos, medSearchQuery]);
 
@@ -166,12 +163,8 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
         if (medModalSearch.trim()) {
             const query = medModalSearch.toLowerCase();
             list = list.filter(m => 
-                m.nome.toLowerCase().includes(query) ||
-                m.lote.toLowerCase().includes(query) ||
-                (m.dosagem || '').toLowerCase().includes(query) ||
-                (m.fornecedor || '').toLowerCase().includes(query) ||
-                (m.principio_ativo || '').toLowerCase().includes(query) ||
-                m.categoria.toLowerCase().includes(query)
+                m.nome.toLowerCase().startsWith(query) ||
+                (m.principio_ativo || '').toLowerCase().startsWith(query)
             );
         }
         

@@ -263,13 +263,8 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
             const key = `${med.nome.toUpperCase()} - ${med.dosagem?.toUpperCase() || ''} - ${med.tipo?.toUpperCase() || ''}`;
             const code = medicamentCodes[key] || '';
             
-            return med.nome.toLowerCase().includes(term) ||
-                med.lote.toLowerCase().includes(term) ||
-                med.categoria.toLowerCase().includes(term) ||
-                code.toLowerCase().includes(term) ||
-                (med.principio_ativo && med.principio_ativo.toLowerCase().includes(term)) ||
-                (med.fornecedor && med.fornecedor.toLowerCase().includes(term)) ||
-                (med.tipo && med.tipo.toLowerCase().includes(term));
+            return med.nome.toLowerCase().startsWith(term) ||
+                (med.principio_ativo && med.principio_ativo.toLowerCase().startsWith(term));
         });
     }, [medicamentos, searchTerm, medicamentCodes]);
 

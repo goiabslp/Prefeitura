@@ -925,11 +925,11 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                                     <div className="flex-1 bg-slate-50 rounded-xl p-3 overflow-y-auto max-h-64 custom-scrollbar">
                                         <div className="space-y-2">
                                             {cat.stats.items.map(med => (
-                                                <div key={med.id} className="flex justify-between items-center p-2 bg-white rounded-lg border border-slate-100">
-                                                    <div>
-                                                        <div className="text-xs font-bold text-slate-700 truncate max-w-[120px]" title={med.nome}>{med.nome}</div>
+                                                <div key={med.id} className="flex justify-between items-start gap-2 p-2 bg-white rounded-lg border border-slate-100">
+                                                    <div className="flex-1">
+                                                        <div className="text-[10px] font-bold text-slate-700 leading-tight" title={med.nome}>{med.nome}</div>
                                                     </div>
-                                                    <div>
+                                                    <div className="shrink-0">
                                                         {med.quantidade > 0 ? (
                                                             <span className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-emerald-100 text-emerald-700">OK</span>
                                                         ) : (

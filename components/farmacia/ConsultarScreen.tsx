@@ -77,12 +77,10 @@ export const ConsultarScreen: React.FC<ConsultarScreenProps> = ({
 
             const matchAtStart = (str: string | undefined | null) => {
                 if (!str) return false;
-                const lowerStr = str.toLowerCase();
-                return lowerStr.startsWith(term) || lowerStr.includes(` ${term}`);
+                return str.toLowerCase().startsWith(term);
             };
 
             return matchAtStart(med.nome) || 
-                   matchAtStart(med.lote) ||
                    matchAtStart(med.principio_ativo);
         });
 
