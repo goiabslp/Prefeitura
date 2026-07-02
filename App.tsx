@@ -3512,7 +3512,16 @@ const App: React.FC = () => {
     );
   }
 
+  const hasInvalidAvatar = !currentUser?.avatar || 
+                           currentUser.avatar.trim() === '' || 
+                           currentUser.avatar.toLowerCase() === 'sem avatar' ||
+                           currentUser.avatar.toLowerCase() === 'sem_avatar';
 
+  if (currentUser && hasInvalidAvatar) {
+    return (
+      <AvatarSelectionModal currentUser={currentUser} />
+    );
+  }
 
 
   return (

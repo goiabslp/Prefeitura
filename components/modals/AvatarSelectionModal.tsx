@@ -8,11 +8,10 @@ interface AvatarSelectionModalProps {
   currentUser: User;
 }
 
-const AVATAR_SEEDS = [
-  'Felix', 'Aneka', 'Jack', 'Bella', 'Max', 
-  'Oliver', 'Lucy', 'Charlie', 'Milo', 'Chloe', 
-  'Leo', 'Lily', 'Lola', 'Oscar', 'Luna'
-];
+const AVATAR_CONFIGS = Array.from({ length: 14 }, (_, i) => ({
+  id: `Avatar3D-${i + 1}`,
+  url: `/avatars/avatar${i + 1}.png`
+}));
 
 export const AvatarSelectionModal: React.FC<AvatarSelectionModalProps> = ({ currentUser }) => {
   const { refreshUser } = useAuth();
@@ -20,7 +19,10 @@ export const AvatarSelectionModal: React.FC<AvatarSelectionModalProps> = ({ curr
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const getAvatarUrl = (seed: string) => `https://api.dicebear.com/7.x/avataaars/svg?seed=${seed}`;
+  const getAvatarUrl = (id: string) => {
+    const config = AVATAR_CONFIGS.find(c => c.id === id);
+    return config?.url || '';
+  };
 
   const handleSave = async () => {
     if (!selectedSeed) return;
@@ -67,12 +69,12 @@ export const AvatarSelectionModal: React.FC<AvatarSelectionModalProps> = ({ curr
           )}
 
           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-6">
-            {AVATAR_SEEDS.map((seed) => {
-              const isSelected = selectedSeed === seed;
+            {AVATAR_CONFIGS.map(({ id }) => {
+              const isSelected = selectedSeed === id;
               return (
                 <button
-                  key={seed}
-                  onClick={() => setSelectedSeed(seed)}
+                  key={id}
+                  onClick={() => setSelectedSeed(id)}
                   className={`relative group aspect-square rounded-2xl flex items-center justify-center p-4 transition-all duration-300 ${
                     isSelected 
                       ? 'bg-indigo-100 border-2 border-indigo-600 shadow-[0_0_20px_rgba(79,70,229,0.3)] scale-105 z-10' 
@@ -80,8 +82,8 @@ export const AvatarSelectionModal: React.FC<AvatarSelectionModalProps> = ({ curr
                   }`}
                 >
                   <img
-                    src={getAvatarUrl(seed)}
-                    alt={`Avatar ${seed}`}
+                    src={getAvatarUrl(id)}
+                    alt={`Avatar ${id}`}
                     className="w-full h-full object-contain drop-shadow-md group-hover:scale-110 transition-transform duration-300"
                   />
                   {isSelected && (

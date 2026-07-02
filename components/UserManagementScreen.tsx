@@ -541,16 +541,16 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                     })}
                     <button
                       type="button"
-                      onClick={() => setFormData({ ...formData, avatar: undefined })}
+                      onClick={() => setFormData({ ...formData, avatar: '' })}
                       className={`relative shrink-0 w-24 h-24 rounded-[2rem] border-4 transition-all duration-300 snap-center flex flex-col items-center justify-center gap-1 ${
-                        !formData.avatar 
+                        !formData.avatar || formData.avatar === ''
                           ? 'border-slate-500 scale-105 shadow-xl shadow-slate-500/20 bg-slate-100' 
                           : 'border-slate-100 bg-slate-50 hover:border-slate-300 hover:scale-105 opacity-80 hover:opacity-100 text-slate-400 hover:text-slate-600'
                       }`}
                     >
                       <UserIcon className="w-6 h-6" />
                       <span className="text-[10px] font-black uppercase">Sem Avatar</span>
-                      {!formData.avatar && (
+                      {(!formData.avatar || formData.avatar === '') && (
                         <div className="absolute -bottom-2 -right-2 bg-slate-500 text-white rounded-full p-1.5 border-4 border-white shadow-md">
                           <CheckCircle2 className="w-4 h-4" />
                         </div>

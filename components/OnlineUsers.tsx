@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { supabase } from '../services/supabaseClient';
 import { User } from '../types';
 import { X } from 'lucide-react';
@@ -65,40 +66,52 @@ export const OnlineUsers: React.FC<{ currentUser: User }> = ({ currentUser }) =>
     <>
       <div className="flex items-center gap-2 mr-2 md:mr-4 border-r border-slate-200 pr-2 md:pr-4">
         <div className="flex gap-2 overflow-visible">
-          {usersArray.map((u, i) => (
-            <button
-              key={`${u.id}-${i}`}
-              onClick={() => setSelectedUser(u)}
-              className="relative group inline-block focus:outline-none"
-            >
-              {u.avatar ? (
-                <img
-                  src={u.avatar}
-                  alt={u.name}
-                  className="w-8 h-8 rounded-full border-2 border-white object-cover shadow-sm bg-slate-900 group-hover:z-10 group-hover:scale-110 transition-transform"
-                />
-              ) : (
-                <div className="w-8 h-8 rounded-full border-2 border-white bg-indigo-100 flex items-center justify-center shadow-sm group-hover:z-10 group-hover:scale-110 transition-transform">
-                  <span className="text-[10px] font-black text-indigo-700">{u.name.charAt(0)}</span>
+          {usersArray.map((u, i) => {
+            const hasValidAvatar = u.avatar && 
+                                   u.avatar.trim() !== '' && 
+                                   u.avatar.toLowerCase() !== 'sem avatar' && 
+                                   u.avatar.toLowerCase() !== 'sem_avatar';
+            return (
+              <button
+                key={`${u.id}-${i}`}
+                onClick={() => setSelectedUser(u)}
+                className="relative group inline-block focus:outline-none"
+              >
+                {hasValidAvatar ? (
+                  <img
+                    src={u.avatar}
+                    alt={u.name}
+                    className="w-8 h-8 rounded-full border-2 border-white object-cover shadow-sm bg-slate-900 group-hover:z-10 group-hover:scale-110 transition-transform"
+                  />
+                ) : (
+                  <div className="w-8 h-8 rounded-full border-2 border-white bg-indigo-100 flex items-center justify-center shadow-sm group-hover:z-10 group-hover:scale-110 transition-transform">
+                    <span className="text-[10px] font-black text-indigo-700">{u.name.charAt(0)}</span>
+                  </div>
+                )}
+                
+                {/* Status dot verde */}
+                <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-400 border-[1.5px] border-white rounded-full z-20"></div>
+                
+                {/* Tooltip */}
+                <div className="absolute top-10 left-1/2 -translate-x-1/2 px-2.5 py-1.5 bg-slate-800 text-white text-[11px] font-bold rounded shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-[100]">
+                  {u.name}
                 </div>
-              )}
-              
-              {/* Status dot verde */}
-              <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-400 border-[1.5px] border-white rounded-full z-20"></div>
-              
-              {/* Tooltip */}
-              <div className="absolute top-10 left-1/2 -translate-x-1/2 px-2.5 py-1.5 bg-slate-800 text-white text-[11px] font-bold rounded shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-[100]">
-                {u.name}
-              </div>
-            </button>
-          ))}
+              </button>
+            );
+          })}
         </div>
       </div>
 
       {/* Mini Modal do Perfil */}
-      {selectedUser && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200 p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-300 relative border border-slate-100">
+      {selectedUser && createPortal(
+        <div 
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200 p-4"
+          onClick={() => setSelectedUser(null)}
+        >
+          <div 
+            className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-300 relative border border-slate-100"
+            onClick={(e) => e.stopPropagation()}
+          >
             
             <button
               onClick={() => setSelectedUser(null)}
@@ -114,17 +127,23 @@ export const OnlineUsers: React.FC<{ currentUser: User }> = ({ currentUser }) =>
 
             <div className="px-6 pb-8 text-center -mt-12 relative z-10">
               <div className="inline-block relative">
-                {selectedUser.avatar ? (
-                  <img
-                    src={selectedUser.avatar}
-                    alt={selectedUser.name}
-                    className="w-24 h-24 rounded-full border-4 border-white shadow-xl object-cover bg-slate-900 mx-auto"
-                  />
-                ) : (
-                  <div className="w-24 h-24 rounded-full border-4 border-white shadow-xl bg-indigo-100 flex items-center justify-center mx-auto">
-                    <span className="text-3xl font-black text-indigo-700">{selectedUser.name.charAt(0)}</span>
-                  </div>
-                )}
+                {(() => {
+                  const hasValidAvatar = selectedUser.avatar && 
+                                         selectedUser.avatar.trim() !== '' && 
+                                         selectedUser.avatar.toLowerCase() !== 'sem avatar' && 
+                                         selectedUser.avatar.toLowerCase() !== 'sem_avatar';
+                  return hasValidAvatar ? (
+                    <img
+                      src={selectedUser.avatar}
+                      alt={selectedUser.name}
+                      className="w-24 h-24 rounded-full border-4 border-white shadow-xl object-cover bg-slate-900 mx-auto"
+                    />
+                  ) : (
+                    <div className="w-24 h-24 rounded-full border-4 border-white shadow-xl bg-indigo-100 flex items-center justify-center mx-auto">
+                      <span className="text-3xl font-black text-indigo-700">{selectedUser.name.charAt(0)}</span>
+                    </div>
+                  );
+                })()}
                 <div className="absolute bottom-1 right-1 w-5 h-5 bg-green-400 border-2 border-white rounded-full z-20 shadow-md"></div>
               </div>
               
@@ -147,7 +166,8 @@ export const OnlineUsers: React.FC<{ currentUser: User }> = ({ currentUser }) =>
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );
