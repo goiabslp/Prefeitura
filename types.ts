@@ -262,6 +262,8 @@ export interface User {
   twoFactorSecret2?: string;
   email?: string;
   whatsapp?: string;
+  avatar?: string;
+  status?: 'active' | 'blocked';
 }
 
 export interface Signature {

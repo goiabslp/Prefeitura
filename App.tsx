@@ -3382,7 +3382,8 @@ const App: React.FC = () => {
       two_factor_enabled: u.twoFactorEnabled,
       two_factor_secret: u.twoFactorSecret,
       two_factor_enabled_2: u.twoFactorEnabled2,
-      two_factor_secret_2: u.twoFactorSecret2
+      two_factor_secret_2: u.twoFactorSecret2,
+      status: u.status
     }).eq('id', u.id);
 
     if (u.password) {
@@ -3401,6 +3402,13 @@ const App: React.FC = () => {
       setUsers(p => p.map(us => us.id === u.id ? u : us));
       if (currentUser && currentUser.id === u.id) {
         await refreshUser();
+      }
+      if (u.status === 'blocked' && currentUser && currentUser.id !== u.id) {
+        await supabase.channel('global_events').send({
+          type: 'broadcast',
+          event: 'user-blocked',
+          payload: { userId: u.id }
+        });
       }
     }
   };

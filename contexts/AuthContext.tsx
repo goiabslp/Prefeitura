@@ -52,7 +52,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
         });
 
-        return () => subscription.unsubscribe();
+        const channel = supabase.channel('global_events')
+            .on('broadcast', { event: 'user-blocked' }, async (payload) => {
+                if (payload.payload?.userId) {
+                    // Check if current session user is the blocked user
+                    const currentSession = await supabase.auth.getSession();
+                    if (currentSession.data.session?.user?.id === payload.payload.userId) {
+                        alert('Seu usuário foi bloqueado por um administrador. Você foi desconectado.');
+                        await supabase.auth.signOut();
+                        setUser(null);
+                        setSession(null);
+                    }
+                }
+            })
+            .subscribe();
+
+        return () => {
+            subscription.unsubscribe();
+            supabase.removeChannel(channel);
+        };
     }, []);
 
     const fetchProfile = async (userId: string, email: string) => {
@@ -88,8 +106,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     twoFactorSecret: data.two_factor_secret,
                     twoFactorEnabled2: data.two_factor_enabled_2,
                     twoFactorSecret2: data.two_factor_secret_2,
-                    mustChangePassword: data.must_change_password
+                    mustChangePassword: data.must_change_password,
+                    status: data.status || 'active'
                 };
+
+                if (appUser.status === 'blocked') {
+                    alert('Sua conta está bloqueada pelo administrador.');
+                    await supabase.auth.signOut();
+                    setUser(null);
+                    setSession(null);
+                    setLoading(false);
+                    return;
+                }
+
                 setUser(appUser);
 
                 // Broadcast Login Event (Only if just signed in or first load - but context loads on every refresh. 

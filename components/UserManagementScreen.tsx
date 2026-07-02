@@ -399,10 +399,14 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                         user.role === 'marketing' ? 'bg-gradient-to-br from-fuchsia-500 to-pink-500 text-white' :
                         'bg-gradient-to-br from-slate-200 to-slate-300 text-slate-500'
                       }`}>
-                      {user.name.charAt(0)}
+                      {user.avatar ? (
+                        <img src={user.avatar} alt={`Avatar de ${user.name}`} className="w-full h-full object-cover" />
+                      ) : (
+                        user.name.charAt(0)
+                      )}
 
                       {/* Status Dot */}
-                      <div className="absolute bottom-1 right-1 w-3.5 h-3.5 bg-green-400 border-[3px] border-white rounded-full shadow-sm"></div>
+                      <div className={`absolute bottom-1 right-1 w-3.5 h-3.5 border-[3px] border-white rounded-full shadow-sm ${user.status === 'blocked' ? 'bg-rose-500' : 'bg-green-400'}`}></div>
                     </div>
 
                     <div className="flex-1 min-w-0">
@@ -413,6 +417,11 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                         {isCurrentUser && (
                           <span className="px-2 py-0.5 bg-indigo-600 text-white text-[10px] font-black uppercase tracking-wider rounded-lg shadow-lg shadow-indigo-500/30 whitespace-nowrap">
                             Você
+                          </span>
+                        )}
+                        {user.status === 'blocked' && (
+                          <span className="px-2 py-0.5 bg-rose-600 text-white text-[10px] font-black uppercase tracking-wider rounded-lg shadow-lg shadow-rose-500/30 whitespace-nowrap">
+                            Bloqueado
                           </span>
                         )}
                       </div>
@@ -482,11 +491,74 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-fade-in">
             <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[95vh] border border-white/20">
               <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                <h3 className="text-xl font-bold text-slate-800">{isAdmin ? (editingUser ? 'Editar Usuário' : 'Novo Usuário') : 'Meu Perfil'}</h3>
+                <div className="flex items-center gap-4">
+                  <h3 className="text-xl font-bold text-slate-800">{isAdmin ? (editingUser ? 'Editar Usuário' : 'Novo Usuário') : 'Meu Perfil'}</h3>
+                  {editingUser && isAdmin && currentUser.id !== editingUser.id && (
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, status: formData.status === 'blocked' ? 'active' : 'blocked' })}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all shadow-sm ${
+                        formData.status === 'blocked'
+                          ? 'bg-rose-100 text-rose-700 hover:bg-rose-200 hover:shadow-md'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:shadow-md'
+                      }`}
+                    >
+                      {formData.status === 'blocked' ? 'Desbloquear Usuário' : 'Bloquear Usuário'}
+                    </button>
+                  )}
+                </div>
                 <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-slate-200 rounded-lg text-slate-500"><X className="w-5 h-5" /></button>
               </div>
 
               <div className="p-8 space-y-8 overflow-y-auto custom-scrollbar">
+                
+                {/* Seleção de Avatar */}
+                <div className="space-y-4">
+                  <label className={labelClass}>Avatar (Monarquia/Medieval 3D)</label>
+                  <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar snap-x items-center">
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14].map(num => {
+                      const avatarUrl = `/avatars/avatar${num}.png`;
+                      const isSelected = formData.avatar === avatarUrl;
+                      return (
+                        <button
+                          key={num}
+                          type="button"
+                          onClick={() => setFormData({ ...formData, avatar: avatarUrl })}
+                          className={`relative shrink-0 w-24 h-24 rounded-[2rem] border-4 transition-all duration-300 snap-center ${
+                            isSelected 
+                              ? 'border-pink-600 scale-105 shadow-xl shadow-pink-500/30' 
+                              : 'border-slate-100 hover:border-slate-300 hover:scale-105 opacity-80 hover:opacity-100'
+                          }`}
+                        >
+                          <img src={avatarUrl} alt={`Avatar ${num}`} className="w-full h-full object-cover rounded-[1.8rem] bg-slate-900" />
+                          {isSelected && (
+                            <div className="absolute -bottom-2 -right-2 bg-pink-600 text-white rounded-full p-1.5 border-4 border-white shadow-md">
+                              <CheckCircle2 className="w-4 h-4" />
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, avatar: undefined })}
+                      className={`relative shrink-0 w-24 h-24 rounded-[2rem] border-4 transition-all duration-300 snap-center flex flex-col items-center justify-center gap-1 ${
+                        !formData.avatar 
+                          ? 'border-slate-500 scale-105 shadow-xl shadow-slate-500/20 bg-slate-100' 
+                          : 'border-slate-100 bg-slate-50 hover:border-slate-300 hover:scale-105 opacity-80 hover:opacity-100 text-slate-400 hover:text-slate-600'
+                      }`}
+                    >
+                      <UserIcon className="w-6 h-6" />
+                      <span className="text-[10px] font-black uppercase">Sem Avatar</span>
+                      {!formData.avatar && (
+                        <div className="absolute -bottom-2 -right-2 bg-slate-500 text-white rounded-full p-1.5 border-4 border-white shadow-md">
+                          <CheckCircle2 className="w-4 h-4" />
+                        </div>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
                 <div className="space-y-4">
                   <label className={labelClass}>Tipo de Perfil</label>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
