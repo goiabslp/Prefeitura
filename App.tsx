@@ -794,7 +794,8 @@ const App: React.FC = () => {
             twoFactorEnabled: ru.two_factor_enabled,
             twoFactorSecret: ru.two_factor_secret,
             twoFactorEnabled2: ru.two_factor_enabled_2,
-            twoFactorSecret2: ru.two_factor_secret_2
+            twoFactorSecret2: ru.two_factor_secret_2,
+            status: ru.status
           }));
           if (mappedUsers.length > 0) setUsers(mappedUsers);
         }
@@ -3571,7 +3572,8 @@ const App: React.FC = () => {
                                 tempPassword: ru.temp_password,
                                 tempPasswordExpiresAt: ru.temp_password_expires_at,
                                 twoFactorEnabled: ru.two_factor_enabled,
-                                twoFactorSecret: ru.two_factor_secret
+                                twoFactorSecret: ru.two_factor_secret,
+                                status: ru.status
                               }));
                               setUsers(mapped);
                             }
