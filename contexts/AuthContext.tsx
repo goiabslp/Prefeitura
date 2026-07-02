@@ -107,7 +107,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     twoFactorEnabled2: data.two_factor_enabled_2,
                     twoFactorSecret2: data.two_factor_secret_2,
                     mustChangePassword: data.must_change_password,
-                    status: data.status || 'active'
+                    status: data.status || 'active',
+                    avatar: data.avatar
                 };
 
                 if (appUser.status === 'blocked') {

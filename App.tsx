@@ -795,7 +795,8 @@ const App: React.FC = () => {
             twoFactorSecret: ru.two_factor_secret,
             twoFactorEnabled2: ru.two_factor_enabled_2,
             twoFactorSecret2: ru.two_factor_secret_2,
-            status: ru.status
+            status: ru.status,
+            avatar: ru.avatar
           }));
           if (mappedUsers.length > 0) setUsers(mappedUsers);
         }
@@ -3384,7 +3385,8 @@ const App: React.FC = () => {
       two_factor_secret: u.twoFactorSecret,
       two_factor_enabled_2: u.twoFactorEnabled2,
       two_factor_secret_2: u.twoFactorSecret2,
-      status: u.status
+      status: u.status,
+      avatar: u.avatar
     }).eq('id', u.id);
 
     if (u.password) {
@@ -3573,7 +3575,8 @@ const App: React.FC = () => {
                                 tempPasswordExpiresAt: ru.temp_password_expires_at,
                                 twoFactorEnabled: ru.two_factor_enabled,
                                 twoFactorSecret: ru.two_factor_secret,
-                                status: ru.status
+                                status: ru.status,
+                                avatar: ru.avatar
                               }));
                               setUsers(mapped);
                             }

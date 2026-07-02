@@ -18,6 +18,7 @@ import { useNotification } from '../contexts/NotificationContext';
 import { useChat } from '../contexts/ChatContext';
 import { NotificationCenter } from './NotificationCenter';
 import { SyncIndicator } from './SyncIndicator';
+import { OnlineUsers } from './OnlineUsers';
 import { useState } from 'react';
 import { getCachedImage, IMAGE_KEYS } from '../services/cacheService';
 
@@ -298,6 +299,9 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
 
         {/* Lado Direito: Ações e Perfil */}
         < div className="flex items-center gap-2 md:gap-4" >
+
+          {/* Usuários Online */}
+          <OnlineUsers currentUser={currentUser} />
 
           {/* REFRESH BUTTON */}
           <button
