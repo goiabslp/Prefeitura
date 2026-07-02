@@ -240,7 +240,8 @@ const mapLicitacaoProcessToOrder = (process: any): Order => {
         digitalSignature,
         signatureName: process.solicitante_nome,
         signatureRole: process.solicitante_cargo || 'Solicitante',
-        signatureSector: process.solicitante_setor || 'Geral'
+        signatureSector: process.solicitante_setor || 'Geral',
+        completedAt: process.atualizado_em || process.updated_at || process.data_conclusao
       }
     }
   } as unknown as Order;

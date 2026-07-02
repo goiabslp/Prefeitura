@@ -675,14 +675,17 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                 <div className="md:col-span-2 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 whitespace-nowrap">
                                                     <Edit2 className="w-3 h-3" /> Objeto / Descrição
                                                 </div>
-                                                <div className="md:col-span-3 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 whitespace-nowrap">
+                                                <div className="md:col-span-2 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 whitespace-nowrap">
                                                     <Network className="w-3 h-3" /> Solicitante / Setor
                                                 </div>
                                                 <div className="md:col-span-2 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 whitespace-nowrap">
                                                     <Info className="w-3 h-3" /> Fase
                                                 </div>
-                                                <div className="md:col-span-2 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 whitespace-nowrap">
+                                                <div className="md:col-span-1 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 whitespace-nowrap">
                                                     <RotateCcw className="w-3 h-3" /> Status
+                                                </div>
+                                                <div className="md:col-span-2 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-center gap-2 whitespace-nowrap">
+                                                    <Clock className="w-3 h-3" /> Prazo
                                                 </div>
                                                 <div className="md:col-span-1 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-center whitespace-nowrap">
                                                     Ações
@@ -772,13 +775,8 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                                 {new Date(order.createdAt).toLocaleDateString('pt-BR')}
                                                             </span>
                                                         </div>
-                                                        <div className="md:col-span-2 pr-4 flex items-center">
-                                                            <span className="text-xs font-bold text-slate-600 line-clamp-2" title={(content as any)?.objeto || content?.description || 'Objeto não especificado'}>
-                                                                {(content as any)?.objeto || content?.description || <span className="italic text-slate-400">Objeto não especificado</span>}
-                                                            </span>
-                                                        </div>
-                                                        <div
-                                                            className="md:col-span-3 flex flex-col justify-center pr-4 cursor-help"
+                                                        <div 
+                                                            className="md:col-span-2 pr-4 flex items-center cursor-help"
                                                             onMouseEnter={(e) => {
                                                                 const text = order.title || (order.documentSnapshot?.content as any)?.objeto;
                                                                 if (text) {
@@ -795,6 +793,11 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                                 setHoveredTooltip(null);
                                                             }}
                                                         >
+                                                            <span className="text-xs font-bold text-slate-600 line-clamp-2">
+                                                                {(content as any)?.objeto || content?.description || <span className="italic text-slate-400">Objeto não especificado</span>}
+                                                            </span>
+                                                        </div>
+                                                        <div className="md:col-span-2 flex flex-col justify-center pr-4">
                                                             <span className="text-xs font-bold text-slate-700 truncate">{content?.requesterName || order.userName || 'Sem Solicitante'}</span>
                                                             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate flex items-center gap-1 mt-0.5">
                                                                 <Network className="w-3 h-3" /> {content?.requesterSector || order.requestingSector || 'Sem Setor'}
@@ -806,9 +809,71 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                                 {licitacaoFasesMap[((content as any)?.fase) as keyof typeof licitacaoFasesMap]?.label || 'Sem Fase'}
                                                             </span>
                                                         </div>
-                                                        <div className="md:col-span-2 flex items-center justify-start cursor-pointer" onClick={() => isAdmin && setStatusSelectionOrder(order)}>
+                                                        <div className="md:col-span-1 flex items-center justify-start cursor-pointer" onClick={() => isAdmin && setStatusSelectionOrder(order)}>
                                                             {getStatusBadge(order.status)}
                                                         </div>
+                                                        {(() => {
+                                                            const isFinalized = order.status === 'completed' || order.status === 'approved';
+                                                            const stripTime = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+                                                            const startDate = stripTime(new Date(order.createdAt));
+                                                            const endDate = stripTime(new Date());
+                                                            const diffTime = endDate.getTime() - startDate.getTime();
+                                                            const daysElapsed = Math.max(0, Math.floor(diffTime / (1000 * 3600 * 24)));
+                                                            const daysLeft = 60 - daysElapsed;
+                                                            
+                                                            const isLate = daysLeft < 0;
+
+                                                            if (!isLate) {
+                                                                const isWarning = daysLeft <= 15;
+                                                                return (
+                                                                    <div className="md:col-span-2 flex flex-col justify-center px-4">
+                                                                        <div className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl border ${isWarning ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'} shadow-sm`}>
+                                                                            <span className={`text-base font-black leading-none ${isWarning ? 'text-amber-600' : 'text-emerald-600'}`}>
+                                                                                {daysLeft}
+                                                                            </span>
+                                                                            <span className={`text-[7px] font-black uppercase mt-1 tracking-wider ${isWarning ? 'text-amber-500' : 'text-emerald-500'}`}>
+                                                                                Dias Restantes
+                                                                            </span>
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            }
+
+                                                            if (isLate && !isFinalized) {
+                                                                return (
+                                                                    <div className="md:col-span-2 flex flex-col justify-center px-4">
+                                                                        <div className="group flex flex-col items-center justify-center py-1 px-2 rounded-xl border shadow-sm bg-rose-50 border-rose-200 cursor-help">
+                                                                            <div className="flex flex-col items-center justify-center py-1 group-hover:hidden">
+                                                                                <span className="text-[10px] font-black uppercase tracking-widest text-rose-600">
+                                                                                    Vencido
+                                                                                </span>
+                                                                            </div>
+                                                                            <div className="hidden flex-col items-center group-hover:flex">
+                                                                                <span className="text-base font-black leading-none text-rose-600">
+                                                                                    {daysElapsed}
+                                                                                </span>
+                                                                                <span className="text-[7px] font-black uppercase mt-1 tracking-wider text-rose-500">
+                                                                                    Dias Corridos
+                                                                                </span>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            }
+
+                                                            return (
+                                                                <div className="md:col-span-2 flex flex-col justify-center px-4">
+                                                                    <div className="flex flex-col items-center justify-center py-1 px-2 rounded-xl border shadow-sm bg-slate-50 border-slate-200">
+                                                                        <span className="text-base font-black leading-none text-slate-500">
+                                                                            {daysElapsed}
+                                                                        </span>
+                                                                        <span className="text-[7px] font-black uppercase mt-1 tracking-wider text-slate-400">
+                                                                            Dias Corridos
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })()}
                                                         <div className="md:col-span-1 flex items-center justify-center gap-1">
                                                             <button
                                                                 onClick={() => onViewOrder?.(order)}
