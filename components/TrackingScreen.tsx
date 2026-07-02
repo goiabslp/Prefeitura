@@ -407,8 +407,9 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
 
     const licitacaoFasesMap = {
         'preparatoria': { label: 'Preparatória', desc: 'está realizando planejamento, estudo técnico e definição do objeto e edital.' },
-        'divulgacao': { label: 'Divulgação do edital', desc: 'está publicando para dar publicidade.' },
         'propostas': { label: 'Propostas/lances', desc: 'as empresas estão enviando preços/ofertas.' },
+        'autuacao': { label: 'Autuação', desc: 'Abertura formal do processo licitatório, com a numeração, registro, documentação e início oficial à tramitação do processo.' },
+        'divulgacao': { label: 'Divulgação do edital', desc: 'está publicando para dar publicidade.' },
         'julgamento': { label: 'Julgamento', desc: 'está fazendo análise e classificação das propostas.' },
         'habilitacao': { label: 'Habilitação', desc: 'está verificando a documentação da vencedora.' },
         'recursos': { label: 'Recursos', desc: 'está abrindo prazo para contestação.' },
@@ -2030,7 +2031,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                         if (!currentPhase) {
                                             isBlocked = key !== 'preparatoria';
                                         } else if (currentPhase === 'preparatoria') {
-                                            isBlocked = key !== 'divulgacao' && key !== 'propostas' && key !== 'preparatoria';
+                                            isBlocked = key !== 'propostas' && key !== 'autuacao' && key !== 'preparatoria';
                                         }
 
                                         const isDisabled = isActive || isBlocked;
@@ -2047,7 +2048,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                             publicado: !!checkin.publicado,
                                                             pasta: !!checkin.pasta
                                                         });
-                                                    } else if (key === 'divulgacao' || key === 'propostas') {
+                                                    } else if (key === 'autuacao' || key === 'propostas') {
                                                         if (!licitacaoPhaseOrder.protocol || licitacaoPhaseOrder.protocol.startsWith('LIC-')) {
                                                             setAuxPhaseForProtocol(key);
                                                             setNewProtocolValue(licitacaoPhaseOrder.protocol || '');
@@ -2128,7 +2129,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                 </div>
                                 <div>
                                     <h3 className="text-xl font-black text-slate-900 tracking-tight uppercase leading-none">Alterar Protocolo</h3>
-                                    <p className="text-xs font-bold text-indigo-600 font-mono mt-1 tracking-wider">{auxPhaseForProtocol ? `Fase: ${auxPhaseForProtocol === 'divulgacao' ? 'Divulgação do Edital' : 'Propostas/Lances'}` : 'Edição Manual'}</p>
+                                    <p className="text-xs font-bold text-indigo-600 font-mono mt-1 tracking-wider">{auxPhaseForProtocol ? `Fase: ${auxPhaseForProtocol === 'autuacao' ? 'Autuação' : 'Propostas/Lances'}` : 'Edição Manual'}</p>
                                 </div>
                             </div>
                             <button onClick={() => setProtocolEditOrder(null)} className="p-3 hover:bg-white hover:shadow-sm rounded-2xl text-slate-400 hover:text-slate-900 transition-all active:scale-90"><X className="w-6 h-6" /></button>
