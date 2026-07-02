@@ -25,6 +25,7 @@ interface HomeScreenProps {
     onMarketing?: () => void;
     onConsultas?: () => void;
     onFarmacia?: () => void;
+    onMotorista?: () => void;
     onViewTasksDashboard?: () => void;
     userRole: UserRole;
     userName: string;
@@ -70,6 +71,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     onMarketing,
     onConsultas,
     onFarmacia,
+    onMotorista,
     onLogout,
     onViewTasksDashboard,
     orders = [], // Receive orders for Tasks Dashboard
@@ -115,6 +117,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     const canAccessMarketing = (permissions.includes('parent_marketing') || userRole === 'admin') && isModuleActive('parent_marketing');
     const canAccessConsultas = (permissions.includes('parent_consultas') || userRole === 'admin') && isModuleActive('parent_consultas');
     const canAccessFarmacia = (permissions.includes('parent_farmacia') || userRole === 'admin') && isModuleActive('parent_farmacia');
+    const canAccessMotorista = permissions.includes('parent_motorista') || userRole === 'admin';
     const firstName = userName.split(' ')[0];
 
     const getPendingCount = (blockType: string) => {
@@ -452,6 +455,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                                 {/* Field Modules */}
                                 {canAccessAgricultura && renderModuleButton(() => onAgricultura?.(), 'emerald', Sprout, 'Agricultura', 'Gestão rural', '350ms', false, getPendingCount('agricultura'))}
                                 {canAccessObras && renderModuleButton(() => onObras?.(), 'orange', HardHat, 'Obras', 'Gestão de obras', '400ms', false, getPendingCount('obras'))}
+                                {canAccessMotorista && renderModuleButton(() => onMotorista?.(), 'indigo', Car, 'Motorista', 'Viagens e rotas', '420ms', false)}
 
                                 {/* Admin Shortcut */}
                                 {canAccessFleet && renderModuleButton(() => onOpenAdmin('fleet'), 'slate', Car, 'Frotas', 'Gestão', '450ms', false)}

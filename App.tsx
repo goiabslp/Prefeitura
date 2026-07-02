@@ -101,6 +101,9 @@ import { ProjetosModule } from './components/projetos/ProjetosModule';
 import { MarketingModule } from './components/marketing/MarketingModule';
 import { ConsultasModule } from './components/consultas/ConsultasModule';
 import { FarmaciaModule } from './components/farmacia/FarmaciaModule';
+import { MotoristaModule } from './components/motorista/MotoristaModule';
+import { NovaViagemScreen } from './components/motorista/NovaViagemScreen';
+import { MinhasViagensScreen } from './components/motorista/MinhasViagensScreen';
 import { SystemUpdateScreen } from './components/SystemUpdateScreen';
 import { NovoEventoScreen } from './components/diarias/NovoEventoScreen';
 import { LancamentosScreen } from './components/diarias/LancamentosScreen';
@@ -187,7 +190,10 @@ const VIEW_TO_PATH: Record<string, string> = {
   'farmacia:dashboard-medicamentos': '/FarmaciaPopular/Dashboard/Medicamentos',
   'farmacia:dashboard-pacientes': '/FarmaciaPopular/Dashboard/Pacientes',
   'farmacia:dashboard-relatorios': '/FarmaciaPopular/Dashboard/Relatorios',
-  'farmacia:dashboard-rename': '/FarmaciaPopular/Dashboard/Rename'
+  'farmacia:dashboard-rename': '/FarmaciaPopular/Dashboard/Rename',
+  'motorista': '/Motorista',
+  'motorista:nova-viagem': '/Motorista/NovaViagem',
+  'motorista:minhas-viagens': '/Motorista/MinhasViagens'
 };
 
 const PATH_TO_STATE: Record<string, any> = Object.fromEntries(
@@ -250,7 +256,7 @@ const mapLicitacaoProcessToOrder = (process: any): Order => {
 
 const App: React.FC = () => {
   // State controlling the active module view
-  const [currentView, setCurrentView] = useState<'login' | 'home' | 'admin' | 'tracking' | 'editor' | 'vehicle-scheduling' | 'abastecimento' | 'agricultura' | 'obras' | 'order-details' | 'tasks-dashboard' | 'purchase-inventory' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'diarias-novo-evento' | 'diarias-lancamentos' | 'licitacao' | 'licitacao:new' | 'licitacao:view' | 'licitacao:details' | 'licitacao-all' | 'licitacao-screening' | 'consultas' | 'farmacia'>('login');
+  const [currentView, setCurrentView] = useState<'login' | 'home' | 'admin' | 'tracking' | 'editor' | 'vehicle-scheduling' | 'abastecimento' | 'agricultura' | 'obras' | 'order-details' | 'tasks-dashboard' | 'purchase-inventory' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'diarias-novo-evento' | 'diarias-lancamentos' | 'licitacao' | 'licitacao:new' | 'licitacao:view' | 'licitacao:details' | 'licitacao-all' | 'licitacao-screening' | 'consultas' | 'farmacia' | 'motorista' | 'motorista:nova-viagem' | 'motorista:minhas-viagens'>('login');
   const [remoteAccessState, setRemoteAccessState] = useState<any>(null);
 
   useEffect(() => {
@@ -1181,6 +1187,8 @@ const App: React.FC = () => {
         stateKey = appState.view ? `consultas:${appState.view}` : 'consultas';
       } else if (currentView === 'farmacia') {
         stateKey = appState.view ? `farmacia:${appState.view}` : 'farmacia';
+      } else if (currentView.startsWith('motorista')) {
+        stateKey = currentView;
       } else if (currentView === 'home' && !activeBlock) {
         stateKey = 'home';
       }
@@ -3942,7 +3950,11 @@ const App: React.FC = () => {
                 }}
                 onFarmacia={() => {
                   setCurrentView('farmacia');
-                  setAppState(prev => ({ ...prev, view: undefined }));
+                  window.history.pushState({}, '', VIEW_TO_PATH['farmacia']);
+                }}
+                onMotorista={() => {
+                  setCurrentView('motorista');
+                  window.history.pushState({}, '', VIEW_TO_PATH['motorista']);
                 }}
                 activeBlock={activeBlock}
                 setActiveBlock={(block) => {
@@ -4156,6 +4168,34 @@ const App: React.FC = () => {
                 sectors={sectors}
                 refreshTrigger={lastRefresh}
               />
+            )}
+
+            {currentView === 'motorista' && (
+              <MotoristaModule
+                onBack={() => {
+                  setCurrentView('home');
+                  setActiveBlock(null);
+                  window.history.pushState({}, '', '/PaginaInicial');
+                }}
+                onNavigate={(view) => {
+                  setCurrentView(view as any);
+                  window.history.pushState({}, '', VIEW_TO_PATH[view]);
+                }}
+              />
+            )}
+            
+            {currentView === 'motorista:nova-viagem' && (
+              <NovaViagemScreen onBack={() => {
+                  setCurrentView('motorista');
+                  window.history.pushState({}, '', VIEW_TO_PATH['motorista']);
+              }} />
+            )}
+
+            {currentView === 'motorista:minhas-viagens' && (
+              <MinhasViagensScreen onBack={() => {
+                  setCurrentView('motorista');
+                  window.history.pushState({}, '', VIEW_TO_PATH['motorista']);
+              }} />
             )}
 
             {currentView === 'agricultura' && (
