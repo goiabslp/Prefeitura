@@ -420,7 +420,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
 
                 // Ao pesquisar um CPF válido NÃO CADASTRADO, deve exibir um modal
                 const cleanQuery = query.replace(/\D/g, '');
-                if (cleanQuery.length === 11 && validateCPF(cleanQuery)) {
+                if (cleanQuery.length === 11) {
                     const exists = results.some(p => p.cpf.replace(/\D/g, '') === cleanQuery);
                     if (!exists) {
                         setUnregisteredCpf(patientQuery);
@@ -1845,43 +1845,55 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
             {/* MODAL: CPF NÃO CADASTRADO */}
             {showCpfNotFoundModal && typeof document !== 'undefined' && createPortal(
                 <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/50 backdrop-blur-md animate-in fade-in duration-300">
-                    <div className="bg-white rounded-[2.5rem] shadow-[0_25px_70px_rgba(0,0,0,0.15)] w-full max-w-md overflow-hidden border border-slate-100 flex flex-col transform transition-all animate-in zoom-in-95 slide-in-from-bottom-8 duration-300">
-                        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 shrink-0">
-                            <div>
-                                <h3 className="text-sm font-black text-sky-600 uppercase tracking-wider flex items-center gap-1.5">
-                                    <UserPlus className="w-4 h-4" /> CPF não cadastrado
-                                </h3>
-                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">Identificação do paciente</p>
-                            </div>
+                    <div className="bg-white rounded-[2rem] shadow-[0_30px_100px_rgba(0,0,0,0.2)] w-full max-w-md overflow-hidden border border-slate-100 flex flex-col transform transition-all animate-in zoom-in-[0.98] slide-in-from-bottom-10 duration-500">
+                        
+                        <div className="relative overflow-hidden bg-gradient-to-br from-indigo-600 via-sky-500 to-cyan-500 p-8 pb-10 flex flex-col items-center justify-center text-white shrink-0">
+                            {/* Decorative background elements */}
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2"></div>
+                            <div className="absolute bottom-0 left-0 w-24 h-24 bg-sky-300/30 rounded-full blur-xl translate-y-1/2 -translate-x-1/2"></div>
+                            
                             <button 
-                                onClick={() => {
-                                    setShowCpfNotFoundModal(false);
-                                }} 
-                                className="p-2 hover:bg-slate-200 rounded-xl text-slate-400 hover:text-slate-700 transition-all hover:rotate-90 duration-300"
+                                onClick={() => setShowCpfNotFoundModal(false)} 
+                                className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-xl text-white transition-all hover:rotate-90 duration-300"
                             >
-                                <X className="w-5 h-5" />
+                                <X className="w-4 h-4" />
                             </button>
-                        </div>
-                        <div className="p-6 space-y-4">
-                            <p className="text-xs text-slate-600 font-semibold leading-relaxed">
-                                CPF não cadastrado, deseja cadastrá-lo?
+                            
+                            <div className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center mb-4 shadow-xl ring-1 ring-white/30 animate-in zoom-in duration-500 delay-150">
+                                <UserPlus className="w-8 h-8 text-white drop-shadow-md" />
+                            </div>
+                            
+                            <h3 className="text-xl font-black text-white text-center leading-tight drop-shadow-sm">
+                                Paciente não<br/>encontrado
+                            </h3>
+                            <p className="text-sky-100 text-xs font-bold uppercase tracking-widest mt-3 opacity-90">
+                                Identificação do Sistema
                             </p>
-                            <div className="p-4 bg-slate-50 border border-slate-200/50 rounded-2xl text-xs font-bold text-slate-700 shadow-inner flex justify-between items-center">
-                                <span className="text-slate-400 font-semibold">CPF pesquisado:</span>
-                                <span className="text-slate-800 font-black">
-                                    {unregisteredCpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4") || unregisteredCpf}
-                                </span>
+                        </div>
+                        
+                        <div className="p-8 pb-6 flex flex-col items-center space-y-6 relative -mt-4 bg-white rounded-t-[2rem]">
+                            <p className="text-sm text-slate-500 font-semibold text-center leading-relaxed max-w-[280px]">
+                                Este CPF ainda não possui registro em nossa base. Gostaria de iniciar o cadastro agora?
+                            </p>
+                            
+                            <div className="w-full relative group">
+                                <div className="absolute inset-0 bg-gradient-to-r from-sky-500 to-indigo-500 rounded-2xl blur-md opacity-20 group-hover:opacity-30 transition-opacity duration-500"></div>
+                                <div className="relative px-5 py-4 bg-white border border-sky-100 rounded-2xl flex justify-between items-center shadow-sm">
+                                    <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest">CPF Informado</span>
+                                    <span className="text-base text-slate-800 font-black font-mono">
+                                        {unregisteredCpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4") || unregisteredCpf}
+                                    </span>
+                                </div>
                             </div>
                         </div>
-                        <div className="p-5 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 shrink-0">
+                        
+                        <div className="p-6 pt-2 bg-white flex justify-center gap-4 shrink-0 w-full">
                             <button
                                 type="button"
-                                onClick={() => {
-                                    setShowCpfNotFoundModal(false);
-                                }}
-                                className="px-5 py-3 bg-white border border-slate-200 hover:bg-slate-100 text-slate-600 font-extrabold rounded-2xl text-xs uppercase tracking-wider active:scale-95 transition-all"
+                                onClick={() => setShowCpfNotFoundModal(false)}
+                                className="flex-1 py-3.5 bg-slate-50 hover:bg-slate-100 text-slate-500 font-extrabold rounded-2xl text-xs uppercase tracking-wider active:scale-95 transition-all"
                             >
-                                Não
+                                Cancelar
                             </button>
                             <button
                                 type="button"
@@ -1890,9 +1902,9 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                     handleCpfChange(unregisteredCpf);
                                     setIsRegistering(true);
                                 }}
-                                className="px-6 py-3 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white font-extrabold rounded-2xl text-xs uppercase tracking-wider active:scale-95 transition-all flex items-center gap-1.5 shadow-md shadow-sky-500/20"
+                                className="flex-1 py-3.5 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white font-extrabold rounded-2xl text-xs uppercase tracking-wider active:scale-[0.98] transition-all shadow-xl shadow-sky-500/30 flex items-center justify-center gap-2"
                             >
-                                Sim
+                                Cadastrar
                             </button>
                         </div>
                     </div>

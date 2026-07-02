@@ -1318,18 +1318,24 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
 
                                 <div className="bg-slate-50/50 border border-slate-100 rounded-2xl p-3.5 flex flex-col justify-between">
                                     <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1">Validade</span>
-                                    <span className={`text-sm font-bold ${
-                                        new Date(selectedMed.validade).getTime() <= Date.now() 
-                                            ? 'text-rose-500' 
-                                            : 'text-slate-700'
-                                    }`}>
-                                        {formatDateBr(selectedMed.validade)}
-                                    </span>
+                                    {selectedMed.lote === 'LOTE-INICIAL' ? (
+                                        <span className="text-sm font-bold text-slate-400">
+                                            -
+                                        </span>
+                                    ) : (
+                                        <span className={`text-sm font-bold ${
+                                            new Date(selectedMed.validade).getTime() <= Date.now() 
+                                                ? 'text-rose-500' 
+                                                : 'text-slate-700'
+                                        }`}>
+                                            {formatDateBr(selectedMed.validade)}
+                                        </span>
+                                    )}
                                 </div>
                             </div>
 
                             {/* Warning or Status banner */}
-                            {new Date(selectedMed.validade).getTime() <= Date.now() ? (
+                            {(selectedMed.lote !== 'LOTE-INICIAL' && new Date(selectedMed.validade).getTime() <= Date.now()) ? (
                                 <div className="bg-rose-50 border border-rose-100 rounded-2xl p-3 flex items-start gap-2.5 text-[10px] font-semibold text-rose-700">
                                     <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
                                     <span>Este lote está vencido e não deve ser dispensado aos pacientes. Promova o descarte correto do estoque.</span>

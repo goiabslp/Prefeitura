@@ -151,7 +151,11 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
 
     // Filtered list of medicines for select modal
     const modalMedOptions = useMemo(() => {
-        // Show all medicines
+        // Se a busca estiver vazia, não retorna nada (aguarda pesquisa)
+        if (!medModalSearch.trim()) {
+            return [];
+        }
+
         let list = [...medicamentos];
         
         // Filter by category tab
@@ -159,16 +163,44 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
             list = list.filter(m => m.categoria === medModalCategory);
         }
         
-        // Filter by search query
-        if (medModalSearch.trim()) {
-            const query = medModalSearch.toLowerCase();
-            list = list.filter(m => 
-                m.nome.toLowerCase().startsWith(query) ||
-                (m.principio_ativo || '').toLowerCase().startsWith(query)
-            );
-        }
+        // Filter by search query (observando iniciais exatas - startsWith)
+        const query = medModalSearch.toLowerCase();
+        const filteredList = list.filter(m => 
+            m.nome.toLowerCase().startsWith(query) ||
+            (m.principio_ativo || '').toLowerCase().startsWith(query) ||
+            m.lote.toLowerCase().startsWith(query)
+        );
         
-        return list;
+        // Agrupar e manter apenas o lote com vencimento mais antigo (menor validade)
+        const grouped = new Map<string, typeof list[0]>();
+        
+        filteredList.forEach(m => {
+            const key = `${m.nome}-${m.dosagem || ''}-${m.forma_farmaceutica || ''}`;
+            const existing = grouped.get(key);
+            
+            if (!existing) {
+                grouped.set(key, m);
+            } else {
+                const existingHasStock = existing.quantidade > 0;
+                const currentHasStock = m.quantidade > 0;
+                
+                // Se o existente não tem estoque e o atual tem, damos preferência ao atual
+                if (!existingHasStock && currentHasStock) {
+                    grouped.set(key, m);
+                } 
+                // Se ambos têm estoque (ou ambos não têm), pegamos a menor validade
+                else if (existingHasStock === currentHasStock) {
+                    const dateExisting = new Date(existing.validade).getTime();
+                    const dateCurrent = new Date(m.validade).getTime();
+                    
+                    if (dateCurrent < dateExisting) {
+                        grouped.set(key, m);
+                    }
+                }
+            }
+        });
+        
+        return Array.from(grouped.values()).sort((a, b) => a.nome.localeCompare(b.nome));
     }, [medicamentos, medModalSearch, medModalCategory]);
 
     // Filter withdrawals for the active patient
@@ -1303,10 +1335,21 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                             ) : (
                                 <div className="py-12 flex flex-col items-center justify-center text-slate-400">
                                     <Search className="w-12 h-12 mb-2 opacity-20 text-slate-500" />
-                                    <h4 className="text-xs font-extrabold text-slate-700">Nenhum lote em estoque</h4>
-                                    <p className="text-[10px] text-slate-500 text-center mt-0.5 font-medium">
-                                        Não encontramos medicamentos que correspondam aos filtros selecionados.
-                                    </p>
+                                    {!medModalSearch.trim() ? (
+                                        <>
+                                            <h4 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">Aguardando pesquisa</h4>
+                                            <p className="text-[10px] text-slate-500 text-center mt-1 font-medium">
+                                                Digite as iniciais do nome, princípio ativo ou lote para buscar.
+                                            </p>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <h4 className="text-xs font-extrabold text-slate-700">Nenhum lote em estoque</h4>
+                                            <p className="text-[10px] text-slate-500 text-center mt-0.5 font-medium">
+                                                Não encontramos medicamentos que correspondam aos filtros selecionados.
+                                            </p>
+                                        </>
+                                    )}
                                 </div>
                             )}
                         </div>
