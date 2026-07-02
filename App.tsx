@@ -269,12 +269,37 @@ const App: React.FC = () => {
 
   const updateLicitacaoProcessMutation = useUpdateLicitacaoProcess();
 
-  const handleUpdateLicitacaoPhase = async (orderId: string, phase: string) => {
+  const handleUpdateLicitacaoPhase = async (orderId: string, phase: string, payload?: any) => {
     try {
-      await updateLicitacaoProcessMutation.mutateAsync({ id: orderId, updates: { fase: phase } });
-      setOrders(orders.map(o => o.id === orderId ? { ...o, documentSnapshot: { ...(o.documentSnapshot || {}), content: { ...(o.documentSnapshot?.content || {}), fase: phase } } } as unknown as Order : o));
+      const dbUpdates: any = { fase: phase };
+      if (payload?.protocolo) dbUpdates.protocolo = payload.protocolo;
+      if (payload?.checkin_finalizado) dbUpdates.checkin_finalizado = payload.checkin_finalizado;
+
+      await updateLicitacaoProcessMutation.mutateAsync({ id: orderId, updates: dbUpdates });
+      setOrders(orders.map(o => o.id === orderId ? { 
+        ...o, 
+        ...(payload?.protocolo ? { protocol: payload.protocolo } : {}),
+        documentSnapshot: { 
+          ...(o.documentSnapshot || {}), 
+          content: { 
+            ...(o.documentSnapshot?.content || {}), 
+            fase: phase,
+            ...(payload?.checkin_finalizado ? { checkin_finalizado: payload.checkin_finalizado } : {})
+          } 
+        } 
+      } as unknown as Order : o));
     } catch (error) {
       console.error('Failed to update phase', error);
+      throw error;
+    }
+  };
+
+  const handleUpdateLicitacaoProtocol = async (orderId: string, protocolo: string) => {
+    try {
+      await updateLicitacaoProcessMutation.mutateAsync({ id: orderId, updates: { protocolo } });
+      setOrders(orders.map(o => o.id === orderId ? { ...o, protocol: protocolo } as unknown as Order : o));
+    } catch (error) {
+      console.error('Failed to update protocol', error);
       throw error;
     }
   };
@@ -589,20 +614,20 @@ const App: React.FC = () => {
       const fetchMetadata = !scope || scope === 'metadata';
       const fetchEntities = !scope || scope === 'entities';
       const fetchTransactions = !scope || scope === 'transactions'; // Generic transactions
-      const fetchVehicleSchedules = !scope || scope === 'vehicle-scheduling';
-      const fetchAbastecimento = !scope || scope === 'abastecimento';
+      const fetchVehicleSchedules = (!scope || scope === 'vehicle-scheduling') && isModuleActive('parent_frotas');
+      const fetchAbastecimento = (!scope || scope === 'abastecimento') && isModuleActive('parent_abastecimento');
 
-      const fetchCompras = !scope || scope === 'compras';
-      const fetchDiarias = !scope || scope === 'diarias';
-      const fetchOficios = !scope || scope === 'oficio';
-      const fetchMarketing = !scope || scope === 'marketing';
-      const fetchRh = !scope || scope === 'rh';
-      const fetchAgriculture = !scope || scope === 'agriculture';
-      const fetchObras = !scope || scope === 'obras';
-      const fetchProjetos = !scope || scope === 'projetos';
-      const fetchLicitacao = !scope || scope === 'licitacao';
-      const fetchCalendar = !scope || scope === 'calendar';
-      const fetchTasks = true; // Always fetch tasks for now or optimize later
+      const fetchCompras = (!scope || scope === 'compras') && isModuleActive('parent_compras');
+      const fetchDiarias = (!scope || scope === 'diarias') && isModuleActive('parent_diarias');
+      const fetchOficios = (!scope || scope === 'oficio') && isModuleActive('parent_criar_oficio');
+      const fetchMarketing = (!scope || scope === 'marketing') && isModuleActive('parent_marketing');
+      const fetchRh = (!scope || scope === 'rh') && isModuleActive('parent_rh');
+      const fetchAgriculture = (!scope || scope === 'agriculture') && isModuleActive('parent_agricultura');
+      const fetchObras = (!scope || scope === 'obras') && isModuleActive('parent_obras');
+      const fetchProjetos = (!scope || scope === 'projetos') && isModuleActive('parent_projetos');
+      const fetchLicitacao = (!scope || scope === 'licitacao') && isModuleActive('parent_licitacao');
+      const fetchCalendar = (!scope || scope === 'calendar') && isModuleActive('parent_calendario');
+      const fetchTasks = (!scope || scope === 'transactions') && isModuleActive('parent_tarefas');
 
       // Batch 1: Metadata & Config (Fast)
       if (fetchMetadata || fetchAbastecimento) {
@@ -618,8 +643,8 @@ const App: React.FC = () => {
           entityService.getSectors(),
           entityService.getJobs(),
           entityService.getBrands(),
-          AbastecimentoService.getGasStations(),
-          AbastecimentoService.getFuelTypes(),
+          isModuleActive('parent_abastecimento') ? AbastecimentoService.getGasStations() : Promise.resolve([]),
+          isModuleActive('parent_abastecimento') ? AbastecimentoService.getFuelTypes() : Promise.resolve([]),
           entityService.getUsers(),
           db.getGlobalCounter(),
         ]);
@@ -698,16 +723,16 @@ const App: React.FC = () => {
 
       const promises: Promise<any>[] = [];
 
-      if (fetchCompras || fetchTransactions) {
+      if (fetchCompras || (fetchTransactions && isModuleActive('parent_compras'))) {
         promises.push(comprasService.getAllPurchaseOrders().then(d => { savedPurchaseOrders = d; }));
       }
       if (fetchTransactions) {
 
       }
-      if (fetchVehicleSchedules || fetchTransactions) {
+      if (fetchVehicleSchedules || (fetchTransactions && isModuleActive('parent_frotas'))) {
         promises.push(vehicleSchedulingService.getSchedules().then(d => { savedSchedules = d; }));
       }
-      if (fetchTasks || fetchTransactions) {
+      if (fetchTasks || (fetchTransactions && isModuleActive('parent_tarefas'))) {
         promises.push(taskService.getTasks().then(d => { savedTasks = d; }));
       }
       if (fetchMarketing && currentUser) {
@@ -721,12 +746,13 @@ const App: React.FC = () => {
       await Promise.all(promises);
 
       // Update States based on what was fetched
-      if (fetchCompras || fetchTransactions) {
+      // Update States based on what was fetched
+      if (fetchCompras || (fetchTransactions && isModuleActive('parent_compras'))) {
         // setPurchaseOrders(savedPurchaseOrders); // Derived
       }
 
-      if (fetchVehicleSchedules || fetchTransactions) setSchedules(savedSchedules);
-      if (fetchTasks || fetchTransactions) setTasks(savedTasks);
+      if (fetchVehicleSchedules || (fetchTransactions && isModuleActive('parent_frotas'))) setSchedules(savedSchedules);
+      if (fetchTasks || (fetchTransactions && isModuleActive('parent_tarefas'))) setTasks(savedTasks);
 
       // Update Consolidated Orders only if meaningful changes could have happened
       if (fetchCompras || fetchOficios || fetchDiarias || fetchTransactions) {
@@ -752,33 +778,55 @@ const App: React.FC = () => {
 
   // Realtime Listeners for Abastecimento Entities
   useEffect(() => {
-    // Vehicles Channel
-    const vehicleChannel = supabase.channel('public:vehicles')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'vehicles' },
-        async () => {
-          const updated = await entityService.getVehicles();
-          setVehicles(updated);
-          try { sessionStorage.setItem('cachedVehicles', JSON.stringify(updated)); } catch (e) { }
-        }
-      )
-      .subscribe();
+    const activeChannels: any[] = [];
 
-    // Profiles (Drivers/Users/Persons) Channel
+    // Vehicles & Schedules Channel (Frotas)
+    if (isModuleActive('parent_frotas')) {
+      const vehicleChannel = supabase.channel('public:vehicles')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'vehicles' },
+          async () => {
+            const updated = await entityService.getVehicles();
+            setVehicles(updated);
+            try { sessionStorage.setItem('cachedVehicles', JSON.stringify(updated)); } catch (e) { }
+          }
+        )
+        .subscribe();
+      activeChannels.push(vehicleChannel);
+
+      const schedulesChannel = supabase.channel('public:vehicle_schedules')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'vehicle_schedules' },
+          async (payload) => {
+            if (payload.eventType === 'DELETE') {
+              setSchedules(prev => prev.filter(s => s.id !== payload.old.id));
+              return;
+            }
+            const updatedSchedule = await vehicleSchedulingService.getScheduleById(payload.new.id);
+            if (updatedSchedule) {
+              if (payload.eventType === 'INSERT') setSchedules(prev => [updatedSchedule, ...prev]);
+              else setSchedules(prev => prev.map(s => s.id === updatedSchedule.id ? updatedSchedule : s));
+            }
+          }
+        )
+        .subscribe();
+      activeChannels.push(schedulesChannel);
+    }
+
+    // Profiles (Drivers/Users/Persons) Channel (Always Active for Auth)
     const profileChannel = supabase.channel('public:profiles')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'profiles' },
-        async () => {
-          // Update Persons (for dropdowns)
-          const updatedPersons = await entityService.getPersons();
-          setPersons(updatedPersons);
-          try { sessionStorage.setItem('cachedPersons', JSON.stringify(updatedPersons)); } catch (e) { }
-
-          // Update Users (for Auth & 2FA) - CRITICAL FOR SESSION SYNC
-          const savedUsers = await entityService.getUsers();
-          const mappedUsers: User[] = savedUsers.map((ru: any) => ({
+        async (payload) => {
+          if (payload.eventType === 'DELETE') {
+            setUsers(prev => prev.filter(u => u.id !== payload.old.id));
+            return;
+          }
+          const ru = payload.new;
+          const mappedUser: User = {
             id: ru.id,
             username: ru.username,
             name: ru.name,
@@ -797,140 +845,166 @@ const App: React.FC = () => {
             twoFactorSecret2: ru.two_factor_secret_2,
             status: ru.status,
             avatar: ru.avatar
-          }));
-          if (mappedUsers.length > 0) setUsers(mappedUsers);
+          };
+          if (payload.eventType === 'INSERT') {
+            setUsers(prev => [...prev, mappedUser]);
+          } else if (payload.eventType === 'UPDATE') {
+            setUsers(prev => prev.map(u => u.id === ru.id ? mappedUser : u));
+          }
         }
       )
       .subscribe();
+    activeChannels.push(profileChannel);
 
-    // Gas Stations Channel
-    const stationChannel = supabase.channel('public:abastecimento_gas_stations')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'abastecimento_gas_stations' },
-        async () => {
-          const updated = await AbastecimentoService.getGasStations();
-          setGasStations(updated);
-          try { sessionStorage.setItem('cachedGasStations', JSON.stringify(updated)); } catch (e) { }
-        }
-      )
-      .subscribe();
+    // Abastecimento
+    if (isModuleActive('parent_abastecimento')) {
+      const stationChannel = supabase.channel('public:abastecimento_gas_stations')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'abastecimento_gas_stations' },
+          async () => {
+            const updated = await AbastecimentoService.getGasStations();
+            setGasStations(updated);
+            try { sessionStorage.setItem('cachedGasStations', JSON.stringify(updated)); } catch (e) { }
+          }
+        )
+        .subscribe();
+      
+      const configChannel = supabase.channel('public:abastecimento_config')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'abastecimento_config' },
+          async () => {
+            const updated = await AbastecimentoService.getFuelTypes();
+            setFuelTypes(updated);
+            try { sessionStorage.setItem('cachedFuelTypes', JSON.stringify(updated)); } catch (e) { }
+          }
+        )
+        .subscribe();
+        
+      activeChannels.push(stationChannel, configChannel);
+    }
 
-    // Fuel Config Channel
-    const configChannel = supabase.channel('public:abastecimento_config')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'abastecimento_config' },
-        async () => {
-          const updated = await AbastecimentoService.getFuelTypes();
-          setFuelTypes(updated);
-          try { sessionStorage.setItem('cachedFuelTypes', JSON.stringify(updated)); } catch (e) { }
-        }
-      )
-      .subscribe();
+    // Purchase Orders Channel (Compras)
+    if (isModuleActive('parent_compras')) {
+      const purchaseChannel = supabase.channel('public:purchase_orders')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'purchase_orders' },
+          async (payload) => {
+            queryClient.invalidateQueries({ queryKey: purchaseOrderKeys.all });
+          }
+        )
+        .subscribe();
+      activeChannels.push(purchaseChannel);
+    }
 
-    // Purchase Orders Channel (NEW)
-    const purchaseChannel = supabase.channel('public:purchase_orders')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'purchase_orders' },
-        async () => {
-          syncOrders('compras');
-        }
-      )
-      .subscribe();
+    // TASKS Realtime Channel (Tarefas)
+    if (isModuleActive('parent_tarefas')) {
+      const tasksChannel = supabase.channel('public:tasks_realtime')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'tasks' },
+          async (payload) => {
+            if (payload.eventType === 'DELETE') {
+              setTasks(prev => prev.filter(t => t.id !== payload.old.id));
+              return;
+            }
+            const updatedTask = await taskService.getTaskById(payload.new.id);
+            if (updatedTask) {
+              if (payload.eventType === 'INSERT') setTasks(prev => [updatedTask, ...prev]);
+              else setTasks(prev => prev.map(t => t.id === updatedTask.id ? updatedTask : t));
+            }
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'task_assignments' },
+          async (payload) => {
+            if (payload.eventType === 'DELETE') {
+              const updatedTask = await taskService.getTaskById(payload.old.task_id);
+              if (updatedTask) setTasks(prev => prev.map(t => t.id === updatedTask.id ? updatedTask : t));
+              return;
+            }
+            const updatedTask = await taskService.getTaskById(payload.new.task_id);
+            if (updatedTask) setTasks(prev => prev.map(t => t.id === updatedTask.id ? updatedTask : t));
+          }
+        )
+        .subscribe();
+      activeChannels.push(tasksChannel);
+    }
 
-    // TASKS Realtime Channel
-    const tasksChannel = supabase.channel('public:tasks_realtime')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'tasks' },
-        async () => {
-          refreshData(true, 'transactions');
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'task_assignments' },
-        async () => {
-          refreshData(true, 'transactions');
-        }
-      )
-      .subscribe();
+    // Licitacao Channel
+    if (isModuleActive('parent_licitacao')) {
+      const licitacaoChannel = supabase.channel('public:licitacao_processos')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'licitacao_processos' },
+          () => {
+            queryClient.invalidateQueries({ queryKey: licitacaoKeys.all });
+          }
+        )
+        .subscribe();
+      activeChannels.push(licitacaoChannel);
+    }
 
-    // Vehicle Schedules Channel (NEW)
-    const schedulesChannel = supabase.channel('public:vehicle_schedules')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'vehicle_schedules' },
-        async () => {
-          refreshData(true, 'vehicle-scheduling');
-        }
-      )
-      .subscribe();
+    // Consultas Channel
+    if (isModuleActive('consultas')) {
+      const consultasChannel = supabase.channel('public:consultas_changes')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'consultas_agendamentos' },
+          () => {
+            window.dispatchEvent(new Event('consultas-agendamentos-changed'));
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'consultas_pacientes' },
+          () => {
+            window.dispatchEvent(new Event('consultas-pacientes-changed'));
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'consultas_procedimentos' },
+          () => {
+            window.dispatchEvent(new Event('consultas-procedimentos-changed'));
+          }
+        )
+        .subscribe();
+      activeChannels.push(consultasChannel);
+    }
 
-    // Licitacao Channel (NEW)
-    const licitacaoChannel = supabase.channel('public:licitacao_processos')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'licitacao_processos' },
-        () => {
-          queryClient.invalidateQueries({ queryKey: licitacaoKeys.all });
-        }
-      )
-      .subscribe();
+    // Farmácia Popular Channel
+    if (isModuleActive('farmacia')) {
+      const farmaciaChannel = supabase.channel('public:farmacia_changes')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'farmacia_medicamentos' },
+          () => {
+            window.dispatchEvent(new Event('farmacia-medicamentos-changed'));
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'farmacia_movimentacoes' },
+          () => {
+            window.dispatchEvent(new Event('farmacia-movimentacoes-changed'));
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'farmacia_config' },
+          () => {
+            window.dispatchEvent(new Event('farmacia-config-changed'));
+          }
+        )
+        .subscribe();
+      activeChannels.push(farmaciaChannel);
+    }
 
-    // Consultas Channel (NEW)
-    const consultasChannel = supabase.channel('public:consultas_changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'consultas_agendamentos' },
-        () => {
-          window.dispatchEvent(new Event('consultas-agendamentos-changed'));
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'consultas_pacientes' },
-        () => {
-          window.dispatchEvent(new Event('consultas-pacientes-changed'));
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'consultas_procedimentos' },
-        () => {
-          window.dispatchEvent(new Event('consultas-procedimentos-changed'));
-        }
-      )
-      .subscribe();
-
-    // Farmácia Popular Channel (NEW)
-    const farmaciaChannel = supabase.channel('public:farmacia_changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'farmacia_medicamentos' },
-        () => {
-          window.dispatchEvent(new Event('farmacia-medicamentos-changed'));
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'farmacia_movimentacoes' },
-        () => {
-          window.dispatchEvent(new Event('farmacia-movimentacoes-changed'));
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'farmacia_config' },
-        () => {
-          window.dispatchEvent(new Event('farmacia-config-changed'));
-        }
-      )
-      .subscribe();
-
-    // System Update Channel (NEW) - Enhanced with Broadcast for true Realtime
+    // System Update Channel (Always Active)
     const settingsChannel = supabase.channel('global-updates')
       .on(
         'postgres_changes',
@@ -957,21 +1031,12 @@ const App: React.FC = () => {
       .subscribe((status) => {
         console.log("Channel global-updates status:", status);
       });
+    activeChannels.push(settingsChannel);
 
     return () => {
-      supabase.removeChannel(vehicleChannel);
-      supabase.removeChannel(profileChannel);
-      supabase.removeChannel(stationChannel);
-      supabase.removeChannel(configChannel);
-      supabase.removeChannel(purchaseChannel);
-      supabase.removeChannel(tasksChannel);
-      supabase.removeChannel(schedulesChannel);
-      supabase.removeChannel(licitacaoChannel);
-      supabase.removeChannel(settingsChannel);
-      supabase.removeChannel(consultasChannel);
-      supabase.removeChannel(farmaciaChannel);
+      activeChannels.forEach(ch => supabase.removeChannel(ch));
     };
-  }, [queryClient]);
+  }, [queryClient, moduleStatus]);
 
   // --- PERSISTENT ROUTING LOGIC ---
   useEffect(() => {
@@ -4175,6 +4240,7 @@ const App: React.FC = () => {
                 onViewOrder={handleViewOrder}
                 sectors={sectors}
                 onUpdateLicitacaoPhase={handleUpdateLicitacaoPhase}
+                onUpdateLicitacaoProtocol={handleUpdateLicitacaoProtocol}
               />
             )}
 
@@ -4468,6 +4534,7 @@ const App: React.FC = () => {
                 onViewOrder={handleViewOrder}
                 sectors={sectors}
                 onUpdateLicitacaoPhase={handleUpdateLicitacaoPhase}
+                onUpdateLicitacaoProtocol={handleUpdateLicitacaoProtocol}
               />
             )}
 

@@ -3,6 +3,30 @@ import { VehicleSchedule, ScheduleStatus } from '../types';
 import { notificationService } from './notificationService';
 
 
+const mapSchedule = (s: any): VehicleSchedule => ({
+    id: s.id,
+    protocol: s.protocol,
+    vehicleId: s.vehicle_id,
+    driverId: s.driver_id,
+    requesterPersonId: s.requester_person_id,
+    requesterId: s.requester_id,
+    destination: s.destination,
+    serviceSectorId: s.service_sector_id,
+    purpose: s.purpose,
+    departureDateTime: s.departure_date_time,
+    returnDateTime: s.return_date_time,
+    vehicleLocation: s.vehicle_location,
+    status: s.status as ScheduleStatus,
+    createdAt: s.created_at,
+    authorizedByName: s.authorized_by_name,
+    passengers: s.passengers,
+    patientCount: s.patient_count,
+    companionCount: s.companion_count,
+    cancellationReason: s.cancellation_reason,
+    cancelledAt: s.cancelled_at,
+    cancelledBy: s.cancelled_by
+});
+
 export const getSchedules = async (): Promise<VehicleSchedule[]> => {
     const { data, error } = await supabase
         .from('vehicle_schedules')
@@ -14,29 +38,22 @@ export const getSchedules = async (): Promise<VehicleSchedule[]> => {
         return [];
     }
 
-    return data.map((s: any) => ({
-        id: s.id,
-        protocol: s.protocol,
-        vehicleId: s.vehicle_id,
-        driverId: s.driver_id,
-        requesterPersonId: s.requester_person_id,
-        requesterId: s.requester_id,
-        destination: s.destination,
-        serviceSectorId: s.service_sector_id,
-        purpose: s.purpose,
-        departureDateTime: s.departure_date_time,
-        returnDateTime: s.return_date_time,
-        vehicleLocation: s.vehicle_location,
-        status: s.status as ScheduleStatus,
-        createdAt: s.created_at,
-        authorizedByName: s.authorized_by_name,
-        passengers: s.passengers,
-        patientCount: s.patient_count,
-        companionCount: s.companion_count,
-        cancellationReason: s.cancellation_reason,
-        cancelledAt: s.cancelled_at,
-        cancelledBy: s.cancelled_by
-    }));
+    return data.map(mapSchedule);
+};
+
+export const getScheduleById = async (id: string): Promise<VehicleSchedule | null> => {
+    const { data, error } = await supabase
+        .from('vehicle_schedules')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+    if (error) {
+        console.error('Error fetching schedule:', error);
+        return null;
+    }
+
+    return mapSchedule(data);
 };
 
 const generateProtocol = async (): Promise<string> => {

@@ -43,6 +43,25 @@ export const getTasks = async (): Promise<Order[]> => {
     return data.map(mapTaskToOrder);
 };
 
+export const getTaskById = async (id: string): Promise<Order | null> => {
+    const { data, error } = await supabase
+        .from('tasks')
+        .select(`
+            *,
+            creator:creator_id(name),
+            task_assignments(user_id)
+        `)
+        .eq('id', id)
+        .single();
+
+    if (error) {
+        console.error('Error fetching task:', error);
+        return null;
+    }
+
+    return mapTaskToOrder(data);
+};
+
 export const createTask = async (task: Partial<Order>): Promise<Order | null> => {
     // 1. Insert Task
     const dbTask = {
