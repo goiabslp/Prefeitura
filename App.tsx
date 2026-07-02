@@ -78,6 +78,7 @@ import { AbastecimentoForm } from './components/abastecimento/AbastecimentoForm'
 import { AbastecimentoList } from './components/abastecimento/AbastecimentoList';
 import { AbastecimentoDashboard } from './components/abastecimento/AbastecimentoDashboard';
 import { ForcePasswordChangeModal } from './components/ForcePasswordChangeModal';
+import { AvatarSelectionModal } from './components/modals/AvatarSelectionModal';
 import { NotificationProvider, useNotification } from './contexts/NotificationContext';
 import { SystemSettingsProvider, useSystemSettings } from './contexts/SystemSettingsContext';
 import { useQueryClient } from '@tanstack/react-query';
