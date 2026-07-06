@@ -14,6 +14,7 @@ import { ptBR } from 'date-fns/locale';
 import { jsPDF } from 'jspdf';
 import { savePurchaseOrder } from '../../services/comprasService';
 import { useNotification } from '../../contexts/NotificationContext';
+import { PacientesTab } from '../common/PacientesTab';
 
 interface DashboardScreenProps {
     currentUser: User;
@@ -665,6 +666,11 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                             </div>
                         )}
                     </div>
+                </div>
+                
+                {/* Unified Pacientes Registration List */}
+                <div className="mt-6">
+                    <PacientesTab />
                 </div>
             </div>
             </>
