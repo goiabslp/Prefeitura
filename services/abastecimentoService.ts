@@ -138,7 +138,7 @@ export const AbastecimentoService = {
             if (filters) {
                 if (filters.search) {
                     const s = filters.search.toLowerCase();
-                    query = query.or(`vehicle.ilike.%${s}%,driver.ilike.%${s}%,fiscal.ilike.%${s}%,invoice_number.ilike.%${s}%`);
+                    query = query.or(`vehicle.ilike.%${s}%,driver.ilike.%${s}%,fiscal.ilike.%${s}%,invoice_number.eq.${s}`);
                 }
                 if (filters.date) {
                     const start = `${filters.date}T00:00:00-03:00`;
