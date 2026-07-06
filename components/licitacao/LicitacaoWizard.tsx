@@ -77,6 +77,19 @@ export const LicitacaoWizard: React.FC<LicitacaoWizardProps> = ({ currentUser, o
         setLocalDocuments(docs);
     }, [initialData]);
 
+    // Dados do solicitante original do processo licitatório (ou dados do usuário logado se for um novo processo)
+    const solicitanteNome = initialData
+        ? (initialData.documentSnapshot?.content?.requesterName || initialData.userName || '')
+        : currentUser.name;
+
+    const solicitanteCargo = initialData
+        ? (initialData.documentSnapshot?.content?.requesterRole || 'N/A')
+        : (currentUser.jobTitle || 'N/A');
+
+    const solicitanteSetor = initialData
+        ? (initialData.documentSnapshot?.content?.requesterSector || 'Geral')
+        : (currentUser.sector || 'Geral');
+
     const showToast = (message: string, type: ToastType = 'info') => {
         setToast({ show: true, message, type });
     };
@@ -430,7 +443,7 @@ export const LicitacaoWizard: React.FC<LicitacaoWizardProps> = ({ currentUser, o
                                         <label className="block text-[10px] font-bold tracking-widest text-slate-400 uppercase mb-1.5">Nome Completo</label>
                                         <input 
                                             type="text"
-                                            value={currentUser.name}
+                                            value={solicitanteNome}
                                             disabled
                                             className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none text-slate-600 font-medium text-sm"
                                         />
@@ -440,7 +453,7 @@ export const LicitacaoWizard: React.FC<LicitacaoWizardProps> = ({ currentUser, o
                                             <label className="block text-[10px] font-bold tracking-widest text-slate-400 uppercase mb-1.5">Cargo</label>
                                             <input 
                                                 type="text"
-                                                value={currentUser.jobTitle || 'N/A'}
+                                                value={solicitanteCargo}
                                                 disabled
                                                 className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none text-slate-600 font-medium text-sm"
                                             />
@@ -449,7 +462,7 @@ export const LicitacaoWizard: React.FC<LicitacaoWizardProps> = ({ currentUser, o
                                             <label className="block text-[10px] font-bold tracking-widest text-slate-400 uppercase mb-1.5">Setor</label>
                                             <input 
                                                 type="text"
-                                                value={currentUser.sector || 'Geral'}
+                                                value={solicitanteSetor}
                                                 disabled
                                                 className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl outline-none text-slate-600 font-medium text-sm"
                                             />
