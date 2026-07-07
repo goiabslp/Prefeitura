@@ -788,7 +788,7 @@ const App: React.FC = () => {
     const activeChannels: any[] = [];
 
     // Vehicles & Schedules Channel (Frotas)
-    if (isModuleActive('parent_frotas')) {
+    if (isModuleActive('parent_frotas') && (currentView === 'vehicle-scheduling' || activeBlock === 'agendamento')) {
       const vehicleChannel = supabase.channel('public:vehicles')
         .on(
           'postgres_changes',
@@ -864,7 +864,7 @@ const App: React.FC = () => {
     activeChannels.push(profileChannel);
 
     // Abastecimento
-    if (isModuleActive('parent_abastecimento')) {
+    if (isModuleActive('parent_abastecimento') && (currentView === 'abastecimento' || activeBlock === 'abastecimento')) {
       const stationChannel = supabase.channel('public:abastecimento_gas_stations')
         .on(
           'postgres_changes',
@@ -893,7 +893,7 @@ const App: React.FC = () => {
     }
 
     // Purchase Orders Channel (Compras)
-    if (isModuleActive('parent_compras')) {
+    if (isModuleActive('parent_compras') && activeBlock === 'compras') {
       const purchaseChannel = supabase.channel('public:purchase_orders')
         .on(
           'postgres_changes',
@@ -907,7 +907,7 @@ const App: React.FC = () => {
     }
 
     // TASKS Realtime Channel (Tarefas)
-    if (isModuleActive('parent_tarefas')) {
+    if (isModuleActive('parent_tarefas') && currentView === 'tasks-dashboard') {
       const tasksChannel = supabase.channel('public:tasks_realtime')
         .on(
           'postgres_changes',
@@ -942,7 +942,7 @@ const App: React.FC = () => {
     }
 
     // Licitacao Channel
-    if (isModuleActive('parent_licitacao')) {
+    if (isModuleActive('parent_licitacao') && activeBlock === 'licitacao') {
       const licitacaoChannel = supabase.channel('public:licitacao_processos')
         .on(
           'postgres_changes',
@@ -956,7 +956,7 @@ const App: React.FC = () => {
     }
 
     // Consultas Channel
-    if (isModuleActive('consultas')) {
+    if (isModuleActive('consultas') && currentView === 'consultas') {
       const consultasChannel = supabase.channel('public:consultas_changes')
         .on(
           'postgres_changes',
@@ -984,7 +984,7 @@ const App: React.FC = () => {
     }
 
     // Farmácia Popular Channel
-    if (isModuleActive('farmacia')) {
+    if (isModuleActive('farmacia') && currentView === 'farmacia') {
       const farmaciaChannel = supabase.channel('public:farmacia_changes')
         .on(
           'postgres_changes',
@@ -1043,7 +1043,7 @@ const App: React.FC = () => {
     return () => {
       activeChannels.forEach(ch => supabase.removeChannel(ch));
     };
-  }, [queryClient, moduleStatus]);
+  }, [queryClient, moduleStatus, currentView, activeBlock]);
 
   // --- PERSISTENT ROUTING LOGIC ---
   useEffect(() => {
@@ -1194,6 +1194,20 @@ const App: React.FC = () => {
       }
     }
 
+    const getScopeForView = (view: string, block: string): string | undefined => {
+      if (block === 'licitacao' || view === 'licitacao-all' || view === 'licitacao-screening') return 'licitacao';
+      if (view === 'vehicle-scheduling' || block === 'agendamento') return 'vehicle-scheduling';
+      if (view === 'abastecimento' || block === 'abastecimento') return 'abastecimento';
+      if (block === 'compras') return 'compras';
+      if (block === 'diarias') return 'diarias';
+      if (block === 'oficio') return 'oficio';
+      if (view === 'tasks-dashboard') return 'transactions'; // 'transactions' covers tasks
+      if (view === 'rh') return 'rh';
+      if (view === 'marketing') return 'marketing';
+      if (view === 'home') return 'metadata'; // apenas metadados leves
+      return undefined;
+    };
+
     const expectedPath = VIEW_TO_PATH[stateKey];
     if (expectedPath && window.location.pathname !== expectedPath) {
       window.history.pushState(null, '', expectedPath);
@@ -1201,9 +1215,10 @@ const App: React.FC = () => {
 
     // Auto-refresh on route change (Debounced to prevent timeout floods)
     const timeoutId = setTimeout(() => {
-      refreshData(true);
-      // Invalida todos os caches do react-query para forçar o fetch dos dados mais recentes da nova rota
-      queryClient.invalidateQueries();
+      const scope = getScopeForView(currentView as string, activeBlock as string);
+      if (scope) {
+        refreshData(true, scope);
+      }
     }, 500);
 
     return () => clearTimeout(timeoutId);
@@ -1265,6 +1280,8 @@ const App: React.FC = () => {
   // --- TRACKING LOGS EFFECTS ---
   // 1. Navigation Tracking
   useEffect(() => {
+    // Desativado temporariamente para economizar a cota de Egress/Database no Supabase
+    /*
     if (currentUser) {
       const getFriendlyViewName = (view: string) => {
         switch (view) {
@@ -1314,10 +1331,13 @@ const App: React.FC = () => {
         details: { view: currentView, block: activeBlock }
       });
     }
+    */
   }, [currentView, activeBlock, currentUser]);
 
   // 2. Global Click Tracking
   useEffect(() => {
+    // Desativado temporariamente para economizar a cota de Egress/Database no Supabase
+    /*
     if (!currentUser) return;
 
     const handleGlobalClick = (e: MouseEvent) => {
@@ -1384,6 +1404,7 @@ const App: React.FC = () => {
 
     window.addEventListener('click', handleGlobalClick, true);
     return () => window.removeEventListener('click', handleGlobalClick, true);
+    */
   }, [currentView, activeBlock, currentUser]);
 
   // --- SYSTEM AUTO-REFRESH ROUTINE (07:00, 12:00, 18:00) ---
