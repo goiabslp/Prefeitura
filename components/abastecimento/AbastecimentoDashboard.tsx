@@ -808,10 +808,34 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
         }).format(value);
     };
 
-    const loadRecords = async (limit: number = 2000) => {
-        // PERF: Temporarily fetching a large number of records to maintain dashboard functionality 
-        // which relies on client-side aggregation. Future TODO: Refactor dashboard to use server-side aggregation.
-        const { data } = await AbastecimentoService.getAbastecimentos(1, limit);
+    const loadRecords = async (
+        limit: number = 10000,
+        customFilters?: { startDate?: string; endDate?: string }
+    ) => {
+        let startDateStr = '';
+        let endDateStr = '';
+
+        if (customFilters?.startDate && customFilters?.endDate) {
+            startDateStr = customFilters.startDate;
+            endDateStr = customFilters.endDate;
+        } else if (activeTab === 'reports' || activeTab === 'lancamentos') {
+            startDateStr = appliedFilters.startDate;
+            endDateStr = appliedFilters.endDate;
+        } else {
+            // Dashboard: período de 6 meses relativo a selectedMonth e selectedYear
+            // Data inicial: 5 meses antes de selectedMonth
+            const startD = new Date(selectedYear, selectedMonth - 5, 1);
+            startDateStr = `${startD.getFullYear()}-${String(startD.getMonth() + 1).padStart(2, '0')}-01`;
+
+            // Data final: último dia de selectedMonth
+            const endD = new Date(selectedYear, selectedMonth + 1, 0);
+            endDateStr = `${endD.getFullYear()}-${String(endD.getMonth() + 1).padStart(2, '0')}-${String(endD.getDate()).padStart(2, '0')}`;
+        }
+
+        const { data } = await AbastecimentoService.getAbastecimentos(1, limit, {
+            startDate: startDateStr,
+            endDate: endDateStr
+        });
         setAllRecords(data);
     };
 
@@ -820,10 +844,18 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
         setReportHistory(history);
     };
 
+    // Carregar histórico de relatórios apenas uma vez no carregamento do componente
+    useEffect(() => {
+        loadReportHistory();
+    }, []);
+
+    // Recarregar registros de abastecimento quando mudar de mês, ano, aba ou quando filtros forem aplicados
     useEffect(() => {
         loadRecords();
-        loadReportHistory();
+    }, [selectedMonth, selectedYear, activeTab, appliedFilters]);
 
+    // Registrar o canal do Supabase para atualizar em tempo real
+    useEffect(() => {
         const channel = supabase
             .channel('dashboard-records-changes')
             .on(
@@ -838,9 +870,9 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
         return () => {
             supabase.removeChannel(channel);
         };
-    }, []);
+    }, [selectedMonth, selectedYear, activeTab, appliedFilters]);
 
-    // Effect to handle manual refresh trigger
+    // Efeito para tratar o gatilho de atualização manual
     useEffect(() => {
         if (refreshTrigger && refreshTrigger > 0) {
             loadRecords();
@@ -854,7 +886,7 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
         setIsPreparingReport(true);
         try {
             // Fetch a much larger limit to ensure all records matching the filter are available for the complete report
-            await loadRecords(10000);
+            await loadRecords(10000, { startDate: appliedFilters.startDate, endDate: appliedFilters.endDate });
 
             // We must wait for React to process the state update of allRecords before saving the report history?
             // Actually, the current reportData is already based on appliedFilters. 
@@ -1058,10 +1090,13 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
         // We need to look at 'allRecords' for this, not just filtered
         const last6MonthsMatches = allRecords.filter(r => {
             const d = new Date(r.date);
-            const now = new Date();
-            const sixMonthsAgo = new Date();
-            sixMonthsAgo.setMonth(now.getMonth() - 6);
-            return d >= sixMonthsAgo && d <= now;
+            const referenceDate = new Date(selectedYear, selectedMonth, 1);
+            const sixMonthsAgo = new Date(selectedYear, selectedMonth - 5, 1);
+            
+            // Fim do mês selecionado
+            const endOfReferenceMonth = new Date(selectedYear, selectedMonth + 1, 0, 23, 59, 59, 999);
+            
+            return d >= sixMonthsAgo && d <= endOfReferenceMonth;
         });
 
         const evolutionMap: Record<string, { month: string, cost: number, liters: number }> = {};
