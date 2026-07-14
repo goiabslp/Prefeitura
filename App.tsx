@@ -618,7 +618,7 @@ const App: React.FC = () => {
     if (!silent) showToast("Atualizando dados...", "info");
     try {
       // Determines which batches to run based on scope
-      const fetchMetadata = !scope || scope === 'metadata';
+      const fetchMetadata = !scope || scope === 'metadata' || scope === 'entities';
       const fetchEntities = !scope || scope === 'entities';
       const fetchTransactions = !scope || scope === 'transactions'; // Generic transactions
       const fetchVehicleSchedules = (!scope || scope === 'vehicle-scheduling') && isModuleActive('parent_frotas');
@@ -1205,6 +1205,7 @@ const App: React.FC = () => {
       if (view === 'rh') return 'rh';
       if (view === 'marketing') return 'marketing';
       if (view === 'home') return 'metadata'; // apenas metadados leves
+      if (view === 'admin') return 'entities';
       return undefined;
     };
 
