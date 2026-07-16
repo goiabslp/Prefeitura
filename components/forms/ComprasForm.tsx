@@ -236,12 +236,17 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
               <div>
                 <div className="flex justify-between items-center mb-1.5">
                   <label className={labelClass}>Finalidade do Pedido</label>
-                  <span className={`text-[9px] font-black tracking-wider uppercase px-2 py-0.5 rounded ${
+                  <span className={`text-xs font-black tracking-wider uppercase px-3 py-1.5 rounded-full flex items-center gap-1.5 border transition-all duration-300 ${
                     (content.title?.length || 0) >= 100 
-                      ? 'bg-emerald-50 text-emerald-700' 
-                      : 'bg-rose-50 text-rose-700'
+                      ? 'bg-emerald-100 text-emerald-800 border-emerald-200 shadow-sm' 
+                      : 'bg-rose-100 text-rose-800 border-rose-200 shadow-sm animate-pulse'
                   }`}>
-                    {content.title?.length || 0} / 100 caracteres no mínimo
+                    {(content.title?.length || 0) >= 100 ? (
+                      <Check className="w-3.5 h-3.5 text-emerald-600" />
+                    ) : (
+                      <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                    )}
+                    <span>{content.title?.length || 0} / 100 caracteres no mínimo</span>
                   </span>
                 </div>
                 <div className="relative group">
@@ -260,7 +265,7 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
                   <label className={labelClass}>Prioridade</label>
                   <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Selecione o nível de urgência</p>
                 </div>
-                <div className="flex bg-slate-100/80 p-1 rounded-full gap-1 w-full sm:max-w-xs border border-slate-200/50">
+                <div className="flex bg-slate-100/80 p-1 rounded-full gap-1 w-full sm:max-w-md border border-slate-200/50">
                   {PRIORITY_OPTIONS.map((opt) => {
                     const Icon = opt.icon;
                     const isSelected = content.priority === opt.value;
@@ -278,7 +283,7 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
                         type="button"
                         onClick={() => handleUpdate('content', 'priority', opt.value)}
                         className={`
-                          flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-full text-[10px] font-black uppercase tracking-wider transition-all duration-300
+                          flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 sm:px-3 rounded-full text-[10px] font-black uppercase tracking-wider transition-all duration-300
                           ${isSelected
                             ? selectedColors[opt.color as keyof typeof selectedColors]
                             : 'text-slate-400 hover:bg-white/50 hover:text-slate-600'}
@@ -593,7 +598,21 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
             <MessageSquare className="w-4 h-4 text-emerald-600" /> Justificativa do Pedido
           </h3>
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-            <label className={labelClass}>Descrição da Necessidade</label>
+            <div className="flex justify-between items-center mb-2">
+              <label className={labelClass}>Descrição da Necessidade</label>
+              <span className={`text-xs font-black tracking-wider uppercase px-3 py-1.5 rounded-full flex items-center gap-1.5 border transition-all duration-300 ${
+                (content.body?.length || 0) >= 400 
+                  ? 'bg-emerald-100 text-emerald-800 border-emerald-200 shadow-sm' 
+                  : 'bg-rose-100 text-rose-800 border-rose-200 shadow-sm animate-pulse'
+              }`}>
+                {(content.body?.length || 0) >= 400 ? (
+                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                ) : (
+                  <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                )}
+                <span>{(content.body?.length || 0)} / 400 caracteres no mínimo</span>
+              </span>
+            </div>
             <div className="relative">
               <textarea
                 value={content.body}

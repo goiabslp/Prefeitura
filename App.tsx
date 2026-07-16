@@ -2601,6 +2601,88 @@ const App: React.FC = () => {
     }
   };
 
+  const handleResetOrderFlow = async (order: Order) => {
+    if (!currentUser) return;
+    const prevOrders = orders;
+    const newMovement: StatusMovement = {
+      statusLabel: 'Fluxo Reiniciado',
+      date: new Date().toISOString(),
+      userName: currentUser.name,
+      justification: 'Fluxo reiniciado do zero devido a inatividade (Sem Movimentação)'
+    };
+
+    const updatedDocumentSnapshot = order.documentSnapshot ? {
+      ...order.documentSnapshot,
+      content: {
+        ...order.documentSnapshot.content,
+        signatureName: '',
+        signatureRole: '',
+        useDigitalSignature: true,
+        digitalSignature: { 
+          enabled: false,
+          method: '',
+          ip: '',
+          date: '',
+          id: ''
+        }
+      }
+    } : null;
+
+    const updatedOrder: Order = {
+      ...order,
+      status: 'pending',
+      purchaseStatus: null,
+      documentSnapshot: updatedDocumentSnapshot,
+      statusHistory: [...(order.statusHistory || []), newMovement]
+    };
+
+    auditLogService.logAction({
+      action_type: 'action',
+      module: order.blockType || 'geral',
+      description: `Reiniciou o fluxo do pedido: "${order.title || 'documento'}" (${order.protocol}) do zero`,
+      details: { protocol: order.protocol, title: order.title, type: order.blockType }
+    });
+
+    const updateList = (list: Order[]) => {
+      return list.map(o => o.id === updatedOrder.id ? updatedOrder : o);
+    };
+    setOrders(updateList);
+
+    const blockKey = purchaseOrderKeys.lists();
+    const detailKey = purchaseOrderKeys.detail(updatedOrder.id);
+
+    queryClient.setQueriesData({ queryKey: [...blockKey, 'infinite'] }, (oldData: any) => {
+      if (!oldData) return oldData;
+      return {
+        ...oldData,
+        pages: oldData.pages.map((page: any) =>
+          page.map((o: any) => o.id === updatedOrder.id ? { ...o, ...updatedOrder } : o)
+        )
+      };
+    });
+
+    queryClient.setQueriesData({ queryKey: blockKey }, (oldData: any) => {
+      if (!oldData || !Array.isArray(oldData)) return oldData;
+      return oldData.map((o: any) => o.id === updatedOrder.id ? { ...o, ...updatedOrder } : o);
+    });
+
+    queryClient.setQueriesData({ queryKey: detailKey }, (oldData: any) => {
+      if (!oldData) return oldData;
+      return { ...oldData, ...updatedOrder };
+    });
+
+    try {
+      await comprasService.savePurchaseOrder(updatedOrder);
+      showToast("Fluxo de Pedido Reiniciado do Zero", "success");
+      syncOrders('compras');
+    } catch (err) {
+      console.error("Failed to reset order flow:", err);
+      setOrders(prevOrders);
+      queryClient.invalidateQueries({ queryKey: blockKey });
+      showToast("Erro ao reiniciar o fluxo do pedido.", "error");
+    }
+  };
+
   const handleUpdatePurchaseStatus = async (orderOrId: string | Order, purchaseStatus: any, justification?: string, budgetFileUrl?: string, completionForecast?: string) => {
     if (!currentUser) return;
 
@@ -4571,6 +4653,7 @@ const App: React.FC = () => {
                 onUpdatePurchaseStatus={handleUpdatePurchaseStatus}
                 onViewOrder={handleViewOrder}
                 sectors={sectors}
+                onResetOrderFlow={handleResetOrderFlow}
               />
             )}
             {currentView === 'licitacao-all' && currentUser && (

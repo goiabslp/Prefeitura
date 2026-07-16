@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { ComprasStepper, StepStatus } from './ComprasStepper';
 import { AppState, ContentData, DocumentConfig, Signature, Person, Sector, Job } from '../../types';
 import { ComprasForm } from '../forms/ComprasForm';
-import { ChevronRight, ArrowLeft, CheckCircle2, Loader2, CreditCard, Info } from 'lucide-react';
+import { ChevronRight, ArrowLeft, CheckCircle2, Loader2, CreditCard, Info, AlertTriangle } from 'lucide-react';
 import { User } from '../../types';
 
 interface ComprasStepWizardProps {
@@ -29,6 +29,7 @@ export const ComprasStepWizard: React.FC<ComprasStepWizardProps> = ({
     const [showAccountWarning, setShowAccountWarning] = useState(false);
     const [showFichaModal, setShowFichaModal] = useState(false);
     const [hasShownFichaModal, setHasShownFichaModal] = useState(false);
+    const [validationWarning, setValidationWarning] = useState<string | null>(null);
 
     useEffect(() => {
         if (currentStep === 5 && !hasShownFichaModal) {
@@ -44,16 +45,16 @@ export const ComprasStepWizard: React.FC<ComprasStepWizardProps> = ({
         // Helper to check validity
         const s1Valid = !!(content.title && content.title.length >= 100 && content.requesterName && content.priority);
         const s2Valid = !!(content.purchaseItems && content.purchaseItems.length > 0);
-        const s3Valid = !!(content.body && content.body.length > 0);
+        const s3Valid = !!(content.body && content.body.length >= 400);
         const s4Valid = true; // Optional (Anexos)
         const s5Valid = !!(content.fichaOrcamentaria && content.fichaOrcamentaria !== 'N/A' && content.fichaOrcamentaria.trim() !== ''); // Ficha Orçamentária
         const s6Valid = !!(content.resolucaoDescricao && (content.resolucaoDescricao === 'N/A' || content.resolucaoNumero)); // Origem
         const s7Valid = !!(content.signatureName); // Assinar
-
+ 
         // Helper to check "started" (partial) - simple check if ANY field is filled
         const s1Started = !!(content.title || content.requesterName || content.priority);
         const s2Started = false; // Hard to be "partial" on items list, either have items or not
-        const s3Started = !!(content.body && content.body.length > 0);
+        const s3Started = !!(content.body && content.body.length > 0 && content.body.length < 400);
         const s5Started = !!(content.fichaOrcamentaria && content.fichaOrcamentaria !== 'N/A' && content.fichaOrcamentaria.trim() !== '');
         const s6Started = !!(content.resolucaoDescricao || content.resolucaoNumero);
         const s7Started = false;
@@ -81,7 +82,7 @@ export const ComprasStepWizard: React.FC<ComprasStepWizardProps> = ({
         return !!(
             content.title && content.title.length >= 100 && content.requesterName && content.priority && // Step 1
             content.purchaseItems && content.purchaseItems.length > 0 && // Step 2
-            content.body && // Step 3
+            content.body && content.body.length >= 400 && // Step 3
             content.fichaOrcamentaria && content.fichaOrcamentaria !== 'N/A' && content.fichaOrcamentaria.trim() !== '' && // Step 5
             content.resolucaoDescricao && (content.resolucaoDescricao === 'N/A' || content.resolucaoNumero) && // Step 6
             content.signatureName // Step 7
@@ -103,28 +104,29 @@ export const ComprasStepWizard: React.FC<ComprasStepWizardProps> = ({
 
     const validateStep = (step: number): boolean => {
         if (step === 1) {
-            if (!content.title) { alert('Informe a Finalidade do Pedido'); return false; }
-            if (content.title.length < 100) { alert('A Finalidade do Pedido deve ter no mínimo 100 caracteres.'); return false; }
-            if (!content.requesterName) { alert('Selecione o Solicitante'); return false; }
+            if (!content.title) { setValidationWarning('Informe a Finalidade do Pedido'); return false; }
+            if (content.title.length < 100) { setValidationWarning('A Finalidade do Pedido deve ter no mínimo 100 caracteres.'); return false; }
+            if (!content.requesterName) { setValidationWarning('Selecione o Solicitante'); return false; }
         }
         if (step === 2) {
             if (!content.purchaseItems || content.purchaseItems.length === 0) {
-                alert('Adicione pelo menos um item à lista');
+                setValidationWarning('Adicione pelo menos um item à lista');
                 return false;
             }
         }
         if (step === 3) {
-            if (!content.body) { alert('Preencha a Justificativa'); return false; }
+            if (!content.body) { setValidationWarning('Preencha a Justificativa'); return false; }
+            if (content.body.length < 400) { setValidationWarning('A Justificativa do Pedido deve ter no mínimo 400 caracteres.'); return false; }
         }
         if (step === 5) {
             if (!content.fichaOrcamentaria || content.fichaOrcamentaria === 'N/A' || content.fichaOrcamentaria.trim() === '') {
-                alert('A Ficha Orçamentária é obrigatória.');
+                setValidationWarning('A Ficha Orçamentária é obrigatória.');
                 return false;
             }
         }
         if (step === 6) {
             if (!content.resolucaoDescricao || (content.resolucaoDescricao !== 'N/A' && !content.resolucaoNumero)) {
-                alert('A Origem (Tipo e Número) é obrigatória.');
+                setValidationWarning('A Origem (Tipo e Número) é obrigatória.');
                 return false;
             }
         }
@@ -249,6 +251,37 @@ export const ComprasStepWizard: React.FC<ComprasStepWizardProps> = ({
                             className="w-full mt-6 py-4 bg-emerald-600 text-white font-black text-xs uppercase tracking-[0.2em] rounded-2xl shadow-xl shadow-emerald-600/20 hover:bg-emerald-700 hover:shadow-emerald-700/30 transition-all active:scale-[0.97] flex items-center justify-center gap-2"
                         >
                             <span>Entendido</span>
+                        </button>
+                    </div>
+                </div>,
+                document.body
+            )}
+
+            {validationWarning && createPortal(
+                <div className="fixed inset-0 z-[1300] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-fade-in text-slate-900">
+                    <div className="w-full max-w-sm bg-white rounded-[2rem] shadow-2xl border border-slate-100/50 p-8 flex flex-col items-center text-center animate-scale-up relative overflow-hidden">
+                        
+                        {/* Ícone Alerta */}
+                        <div className="w-16 h-16 bg-gradient-to-tr from-amber-500 to-yellow-400 rounded-3xl flex items-center justify-center mb-6 shadow-xl shadow-amber-500/20 rotate-3 hover:rotate-0 transition-transform duration-300">
+                            <AlertTriangle className="w-8 h-8 text-white animate-bounce" />
+                        </div>
+
+                        {/* Título */}
+                        <h4 className="text-xl font-black text-slate-900 tracking-tight leading-tight uppercase">
+                            Atenção
+                        </h4>
+                        
+                        {/* Descrição */}
+                        <p className="text-slate-600 font-semibold mt-4 text-sm leading-relaxed">
+                            {validationWarning}
+                        </p>
+                        
+                        {/* Botão */}
+                        <button
+                            onClick={() => setValidationWarning(null)}
+                            className="w-full mt-6 py-4 bg-slate-900 hover:bg-slate-800 text-white font-black text-xs uppercase tracking-[0.2em] rounded-2xl shadow-xl shadow-slate-900/20 transition-all active:scale-[0.97]"
+                        >
+                            Entendido
                         </button>
                     </div>
                 </div>,

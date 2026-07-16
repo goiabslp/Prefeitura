@@ -49,6 +49,7 @@ interface TrackingScreenProps {
     showAllProcesses?: boolean;
     onViewOrder?: (order: Order) => void;
     sectors?: Sector[];
+    onResetOrderFlow?: (order: Order) => Promise<void>;
 }
 
 export const TrackingScreen: React.FC<TrackingScreenProps> = ({
@@ -69,12 +70,14 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
     onUpdateLicitacaoProtocol,
     showAllProcesses = false,
     onViewOrder,
-    sectors = []
+    sectors = [],
+    onResetOrderFlow
 }) => {
     const queryClient = useQueryClient();
     const updateAccountMutation = useUpdatePurchaseOrderAccount();
     const [localOptimisticUpdates, setLocalOptimisticUpdates] = useState<Record<string, Partial<Order>>>({});
     const [successOrderId, setSuccessOrderId] = useState<string | null>(null);
+    const [resetFlowOrder, setResetFlowOrder] = useState<Order | null>(null);
     const [hoveredTooltip, setHoveredTooltip] = useState<{ text: string; type: 'licitacao' | 'compras' | 'diarias'; x: number; y: number } | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [purchaseStatusFilter, setPurchaseStatusFilter] = useState('all');
@@ -482,8 +485,16 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
         const canClick = isAdmin || (isComprasUser && !isLockedForUser && isApproved);
 
         const handleClick = (e: React.MouseEvent) => {
-            if (!canClick) return;
             e.stopPropagation();
+
+            if (isSemMov) {
+                if (isAdmin || isComprasUser) {
+                    setResetFlowOrder(order);
+                }
+                return;
+            }
+
+            if (!canClick) return;
 
             if (isAdmin && isEmAprovacao) {
                 setAdminApprovalOrder(order);
@@ -494,13 +505,14 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
 
         if (isApproved || isSemMov) {
             const displayConfig = config;
+            const isClickable = (isSemMov && (isAdmin || isComprasUser)) || canClick;
 
             return (
                 <button
                     onClick={handleClick}
-                    disabled={isLockedForUser || (!isApproved && !isAdmin)}
+                    disabled={isLockedForUser || (isSemMov ? (!isAdmin && !isComprasUser) : (!isApproved && !isAdmin))}
                     className={`flex items-center justify-between gap-2 px-3 py-1.5 rounded-full border transition-all duration-300 group
-                        ${canClick ? 'cursor-pointer hover:shadow-md active:scale-95' : 'cursor-default'}
+                        ${isClickable ? 'cursor-pointer hover:shadow-md active:scale-95' : 'cursor-default'}
                         ${isLockedForUser ? 'bg-purple-50 text-purple-700 border-purple-200 opacity-80' : `${displayConfig.color}`}
                     `}
                 >
@@ -510,7 +522,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                     </div>
                     {isLockedForUser ? (
                         <Lock className="w-2.5 h-2.5 text-purple-400 shrink-0" />
-                    ) : canClick ? (
+                    ) : isClickable ? (
                         <ChevronRight className="w-3 h-3 opacity-40 group-hover:translate-x-0.5 transition-transform shrink-0" />
                     ) : null}
                 </button>
@@ -2219,6 +2231,69 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                 className="w-full py-4 bg-indigo-600 text-white font-black text-xs uppercase tracking-[0.2em] rounded-2xl shadow-xl shadow-indigo-600/20 hover:bg-indigo-700 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                             >
                                 <Save className="w-4 h-4" /> Salvar Alteração
+                            </button>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
+
+            {resetFlowOrder && createPortal(
+                <div className="fixed inset-0 z-[1150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-fade-in text-slate-900">
+                    <div className="w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl border border-slate-100/50 p-8 flex flex-col items-center text-center animate-scale-up relative overflow-hidden">
+                        
+                        {/* Ícone Lindo */}
+                        <div className="w-16 h-16 bg-gradient-to-tr from-rose-600 to-amber-500 rounded-3xl flex items-center justify-center mb-6 shadow-xl shadow-rose-500/20 rotate-3 hover:rotate-0 transition-transform duration-300">
+                            <AlertTriangle className="w-8 h-8 text-white" />
+                        </div>
+
+                        {/* Título e Protocolo */}
+                        <h4 className="text-xl font-black text-slate-900 tracking-tight leading-tight uppercase">
+                            Processo Sem Movimentação
+                        </h4>
+                        <p className="text-xs font-bold text-rose-600 font-mono mt-1 tracking-wider">{resetFlowOrder.protocol}</p>
+                        
+                        {/* Descrição */}
+                        <p className="text-slate-500 font-medium mt-4 text-sm leading-relaxed">
+                            Este pedido está inativo há mais de <span className="font-bold text-slate-800">30 dias</span>. Escolha a ação que deseja realizar:
+                        </p>
+                        
+                        <div className="w-full mt-6 space-y-3">
+                            {/* Botão Principal: Reiniciar do Zero */}
+                            <button
+                                onClick={async () => {
+                                    const order = resetFlowOrder;
+                                    setResetFlowOrder(null);
+                                    await onResetOrderFlow?.(order);
+                                }}
+                                className="w-full py-4 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs uppercase tracking-[0.2em] rounded-2xl shadow-xl shadow-rose-600/20 transition-all active:scale-[0.97] flex items-center justify-center gap-2"
+                            >
+                                <RotateCcw className="w-4 h-4" />
+                                <span>Reiniciar Fluxo do Zero</span>
+                            </button>
+
+                            {/* Botão Secundário: Prosseguir com o Status atual (se for o caso) */}
+                            <button
+                                onClick={() => {
+                                    const order = resetFlowOrder;
+                                    setResetFlowOrder(null);
+                                    if (order.status === 'approved') {
+                                        setStatusSelectionOrder(order);
+                                    } else {
+                                        setAdminApprovalOrder(order);
+                                    }
+                                }}
+                                className="w-full py-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs uppercase tracking-[0.15em] rounded-2xl transition-all active:scale-[0.97]"
+                            >
+                                Prosseguir com Status Atual
+                            </button>
+
+                            {/* Botão Cancelar */}
+                            <button
+                                onClick={() => setResetFlowOrder(null)}
+                                className="w-full py-3 bg-transparent text-slate-400 hover:text-slate-600 font-bold text-xs uppercase tracking-wider transition-colors"
+                            >
+                                Voltar
                             </button>
                         </div>
                     </div>
