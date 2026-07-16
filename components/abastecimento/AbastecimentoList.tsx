@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Search, Filter, Fuel, Trash2, Calendar, User, Truck, ShieldCheck, FileText, ChevronDown, Check, X } from 'lucide-react';
-import { AbastecimentoService, AbastecimentoRecord } from '../../services/abastecimentoService';
+import { AbastecimentoService, AbastecimentoRecord, GasStation } from '../../services/abastecimentoService';
 import { supabase } from '../../services/supabaseClient';
 import { GestureItem } from '../common/GestureItem';
 import { formatLocalDateTime, getLocalISOData } from '../../utils/dateUtils';
@@ -156,9 +156,11 @@ export const AbastecimentoList: React.FC<AbastecimentoListProps> = ({ onBack, on
     });
     const [filterSector, setFilterSector] = useState('all');
     const [filterFuel, setFilterFuel] = useState('all');
+    const [filterStation, setFilterStation] = useState('all');
 
     // Dropdown Data
     const [sectorsList, setSectorsList] = useState<{ id: string, name: string }[]>([]);
+    const [gasStations, setGasStations] = useState<GasStation[]>([]);
 
     const [isFilterOpen, setIsFilterOpen] = useState(false);
 
@@ -174,7 +176,7 @@ export const AbastecimentoList: React.FC<AbastecimentoListProps> = ({ onBack, on
     // Reset pagination when filters change
     useEffect(() => {
         setPage(1);
-    }, [filterMode, selectedDate, filterSector, filterFuel, refreshTrigger]);
+    }, [filterMode, selectedDate, filterSector, filterFuel, filterStation, refreshTrigger]);
 
     const loadSupplies = React.useCallback(async (currentPage: number, resetList: boolean = false) => {
         setIsLoading(true);
@@ -184,6 +186,7 @@ export const AbastecimentoList: React.FC<AbastecimentoListProps> = ({ onBack, on
             if (debouncedSearch) filters.search = debouncedSearch;
             if (filterSector && filterSector !== 'all') filters.sector = filterSector;
             if (filterFuel && filterFuel !== 'all') filters.fuelType = filterFuel;
+            if (filterStation && filterStation !== 'all') filters.station = filterStation;
 
             if (filterMode === 'today' || filterMode === 'date') {
                 const baseDateStr = filterMode === 'today'
@@ -193,12 +196,13 @@ export const AbastecimentoList: React.FC<AbastecimentoListProps> = ({ onBack, on
                 filters.date = baseDateStr;
             }
 
-            const [dataRes, vehiclesRes, sectorsRes] = await Promise.all([
+            const [dataRes, vehiclesRes, sectorsRes, stationsRes] = await Promise.all([
                 AbastecimentoService.getAbastecimentos(currentPage, 50, filters),
                 // Optimization: Load metadata only if maps are empty or forced refresh
                 // But for now keeping simple to ensure consistency
                 Object.keys(vehicleSectorMap).length === 0 ? supabase.from('vehicles').select('*') : Promise.resolve({ data: null }),
-                Object.keys(vehicleSectorMap).length === 0 ? supabase.from('sectors').select('*') : Promise.resolve({ data: null })
+                Object.keys(vehicleSectorMap).length === 0 ? supabase.from('sectors').select('*') : Promise.resolve({ data: null }),
+                gasStations.length === 0 ? AbastecimentoService.getGasStations() : Promise.resolve(null)
             ]);
 
             if (resetList || currentPage === 1) {
@@ -209,6 +213,10 @@ export const AbastecimentoList: React.FC<AbastecimentoListProps> = ({ onBack, on
 
             setTotalCount(dataRes.count);
             setHasMore(dataRes.data.length === 50);
+
+            if (stationsRes) {
+                setGasStations(stationsRes.sort((a: any, b: any) => a.name.localeCompare(b.name)));
+            }
 
             if (vehiclesRes.data && sectorsRes.data) {
                 const sectorLookup = sectorsRes.data.reduce((acc: any, s: any) => {
@@ -246,7 +254,7 @@ export const AbastecimentoList: React.FC<AbastecimentoListProps> = ({ onBack, on
         } finally {
             setIsLoading(false);
         }
-    }, [debouncedSearch, filterSector, filterFuel, filterMode, selectedDate]); // Dependencies ensuring fresh state
+    }, [debouncedSearch, filterSector, filterFuel, filterStation, filterMode, selectedDate, vehicleSectorMap, gasStations.length]); // Dependencies ensuring fresh state
 
     useEffect(() => {
         loadSupplies(page, page === 1);
@@ -315,7 +323,8 @@ export const AbastecimentoList: React.FC<AbastecimentoListProps> = ({ onBack, on
                         <div className="relative">
                             <button
                                 onClick={() => setIsFilterOpen(!isFilterOpen)}
-                                className={`flex items-center justify-center gap-2 px-4 py-2.5 border rounded-xl font-bold text-xs shadow-sm transition-all active:scale-95 ${filterMode !== 'all'
+                                className={`flex items-center justify-center gap-2 px-4 py-2.5 border rounded-xl font-bold text-xs shadow-sm transition-all active:scale-95 ${
+                                    (filterMode !== 'all' || filterSector !== 'all' || filterFuel !== 'all' || filterStation !== 'all')
                                     ? 'bg-cyan-50 border-cyan-200 text-cyan-700'
                                     : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
                                     }`}
@@ -394,6 +403,20 @@ export const AbastecimentoList: React.FC<AbastecimentoListProps> = ({ onBack, on
                                                 <option value="all">Todos</option>
                                                 {sectorsList.map(s => (
                                                     <option key={s.id} value={s.id}>{s.name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Posto</span>
+                                            <select
+                                                value={filterStation}
+                                                onChange={(e) => setFilterStation(e.target.value)}
+                                                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-2 text-xs font-bold text-slate-700 outline-none focus:border-cyan-500"
+                                            >
+                                                <option value="all">Todos</option>
+                                                {gasStations.map(station => (
+                                                    <option key={station.id} value={station.name}>{station.name}</option>
                                                 ))}
                                             </select>
                                         </div>
