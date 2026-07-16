@@ -425,7 +425,9 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
         const isEmAprovacao = !order.status || order.status === 'pending' || order.status === 'awaiting_approval' || order.status === 'payment_account';
 
         const isLockedForUser = currentStatus === 'aprovacao_orcamento' && !isAdmin;
-        const canClick = (isAdmin && isEmAprovacao) || (isComprasUser && !isLockedForUser && isApproved);
+        // O administrador sempre pode clicar para gerenciar ou fazer o fluxo rodar.
+        // O usuário do compras pode clicar se o pedido estiver aprovado e não estiver bloqueado.
+        const canClick = isAdmin || (isComprasUser && !isLockedForUser && isApproved);
 
         const handleClick = (e: React.MouseEvent) => {
             if (!canClick) return;
@@ -433,7 +435,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
 
             if (isAdmin && isEmAprovacao) {
                 setAdminApprovalOrder(order);
-            } else if (isComprasUser && isApproved) {
+            } else if ((isComprasUser || isAdmin) && isApproved) {
                 setStatusSelectionOrder(order);
             }
         };
