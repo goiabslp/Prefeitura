@@ -220,6 +220,30 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
             });
         }
 
+        if (purchaseStatusFilter !== 'all') {
+            return withOverrides.filter(order => {
+                const status = order.status;
+                const isInAprovacao = status === 'pending' || status === 'awaiting_approval' || status === 'payment_account';
+                const isRecebido = status === 'approved' && (!order.purchaseStatus || order.purchaseStatus === 'recebido');
+                
+                let isSemMov = false;
+                if (isInAprovacao || isRecebido) {
+                    const lastDateStr = order.statusHistory && order.statusHistory.length > 0
+                        ? order.statusHistory[order.statusHistory.length - 1].date
+                        : order.createdAt;
+                    const diffTime = Date.now() - new Date(lastDateStr).getTime();
+                    const days = diffTime / (1000 * 60 * 60 * 24);
+                    if (days > 30) {
+                        isSemMov = true;
+                    }
+                }
+
+                if (isSemMov) return false;
+
+                return true;
+            });
+        }
+
         return withOverrides;
     }, [infinitePurchaseOrders, orders, localOptimisticUpdates, purchaseStatusFilter]);
 

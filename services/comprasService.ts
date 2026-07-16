@@ -42,7 +42,11 @@ export const getAllPurchaseOrders = async (lightweight = true, page = 0, limit =
     }
 
     if (purchaseStatus) {
-        query = query.eq('purchase_status', purchaseStatus);
+        if (purchaseStatus === 'recebido') {
+            query = query.or('purchase_status.eq.recebido,and(purchase_status.is.null,status.eq.approved)');
+        } else {
+            query = query.eq('purchase_status', purchaseStatus);
+        }
     }
 
     if (lightweight) {
