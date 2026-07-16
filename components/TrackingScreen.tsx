@@ -153,9 +153,11 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
         counts.all = allPurchaseOrders.length;
         allPurchaseOrders.forEach(order => {
             const status = order.status;
+            const isInAprovacao = status === 'pending' || status === 'awaiting_approval' || status === 'payment_account';
+            const isRecebido = status === 'approved' && (!order.purchaseStatus || order.purchaseStatus === 'recebido');
             let pStatus: string | null = order.purchaseStatus || (status === 'approved' ? 'recebido' : null);
 
-            if (pStatus === 'recebido') {
+            if (isInAprovacao || isRecebido) {
                 const lastDateStr = order.statusHistory && order.statusHistory.length > 0
                     ? order.statusHistory[order.statusHistory.length - 1].date
                     : order.createdAt;
@@ -167,7 +169,11 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
             }
 
             if (status === 'pending' || status === 'awaiting_approval' || status === 'payment_account') {
-                counts['pending_approval'] = (counts['pending_approval'] || 0) + 1;
+                if (pStatus === 'sem_movimentacao') {
+                    counts['sem_movimentacao'] = (counts['sem_movimentacao'] || 0) + 1;
+                } else {
+                    counts['pending_approval'] = (counts['pending_approval'] || 0) + 1;
+                }
             } else if (status === 'rejected') {
                 counts['rejected'] = (counts['rejected'] || 0) + 1;
             } else if (pStatus) {
@@ -198,8 +204,9 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
         if (purchaseStatusFilter === 'sem_movimentacao') {
             return withOverrides.filter(order => {
                 const status = order.status;
-                const pStatus = order.purchaseStatus || (status === 'approved' ? 'recebido' : null);
-                if (pStatus !== 'recebido') return false;
+                const isInAprovacao = status === 'pending' || status === 'awaiting_approval' || status === 'payment_account';
+                const isRecebido = status === 'approved' && (!order.purchaseStatus || order.purchaseStatus === 'recebido');
+                if (!isInAprovacao && !isRecebido) return false;
 
                 const lastDateStr = order.statusHistory && order.statusHistory.length > 0
                     ? order.statusHistory[order.statusHistory.length - 1].date
@@ -450,11 +457,12 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
         const isApproved = order.status === 'approved';
         const isEmAprovacao = !order.status || order.status === 'pending' || order.status === 'awaiting_approval' || order.status === 'payment_account';
         const isFinalized = order.status === 'rejected' || order.purchaseStatus === 'concluido' || order.purchaseStatus === 'cancelado';
+        const isRecebido = isApproved && (!order.purchaseStatus || order.purchaseStatus === 'recebido');
 
         let currentStatus: string = order.purchaseStatus || 'recebido';
 
         let isSemMov = false;
-        if (isApproved && (order.purchaseStatus === 'recebido' || !order.purchaseStatus)) {
+        if (isEmAprovacao || isRecebido) {
             const lastDateStr = order.statusHistory && order.statusHistory.length > 0
                 ? order.statusHistory[order.statusHistory.length - 1].date
                 : order.createdAt;
