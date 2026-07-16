@@ -104,6 +104,25 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
         };
     }, [isStatusDropdownOpen]);
 
+    const checkIsSemMovimentacao = (order: Order): boolean => {
+        const status = order.status;
+        const isEmAprovacao = !status || status === 'pending' || status === 'awaiting_approval' || status === 'payment_account';
+        const isRecebido = status === 'approved' && (!order.purchaseStatus || order.purchaseStatus === 'recebido');
+        
+        if (!isEmAprovacao && !isRecebido) return false;
+
+        const lastDateStr = order.statusHistory && order.statusHistory.length > 0
+            ? order.statusHistory[order.statusHistory.length - 1].date
+            : order.createdAt;
+        
+        const lastDate = new Date(lastDateStr);
+        const now = new Date();
+        const diffTime = now.getTime() - lastDate.getTime();
+        const days = diffTime / (1000 * 60 * 60 * 24);
+        
+        return days >= 30;
+    };
+
     // OFICIOS
     const {
         data: infiniteOficios,
@@ -156,19 +175,11 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
         counts.all = allPurchaseOrders.length;
         allPurchaseOrders.forEach(order => {
             const status = order.status;
-            const isInAprovacao = status === 'pending' || status === 'awaiting_approval' || status === 'payment_account';
-            const isRecebido = status === 'approved' && (!order.purchaseStatus || order.purchaseStatus === 'recebido');
+            const isSemMov = checkIsSemMovimentacao(order);
             let pStatus: string | null = order.purchaseStatus || (status === 'approved' ? 'recebido' : null);
 
-            if (isInAprovacao || isRecebido) {
-                const lastDateStr = order.statusHistory && order.statusHistory.length > 0
-                    ? order.statusHistory[order.statusHistory.length - 1].date
-                    : order.createdAt;
-                const diffTime = Date.now() - new Date(lastDateStr).getTime();
-                const days = diffTime / (1000 * 60 * 60 * 24);
-                if (days > 30) {
-                    pStatus = 'sem_movimentacao';
-                }
+            if (isSemMov) {
+                pStatus = 'sem_movimentacao';
             }
 
             if (status === 'pending' || status === 'awaiting_approval' || status === 'payment_account') {
@@ -205,41 +216,13 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
         });
 
         if (purchaseStatusFilter === 'sem_movimentacao') {
-            return withOverrides.filter(order => {
-                const status = order.status;
-                const isInAprovacao = status === 'pending' || status === 'awaiting_approval' || status === 'payment_account';
-                const isRecebido = status === 'approved' && (!order.purchaseStatus || order.purchaseStatus === 'recebido');
-                if (!isInAprovacao && !isRecebido) return false;
-
-                const lastDateStr = order.statusHistory && order.statusHistory.length > 0
-                    ? order.statusHistory[order.statusHistory.length - 1].date
-                    : order.createdAt;
-                const diffTime = Date.now() - new Date(lastDateStr).getTime();
-                const days = diffTime / (1000 * 60 * 60 * 24);
-                return days > 30;
-            });
+            return withOverrides.filter(order => checkIsSemMovimentacao(order));
         }
 
         if (purchaseStatusFilter !== 'all') {
             return withOverrides.filter(order => {
-                const status = order.status;
-                const isInAprovacao = status === 'pending' || status === 'awaiting_approval' || status === 'payment_account';
-                const isRecebido = status === 'approved' && (!order.purchaseStatus || order.purchaseStatus === 'recebido');
-                
-                let isSemMov = false;
-                if (isInAprovacao || isRecebido) {
-                    const lastDateStr = order.statusHistory && order.statusHistory.length > 0
-                        ? order.statusHistory[order.statusHistory.length - 1].date
-                        : order.createdAt;
-                    const diffTime = Date.now() - new Date(lastDateStr).getTime();
-                    const days = diffTime / (1000 * 60 * 60 * 24);
-                    if (days > 30) {
-                        isSemMov = true;
-                    }
-                }
-
+                const isSemMov = checkIsSemMovimentacao(order);
                 if (isSemMov) return false;
-
                 return true;
             });
         }
@@ -488,17 +471,9 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
 
         let currentStatus: string = order.purchaseStatus || 'recebido';
 
-        let isSemMov = false;
-        if (isEmAprovacao || isRecebido) {
-            const lastDateStr = order.statusHistory && order.statusHistory.length > 0
-                ? order.statusHistory[order.statusHistory.length - 1].date
-                : order.createdAt;
-            const diffTime = Date.now() - new Date(lastDateStr).getTime();
-            const days = diffTime / (1000 * 60 * 60 * 24);
-            if (days > 30) {
-                isSemMov = true;
-                currentStatus = 'sem_movimentacao';
-            }
+        const isSemMov = checkIsSemMovimentacao(order);
+        if (isSemMov) {
+            currentStatus = 'sem_movimentacao';
         }
 
         const config = purchaseStatusMap[currentStatus as keyof typeof purchaseStatusMap] || purchaseStatusMap.recebido;
