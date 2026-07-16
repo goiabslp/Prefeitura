@@ -121,6 +121,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
     }, [infiniteOficios, orders]);
 
     // COMPRAS
+    const isLocalFilter = purchaseStatusFilter === 'sem_movimentacao';
     const {
         data: infinitePurchaseOrders,
         fetchNextPage: fetchNextPurchaseOrders,
@@ -131,8 +132,8 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
     } = useInfinitePurchaseOrders(
         20,
         searchTerm,
-        purchaseStatusFilter === 'pending_approval' || purchaseStatusFilter === 'rejected' || purchaseStatusFilter === 'payment_account' ? purchaseStatusFilter : undefined,
-        (purchaseStatusFilter !== 'all' && purchaseStatusFilter !== 'pending_approval' && purchaseStatusFilter !== 'rejected' && purchaseStatusFilter !== 'payment_account') ? purchaseStatusFilter : undefined
+        (purchaseStatusFilter === 'pending_approval' || purchaseStatusFilter === 'rejected' || purchaseStatusFilter === 'payment_account') ? purchaseStatusFilter : undefined,
+        (purchaseStatusFilter !== 'all' && purchaseStatusFilter !== 'pending_approval' && purchaseStatusFilter !== 'rejected' && purchaseStatusFilter !== 'payment_account' && !isLocalFilter) ? purchaseStatusFilter : undefined
     );
 
     const { data: remoteAllPurchaseOrders } = usePurchaseOrders();
@@ -152,14 +153,23 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
         counts.all = allPurchaseOrders.length;
         allPurchaseOrders.forEach(order => {
             const status = order.status;
-            const pStatus = order.purchaseStatus || (status === 'approved' ? 'recebido' : null);
+            let pStatus: string | null = order.purchaseStatus || (status === 'approved' ? 'recebido' : null);
 
-            if (status === 'pending' || status === 'awaiting_approval') {
+            if (pStatus === 'recebido') {
+                const lastDateStr = order.statusHistory && order.statusHistory.length > 0
+                    ? order.statusHistory[order.statusHistory.length - 1].date
+                    : order.createdAt;
+                const diffTime = Date.now() - new Date(lastDateStr).getTime();
+                const days = diffTime / (1000 * 60 * 60 * 24);
+                if (days > 30) {
+                    pStatus = 'sem_movimentacao';
+                }
+            }
+
+            if (status === 'pending' || status === 'awaiting_approval' || status === 'payment_account') {
                 counts['pending_approval'] = (counts['pending_approval'] || 0) + 1;
             } else if (status === 'rejected') {
                 counts['rejected'] = (counts['rejected'] || 0) + 1;
-            } else if (status === 'payment_account') {
-                counts['payment_account'] = (counts['payment_account'] || 0) + 1;
             } else if (pStatus) {
                 counts[pStatus] = (counts[pStatus] || 0) + 1;
             }
@@ -177,14 +187,31 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
         });
 
         // Apply local overrides for absolute immediate feedback
-        return baseList.map(order => {
+        const withOverrides = baseList.map(order => {
             const override = localOptimisticUpdates[order.id];
             if (override) {
                 return { ...order, ...override };
             }
             return order;
         });
-    }, [infinitePurchaseOrders, orders, localOptimisticUpdates]);
+
+        if (purchaseStatusFilter === 'sem_movimentacao') {
+            return withOverrides.filter(order => {
+                const status = order.status;
+                const pStatus = order.purchaseStatus || (status === 'approved' ? 'recebido' : null);
+                if (pStatus !== 'recebido') return false;
+
+                const lastDateStr = order.statusHistory && order.statusHistory.length > 0
+                    ? order.statusHistory[order.statusHistory.length - 1].date
+                    : order.createdAt;
+                const diffTime = Date.now() - new Date(lastDateStr).getTime();
+                const days = diffTime / (1000 * 60 * 60 * 24);
+                return days > 30;
+            });
+        }
+
+        return withOverrides;
+    }, [infinitePurchaseOrders, orders, localOptimisticUpdates, purchaseStatusFilter]);
 
 
     // DIARIAS
@@ -403,6 +430,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
         realizado: { label: 'Pedido Realizado', icon: ShoppingCart, color: 'text-emerald-600 bg-emerald-50 border-emerald-100' },
         concluido: { label: 'Concluído', icon: CheckCircle, color: 'text-slate-600 bg-slate-50 border-slate-100' },
         cancelado: { label: 'Cancelado', icon: XCircle, color: 'text-rose-600 bg-rose-50 border-rose-100' },
+        sem_movimentacao: { label: 'Sem Movimentação', icon: AlertTriangle, color: 'text-rose-700 bg-rose-50 border-rose-200 shadow-[0_0_8px_rgba(244,63,94,0.15)] animate-pulse' },
     };
 
     const licitacaoFasesMap = {
@@ -419,10 +447,26 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
     };
 
     const PurchaseStatusSelector = ({ order }: { order: Order }) => {
-        const currentStatus = order.purchaseStatus || 'recebido';
-        const config = purchaseStatusMap[currentStatus as keyof typeof purchaseStatusMap] || purchaseStatusMap.recebido;
         const isApproved = order.status === 'approved';
         const isEmAprovacao = !order.status || order.status === 'pending' || order.status === 'awaiting_approval' || order.status === 'payment_account';
+        const isFinalized = order.status === 'rejected' || order.purchaseStatus === 'concluido' || order.purchaseStatus === 'cancelado';
+
+        let currentStatus: string = order.purchaseStatus || 'recebido';
+
+        let isSemMov = false;
+        if (isApproved && (order.purchaseStatus === 'recebido' || !order.purchaseStatus)) {
+            const lastDateStr = order.statusHistory && order.statusHistory.length > 0
+                ? order.statusHistory[order.statusHistory.length - 1].date
+                : order.createdAt;
+            const diffTime = Date.now() - new Date(lastDateStr).getTime();
+            const days = diffTime / (1000 * 60 * 60 * 24);
+            if (days > 30) {
+                isSemMov = true;
+                currentStatus = 'sem_movimentacao';
+            }
+        }
+
+        const config = purchaseStatusMap[currentStatus as keyof typeof purchaseStatusMap] || purchaseStatusMap.recebido;
 
         const isLockedForUser = currentStatus === 'aprovacao_orcamento' && !isAdmin;
         // O administrador sempre pode clicar para gerenciar ou fazer o fluxo rodar.
@@ -440,20 +484,20 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
             }
         };
 
-        if (isApproved) {
+        if (isApproved || isSemMov) {
             const displayConfig = config;
 
             return (
                 <button
                     onClick={handleClick}
-                    disabled={isLockedForUser}
+                    disabled={isLockedForUser || (!isApproved && !isAdmin)}
                     className={`flex items-center justify-between gap-2 px-3 py-1.5 rounded-full border transition-all duration-300 group
                         ${canClick ? 'cursor-pointer hover:shadow-md active:scale-95' : 'cursor-default'}
                         ${isLockedForUser ? 'bg-purple-50 text-purple-700 border-purple-200 opacity-80' : `${displayConfig.color}`}
                     `}
                 >
                     <div className="flex items-center gap-1.5 min-w-0">
-                        <displayConfig.icon className={`w-3.5 h-3.5 shrink-0 ${isLockedForUser ? 'animate-pulse' : ''}`} />
+                        <displayConfig.icon className={`w-3.5 h-3.5 shrink-0 ${isSemMov ? 'animate-pulse' : isLockedForUser ? 'animate-pulse' : ''}`} />
                         <span className="text-[9px] font-black uppercase tracking-wider whitespace-nowrap overflow-hidden text-ellipsis">{displayConfig.label}</span>
                     </div>
                     {isLockedForUser ? (
@@ -583,12 +627,14 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                             {purchaseStatusFilter === 'all' ? 'Status' :
                                                 [
                                                     { id: 'all', label: 'Todos' },
-                                                    { id: 'payment_account', label: 'Aprovação' },
+                                                    { id: 'pending_approval', label: 'Em Aprovação' },
                                                     { id: 'recebido', label: 'Pedido Recebido' },
                                                     { id: 'coletando_orcamento', label: 'Orçamento' },
+                                                    { id: 'aprovacao_orcamento', label: 'Aprovação de Orçamento' },
                                                     { id: 'coletando_dotacao', label: 'Dotação' },
                                                     { id: 'realizado', label: 'Pedido Realizado' },
                                                     { id: 'concluido', label: 'Concluído' },
+                                                    { id: 'sem_movimentacao', label: 'Sem Movimentação' },
                                                     { id: 'rejected', label: 'Rejeitado' },
                                                     { id: 'cancelado', label: 'Cancelado' },
                                                 ].find(s => s.id === purchaseStatusFilter)?.label}
@@ -610,12 +656,14 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                     <div className="max-h-[60vh] overflow-y-auto custom-scrollbar px-2 space-y-0.5">
                                                         {[
                                                             { id: 'all', label: 'Todos os Pedidos' },
-                                                            { id: 'payment_account', label: 'Aprovação' },
+                                                            { id: 'pending_approval', label: 'Em Aprovação' },
                                                             { id: 'recebido', label: 'Pedido Recebido' },
                                                             { id: 'coletando_orcamento', label: 'Orçamento' },
+                                                            { id: 'aprovacao_orcamento', label: 'Aprovação de Orçamento' },
                                                             { id: 'coletando_dotacao', label: 'Dotação' },
                                                             { id: 'realizado', label: 'Pedido Realizado' },
                                                             { id: 'concluido', label: 'Concluído' },
+                                                            { id: 'sem_movimentacao', label: 'Sem Movimentação' },
                                                             { id: 'rejected', label: 'Rejeitado' },
                                                             { id: 'cancelado', label: 'Cancelado' },
                                                         ].map(option => {

@@ -234,19 +234,33 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
             </h3>
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
               <div>
-                <label className={labelClass}>Finalidade do Pedido</label>
-                <input
-                  value={content.title}
-                  onChange={(e) => handleUpdate('content', 'title', e.target.value)}
-                  className={`${inputClass} font-bold text-slate-900 text-base`}
-                  placeholder="Novo Pedido"
-                />
+                <div className="flex justify-between items-center mb-1.5">
+                  <label className={labelClass}>Finalidade do Pedido</label>
+                  <span className={`text-[9px] font-black tracking-wider uppercase px-2 py-0.5 rounded ${
+                    (content.title?.length || 0) >= 100 
+                      ? 'bg-emerald-50 text-emerald-700' 
+                      : 'bg-rose-50 text-rose-700'
+                  }`}>
+                    {content.title?.length || 0} / 100 caracteres no mínimo
+                  </span>
+                </div>
+                <div className="relative group">
+                  <textarea
+                    value={content.title || ''}
+                    onChange={(e) => handleUpdate('content', 'title', e.target.value)}
+                    className="w-full min-h-[120px] bg-slate-50/50 border border-slate-200 rounded-2xl p-4 text-sm font-bold text-slate-900 outline-none focus:bg-white focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/5 transition-all resize-none leading-relaxed"
+                    placeholder="Descreva detalhadamente a finalidade do pedido (mínimo de 100 caracteres)..."
+                  />
+                </div>
               </div>
 
               {/* Bloco de Prioridade Compacto e Moderno */}
-              <div className="pt-2 border-t border-slate-100">
-                <label className={labelClass}>Prioridade</label>
-                <div className="flex bg-slate-100 p-1 rounded-full gap-1">
+              <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div>
+                  <label className={labelClass}>Prioridade</label>
+                  <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Selecione o nível de urgência</p>
+                </div>
+                <div className="flex bg-slate-100/80 p-1 rounded-full gap-1 w-full sm:max-w-xs border border-slate-200/50">
                   {PRIORITY_OPTIONS.map((opt) => {
                     const Icon = opt.icon;
                     const isSelected = content.priority === opt.value;
@@ -261,17 +275,18 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
                     return (
                       <button
                         key={opt.value}
+                        type="button"
                         onClick={() => handleUpdate('content', 'priority', opt.value)}
                         className={`
-                          flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wide transition-all duration-300
+                          flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-full text-[10px] font-black uppercase tracking-wider transition-all duration-300
                           ${isSelected
                             ? selectedColors[opt.color as keyof typeof selectedColors]
                             : 'text-slate-400 hover:bg-white/50 hover:text-slate-600'}
                         `}
                       >
                         <Icon className={`w-3.5 h-3.5 ${isSelected ? '' : 'opacity-70'}`} />
-                        <span className="hidden sm:inline">{opt.label}</span>
-                        <span className="sm:hidden">{opt.label.slice(0, 3)}</span>
+                        <span className="hidden md:inline">{opt.label}</span>
+                        <span className="md:hidden">{opt.label.slice(0, 3)}</span>
                       </button>
                     );
                   })}
@@ -715,27 +730,16 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
             </div>
             
             <div className="space-y-4">
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleUpdate('content', 'fichaOrcamentaria', content.fichaOrcamentaria === 'N/A' ? '' : 'N/A')}
-                  className={`flex-1 py-2 px-4 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 border-2 ${content.fichaOrcamentaria === 'N/A' ? 'bg-slate-900 border-slate-900 text-white shadow-md' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}
-                >
-                  <Minus className="w-4 h-4" /> Não se Aplica
-                </button>
-              </div>
-
-              <div className={`bg-white p-6 rounded-2xl border-2 shadow-sm transition-all text-left ${content.fichaOrcamentaria === 'N/A' ? 'border-slate-100 opacity-50' : 'border-slate-200 focus-within:border-emerald-500 focus-within:ring-4 focus-within:ring-emerald-500/20'}`}>
+              <div className="bg-white p-6 rounded-2xl border-2 border-slate-200 focus-within:border-emerald-500 focus-within:ring-4 focus-within:ring-emerald-500/20 shadow-sm transition-all text-left">
                 <label className="block text-xs font-black uppercase tracking-wider text-slate-500 mb-2">
-                  Número da Ficha
+                  Número da Ficha (Obrigatório)
                 </label>
                 <input
                   type="text"
-                  disabled={content.fichaOrcamentaria === 'N/A'}
-                  value={content.fichaOrcamentaria === 'N/A' ? 'N/A' : (content.fichaOrcamentaria || '')}
+                  value={content.fichaOrcamentaria === 'N/A' ? '' : (content.fichaOrcamentaria || '')}
                   onChange={(e) => handleUpdate('content', 'fichaOrcamentaria', e.target.value)}
                   placeholder="Ex: 12345-6"
-                  className="w-full text-xl font-bold text-slate-900 placeholder:text-slate-300 border-none p-0 focus:ring-0 bg-transparent outline-none disabled:bg-transparent"
+                  className="w-full text-xl font-bold text-slate-900 placeholder:text-slate-300 border-none p-0 focus:ring-0 bg-transparent outline-none"
                 />
               </div>
             </div>

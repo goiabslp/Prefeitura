@@ -1,8 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { ComprasStepper, StepStatus } from './ComprasStepper';
 import { AppState, ContentData, DocumentConfig, Signature, Person, Sector, Job } from '../../types';
 import { ComprasForm } from '../forms/ComprasForm';
-import { ChevronRight, ArrowLeft, CheckCircle2, Loader2 } from 'lucide-react';
+import { ChevronRight, ArrowLeft, CheckCircle2, Loader2, CreditCard, Info } from 'lucide-react';
 import { User } from '../../types';
 
 interface ComprasStepWizardProps {
@@ -26,17 +27,26 @@ export const ComprasStepWizard: React.FC<ComprasStepWizardProps> = ({
 }) => {
     const [currentStep, setCurrentStep] = useState(1);
     const [showAccountWarning, setShowAccountWarning] = useState(false);
+    const [showFichaModal, setShowFichaModal] = useState(false);
+    const [hasShownFichaModal, setHasShownFichaModal] = useState(false);
+
+    useEffect(() => {
+        if (currentStep === 5 && !hasShownFichaModal) {
+            setShowFichaModal(true);
+            setHasShownFichaModal(true);
+        }
+    }, [currentStep, hasShownFichaModal]);
 
     // --- Status Calculation Logic ---
     const stepsStatus = useMemo(() => {
         const statuses: Record<number, StepStatus> = {};
 
         // Helper to check validity
-        const s1Valid = !!(content.title && content.requesterName && content.priority);
+        const s1Valid = !!(content.title && content.title.length >= 100 && content.requesterName && content.priority);
         const s2Valid = !!(content.purchaseItems && content.purchaseItems.length > 0);
         const s3Valid = !!(content.body && content.body.length > 0);
         const s4Valid = true; // Optional (Anexos)
-        const s5Valid = !!(content.fichaOrcamentaria); // Ficha Orçamentária
+        const s5Valid = !!(content.fichaOrcamentaria && content.fichaOrcamentaria !== 'N/A' && content.fichaOrcamentaria.trim() !== ''); // Ficha Orçamentária
         const s6Valid = !!(content.resolucaoDescricao && (content.resolucaoDescricao === 'N/A' || content.resolucaoNumero)); // Origem
         const s7Valid = !!(content.signatureName); // Assinar
 
@@ -44,7 +54,7 @@ export const ComprasStepWizard: React.FC<ComprasStepWizardProps> = ({
         const s1Started = !!(content.title || content.requesterName || content.priority);
         const s2Started = false; // Hard to be "partial" on items list, either have items or not
         const s3Started = !!(content.body && content.body.length > 0);
-        const s5Started = !!(content.fichaOrcamentaria);
+        const s5Started = !!(content.fichaOrcamentaria && content.fichaOrcamentaria !== 'N/A' && content.fichaOrcamentaria.trim() !== '');
         const s6Started = !!(content.resolucaoDescricao || content.resolucaoNumero);
         const s7Started = false;
 
@@ -66,13 +76,13 @@ export const ComprasStepWizard: React.FC<ComprasStepWizardProps> = ({
         return statuses;
     }, [content, currentStep]);
 
-    // Check Global Completion for \"Finalizar\" button
+    // Check Global Completion for "Finalizar" button
     const isAllMandatoryCompleted = useMemo(() => {
         return !!(
-            content.title && content.requesterName && content.priority && // Step 1
+            content.title && content.title.length >= 100 && content.requesterName && content.priority && // Step 1
             content.purchaseItems && content.purchaseItems.length > 0 && // Step 2
             content.body && // Step 3
-            content.fichaOrcamentaria && // Step 5
+            content.fichaOrcamentaria && content.fichaOrcamentaria !== 'N/A' && content.fichaOrcamentaria.trim() !== '' && // Step 5
             content.resolucaoDescricao && (content.resolucaoDescricao === 'N/A' || content.resolucaoNumero) && // Step 6
             content.signatureName // Step 7
         );
@@ -80,15 +90,6 @@ export const ComprasStepWizard: React.FC<ComprasStepWizardProps> = ({
 
 
     const nextStep = () => {
-        if (currentStep === 5 && !content.fichaOrcamentaria) {
-            alert('A Ficha Orçamentária é obrigatória.');
-            return;
-        }
-        if (currentStep === 6 && (!content.resolucaoDescricao || (content.resolucaoDescricao !== 'N/A' && !content.resolucaoNumero))) {
-            alert('A Origem (Tipo e Número) é obrigatória.');
-            return;
-        }
-
         if (validateStep(currentStep)) {
             setCurrentStep(prev => Math.min(prev + 1, 7));
             window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -103,6 +104,7 @@ export const ComprasStepWizard: React.FC<ComprasStepWizardProps> = ({
     const validateStep = (step: number): boolean => {
         if (step === 1) {
             if (!content.title) { alert('Informe a Finalidade do Pedido'); return false; }
+            if (content.title.length < 100) { alert('A Finalidade do Pedido deve ter no mínimo 100 caracteres.'); return false; }
             if (!content.requesterName) { alert('Selecione o Solicitante'); return false; }
         }
         if (step === 2) {
@@ -114,11 +116,29 @@ export const ComprasStepWizard: React.FC<ComprasStepWizardProps> = ({
         if (step === 3) {
             if (!content.body) { alert('Preencha a Justificativa'); return false; }
         }
+        if (step === 5) {
+            if (!content.fichaOrcamentaria || content.fichaOrcamentaria === 'N/A' || content.fichaOrcamentaria.trim() === '') {
+                alert('A Ficha Orçamentária é obrigatória.');
+                return false;
+            }
+        }
+        if (step === 6) {
+            if (!content.resolucaoDescricao || (content.resolucaoDescricao !== 'N/A' && !content.resolucaoNumero)) {
+                alert('A Origem (Tipo e Número) é obrigatória.');
+                return false;
+            }
+        }
         return true;
     };
 
     const handleStepClick = (step: number) => {
         if (isLoading) return;
+        if (step > currentStep) {
+            // Validar todos os passos intermediários anteriores
+            for (let i = currentStep; i < step; i++) {
+                if (!validateStep(i)) return;
+            }
+        }
         setCurrentStep(step);
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
@@ -195,7 +215,45 @@ export const ComprasStepWizard: React.FC<ComprasStepWizardProps> = ({
                 </div>
             </div>
 
+            {showFichaModal && createPortal(
+                <div className="fixed inset-0 z-[1200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-fade-in">
+                    <div className="w-full max-w-md bg-white rounded-[2rem] shadow-2xl border border-slate-100/50 p-8 flex flex-col items-center text-center animate-scale-up relative overflow-hidden">
+                        
+                        {/* Fundo decorativo sutil */}
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50 rounded-full blur-3xl opacity-70 -z-10" />
+                        <div className="absolute bottom-0 left-0 w-32 h-32 bg-teal-50 rounded-full blur-3xl opacity-70 -z-10" />
 
+                        {/* Ícone Lindo */}
+                        <div className="w-16 h-16 bg-gradient-to-tr from-emerald-600 to-teal-400 rounded-3xl flex items-center justify-center mb-6 shadow-xl shadow-emerald-500/20 rotate-3 hover:rotate-0 transition-transform duration-300">
+                            <CreditCard className="w-8 h-8 text-white" />
+                        </div>
+
+                        {/* Título e Nome */}
+                        <h4 className="text-xl font-black text-slate-900 tracking-tight leading-tight uppercase">
+                            Olá, {currentUser?.name?.split(' ')[0] || 'Usuário'}!
+                        </h4>
+                        
+                        {/* Descrição */}
+                        <p className="text-slate-500 font-medium mt-4 text-sm leading-relaxed">
+                            A Ficha Orçamentária é <span className="font-bold text-slate-800">obrigatória</span> ao realizar um novo pedido de compras.
+                        </p>
+                        
+                        <div className="w-full bg-emerald-50/50 border border-emerald-100/50 rounded-2xl p-4 mt-4 text-emerald-800 text-xs font-bold leading-relaxed flex items-start gap-3 text-left">
+                            <Info className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                            <span>Procure o setor de contabilidade para inserir o número corretamente.</span>
+                        </div>
+
+                        {/* Botão de Fechar */}
+                        <button
+                            onClick={() => setShowFichaModal(false)}
+                            className="w-full mt-6 py-4 bg-emerald-600 text-white font-black text-xs uppercase tracking-[0.2em] rounded-2xl shadow-xl shadow-emerald-600/20 hover:bg-emerald-700 hover:shadow-emerald-700/30 transition-all active:scale-[0.97] flex items-center justify-center gap-2"
+                        >
+                            <span>Entendido</span>
+                        </button>
+                    </div>
+                </div>,
+                document.body
+            )}
         </div>
     );
 };
