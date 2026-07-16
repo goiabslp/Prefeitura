@@ -10,6 +10,8 @@ import { AppState, ContentData, DocumentConfig, Signature, PurchaseItem, Person,
 import { uploadFile } from '../../services/storageService';
 import { User as UserType } from '../../types';
 import { ItemSelectionModal } from '../compras/ItemSelectionModal';
+import { SelectionModal } from '../SelectionModal';
+import { normalizeText } from '../../utils/stringUtils';
 import { X } from 'lucide-react';
 
 interface ComprasFormProps {
@@ -69,11 +71,8 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
 
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const [isRequesterOpen, setIsRequesterOpen] = useState(false);
-  const [requesterSearch, setRequesterSearch] = useState('');
-  const [dropdownDirection, setDropdownDirection] = useState<'down' | 'up'>('down');
 
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const requesterDropdownRef = useRef<HTMLDivElement>(null);
   const signaturesGridRef = useRef<HTMLDivElement>(null);
   const signButtonRef = useRef<HTMLButtonElement>(null);
   const [password, setPassword] = useState('');
@@ -101,14 +100,29 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
     }
   }, [content.useDigitalSignature, onUpdate]);
 
+  // AUTO-POPULATE REQUESTER WITH LOGGED IN USER
+  useEffect(() => {
+    if (currentUser && !content.requesterName) {
+      onUpdate(prev => {
+        if (prev.content.requesterName) return prev;
+        return {
+          ...prev,
+          content: {
+            ...prev.content,
+            requesterName: currentUser.name || '',
+            requesterRole: currentUser.jobTitle || '',
+            requesterSector: currentUser.sector || ''
+          }
+        };
+      });
+    }
+  }, [currentUser, content.requesterName, onUpdate]);
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       // Dropdown logic
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setOpenDropdownId(null);
-      }
-      if (requesterDropdownRef.current && !requesterDropdownRef.current.contains(event.target as Node)) {
-        setIsRequesterOpen(false);
       }
 
       // DESELECT SIGNATURE LOGIC
@@ -137,44 +151,23 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [onUpdate]); // Removed state dependency as it's not needed for this logic
 
-  // DETECT SPACE FOR REQUESTER DROPDOWN (UP OR DOWN)
-  useEffect(() => {
-    if (isRequesterOpen && requesterDropdownRef.current) {
-      const rect = requesterDropdownRef.current.getBoundingClientRect();
-      const spaceBelow = window.innerHeight - rect.bottom;
-      // If less than 280px below, open upwards
-      setDropdownDirection(spaceBelow < 280 ? 'up' : 'down');
-    }
-  }, [isRequesterOpen]);
-
-  // FILTRO E ORDENAÇÃO ALFABÉTICA DOS SOLICITANTES
-  const filteredRequesters = useMemo(() => {
-    const term = requesterSearch.toLowerCase();
-    return persons
-      .filter(p => p.name.toLowerCase().includes(term))
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [persons, requesterSearch]);
-
-
-
   const handlePersonSelect = (personId: string) => {
     const person = persons.find(p => p.id === personId);
     if (person) {
       const job = jobs.find(j => j.id === person.jobId)?.name || '';
       const sector = sectors.find(s => s.id === person.sectorId)?.name || '';
 
-      onUpdate({
-        ...state,
+      onUpdate(prev => ({
+        ...prev,
         content: {
-          ...state.content,
+          ...prev.content,
           requesterName: person.name,
           requesterRole: job,
           requesterSector: sector
         }
-      });
+      }));
     }
     setIsRequesterOpen(false);
-    setRequesterSearch('');
   };
 
   const handleAddItem = () => {
@@ -321,72 +314,36 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
                   <ChevronDown className="w-4 h-4 text-slate-400" />
                 </div>
 
-                {isRequesterOpen && (
-                  <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
-                    <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity" onClick={() => setIsRequesterOpen(false)} />
-                    <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200">
-                      <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-                        <h3 className="font-black text-slate-800 text-lg flex items-center gap-2">
-                          <User className="w-5 h-5 text-emerald-600" />
-                          Selecionar Solicitante
-                        </h3>
-                        <button
-                          onClick={() => setIsRequesterOpen(false)}
-                          className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-200 text-slate-500 hover:bg-slate-300 hover:text-slate-700 transition-colors"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
+                <SelectionModal<Person>
+                  isOpen={isRequesterOpen}
+                  onClose={() => setIsRequesterOpen(false)}
+                  title="Selecionar Solicitante"
+                  subtitle="Escolha a pessoa que está realizando a solicitação"
+                  options={persons}
+                  searchPlaceholder="Buscar por nome..."
+                  filterFunction={(person, query) => normalizeText(person.name).includes(normalizeText(query))}
+                  getInternalId={(person) => person.id}
+                  selectedItem={persons.find(p => p.name === content.requesterName)}
+                  onSelect={(person) => handlePersonSelect(person.id)}
+                  renderItem={(person, isSelected) => (
+                    <div className="flex items-center gap-4 px-4 py-3">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shrink-0 ${isSelected ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                        {person.name.charAt(0).toUpperCase()}
                       </div>
-                      <div className="p-4 border-b border-slate-100 bg-white">
-                        <div className="relative">
-                          <input
-                            type="text"
-                            value={requesterSearch}
-                            onChange={(e) => setRequesterSearch(e.target.value)}
-                            placeholder="Pesquisar pessoa na lista..."
-                            autoFocus
-                            className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 outline-none focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10 transition-all"
-                          />
-                          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <div className="flex-1">
+                        <p className={`font-bold text-sm ${isSelected ? 'text-emerald-950' : 'text-slate-700'}`}>{person.name}</p>
+                        <p className="text-[11px] text-slate-400 font-medium">
+                          {jobs.find(j => j.id === person.jobId)?.name || 'Sem cargo'} • {sectors.find(s => s.id === person.sectorId)?.name || 'Sem setor'}
+                        </p>
+                      </div>
+                      {isSelected && (
+                        <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+                          <Check className="w-3.5 h-3.5 text-emerald-600" />
                         </div>
-                      </div>
-                      <div className="flex-1 overflow-y-auto p-2 custom-scrollbar">
-                        {filteredRequesters.length > 0 ? (
-                          filteredRequesters.map((person, idx) => (
-                            <button
-                              key={idx}
-                              onClick={() => {
-                                handlePersonSelect(person.id);
-                                setIsRequesterOpen(false);
-                              }}
-                              className="w-full flex items-center justify-between px-4 py-3 rounded-xl hover:bg-emerald-50 text-left transition-colors group mb-1"
-                            >
-                              <div className="flex flex-col">
-                                <span className="font-bold text-slate-700 group-hover:text-emerald-700">{person.name}</span>
-                                <span className="text-[11px] text-slate-500 font-medium mt-0.5">
-                                  {jobs.find(j => j.id === person.jobId)?.name || 'N/A'} • {sectors.find(s => s.id === person.sectorId)?.name || 'N/A'}
-                                </span>
-                              </div>
-                              {content.requesterName === person.name && (
-                                <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center">
-                                  <Check className="w-3.5 h-3.5 text-emerald-600" />
-                                </div>
-                              )}
-                            </button>
-                          ))
-                        ) : (
-                          <div className="p-12 text-center flex flex-col items-center">
-                            <div className="w-16 h-16 rounded-2xl bg-slate-50 flex items-center justify-center mb-4 border border-slate-100">
-                              <User className="w-8 h-8 text-slate-300" />
-                            </div>
-                            <p className="text-sm text-slate-500 font-bold">Nenhuma pessoa encontrada.</p>
-                            <p className="text-xs text-slate-400 mt-1">Tente buscar por outro nome.</p>
-                          </div>
-                        )}
-                      </div>
+                      )}
                     </div>
-                  </div>
-                )}
+                  )}
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
