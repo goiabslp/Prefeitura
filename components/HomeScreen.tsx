@@ -280,8 +280,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         if (activeBlock === 'diarias') {
             if (permissions.includes('parent_diarias_novo_evento') || userRole === 'admin') {
                 actionButtons.push({
-                    label: 'Novo Evento',
-                    desc: 'Registrar evento externo',
+                    label: 'Nova Viagem',
+                    desc: 'Informar nova viagem',
                     icon: CalendarRange,
                     onClick: () => {
                         window.history.pushState({}, '', '/Diarias/NovoEvento');
@@ -300,6 +300,18 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                         window.dispatchEvent(new Event('popstate'));
                     },
                     color: 'blue'
+                });
+            }
+            if (userRole === 'admin') {
+                actionButtons.push({
+                    label: 'Gestores',
+                    desc: 'Vincular Gestores',
+                    icon: Users,
+                    onClick: () => {
+                        window.history.pushState({}, '', '/Diarias/Gestores');
+                        window.dispatchEvent(new Event('popstate'));
+                    },
+                    color: 'indigo'
                 });
             }
         }
@@ -375,21 +387,21 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                                 <h2 className="text-3xl desktop:text-5xl font-black text-slate-800 tracking-tight text-center drop-shadow-sm">{config.name}</h2>
                             </div>
 
-                            <div className="w-full flex flex-wrap justify-center items-stretch gap-3 desktop:gap-4 max-w-6xl animate-in zoom-in duration-500 fill-mode-backwards p-2">
+                            <div className="w-full grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 desktop:gap-4 max-w-7xl justify-center justify-items-center items-stretch animate-in zoom-in duration-500 fill-mode-backwards p-2">
                                 {actionButtons.map((btn, idx) => (
                                     <button
                                         key={idx}
                                         onClick={btn.onClick}
-                                        className={`group relative flex-1 min-w-[240px] desktop:min-w-[260px] max-w-[360px] min-h-[120px] desktop:min-h-[130px] h-auto py-6 rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-${btn.color}-500/30 hover:border-${btn.color}-200 hover:from-white hover:to-${btn.color}-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden shrink-0 basis-0 grow ${btn.hideOnMobile ? 'hidden desktop:flex' : 'flex'}`}
+                                        className={`group relative w-full max-w-[280px] min-h-[120px] desktop:min-h-[130px] h-auto py-6 rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-${btn.color}-500/30 hover:border-${btn.color}-200 hover:from-white hover:to-${btn.color}-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden shrink-0 ${btn.hideOnMobile ? 'hidden desktop:flex' : 'flex'}`}
                                         style={{ animationDelay: `${idx * 100}ms` }}
                                     >
                                         <div className={`absolute top-0 right-0 w-32 h-32 bg-${btn.color}-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150`}></div>
                                         <div className={`absolute bottom-0 left-0 w-24 h-24 bg-${btn.color}-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100`}></div>
-
+ 
                                         <div className={`relative w-12 h-12 desktop:w-14 desktop:h-14 rounded-2xl bg-gradient-to-br from-${btn.color}-500 to-${btn.color}-600 flex items-center justify-center mb-3 text-white group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300 shadow-lg shadow-${btn.color}-500/30 ring-4 ring-white`}>
                                             <btn.icon className="w-6 h-6 desktop:w-7 desktop:h-7 drop-shadow-md" />
                                         </div>
-
+ 
                                         <h3 className="text-lg desktop:text-2xl font-bold text-slate-800 mb-1 group-hover:text-slate-900 tracking-tight">{btn.label}</h3>
                                         <p className="text-[10px] desktop:text-xs font-bold text-slate-400 group-hover:text-${btn.color}-600 transition-colors uppercase tracking-widest">{btn.desc}</p>
                                     </button>

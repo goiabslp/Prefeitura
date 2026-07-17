@@ -286,6 +286,8 @@ export interface Attachment {
   url: string;
   type: string;
   date: string;
+  expenseType?: 'Hospedagem' | 'Combustível' | 'Alimentação' | 'Estacionamento' | 'Outros' | string;
+  expenseValue?: string;
 }
 
 export interface Order {
@@ -517,6 +519,11 @@ export interface DiariaEvento {
   user_id: string;
   user_name: string;
   created_at?: string;
+  status?: 'aguardando_gestor' | 'aguardando_administrador' | 'aprovado' | string;
+  justificativa_gestor?: string;
+  comprovantes_gestor?: any[];
+  valor_diaria?: number;
+  relatorio_viagem?: string;
 }
 
 export interface ConsultaPaciente {

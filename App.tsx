@@ -107,6 +107,7 @@ import { MinhasViagensScreen } from './components/motorista/MinhasViagensScreen'
 import { SystemUpdateScreen } from './components/SystemUpdateScreen';
 import { NovoEventoScreen } from './components/diarias/NovoEventoScreen';
 import { LancamentosScreen } from './components/diarias/LancamentosScreen';
+import { GestoresScreen } from './components/diarias/GestoresScreen';
 import { OficiosHistory } from './components/oficios/OficiosHistory';
 import { LicitacaoDashboard } from './components/licitacao/LicitacaoDashboard';
 import { LicitacaoWizard } from './components/licitacao/LicitacaoWizard';
@@ -138,6 +139,7 @@ const VIEW_TO_PATH: Record<string, string> = {
   'tracking:diarias': '/Historico/Diarias',
   'diarias-novo-evento': '/Diarias/NovoEvento',
   'diarias-lancamentos': '/Diarias/Lancamentos',
+  'diarias-gestores': '/Diarias/Gestores',
   'editor:oficio': '/Editor/Oficio',
   'editor:compras': '/Editor/Compras',
   'editor:diarias': '/Editor/Diarias',
@@ -256,7 +258,7 @@ const mapLicitacaoProcessToOrder = (process: any): Order => {
 
 const App: React.FC = () => {
   // State controlling the active module view
-  const [currentView, setCurrentView] = useState<'login' | 'home' | 'admin' | 'tracking' | 'editor' | 'vehicle-scheduling' | 'abastecimento' | 'agricultura' | 'obras' | 'order-details' | 'tasks-dashboard' | 'purchase-inventory' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'diarias-novo-evento' | 'diarias-lancamentos' | 'licitacao' | 'licitacao:new' | 'licitacao:view' | 'licitacao:details' | 'licitacao-all' | 'licitacao-screening' | 'consultas' | 'farmacia' | 'motorista' | 'motorista:nova-viagem' | 'motorista:minhas-viagens'>('login');
+  const [currentView, setCurrentView] = useState<'login' | 'home' | 'admin' | 'tracking' | 'editor' | 'vehicle-scheduling' | 'abastecimento' | 'agricultura' | 'obras' | 'order-details' | 'tasks-dashboard' | 'purchase-inventory' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'diarias-novo-evento' | 'diarias-lancamentos' | 'diarias-gestores' | 'licitacao' | 'licitacao:new' | 'licitacao:view' | 'licitacao:details' | 'licitacao-all' | 'licitacao-screening' | 'consultas' | 'farmacia' | 'motorista' | 'motorista:nova-viagem' | 'motorista:minhas-viagens'>('login');
   const [remoteAccessState, setRemoteAccessState] = useState<any>(null);
 
   useEffect(() => {
@@ -3481,6 +3483,30 @@ const App: React.FC = () => {
     setIsFinalizedView(false);
   };
 
+  const handleStartDiariaFromEvent = (diariaContent: any) => {
+    setAppState(prev => ({
+      ...prev,
+      content: {
+        ...INITIAL_STATE.content,
+        title: 'Novo Processo de Diária',
+        requesterName: diariaContent.requesterName,
+        destination: diariaContent.destination,
+        departureDateTime: diariaContent.departureDateTime,
+        returnDateTime: diariaContent.returnDateTime,
+        reason: diariaContent.reason,
+        requestedValue: diariaContent.requestedValue,
+        relatorioViagem: diariaContent.relatorioViagem,
+        attachments: diariaContent.attachments || []
+      }
+    }));
+    setActiveBlock('diarias');
+    setEditingOrder(null);
+    setIsFinalizedView(false);
+    setCurrentView('editor');
+    setAdminTab('content');
+    setIsAdminSidebarOpen(true);
+  };
+
   // Effect to initialize editor if accessed directly via URL
   useEffect(() => {
     // Only trigger if we are in editor view, don't have an editing order,
@@ -4708,6 +4734,19 @@ const App: React.FC = () => {
 
             {currentView === 'diarias-lancamentos' && currentUser && (
               <LancamentosScreen
+                currentUser={currentUser}
+                onBack={() => {
+                  window.history.pushState({}, '', '/Diarias');
+                  window.dispatchEvent(new Event('popstate'));
+                }}
+                onGenerateDiaria={handleStartDiariaFromEvent}
+              />
+            )}
+
+            {currentView === 'diarias-gestores' && currentUser && (
+              <GestoresScreen
+                persons={persons}
+                users={users}
                 currentUser={currentUser}
                 onBack={() => {
                   window.history.pushState({}, '', '/Diarias');

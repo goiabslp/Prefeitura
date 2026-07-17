@@ -164,7 +164,14 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
   onBack,
   onFinish
 }) => {
-  const [selectedPerson, setSelectedPerson] = useState<{ id: string; name: string } | null>(null);
+  const [selectedPerson, setSelectedPerson] = useState<{ id: string; name: string } | null>(() => {
+    if (currentUser) {
+      const match = persons.find(p => p.name.trim().toLowerCase() === currentUser.name.trim().toLowerCase());
+      if (match) return { id: match.id, name: match.name };
+      return { id: currentUser.id, name: currentUser.name };
+    }
+    return null;
+  });
   const [destination, setDestination] = useState('');
   const [departureDateTime, setDepartureDateTime] = useState('');
   const [returnDateTime, setReturnDateTime] = useState('');
@@ -243,7 +250,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
     return sameSectorPersons.filter(p => normalizeText(p.name).includes(term));
   }, [sameSectorPersons, personSearch]);
 
-  const isFormValid = selectedPerson !== null && destination && departureDateTime && returnDateTime && reason.trim().length > 0;
+  const isFormValid = selectedPerson !== null && destination && departureDateTime && returnDateTime && reason.trim().length >= 100;
 
   const handleSubmit = async () => {
     if (!isFormValid || !currentUser) return;
@@ -259,6 +266,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
         setor_id: currentUser.sectorId,
         user_id: currentUser.id,
         user_name: currentUser.name,
+        status: 'aguardando_gestor'
       });
       
       setIsSuccess(true);
@@ -480,6 +488,14 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
                     placeholder="Descreva detalhadamente o objetivo da viagem e a agenda do evento..."
                     className={`${inputClass} min-h-[160px] resize-none leading-relaxed`}
                   />
+                </div>
+                <div className="flex justify-between items-center text-[10px] font-bold mt-1 px-1">
+                  <span className={reason.trim().length >= 100 ? "text-emerald-600" : "text-amber-600"}>
+                    {reason.trim().length >= 100 ? "Requisito mínimo de caracteres atingido!" : `Mínimo de 100 caracteres necessário (faltam ${100 - reason.trim().length} caracteres)`}
+                  </span>
+                  <span className="text-slate-400 font-mono">
+                    {reason.trim().length} / 100
+                  </span>
                 </div>
               </div>
             </div>

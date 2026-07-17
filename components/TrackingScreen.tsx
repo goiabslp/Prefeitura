@@ -19,6 +19,7 @@ import { formatLocalDate } from '../utils/dateUtils';
 import { useOficios, useOficio, useUpdateOficioDescription, useInfiniteOficios } from '../hooks/useOficios';
 import { usePurchaseOrders, usePurchaseOrder, useInfinitePurchaseOrders, useUpdatePurchaseOrderAccount, purchaseOrderKeys } from '../hooks/usePurchaseOrders';
 import { useServiceRequests, useServiceRequest, useInfiniteServiceRequests } from '../hooks/useServiceRequests';
+import { DiariasReportModal } from './diarias/DiariasReportModal';
 
 
 const HashIcon = ({ className }: { className?: string }) => (
@@ -82,6 +83,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
     const [searchTerm, setSearchTerm] = useState('');
     const [purchaseStatusFilter, setPurchaseStatusFilter] = useState('all');
     const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
+    const [showReportModal, setShowReportModal] = useState(false);
     const [finalizadoCheckin, setFinalizadoCheckin] = useState<{ assinados: boolean, publicado: boolean, pasta: boolean } | null>(null);
     const [protocolEditOrder, setProtocolEditOrder] = useState<Order | null>(null);
     const [newProtocolValue, setNewProtocolValue] = useState('');
@@ -376,6 +378,24 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
         const matchesSearch = true; // Handled Server-Side
 
         return matchesSearch;
+    }).sort((a, b) => {
+        if (activeBlock === 'diarias') {
+            const getDepDate = (order: Order) => {
+                const content = order.documentSnapshot?.content;
+                if (content?.departureDateTime) return new Date(content.departureDateTime).getTime();
+                return new Date(order.createdAt).getTime();
+            };
+
+            const payA = a.paymentStatus || 'pending';
+            const payB = b.paymentStatus || 'pending';
+
+            const pA = payA === 'pending' ? 1 : payA === 'contabilidade' ? 2 : payA === 'paid' ? 3 : 4;
+            const pB = payB === 'pending' ? 1 : payB === 'contabilidade' ? 2 : payB === 'paid' ? 3 : 4;
+
+            if (pA !== pB) return pA - pB;
+            return getDepDate(a) - getDepDate(b); // Data mais antiga para mais recente
+        }
+        return 0; // Mantém a ordem original para compras, oficios, etc.
     });
 
     const handleDownload = (order: Order) => {
@@ -711,6 +731,16 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                             )}
                                         </AnimatePresence>
                                     </div>
+                                )}
+                                {isDiarias && (
+                                    <button
+                                        onClick={() => setShowReportModal(true)}
+                                        className="p-2 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-2xl hover:bg-indigo-600 hover:text-white transition-all shadow-sm flex items-center gap-2 font-bold text-[10px] uppercase tracking-widest active:scale-95"
+                                        title="Exportar Relatório"
+                                    >
+                                        <FileDown className="w-3.5 h-3.5" />
+                                        <span className="hidden desktop:inline">Relatório</span>
+                                    </button>
                                 )}
                                 {isAdmin && filteredOrders.length > 0 && !isCompras && (
                                     <button
@@ -2332,6 +2362,15 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                     )}
                 </AnimatePresence>,
                 document.body
+            )}
+            {/* Modal de Relatório de Diárias */}
+            {isDiarias && (
+                <DiariasReportModal
+                    isOpen={showReportModal}
+                    onClose={() => setShowReportModal(false)}
+                    orders={serviceRequestsData}
+                    onUpdatePaymentStatus={onUpdatePaymentStatus}
+                />
             )}
         </>
     );

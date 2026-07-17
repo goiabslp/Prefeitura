@@ -20,8 +20,8 @@ export const PageWrapper: React.FC<PageWrapperProps> = ({
   ...props
 }) => {
   const { branding, document: docConfig, content } = state;
-  const safeBranding = branding || {};
-  const safeWatermark = safeBranding.watermark || {};
+  const safeBranding = (branding || {}) as any;
+  const safeWatermark = (safeBranding.watermark || {}) as any;
   const originalWatermark = safeWatermark.imageUrl || safeBranding.logoUrl;
   const watermarkImg = getCachedImage(originalWatermark, 'branding_watermark') || originalWatermark;
 
