@@ -2,12 +2,14 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   ArrowLeft, MapPin, Calendar, Clock, FileText, CheckCircle2, 
   Loader2, Search, ChevronDown, Users, X, Check, ChevronLeft,
-  MessageSquare, ArrowRight, ChevronRight
+  MessageSquare, ArrowRight, ChevronRight, Car
 } from 'lucide-react';
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Person, User, Sector, Job } from '../../types';
+import { Person, User, Sector, Job, Vehicle } from '../../types';
 import { createDiariaEvento } from '../../services/diariasEventosService';
+import { useCachedVehicles } from '../../hooks/useCachedVehicles';
+import { supabase } from '../../services/supabaseClient';
 
 const DateTimePickerModal = ({ 
   isOpen, 
@@ -177,17 +179,57 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
   const [returnDateTime, setReturnDateTime] = useState('');
   const [reason, setReason] = useState('');
 
+  // Novos campos adicionados
+  const { data: cachedVehicles = [] } = useCachedVehicles();
+  const [directVehicles, setDirectVehicles] = useState<Vehicle[]>([]);
+  const vehicles = directVehicles.length > 0 ? directVehicles : cachedVehicles;
+
+  useEffect(() => {
+    const loadVehiclesDirectly = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('vehicles')
+          .select('*')
+          .order('plate', { ascending: true });
+        if (data && !error) {
+          setDirectVehicles(data);
+        }
+      } catch (e) {
+        console.warn("Direct vehicle loading failed:", e);
+      }
+    };
+    loadVehiclesDirectly();
+  }, []);
+
+  const [hospedagem, setHospedagem] = useState(false);
+  const [hospedagemDias, setHospedagemDias] = useState<number>(1);
+  const [selectedVehicle, setSelectedVehicle] = useState('');
+  const [customVehicle, setCustomVehicle] = useState('');
+  const [distancia, setDistancia] = useState<number | ''>('');
+  const [isCalculatingDistance, setIsCalculatingDistance] = useState(false);
+
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   
   const [currentStep, setCurrentStep] = useState(1);
-  const isStep1Valid = selectedPerson !== null && destination && departureDateTime && returnDateTime;
+  
+  const isStep1Valid = selectedPerson !== null && 
+    destination && 
+    departureDateTime && 
+    returnDateTime && 
+    (selectedVehicle !== '' && (selectedVehicle !== 'OUTRO' || customVehicle.trim() !== '')) &&
+    (!hospedagem || (hospedagem && hospedagemDias > 0)) &&
+    distancia !== '';
   
   // States for city modal
   const [cities, setCities] = useState<string[]>([]);
   const [isCityLoading, setIsCityLoading] = useState(false);
   const [citySearch, setCitySearch] = useState('');
   const [isCityOpen, setIsCityOpen] = useState(false);
+
+  // States for vehicles modal
+  const [isVehiclesOpen, setIsVehiclesOpen] = useState(false);
+  const [vehicleSearch, setVehicleSearch] = useState('');
 
   // States for persons single-select modal
   const [isPersonsOpen, setIsPersonsOpen] = useState(false);
@@ -222,6 +264,77 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
     fetchCities();
   }, []);
 
+  const calculateDistance = async (destinationCity: string) => {
+    try {
+      if (!destinationCity) {
+        setDistancia('');
+        return;
+      }
+      setIsCalculatingDistance(true);
+      
+      const destName = destinationCity.split(' - ')[0].toUpperCase();
+      const originName = "SÃO JOSÉ DO GOIABAL";
+      
+      if (destName === originName) {
+         setDistancia(30);
+         return;
+      }
+      
+      const predefined: Record<string, number> = {
+        'JOÃO MONLEVADE': 45,
+        'BELO HORIZONTE': 160,
+        'IPATINGA': 110,
+        'ITABIRA': 85,
+        'ALVINÓPOLIS': 40,
+        'RIO PIRACICABA': 25,
+        'PONTE NOVA': 75,
+        'DOM SILVÉRIO': 35,
+        'DIONÍSIO': 15,
+        'SÃO DOMINGOS DO PRATA': 30,
+        'RAUL SOARES': 45,
+        'NOVA ERA': 60,
+        'CARATINGA': 130,
+        'TIMÓTEO': 90
+      };
+
+      if (predefined[destName] !== undefined) {
+         const dist = predefined[destName];
+         setDistancia(dist < 30 ? 30 : dist);
+         return;
+      }
+
+      const fetchCoords = async (cityStr: string) => {
+         const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cityStr + ', Minas Gerais, Brazil')}`);
+         const data = await res.json();
+         if (data && data.length > 0) {
+            return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+         }
+         return null;
+      };
+
+      const originCoords = await fetchCoords(originName);
+      const destCoords = await fetchCoords(destName);
+
+      if (originCoords && destCoords) {
+         const osrmRes = await fetch(`https://router.project-osrm.org/route/v1/driving/${originCoords.lon},${originCoords.lat};${destCoords.lon},${destCoords.lat}?overview=false`);
+         const osrmData = await osrmRes.json();
+         if (osrmData.routes && osrmData.routes.length > 0) {
+            const distanceMeters = osrmData.routes[0].distance;
+            const distanceKm = Math.round(distanceMeters / 1000);
+            setDistancia(distanceKm < 30 ? 30 : distanceKm);
+         }
+      }
+    } catch (e) {
+      console.warn('Failed to calculate distance automatically:', e);
+    } finally {
+      setIsCalculatingDistance(false);
+    }
+  };
+
+  useEffect(() => {
+    calculateDistance(destination);
+  }, [destination]);
+
   const normalizeText = (text: string) => {
     return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\w\s]|_/g, "").toLowerCase();
   };
@@ -250,7 +363,15 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
     return sameSectorPersons.filter(p => normalizeText(p.name).includes(term));
   }, [sameSectorPersons, personSearch]);
 
-  const isFormValid = selectedPerson !== null && destination && departureDateTime && returnDateTime && reason.trim().length >= 100;
+  const filteredVehicles = useMemo(() => {
+    const term = normalizeText(vehicleSearch);
+    if (!term) return vehicles;
+    return vehicles.filter(v => 
+      normalizeText(`${v.brand} ${v.model} ${v.plate}`).includes(term)
+    );
+  }, [vehicles, vehicleSearch]);
+
+  const isFormValid = isStep1Valid && reason.trim().length >= 100;
 
   const handleSubmit = async () => {
     if (!isFormValid || !currentUser) return;
@@ -266,7 +387,12 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
         setor_id: currentUser.sectorId,
         user_id: currentUser.id,
         user_name: currentUser.name,
-        status: 'aguardando_gestor'
+        status: 'aguardando_gestor',
+        hospedagem,
+        hospedagem_dias: hospedagem ? hospedagemDias : 0,
+        veiculo: selectedVehicle,
+        veiculo_outro: selectedVehicle === 'OUTRO' ? customVehicle : '',
+        distancia: Number(distancia) || 0
       });
       
       setIsSuccess(true);
@@ -403,21 +529,52 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
               <div className="space-y-6 animate-fade-in">
                 
                 {/* Pessoas */}
-                <div className="relative space-y-3">
-                  <label className={labelClass}>Pessoa Selecionada</label>
-                  <div 
-                    onClick={() => setIsPersonsOpen(true)}
-                    className={`${inputContainerClass} cursor-pointer ${isPersonsOpen ? 'bg-white border-indigo-500 ring-4 ring-indigo-500/5' : ''}`}
-                  >
-                    <Users className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                    <span className={`w-full bg-transparent pl-11 pr-10 py-3 text-sm font-medium outline-none truncate ${selectedPerson ? 'text-slate-900' : 'text-slate-500'}`}>
-                      {selectedPerson ? selectedPerson.name : 'Clique para selecionar o servidor...'}
-                    </span>
-                    <div className="absolute right-4 top-1/2 -translate-y-1/2">
-                      <ChevronDown className="w-4 h-4 text-slate-400" />
-                    </div>
-                  </div>
-                </div>
+                {(() => {
+                  const canChangePerson = currentUser && (currentUser.role === 'admin' || currentUser.permissions.includes('parent_diarias'));
+                  const selectedPersonData = selectedPerson ? persons.find(p => p.id === selectedPerson.id) : null;
+                  const selectedPersonJob = selectedPersonData 
+                    ? (jobs.find(j => j.id === selectedPersonData.jobId)?.name || 'Sem Cargo')
+                    : 'Sem Cargo';
+
+                  return (
+                    <>
+                      <div className="relative space-y-3">
+                        <label className={labelClass}>Pessoa Selecionada</label>
+                        <div 
+                          onClick={() => {
+                            if (canChangePerson) {
+                              setIsPersonsOpen(true);
+                            }
+                          }}
+                          className={`${inputContainerClass} ${canChangePerson ? 'cursor-pointer' : 'bg-slate-100/80 border-slate-200 cursor-not-allowed'} ${isPersonsOpen && canChangePerson ? 'bg-white border-indigo-500 ring-4 ring-indigo-500/5' : ''}`}
+                        >
+                          <Users className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                          <span className={`w-full bg-transparent pl-11 pr-10 py-3 text-sm font-medium outline-none truncate ${selectedPerson ? (canChangePerson ? 'text-slate-900' : 'text-slate-500') : 'text-slate-500'}`}>
+                            {selectedPerson ? selectedPerson.name : 'Clique para selecionar o servidor...'}
+                          </span>
+                          {canChangePerson && (
+                            <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                              <ChevronDown className="w-4 h-4 text-slate-400" />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="relative space-y-3">
+                        <label className={labelClass}>Cargo</label>
+                        <div className={`${inputContainerClass} bg-slate-100/80 border-slate-200 cursor-not-allowed`}>
+                          <Users className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                          <input
+                            type="text"
+                            readOnly
+                            value={selectedPersonJob}
+                            className={`${inputClass} text-slate-500 cursor-not-allowed`}
+                          />
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
 
                 {/* Destino */}
                 <div className="relative space-y-3">
@@ -471,6 +628,116 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
                 </div>
               </div>
             </div>
+              </div>
+
+               {/* Distância */}
+              <div className="space-y-3">
+                <label className={labelClass}>Distância (KM)</label>
+                <div className={`${inputContainerClass} bg-slate-100/80 border-slate-200 cursor-not-allowed`}>
+                  <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                  <input
+                    type="number"
+                    min="0"
+                    readOnly
+                    value={distancia}
+                    placeholder={isCalculatingDistance ? 'Calculando...' : 'Distância em KM'}
+                    className={`${inputClass} text-slate-500 cursor-not-allowed`}
+                  />
+                  {isCalculatingDistance && (
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                      <Loader2 className="w-4 h-4 text-indigo-500 animate-spin" />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Hospedagem */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-3">
+                  <label className={labelClass}>Hospedagem</label>
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setHospedagem(true);
+                        setHospedagemDias(1);
+                      }}
+                      className={`flex-1 py-3 text-sm font-bold rounded-xl border transition-all ${
+                        hospedagem 
+                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-600/10' 
+                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      Sim
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setHospedagem(false);
+                        setHospedagemDias(0);
+                      }}
+                      className={`flex-1 py-3 text-sm font-bold rounded-xl border transition-all ${
+                        !hospedagem 
+                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-600/10' 
+                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      Não
+                    </button>
+                  </div>
+                </div>
+
+                {hospedagem && (
+                  <div className="space-y-3 animate-fade-in">
+                    <label className={labelClass}>Quantos dias?</label>
+                    <div className={inputContainerClass}>
+                      <Clock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                      <input
+                        type="number"
+                        min="1"
+                        value={hospedagemDias}
+                        onChange={(e) => setHospedagemDias(Math.max(1, parseInt(e.target.value) || 1))}
+                        className={inputClass}
+                        placeholder="Número de dias"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Veículo */}
+              <div className="space-y-3">
+                <label className={labelClass}>Veículo</label>
+                <div 
+                  onClick={() => setIsVehiclesOpen(true)}
+                  className={`${inputContainerClass} cursor-pointer ${isVehiclesOpen ? 'bg-white border-indigo-500 ring-4 ring-indigo-500/5' : ''}`}
+                >
+                  <Car className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                  <span className={`w-full bg-transparent pl-11 pr-10 py-3 text-sm font-medium outline-none truncate ${selectedVehicle ? 'text-slate-900' : 'text-slate-500'}`}>
+                    {selectedVehicle === 'OUTRO' 
+                      ? 'OUTRO (Especificar...)' 
+                      : (selectedVehicle || 'Clique para selecionar o veículo...')}
+                  </span>
+                  <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                    <ChevronDown className="w-4 h-4 text-slate-400" />
+                  </div>
+                </div>
+
+                {selectedVehicle === 'OUTRO' && (
+                  <div className="space-y-2 mt-2 animate-fade-in">
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400">Especificar Veículo</label>
+                    <div className={inputContainerClass}>
+                      <Car className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                      <input
+                        type="text"
+                        value={customVehicle}
+                        onChange={(e) => setCustomVehicle(e.target.value)}
+                        placeholder="Digite a marca, modelo e placa do veículo..."
+                        className={inputClass}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
             )}
@@ -614,6 +881,93 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
                     </div>
                     <p className="text-sm text-slate-500 font-medium">Nenhuma cidade encontrada.</p>
                   </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal - Selecionar Veículo */}
+      {isVehiclesOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 sm:p-6 animate-fade-in" onClick={() => setIsVehiclesOpen(false)}>
+          <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <h3 className="font-bold text-slate-900">Selecionar Veículo</h3>
+              <button onClick={() => setIsVehiclesOpen(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-500 transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 border-b border-slate-100 relative">
+              <Search className="absolute left-7 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+              <input
+                type="text"
+                value={vehicleSearch}
+                onChange={(e) => setVehicleSearch(e.target.value)}
+                placeholder="Buscar veículo por marca, modelo ou placa..."
+                autoFocus
+                className="w-full bg-slate-50 border border-slate-200 pl-10 pr-4 py-3 rounded-xl text-sm font-medium text-slate-900 outline-none focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all"
+              />
+            </div>
+            <div className="flex-1 overflow-y-auto p-2" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+              <div className="hide-scroll space-y-1">
+                {/* Opção OUTRO */}
+                {(() => {
+                  const isSelected = selectedVehicle === 'OUTRO';
+                  return (
+                    <button
+                      onClick={() => {
+                        setSelectedVehicle('OUTRO');
+                        setIsVehiclesOpen(false);
+                        setVehicleSearch('');
+                      }}
+                      className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-left text-sm font-medium transition-all group ${isSelected ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-slate-50 text-slate-700'}`}
+                    >
+                      <div className="flex flex-col">
+                        <span className={`${isSelected ? 'font-bold' : ''}`}>OUTRO</span>
+                        <span className={`text-[10px] font-normal ${isSelected ? 'text-indigo-500' : 'text-slate-400'}`}>
+                          Especificar veículo personalizado
+                        </span>
+                      </div>
+                      {isSelected && <Check className="w-5 h-5 text-indigo-600" />}
+                    </button>
+                  );
+                })()}
+
+                {filteredVehicles.length > 0 ? (
+                  filteredVehicles.map((v) => {
+                    const vehicleValue = `${v.brand} ${v.model} - ${v.plate}`;
+                    const isSelected = selectedVehicle === vehicleValue;
+                    return (
+                      <button
+                        key={v.id}
+                        onClick={() => {
+                          setSelectedVehicle(vehicleValue);
+                          setCustomVehicle('');
+                          setIsVehiclesOpen(false);
+                          setVehicleSearch('');
+                        }}
+                        className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-left text-sm font-medium transition-all group ${isSelected ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-slate-50 text-slate-700'}`}
+                      >
+                        <div className="flex flex-col">
+                          <span className={`${isSelected ? 'font-bold' : ''}`}>{v.brand} {v.model}</span>
+                          <span className={`text-[10px] font-normal ${isSelected ? 'text-indigo-500' : 'text-slate-400'}`}>
+                            Placa: {v.plate} | Cor: {v.color} | Setor: {sectors.find(s => s.id === (v.sector_id || v.sectorId))?.name || 'Sem Setor'}
+                          </span>
+                        </div>
+                        {isSelected && <Check className="w-5 h-5 text-indigo-600" />}
+                      </button>
+                    );
+                  })
+                ) : (
+                  vehicleSearch && (
+                    <div className="p-10 text-center flex flex-col items-center">
+                      <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center mb-3">
+                        <Car className="w-6 h-6 text-slate-300" />
+                      </div>
+                      <p className="text-sm text-slate-500 font-medium">Nenhum veículo encontrado.</p>
+                    </div>
+                  )
                 )}
               </div>
             </div>

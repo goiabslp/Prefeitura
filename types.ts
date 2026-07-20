@@ -524,6 +524,11 @@ export interface DiariaEvento {
   comprovantes_gestor?: any[];
   valor_diaria?: number;
   relatorio_viagem?: string;
+  hospedagem?: boolean;
+  hospedagem_dias?: number;
+  veiculo?: string;
+  veiculo_outro?: string;
+  distancia?: number;
 }
 
 export interface ConsultaPaciente {
