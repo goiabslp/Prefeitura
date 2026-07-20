@@ -1205,7 +1205,7 @@ const App: React.FC = () => {
       if (view === 'vehicle-scheduling' || block === 'agendamento') return 'vehicle-scheduling';
       if (view === 'abastecimento' || block === 'abastecimento') return 'abastecimento';
       if (block === 'compras') return 'compras';
-      if (block === 'diarias') return 'diarias';
+      if (block === 'diarias' || view.startsWith('diarias')) return 'diarias';
       if (block === 'oficio') return 'oficio';
       if (view === 'tasks-dashboard') return 'transactions'; // 'transactions' covers tasks
       if (view === 'rh') return 'rh';

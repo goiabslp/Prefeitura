@@ -166,9 +166,13 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
   onBack,
   onFinish
 }) => {
+  const normalizeName = (n: string) => {
+    return n.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  };
+
   const [selectedPerson, setSelectedPerson] = useState<{ id: string; name: string } | null>(() => {
     if (currentUser) {
-      const match = persons.find(p => p.name.trim().toLowerCase() === currentUser.name.trim().toLowerCase());
+      const match = persons.find(p => normalizeName(p.name) === normalizeName(currentUser.name));
       if (match) return { id: match.id, name: match.name };
       return { id: currentUser.id, name: currentUser.name };
     }
@@ -237,6 +241,18 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
 
   // States for date modals
   const [activeDateModal, setActiveDateModal] = useState<'departure' | 'return' | null>(null);
+
+  useEffect(() => {
+    if (currentUser && persons.length > 0) {
+      const isPersonInList = selectedPerson ? persons.some(p => p.id === selectedPerson.id) : false;
+      if (!isPersonInList) {
+        const match = persons.find(p => normalizeName(p.name) === normalizeName(currentUser.name));
+        if (match) {
+          setSelectedPerson({ id: match.id, name: match.name });
+        }
+      }
+    }
+  }, [persons, currentUser]);
 
   useEffect(() => {
     const fetchCities = async () => {
