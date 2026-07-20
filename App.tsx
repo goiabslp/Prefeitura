@@ -664,7 +664,9 @@ const App: React.FC = () => {
           name: ru.name,
           role: ru.role,
           sector: ru.sector,
+          sectorId: ru.sector_id,
           jobTitle: ru.job_title,
+          jobId: ru.job_id,
           email: ru.email,
           whatsapp: ru.whatsapp,
           allowedSignatureIds: ru.allowed_signature_ids,
@@ -835,13 +837,15 @@ const App: React.FC = () => {
             return;
           }
           const ru = payload.new;
-          const mappedUser: User = {
+           const mappedUser: User = {
             id: ru.id,
             username: ru.username,
             name: ru.name,
             role: ru.role,
             sector: ru.sector,
+            sectorId: ru.sector_id,
             jobTitle: ru.job_title,
+            jobId: ru.job_id,
             email: ru.email,
             whatsapp: ru.whatsapp,
             allowedSignatureIds: ru.allowed_signature_ids,
@@ -3590,7 +3594,9 @@ const App: React.FC = () => {
       two_factor_enabled_2: u.twoFactorEnabled2,
       two_factor_secret_2: u.twoFactorSecret2,
       status: u.status,
-      avatar: u.avatar
+      avatar: u.avatar,
+      sector_id: u.sectorId,
+      job_id: u.jobId
     }).eq('id', u.id);
 
     if (u.password) {
@@ -3779,7 +3785,9 @@ const App: React.FC = () => {
                                 name: ru.name,
                                 role: ru.role,
                                 sector: ru.sector,
+                                sectorId: ru.sector_id,
                                 jobTitle: ru.job_title,
+                                jobId: ru.job_id,
                                 email: ru.email,
                                 whatsapp: ru.whatsapp,
                                 allowedSignatureIds: ru.allowed_signature_ids,
@@ -3832,8 +3840,24 @@ const App: React.FC = () => {
                         }}
                         onUpdatePerson={async p => {
                           const updated = await entityService.updatePerson(p);
-                          if (updated) setPersons(prev => prev.map(x => x.id === p.id ? updated : x));
-                          else alert('Erro ao atualizar pessoa');
+                          if (updated) {
+                            setPersons(prev => prev.map(x => x.id === p.id ? updated : x));
+                            const matchedUser = users.find(u => u.name.trim().toLowerCase() === updated.name.trim().toLowerCase());
+                            if (matchedUser) {
+                              const jobName = jobs.find(j => j.id === updated.jobId)?.name || '';
+                              const sectorName = sectors.find(s => s.id === updated.sectorId)?.name || '';
+                              const updatedUser: User = {
+                                ...matchedUser,
+                                sector: sectorName,
+                                sectorId: updated.sectorId,
+                                jobTitle: jobName,
+                                jobId: updated.jobId
+                              };
+                              await handleUpdateUserInApp(updatedUser);
+                            }
+                          } else {
+                            alert('Erro ao atualizar pessoa');
+                          }
                         }}
                         onDeletePerson={async id => {
                           const success = await entityService.deletePerson(id);
