@@ -5,7 +5,7 @@ import {
   X, AlertTriangle, Upload, Paperclip, Check, Trash2,
   Car, Navigation, Hotel, BookOpen
 } from 'lucide-react';
-import { DiariaEvento, User, Attachment, Sector, Job } from '../../types';
+import { DiariaEvento, User, Attachment, Sector, Job, Person } from '../../types';
 import { supabase } from '../../services/supabaseClient';
 import { 
   getDiariaEventosBySector, 
@@ -74,9 +74,10 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
   const [sectors, setSectors] = useState<Sector[]>([]);
   const [profiles, setProfiles] = useState<any[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [persons, setPersons] = useState<Person[]>([]);
 
   useEffect(() => {
-    const loadSectorsProfilesJobs = async () => {
+    const loadAuxiliaryData = async () => {
       try {
         const { data: sData } = await supabase.from('sectors').select('*');
         if (sData) setSectors(sData);
@@ -86,11 +87,23 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
 
         const { data: jData } = await supabase.from('jobs').select('*');
         if (jData) setJobs(jData);
+
+        const { data: peData } = await supabase.from('persons').select('*');
+        if (peData) {
+          setPersons(peData.map((p: any) => ({
+            id: p.id,
+            name: p.name,
+            sectorId: p.sector_id,
+            jobId: p.job_id,
+            birth_date: p.birth_date,
+            driver_code: p.driver_code
+          })));
+        }
       } catch (e) {
-        console.warn("Erro ao carregar setores, perfis e cargos:", e);
+        console.warn("Erro ao carregar dados auxiliares:", e);
       }
     };
-    loadSectorsProfilesJobs();
+    loadAuxiliaryData();
   }, []);
 
   const fetchEventos = async () => {
@@ -1173,18 +1186,33 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                         const servidorNome = selectedEvento.pessoas[0]?.name || 'Servidor não informado';
                         const pessoaObj = selectedEvento.pessoas[0];
 
-                        // Busca o cargo do servidor
+                        // Busca o cargo do servidor da mesma forma que na tela de Novo Evento
                         const getCargoServidor = () => {
                           if (!pessoaObj) return 'Cargo não informado';
-                          const profile = profiles.find(p => p.name?.toLowerCase() === pessoaObj.name?.toLowerCase() || p.id === pessoaObj.id);
+
+                          const normalizeName = (n: string) => n.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                          const targetName = pessoaObj.name ? normalizeName(pessoaObj.name) : '';
+
+                          // 1. Busca a pessoa cadastrada na tabela `persons`
+                          const matchedPerson = persons.find(p => p.id === pessoaObj.id || (p.name && normalizeName(p.name) === targetName));
+                          if (matchedPerson && matchedPerson.jobId) {
+                            const jobObj = jobs.find(j => j.id === matchedPerson.jobId);
+                            if (jobObj && jobObj.name) return jobObj.name;
+                          }
+
+                          // 2. Busca na tabela de perfis de usuários
+                          const profile = profiles.find(p => p.id === pessoaObj.id || (p.name && normalizeName(p.name) === targetName));
                           if (profile && (profile.job_title || profile.jobTitle || profile.job)) {
                             return profile.job_title || profile.jobTitle || profile.job;
                           }
+
+                          // 3. Fallback se a pessoa possuir jobId/role no objeto
                           if ((pessoaObj as any).jobId) {
-                            const job = jobs.find(j => j.id === (pessoaObj as any).jobId);
-                            if (job) return job.name;
+                            const jobObj = jobs.find(j => j.id === (pessoaObj as any).jobId);
+                            if (jobObj && jobObj.name) return jobObj.name;
                           }
                           if ((pessoaObj as any).role) return (pessoaObj as any).role;
+
                           return 'Cargo não informado';
                         };
 
