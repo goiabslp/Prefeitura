@@ -594,7 +594,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
                   return (
                     <>
                       <div className="relative space-y-3">
-                        <label className={labelClass}>Pessoa Selecionada</label>
+                        <label className={labelClass}>Servidor</label>
                         <div 
                           onClick={() => {
                             if (canChangePerson) {
@@ -744,7 +744,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
 
                 {hospedagem && (
                   <div className="space-y-3 animate-fade-in">
-                    <label className={labelClass}>Quantos dias?</label>
+                    <label className={labelClass}>Quantas Noites?</label>
                     <div className={inputContainerClass}>
                       <Clock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                       <input
@@ -753,7 +753,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
                         value={hospedagemDias}
                         onChange={(e) => setHospedagemDias(Math.max(1, parseInt(e.target.value) || 1))}
                         className={inputClass}
-                        placeholder="Número de dias"
+                        placeholder="Número de noites"
                       />
                     </div>
                   </div>

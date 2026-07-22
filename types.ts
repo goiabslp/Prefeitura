@@ -529,6 +529,7 @@ export interface DiariaEvento {
   veiculo?: string;
   veiculo_outro?: string;
   distancia?: number;
+  gestor_transferido_cargo?: string;
 }
 
 export interface ConsultaPaciente {

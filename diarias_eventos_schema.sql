@@ -1,4 +1,4 @@
--- Execute este script no SQL Editor do Supabase para criar a tabela de Lançamentos de Novos Eventos
+-- Execute este script no SQL Editor do Supabase para criar a tabela e adicionar colunas de Lançamentos de Novos Eventos
 CREATE TABLE IF NOT EXISTS public.diarias_eventos (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     pessoas JSONB NOT NULL,
@@ -11,6 +11,20 @@ CREATE TABLE IF NOT EXISTS public.diarias_eventos (
     user_name VARCHAR(255) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+
+-- Garantir adição de todas as colunas de controle, hospedagem, veículo e distância
+ALTER TABLE public.diarias_eventos
+ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'aguardando_gestor',
+ADD COLUMN IF NOT EXISTS justificativa_gestor TEXT,
+ADD COLUMN IF NOT EXISTS comprovantes_gestor JSONB DEFAULT '[]'::jsonb,
+ADD COLUMN IF NOT EXISTS valor_diaria NUMERIC,
+ADD COLUMN IF NOT EXISTS relatorio_viagem TEXT,
+ADD COLUMN IF NOT EXISTS hospedagem BOOLEAN DEFAULT FALSE,
+ADD COLUMN IF NOT EXISTS hospedagem_dias INTEGER DEFAULT 0,
+ADD COLUMN IF NOT EXISTS veiculo VARCHAR(255),
+ADD COLUMN IF NOT EXISTS veiculo_outro VARCHAR(255),
+ADD COLUMN IF NOT EXISTS distancia NUMERIC DEFAULT 0,
+ADD COLUMN IF NOT EXISTS gestor_transferido_cargo VARCHAR(255);
 
 -- Ativar RLS (Row Level Security)
 ALTER TABLE public.diarias_eventos ENABLE ROW LEVEL SECURITY;

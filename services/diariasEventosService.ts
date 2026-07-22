@@ -2,11 +2,32 @@ import { supabase } from './supabaseClient';
 import { DiariaEvento } from '../types';
 
 export const createDiariaEvento = async (evento: Omit<DiariaEvento, 'id' | 'created_at'>): Promise<DiariaEvento> => {
-  const { data, error } = await supabase
+  let payload: any = { ...evento };
+  let { data, error } = await supabase
     .from('diarias_eventos')
-    .insert([evento])
+    .insert([payload])
     .select()
     .single();
+
+  if (error && error.code === 'PGRST204') {
+    console.warn('Coluna ausente no schema cache de diarias_eventos (PGRST204). Executando fallback...', error.message);
+    const fallbackPayload = { ...payload };
+    delete fallbackPayload.distancia;
+    delete fallbackPayload.hospedagem;
+    delete fallbackPayload.hospedagem_dias;
+    delete fallbackPayload.veiculo;
+    delete fallbackPayload.veiculo_outro;
+
+    const fallbackRes = await supabase
+      .from('diarias_eventos')
+      .insert([fallbackPayload])
+      .select()
+      .single();
+
+    if (!fallbackRes.error) {
+      return fallbackRes.data as DiariaEvento;
+    }
+  }
 
   if (error) {
     console.error('Erro ao criar evento de diária:', error);
@@ -51,12 +72,29 @@ export const getAllDiariaEventos = async (): Promise<DiariaEvento[]> => {
 };
 
 export const updateDiariaEvento = async (id: string, updates: Partial<DiariaEvento>): Promise<DiariaEvento> => {
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('diarias_eventos')
     .update(updates)
     .eq('id', id)
     .select()
     .single();
+
+  if (error && error.code === 'PGRST204') {
+    console.warn('Coluna ausente em updateDiariaEvento (PGRST204). Tentando fallback...', error.message);
+    const fallbackUpdates = { ...updates };
+    delete fallbackUpdates.gestor_transferido_cargo;
+
+    const fallbackRes = await supabase
+      .from('diarias_eventos')
+      .update(fallbackUpdates)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (!fallbackRes.error) {
+      return fallbackRes.data as DiariaEvento;
+    }
+  }
 
   if (error) {
     console.error('Erro ao atualizar evento de diária:', error);
