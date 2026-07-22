@@ -3,7 +3,7 @@ import {
   ArrowLeft, Loader2, Calendar, MapPin, Users, RefreshCw, 
   FileText, Search, Hash as HashIcon, CheckCircle2, 
   X, AlertTriangle, Upload, Paperclip, Check, Trash2,
-  Car, Navigation, Hotel, BookOpen, Copy
+  Car, Navigation, Hotel, BookOpen, Copy, Download
 } from 'lucide-react';
 import { DiariaEvento, User, Attachment, Sector, Job, Person } from '../../types';
 import { supabase } from '../../services/supabaseClient';
@@ -736,6 +736,54 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
     }
   };
 
+  const handleDownloadPDF = (evento: DiariaEvento) => {
+    const sNome = evento.pessoas[0]?.name || 'Servidor não informado';
+    const pessoaObj = evento.pessoas[0];
+
+    const getCargo = () => {
+      if (!pessoaObj) return 'Cargo não informado';
+      const normalizeName = (n: string) => n.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const targetName = pessoaObj.name ? normalizeName(pessoaObj.name) : '';
+      const matchedPerson = persons.find(p => p.id === pessoaObj.id || (p.name && normalizeName(p.name) === targetName));
+      if (matchedPerson && matchedPerson.jobId) {
+        const jobObj = jobs.find(j => j.id === matchedPerson.jobId);
+        if (jobObj && jobObj.name) return jobObj.name;
+      }
+      const profile = profiles.find(p => p.id === pessoaObj.id || (p.name && normalizeName(p.name) === targetName));
+      if (profile && (profile.job_title || profile.jobTitle || profile.job)) {
+        return profile.job_title || profile.jobTitle || profile.job;
+      }
+      return 'Cargo não informado';
+    };
+
+    const cServidor = getCargo();
+    const stNome = sectors.find(s => s.id === evento.setor_id)?.name || evento.user_name || 'Setor Solicitante';
+    const autPor = evento.gestor_transferido_cargo
+      ? evento.gestor_transferido_cargo
+      : (sectors.find(s => s.id === evento.setor_id)?.name || 'Gestor do Setor Responsável');
+    const distKm = evento.distancia ? `${evento.distancia} KM` : 'Não informada';
+    const valorStr = evento.valor_diaria ? `R$ ${evento.valor_diaria.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : 'R$ 0,00';
+    const relatorioStr = evento.relatorio_viagem || evento.justificativa_gestor || evento.motivo;
+
+    const comprovantesList: Attachment[] = evento.comprovantes_gestor || [];
+    const despesasStr = (() => {
+      if (!comprovantesList || comprovantesList.length === 0) return "Em relação às despesas, não foram anexados comprovantes adicionais.";
+      return comprovantesList.map(c => `${c.expenseType || c.name || 'Despesa'}: R$ ${c.expenseValue || '0,00'}`).join('; ');
+    })();
+
+    generateDiariaPDF(
+      evento,
+      valorStr,
+      relatorioStr,
+      sNome,
+      cServidor,
+      stNome,
+      autPor,
+      distKm,
+      despesasStr
+    );
+  };
+
   const handleAdminGenerate = async () => {
     if (!selectedEvento || !valorDiaria || !relatorioViagem.trim()) return;
     setIsSubmitting(true);
@@ -1010,6 +1058,16 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                             title="Ver Detalhes"
                           >
                             <FileText className="w-4 h-4" />
+                          </button>
+                        )}
+
+                        {evento.status === 'concluido' && (
+                          <button
+                            onClick={() => handleDownloadPDF(evento)}
+                            className="p-1.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-all border border-emerald-200"
+                            title="Baixar PDF da Viagem"
+                          >
+                            <Download className="w-4 h-4" />
                           </button>
                         )}
                         
