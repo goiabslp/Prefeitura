@@ -3,7 +3,7 @@ import {
   ArrowLeft, Loader2, Calendar, MapPin, Users, RefreshCw, 
   FileText, Search, Hash as HashIcon, CheckCircle2, 
   X, AlertTriangle, Upload, Paperclip, Check, Trash2,
-  Car, Navigation, Hotel, BookOpen
+  Car, Navigation, Hotel, BookOpen, Copy
 } from 'lucide-react';
 import { DiariaEvento, User, Attachment, Sector, Job, Person } from '../../types';
 import { supabase } from '../../services/supabaseClient';
@@ -75,6 +75,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
   const [profiles, setProfiles] = useState<any[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [persons, setPersons] = useState<Person[]>([]);
+  const [isCopiedNarrative, setIsCopiedNarrative] = useState(false);
 
   useEffect(() => {
     const loadAuxiliaryData = async () => {
@@ -1261,7 +1262,32 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                         return (
                           <div className="space-y-6">
                             <div className="bg-gradient-to-br from-indigo-50/50 via-slate-50 to-white p-6 rounded-2xl border border-indigo-100/70 shadow-inner space-y-3">
-                              <span className="text-[10px] font-black text-indigo-700 uppercase tracking-widest block">Resumo Executivo Narrativo</span>
+                              <div className="flex items-center justify-between border-b border-indigo-100/50 pb-2">
+                                <span className="text-[10px] font-black text-indigo-700 uppercase tracking-widest block">Resumo Executivo Narrativo</span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const narrativeText = `O servidor ${servidorNome}, ocupante do cargo de ${cargoServidorStr}, atendendo no âmbito do ${setorNome}, realizou viagem oficial com destino a ${destinoStr}. O deslocamento teve saída realizada em ${dataSaidaStr} e retorno ocorrido em ${dataRetornoStr}, percorrendo uma distância total de aproximadamente ${distanciaKmStr}.\n\nA viagem foi devidamente autorizada por ${autorizadoPorStr}, tendo como fundamentação de interesse público: "${motivoJustificativaStr}".\n\nPara a realização do trajeto, foi utilizado o veículo ${veiculoStr}. Quanto à hospedagem, o registro constou como ${hospedagemStatusStr}${hospedagemNoitesStr}.`;
+                                    navigator.clipboard.writeText(narrativeText);
+                                    setIsCopiedNarrative(true);
+                                    setTimeout(() => setIsCopiedNarrative(false), 2000);
+                                  }}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-[10px] font-bold transition-all shadow-sm active:scale-95"
+                                  title="Copiar texto do Resumo Executivo Narrativo"
+                                >
+                                  {isCopiedNarrative ? (
+                                    <>
+                                      <Check className="w-3.5 h-3.5 text-emerald-300" />
+                                      <span>Copiado!</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Copy className="w-3.5 h-3.5" />
+                                      <span>Copiar Texto</span>
+                                    </>
+                                  )}
+                                </button>
+                              </div>
                               <p className="text-xs font-medium text-slate-800 leading-relaxed break-words whitespace-pre-wrap">
                                 O servidor <strong>{servidorNome}</strong>, ocupante do cargo de <strong>{cargoServidorStr}</strong>, atendendo no âmbito do <strong>{setorNome}</strong>, realizou viagem oficial com destino a <strong>{destinoStr}</strong>. O deslocamento teve saída realizada em <strong>{dataSaidaStr}</strong> e retorno ocorrido em <strong>{dataRetornoStr}</strong>, percorrendo uma distância total de aproximadamente <strong>{distanciaKmStr}</strong>.
                               </p>
