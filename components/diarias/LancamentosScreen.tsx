@@ -235,14 +235,14 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
 
   const handleDelete = async (id: string) => {
     if (window.confirm("Tem certeza que deseja excluir permanentemente este lançamento de viagem?")) {
-      setIsLoading(true);
+      setEventos(prev => prev.filter(e => e.id !== id));
       try {
         await deleteDiariaEvento(id);
-        fetchEventos();
+        await fetchEventos();
       } catch (err) {
         console.error(err);
         alert("Erro ao excluir o lançamento de viagem.");
-        setIsLoading(false);
+        await fetchEventos();
       }
     }
   };
@@ -446,7 +446,10 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                           </button>
                         )}
                         
-                        {(currentUser?.role === 'admin' || evento.user_id === currentUser?.id) && (
+                        {(currentUser?.role === 'admin' || 
+                          evento.user_id === currentUser?.id || 
+                          currentUser?.permissions?.includes('parent_diarias_lancamentos') || 
+                          currentUser?.permissions?.includes('parent_diarias')) && (
                           <button 
                             onClick={() => handleDelete(evento.id)}
                             className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"

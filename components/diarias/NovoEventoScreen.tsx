@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   ArrowLeft, MapPin, Calendar, Clock, FileText, CheckCircle2, 
   Loader2, Search, ChevronDown, Users, X, Check, ChevronLeft,
-  MessageSquare, ArrowRight, ChevronRight, Car
+  MessageSquare, ArrowRight, ChevronRight, Car, AlertTriangle
 } from 'lucide-react';
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -182,6 +182,34 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
   const [departureDateTime, setDepartureDateTime] = useState('');
   const [returnDateTime, setReturnDateTime] = useState('');
   const [reason, setReason] = useState('');
+  const [isExpiredModalOpen, setIsExpiredModalOpen] = useState(false);
+
+  const isDateExpired = (returnDateStr: string): boolean => {
+    if (!returnDateStr) return false;
+    try {
+      const returnDate = parseISO(returnDateStr);
+      const now = new Date();
+      
+      const retDay = new Date(returnDate.getFullYear(), returnDate.getMonth(), returnDate.getDate());
+      const nowDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      
+      const diffMs = nowDay.getTime() - retDay.getTime();
+      const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+      
+      return diffDays > 10;
+    } catch (e) {
+      return false;
+    }
+  };
+
+  const handleReturnSelect = (val: string) => {
+    if (isDateExpired(val)) {
+      setReturnDateTime('');
+      setIsExpiredModalOpen(true);
+    } else {
+      setReturnDateTime(val);
+    }
+  };
 
   // Novos campos adicionados
   const { data: cachedVehicles = [] } = useCachedVehicles();
@@ -221,6 +249,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
     destination && 
     departureDateTime && 
     returnDateTime && 
+    !isDateExpired(returnDateTime) &&
     (selectedVehicle !== '' && (selectedVehicle !== 'OUTRO' || customVehicle.trim() !== '')) &&
     (!hospedagem || (hospedagem && hospedagemDias > 0)) &&
     distancia !== '';
@@ -291,55 +320,55 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
       const destName = destinationCity.split(' - ')[0].toUpperCase();
       const originName = "SÃO JOSÉ DO GOIABAL";
       
+      let distVal = 0;
+
       if (destName === originName) {
-         setDistancia(30);
-         return;
+         distVal = 0;
+      } else {
+        const predefined: Record<string, number> = {
+          'JOÃO MONLEVADE': 45,
+          'BELO HORIZONTE': 160,
+          'IPATINGA': 110,
+          'ITABIRA': 85,
+          'ALVINÓPOLIS': 40,
+          'RIO PIRACICABA': 25,
+          'PONTE NOVA': 75,
+          'DOM SILVÉRIO': 35,
+          'DIONÍSIO': 15,
+          'SÃO DOMINGOS DO PRATA': 30,
+          'RAUL SOARES': 45,
+          'NOVA ERA': 60,
+          'CARATINGA': 130,
+          'TIMÓTEO': 90
+        };
+
+        if (predefined[destName] !== undefined) {
+           distVal = predefined[destName];
+        } else {
+          const fetchCoords = async (cityStr: string) => {
+             const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cityStr + ', Minas Gerais, Brazil')}`);
+             const data = await res.json();
+             if (data && data.length > 0) {
+                return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+             }
+             return null;
+          };
+
+          const originCoords = await fetchCoords(originName);
+          const destCoords = await fetchCoords(destName);
+
+          if (originCoords && destCoords) {
+             const osrmRes = await fetch(`https://router.project-osrm.org/route/v1/driving/${originCoords.lon},${originCoords.lat};${destCoords.lon},${destCoords.lat}?overview=false`);
+             const osrmData = await osrmRes.json();
+             if (osrmData.routes && osrmData.routes.length > 0) {
+                const distanceMeters = osrmData.routes[0].distance;
+                distVal = Math.round(distanceMeters / 1000);
+             }
+          }
+        }
       }
-      
-      const predefined: Record<string, number> = {
-        'JOÃO MONLEVADE': 45,
-        'BELO HORIZONTE': 160,
-        'IPATINGA': 110,
-        'ITABIRA': 85,
-        'ALVINÓPOLIS': 40,
-        'RIO PIRACICABA': 25,
-        'PONTE NOVA': 75,
-        'DOM SILVÉRIO': 35,
-        'DIONÍSIO': 15,
-        'SÃO DOMINGOS DO PRATA': 30,
-        'RAUL SOARES': 45,
-        'NOVA ERA': 60,
-        'CARATINGA': 130,
-        'TIMÓTEO': 90
-      };
 
-      if (predefined[destName] !== undefined) {
-         const dist = predefined[destName];
-         setDistancia(dist < 30 ? 30 : dist);
-         return;
-      }
-
-      const fetchCoords = async (cityStr: string) => {
-         const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cityStr + ', Minas Gerais, Brazil')}`);
-         const data = await res.json();
-         if (data && data.length > 0) {
-            return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
-         }
-         return null;
-      };
-
-      const originCoords = await fetchCoords(originName);
-      const destCoords = await fetchCoords(destName);
-
-      if (originCoords && destCoords) {
-         const osrmRes = await fetch(`https://router.project-osrm.org/route/v1/driving/${originCoords.lon},${originCoords.lat};${destCoords.lon},${destCoords.lat}?overview=false`);
-         const osrmData = await osrmRes.json();
-         if (osrmData.routes && osrmData.routes.length > 0) {
-            const distanceMeters = osrmData.routes[0].distance;
-            const distanceKm = Math.round(distanceMeters / 1000);
-            setDistancia(distanceKm < 30 ? 30 : distanceKm);
-         }
-      }
+      setDistancia(distVal);
     } catch (e) {
       console.warn('Failed to calculate distance automatically:', e);
     } finally {
@@ -390,6 +419,10 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
   const isFormValid = isStep1Valid && reason.trim().length >= 100;
 
   const handleSubmit = async () => {
+    if (isDateExpired(returnDateTime)) {
+      setIsExpiredModalOpen(true);
+      return;
+    }
     if (!isFormValid || !currentUser) return;
     setIsLoading(true);
     
@@ -504,7 +537,13 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
           <div className="min-w-[140px] flex justify-end">
               {currentStep === 1 ? (
                   <button
-                      onClick={() => setCurrentStep(2)}
+                      onClick={() => {
+                        if (isDateExpired(returnDateTime)) {
+                          setIsExpiredModalOpen(true);
+                          return;
+                        }
+                        setCurrentStep(2);
+                      }}
                       disabled={!isStep1Valid || isLoading}
                       className="flex items-center gap-2 px-6 py-2.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 shadow-lg shadow-slate-900/20 active:scale-95 transition-all text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                   >
@@ -1003,10 +1042,50 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
       <DateTimePickerModal
         isOpen={activeDateModal === 'return'}
         onClose={() => setActiveDateModal(null)}
-        onSelect={setReturnDateTime}
+        onSelect={handleReturnSelect}
         initialValue={returnDateTime}
         title="Data e Hora de Retorno"
       />
+
+      {/* Modal - Data da Diária Expirada (Regra dos 10 Dias) */}
+      {isExpiredModalOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 sm:p-6 animate-fade-in" onClick={() => setIsExpiredModalOpen(false)}>
+          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100 animate-slide-up" onClick={e => e.stopPropagation()}>
+            <div className="bg-gradient-to-br from-amber-500 to-orange-600 p-6 text-white text-center relative flex flex-col items-center">
+              <div className="w-14 h-14 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center mb-3 border border-white/30 shadow-inner">
+                <AlertTriangle className="w-8 h-8 text-white" />
+              </div>
+              <h3 className="text-lg font-black tracking-tight uppercase">Data da Diária Expirada</h3>
+              <p className="text-xs text-amber-100 font-semibold mt-1">Prazo Limite Excedido</p>
+              <button 
+                onClick={() => setIsExpiredModalOpen(false)} 
+                className="absolute top-4 right-4 p-2 text-white/80 hover:text-white bg-black/10 hover:bg-black/20 rounded-full transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-5 text-center">
+              <div className="bg-amber-50 border border-amber-200/80 rounded-2xl p-4 text-amber-950 space-y-3 text-left">
+                <div className="flex items-center justify-between border-b border-amber-200/60 pb-2">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-amber-700">Fundamentação Legal</span>
+                  <span className="text-[10px] font-bold text-amber-800 bg-amber-200/60 px-2 py-0.5 rounded">Lei 1084/2017 • Decreto 64/2017</span>
+                </div>
+                <p className="text-xs font-semibold leading-relaxed text-amber-900 italic">
+                  “Art. 38 - O prazo da prestação de contas de diárias, e das despesas relacionadas com a viagem, inclusive passagens aéreas, é de dez dias, contados da data de retorno do servidor e/ou agente político à Sede do Município.”
+                </p>
+              </div>
+
+              <button
+                onClick={() => setIsExpiredModalOpen(false)}
+                className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs uppercase tracking-widest rounded-xl shadow-lg active:scale-[0.98] transition-all"
+              >
+                Entendido
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

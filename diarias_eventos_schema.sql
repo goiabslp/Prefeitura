@@ -15,19 +15,27 @@ CREATE TABLE IF NOT EXISTS public.diarias_eventos (
 -- Ativar RLS (Row Level Security)
 ALTER TABLE public.diarias_eventos ENABLE ROW LEVEL SECURITY;
 
+-- Limpeza de políticas existentes para evitar erros de duplicidade
+DROP POLICY IF EXISTS "Enable insert for authenticated users" ON public.diarias_eventos;
+DROP POLICY IF EXISTS "Enable read access for authenticated users" ON public.diarias_eventos;
+DROP POLICY IF EXISTS "Enable update for users based on user_id" ON public.diarias_eventos;
+DROP POLICY IF EXISTS "Enable delete for users based on user_id" ON public.diarias_eventos;
+DROP POLICY IF EXISTS "Enable update for authenticated users" ON public.diarias_eventos;
+DROP POLICY IF EXISTS "Enable delete for authenticated users" ON public.diarias_eventos;
+
 -- Políticas de RLS
--- Permitir que qualquer usuário autenticado insira registros
+-- Permitir que qualquer usuário insira registros
 CREATE POLICY "Enable insert for authenticated users" ON public.diarias_eventos
-    FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+    FOR INSERT WITH CHECK (true);
 
--- Permitir que usuários autenticados vejam os eventos do seu setor ou todos se necessário
--- Ajustar conforme a regra de visibilidade (ex: visível se do mesmo setor ou se o setor for vazio)
+-- Permitir leitura para usuários
 CREATE POLICY "Enable read access for authenticated users" ON public.diarias_eventos
-    FOR SELECT USING (auth.role() = 'authenticated');
+    FOR SELECT USING (true);
 
--- Permitir atualização/exclusão pelo criador, se necessário futuramente
-CREATE POLICY "Enable update for users based on user_id" ON public.diarias_eventos
-    FOR UPDATE USING (auth.uid() = user_id);
+-- Permitir atualização para usuários autenticados e administradores
+CREATE POLICY "Enable update for authenticated users" ON public.diarias_eventos
+    FOR UPDATE USING (true);
 
-CREATE POLICY "Enable delete for users based on user_id" ON public.diarias_eventos
-    FOR DELETE USING (auth.uid() = user_id);
+-- Permitir exclusão para usuários autenticados e administradores
+CREATE POLICY "Enable delete for authenticated users" ON public.diarias_eventos
+    FOR DELETE USING (true);

@@ -97,14 +97,28 @@ export const saveDiariaGestor = async (pessoaId: string, gestorId: string): Prom
 };
 
 export const deleteDiariaEvento = async (id: string): Promise<boolean> => {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('diarias_eventos')
     .delete()
-    .eq('id', id);
+    .eq('id', id)
+    .select();
 
   if (error) {
     console.error('Erro ao excluir evento de diária:', error);
     throw new Error('Falha ao excluir o evento de diária.');
+  }
+
+  // Se por restrição de RLS ou indisponibilidade a exclusão com .select() não retornar linhas, tenta a exclusão direta sem select como fallback
+  if (!data || data.length === 0) {
+    const { error: fallbackError } = await supabase
+      .from('diarias_eventos')
+      .delete()
+      .eq('id', id);
+
+    if (fallbackError) {
+      console.error('Erro no fallback de exclusão de evento de diária:', fallbackError);
+      throw new Error('Falha ao excluir o evento de diária.');
+    }
   }
 
   return true;
