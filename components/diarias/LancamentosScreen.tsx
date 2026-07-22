@@ -762,14 +762,15 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
       ? evento.gestor_transferido_cargo
       : (sectors.find(s => s.id === evento.setor_id)?.name || 'Gestor do Setor Responsável');
     const distKm = evento.distancia ? `${evento.distancia} KM` : 'Não informada';
-    const valorStr = evento.valor_diaria ? `R$ ${evento.valor_diaria.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : 'R$ 0,00';
-    const relatorioStr = evento.relatorio_viagem || evento.justificativa_gestor || evento.motivo;
 
     const comprovantesList: Attachment[] = evento.comprovantes_gestor || [];
     const despesasStr = (() => {
       if (!comprovantesList || comprovantesList.length === 0) return "Em relação às despesas, não foram anexados comprovantes adicionais.";
       return comprovantesList.map(c => `${c.expenseType || c.name || 'Despesa'}: R$ ${c.expenseValue || '0,00'}`).join('; ');
     })();
+
+    const valorStr = evento.valor_diaria ? `R$ ${evento.valor_diaria.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : 'R$ 0,00';
+    const relatorioStr = evento.relatorio_viagem || 'Relatório de viagem não informado.';
 
     generateDiariaPDF(
       evento,
@@ -1064,8 +1065,8 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                         {evento.status === 'concluido' && (
                           <button
                             onClick={() => handleDownloadPDF(evento)}
-                            className="p-1.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-all border border-emerald-200"
-                            title="Baixar PDF da Viagem"
+                            className="p-1.5 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg transition-all border border-indigo-200/80 shadow-xs"
+                            title="Baixar / Imprimir PDF da Diária Concluída"
                           >
                             <Download className="w-4 h-4" />
                           </button>
