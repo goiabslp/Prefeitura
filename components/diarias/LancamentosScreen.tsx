@@ -14,6 +14,7 @@ import {
   getDiariasGestores,
   deleteDiariaEvento
 } from '../../services/diariasEventosService';
+import { getGlobalSettings } from '../../services/settingsService';
 import { uploadFile } from '../../services/storageService';
 
 const GESTORES_CARGOS = [
@@ -76,10 +77,19 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
   const [jobs, setJobs] = useState<Job[]>([]);
   const [persons, setPersons] = useState<Person[]>([]);
   const [isCopiedNarrative, setIsCopiedNarrative] = useState(false);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
 
   useEffect(() => {
     const loadAuxiliaryData = async () => {
       try {
+        const cachedLogo = localStorage.getItem('cached_img_branding_logo') || localStorage.getItem('cached_img_ui_header_logo');
+        if (cachedLogo) setLogoUrl(cachedLogo);
+
+        const settings = await getGlobalSettings();
+        if (settings?.branding?.logoUrl) {
+          setLogoUrl(settings.branding.logoUrl);
+        }
+
         const { data: sData } = await supabase.from('sectors').select('*');
         if (sData) setSectors(sData);
 
@@ -266,30 +276,529 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
     }
   };
 
+  const generateDiariaPDF = (
+    evento: DiariaEvento,
+    valor: string,
+    relatorio: string,
+    servidorNomeParam: string,
+    cargoServidorParam: string,
+    setorNomeParam: string,
+    autorizadoPorParam: string,
+    distanciaKmParam: string,
+    despesasTextoParam: string
+  ) => {
+    try {
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) return;
+
+      const dataSaidaFormatted = evento.data_saida ? new Date(evento.data_saida).toLocaleString('pt-BR') : '---';
+      const dataRetornoFormatted = evento.data_retorno ? new Date(evento.data_retorno).toLocaleString('pt-BR') : '---';
+      const pernoites = evento.hospedagem ? (evento.hospedagem_dias || 1) : 0;
+      const protocol = `DIA-${evento.id.slice(0, 4).toUpperCase()}/${new Date().getFullYear()}`;
+      const veiculoStr = evento.veiculo === 'OUTRO'
+        ? (evento.veiculo_outro || 'Veículo Personalizado')
+        : (evento.veiculo || 'Não informado');
+
+      const valorFormatado = valor.startsWith('R$') ? valor : `R$ ${valor}`;
+
+      const htmlContent = `
+        <!DOCTYPE html>
+        <html lang="pt-BR">
+        <head>
+          <meta charset="utf-8" />
+          <title>Processo de Diária Oficial - ${protocol}</title>
+          <style>
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+            @page {
+              size: A4 portrait;
+              margin: 0;
+            }
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            html, body { 
+              font-family: 'Inter', sans-serif; 
+              color: #1e293b; 
+              background: #ffffff;
+              margin: 0;
+              padding: 0;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+            .page {
+              width: 210mm;
+              height: 297mm;
+              max-height: 297mm;
+              padding: 14mm 14mm 24mm 14mm;
+              display: flex;
+              flex-direction: column;
+              justify-content: space-between;
+              page-break-after: always;
+              break-after: page;
+              box-sizing: border-box;
+              position: relative;
+              overflow: hidden;
+            }
+            .page-last {
+              page-break-after: avoid;
+              break-after: avoid;
+            }
+            .header {
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              border-bottom: 2px solid #0f172a;
+              padding-bottom: 8px;
+              margin-bottom: 12px;
+            }
+            .header-title {
+              font-size: 13.5px;
+              font-weight: 900;
+              text-transform: uppercase;
+              color: #0f172a;
+              letter-spacing: -0.02em;
+            }
+            .header-subtitle {
+              font-size: 9.5px;
+              color: #64748b;
+              font-weight: 700;
+              text-transform: uppercase;
+              margin-top: 1px;
+            }
+            .protocol-badge {
+              font-family: monospace;
+              font-size: 10.5px;
+              font-weight: 800;
+              background: #f1f5f9;
+              color: #334155;
+              padding: 4px 10px;
+              border-radius: 6px;
+              border: 1px solid #cbd5e1;
+            }
+            .status-badge {
+              display: inline-block;
+              font-size: 8px;
+              font-weight: 900;
+              text-transform: uppercase;
+              background: #dcfce7;
+              color: #15803d;
+              padding: 2px 7px;
+              border-radius: 4px;
+              border: 1px solid #bbf7d0;
+              margin-top: 3px;
+            }
+            .section-box {
+              border: 1px solid #cbd5e1;
+              border-radius: 8px;
+              overflow: hidden;
+              margin-bottom: 10px;
+              background: #ffffff;
+            }
+            .section-header {
+              background: #f1f5f9;
+              padding: 4px 10px;
+              border-bottom: 1px solid #cbd5e1;
+              font-size: 8pt;
+              font-weight: 900;
+              text-transform: uppercase;
+              color: #475569;
+              letter-spacing: 0.05em;
+            }
+            .section-body {
+              padding: 8px 12px;
+            }
+            .grid-2 {
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 10px;
+            }
+            .grid-3 {
+              display: grid;
+              grid-template-columns: 1fr 1fr 1fr;
+              gap: 10px;
+            }
+            .label {
+              font-size: 7pt;
+              font-weight: 900;
+              text-transform: uppercase;
+              color: #64748b;
+              display: block;
+              margin-bottom: 2px;
+            }
+            .value {
+              font-size: 9.5pt;
+              font-weight: 700;
+              color: #0f172a;
+            }
+            .value-highlight {
+              font-size: 13pt;
+              font-weight: 900;
+              color: #4f46e5;
+            }
+            .justificativa-box {
+              font-size: 9.5pt;
+              line-height: 1.45;
+              color: #1e293b;
+              white-space: pre-wrap;
+              background: #fafafa;
+              padding: 10px;
+              border-radius: 6px;
+              border: 1px solid #e2e8f0;
+              font-style: italic;
+              max-height: 155mm;
+              overflow: hidden;
+            }
+            .signatures {
+              margin-top: 60px;
+              margin-bottom: 10px;
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 30px;
+              text-align: center;
+            }
+            .signature-line {
+              border-top: 1.5px solid #0f172a;
+              padding-top: 4px;
+            }
+            .signature-name {
+              font-size: 9pt;
+              font-weight: 900;
+              text-transform: uppercase;
+            }
+            .signature-role {
+              font-size: 7.5pt;
+              color: #64748b;
+              font-weight: 700;
+              text-transform: uppercase;
+            }
+            .footer-bar {
+              position: absolute;
+              bottom: 8mm;
+              left: 14mm;
+              right: 14mm;
+              padding-top: 8px;
+              border-top: 1px dashed #cbd5e1;
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              font-size: 8.5pt;
+              font-weight: 700;
+              color: #475569;
+              background: #ffffff;
+              z-index: 100;
+            }
+            @media print {
+              @page {
+                size: A4 portrait;
+                margin: 0;
+              }
+              html, body {
+                margin: 0;
+                padding: 0;
+              }
+              .page {
+                padding: 12mm 14mm 22mm 14mm;
+                width: 210mm;
+                height: 297mm;
+                max-height: 297mm;
+                box-sizing: border-box;
+                page-break-after: always;
+                break-after: page;
+                position: relative;
+                overflow: hidden;
+              }
+              .footer-bar {
+                position: absolute;
+                bottom: 6mm;
+                left: 14mm;
+                right: 14mm;
+                padding-top: 6px;
+                border-top: 1px dashed #cbd5e1;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                font-size: 8.5pt;
+                font-weight: 700;
+                color: #475569;
+                background: #ffffff;
+                z-index: 100;
+              }
+              .page-last {
+                page-break-after: avoid;
+                break-after: avoid;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <!-- PÁGINA INICIAL -->
+          <div class="page">
+            <div>
+              <div class="header">
+                <div style="display: flex; align-items: center; gap: 14px;">
+                  ${logoUrl ? `<img src="${logoUrl}" alt="Logo Prefeitura" style="max-height: 55px; width: auto; object-fit: contain;" />` : ''}
+                  <div>
+                    <div class="header-title">PREFEITURA MUNICIPAL DE SÃO JOSÉ DO GOIABAL</div>
+                    <div class="header-subtitle">CONCESSÃO DE DIÁRIA E AUTORIZAÇÃO DE VIAGEM OFICIAL</div>
+                  </div>
+                </div>
+                <div style="text-align: right;">
+                  <div class="protocol-badge">${protocol}</div>
+                  <div><span class="status-badge">CONCLUÍDO / GERADO</span></div>
+                </div>
+              </div>
+
+              <!-- 01. DADOS DO BENEFICIÁRIO -->
+              <div class="section-box">
+                <div class="section-header">01. DADOS DO BENEFICIÁRIO</div>
+                <div class="section-body">
+                  <div style="margin-bottom: 10px;">
+                    <span class="label">Nome do Servidor</span>
+                    <span class="value" style="font-size: 12pt;">${servidorNomeParam}</span>
+                  </div>
+                  <div class="grid-2">
+                    <div>
+                      <span class="label">Cargo / Função</span>
+                      <span class="value">${cargoServidorParam}</span>
+                    </div>
+                    <div>
+                      <span class="label">Setor de Atendimento</span>
+                      <span class="value">${setorNomeParam}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 02. LOGÍSTICA E ITINERÁRIO -->
+              <div class="section-box">
+                <div class="section-header">02. LOGÍSTICA E ITINERÁRIO</div>
+                <div class="section-body">
+                  <div style="margin-bottom: 10px;">
+                    <span class="label">Destino (Cidade / UF)</span>
+                    <span class="value">${evento.destino}</span>
+                  </div>
+                  <div class="grid-2" style="margin-bottom: 10px;">
+                    <div style="background: #f8fafc; padding: 8px 12px; border-radius: 6px; border: 1px solid #e2e8f0;">
+                      <span class="label">Data / Hora de Saída</span>
+                      <span class="value">${dataSaidaFormatted}</span>
+                    </div>
+                    <div style="background: #f8fafc; padding: 8px 12px; border-radius: 6px; border: 1px solid #e2e8f0;">
+                      <span class="label">Data / Hora de Retorno</span>
+                      <span class="value">${dataRetornoFormatted}</span>
+                    </div>
+                  </div>
+                  <div class="grid-3">
+                    <div>
+                      <span class="label">Noites de Hospedagem</span>
+                      <span class="value">${pernoites}</span>
+                    </div>
+                    <div>
+                      <span class="label">Distância Prevista</span>
+                      <span class="value">${distanciaKmParam}</span>
+                    </div>
+                    <div>
+                      <span class="label">Veículo Utilizado</span>
+                      <span class="value">${veiculoStr}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 03. RESUMO FINANCEIRO E AUTORIZAÇÃO -->
+              <div class="section-box">
+                <div class="section-header">03. RESUMO FINANCEIRO E AUTORIZAÇÃO</div>
+                <div class="section-body">
+                  <div class="grid-2" style="align-items: center;">
+                    <div>
+                      <span class="label">Valor Concedido da Diária</span>
+                      <span class="value-highlight">${valorFormatado}</span>
+                    </div>
+                    <div>
+                      <span class="label">Autorizado Por</span>
+                      <span class="value">${autorizadoPorParam}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 04. MOTIVO DA VIAGEM (SOLICITAÇÃO INICIAL) -->
+              <div class="section-box">
+                <div class="section-header">04. MOTIVO DA VIAGEM (SOLICITAÇÃO INICIAL)</div>
+                <div class="section-body">
+                  <div class="justificativa-box">${evento.motivo || 'Motivo não informado.'}</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Rodapé Página Inicial -->
+            <div class="footer-bar">
+              <span>Código da Viagem: <strong style="color: #0f172a;">${protocol}</strong></span>
+              <span>Página 1 de 3</span>
+            </div>
+          </div>
+
+          <!-- PÁGINA 1 -->
+          <div class="page">
+            <div>
+              <div class="header">
+                <div style="display: flex; align-items: center; gap: 14px;">
+                  ${logoUrl ? `<img src="${logoUrl}" alt="Logo Prefeitura" style="max-height: 55px; width: auto; object-fit: contain;" />` : ''}
+                  <div>
+                    <div class="header-title">PREFEITURA MUNICIPAL DE SÃO JOSÉ DO GOIABAL</div>
+                    <div class="header-subtitle">CONCESSÃO DE DIÁRIA E AUTORIZAÇÃO DE VIAGEM OFICIAL</div>
+                  </div>
+                </div>
+                <div style="text-align: right;">
+                  <div class="protocol-badge">${protocol}</div>
+                  <div><span class="status-badge">CONCLUÍDO / GERADO</span></div>
+                </div>
+              </div>
+
+              <!-- 05. JUSTIFICATIVA DO GESTOR DE SETOR -->
+              <div class="section-box">
+                <div class="section-header">05. JUSTIFICATIVA DO GESTOR DE SETOR</div>
+                <div class="section-body">
+                  <div class="justificativa-box" style="min-height: 140px;">${evento.justificativa_gestor || 'Sem justificativa do gestor informada.'}</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Rodapé Página 1 -->
+            <div class="footer-bar">
+              <span>Código da Viagem: <strong style="color: #0f172a;">${protocol}</strong></span>
+              <span>Página 2 de 3</span>
+            </div>
+          </div>
+
+          <!-- PÁGINA 2 E DEMAIS -->
+          <div class="page page-last">
+            <div>
+              <div class="header">
+                <div style="display: flex; align-items: center; gap: 14px;">
+                  ${logoUrl ? `<img src="${logoUrl}" alt="Logo Prefeitura" style="max-height: 55px; width: auto; object-fit: contain;" />` : ''}
+                  <div>
+                    <div class="header-title">PREFEITURA MUNICIPAL DE SÃO JOSÉ DO GOIABAL</div>
+                    <div class="header-subtitle">CONCESSÃO DE DIÁRIA E AUTORIZAÇÃO DE VIAGEM OFICIAL</div>
+                  </div>
+                </div>
+                <div style="text-align: right;">
+                  <div class="protocol-badge">${protocol}</div>
+                  <div><span class="status-badge">CONCLUÍDO / GERADO</span></div>
+                </div>
+              </div>
+
+              <!-- 06. RELATÓRIO E JUSTIFICATIVA DA VIAGEM -->
+              <div class="section-box">
+                <div class="section-header">06. RELATÓRIO E JUSTIFICATIVA DA VIAGEM</div>
+                <div class="section-body">
+                  <div class="justificativa-box">${relatorio}</div>
+                </div>
+              </div>
+
+              <!-- 07. COMPROVAÇÃO DE DESPESAS -->
+              <div class="section-box">
+                <div class="section-header">07. COMPROVAÇÃO DE DESPESAS</div>
+                <div class="section-body">
+                  <div style="font-size: 9.5pt; line-height: 1.5; color: #334155;">
+                    ${despesasTextoParam}
+                  </div>
+                </div>
+              </div>
+
+              <!-- Assinaturas -->
+              <div class="signatures">
+                <div class="signature-line">
+                  <div class="signature-name">${servidorNomeParam}</div>
+                  <div class="signature-role">Servidor Solicitante</div>
+                </div>
+                <div class="signature-line">
+                  <div class="signature-name">${autorizadoPorParam}</div>
+                  <div class="signature-role">Gestor / Autorizador</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Rodapé Página 2 -->
+            <div class="footer-bar">
+              <span>Código da Viagem: <strong style="color: #0f172a;">${protocol}</strong></span>
+              <span>Página 3 de 3</span>
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+
+      printWindow.document.write(htmlContent);
+      printWindow.document.close();
+      setTimeout(() => {
+        printWindow.print();
+      }, 400);
+    } catch (e) {
+      console.error("Erro ao gerar janela de impressão PDF:", e);
+    }
+  };
+
   const handleAdminGenerate = async () => {
     if (!selectedEvento || !valorDiaria || !relatorioViagem.trim()) return;
     setIsSubmitting(true);
     try {
+      const valorFloat = parseFloat(valorDiaria.replace(/[^\d,.-]/g, '').replace(',', '.'));
+
       await updateDiariaEvento(selectedEvento.id, {
-        valor_diaria: parseFloat(valorDiaria.replace(/[^\d,.-]/g, '').replace(',', '.')),
+        valor_diaria: valorFloat,
         relatorio_viagem: relatorioViagem.trim(),
         status: 'concluido'
       });
 
-      if (onGenerateDiaria) {
-        onGenerateDiaria({
-          requesterName: selectedEvento.pessoas[0]?.name || 'Servidor',
-          destination: selectedEvento.destino,
-          departureDateTime: selectedEvento.data_saida,
-          returnDateTime: selectedEvento.data_retorno,
-          reason: `MOTIVO DO MOTORISTA: ${selectedEvento.motivo}\n\nJUSTIFICATIVA DO GESTOR: ${selectedEvento.justificativa_gestor || 'Não informada.'}`,
-          requestedValue: valorDiaria,
-          relatorioViagem: relatorioViagem.trim(),
-          attachments: selectedEvento.comprovantes_gestor || []
-        });
-      }
+      const sNome = selectedEvento.pessoas[0]?.name || 'Servidor não informado';
+      const pessoaObj = selectedEvento.pessoas[0];
 
+      const getCargo = () => {
+        if (!pessoaObj) return 'Cargo não informado';
+        const normalizeName = (n: string) => n.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        const targetName = pessoaObj.name ? normalizeName(pessoaObj.name) : '';
+        const matchedPerson = persons.find(p => p.id === pessoaObj.id || (p.name && normalizeName(p.name) === targetName));
+        if (matchedPerson && matchedPerson.jobId) {
+          const jobObj = jobs.find(j => j.id === matchedPerson.jobId);
+          if (jobObj && jobObj.name) return jobObj.name;
+        }
+        const profile = profiles.find(p => p.id === pessoaObj.id || (p.name && normalizeName(p.name) === targetName));
+        if (profile && (profile.job_title || profile.jobTitle || profile.job)) {
+          return profile.job_title || profile.jobTitle || profile.job;
+        }
+        return 'Cargo não informado';
+      };
+
+      const cServidor = getCargo();
+      const stNome = sectors.find(s => s.id === selectedEvento.setor_id)?.name || selectedEvento.user_name || 'Setor Solicitante';
+      const autPor = selectedEvento.gestor_transferido_cargo
+        ? selectedEvento.gestor_transferido_cargo
+        : (sectors.find(s => s.id === selectedEvento.setor_id)?.name || 'Gestor do Setor Responsável');
+      const distKm = selectedEvento.distancia ? `${selectedEvento.distancia} KM` : 'Não informada';
+
+      const comprovantesList: Attachment[] = selectedEvento.comprovantes_gestor || [];
+      const despesasStr = (() => {
+        if (!comprovantesList || comprovantesList.length === 0) return "Em relação às despesas, não foram anexados comprovantes adicionais.";
+        return comprovantesList.map(c => `${c.expenseType || c.name || 'Despesa'}: R$ ${c.expenseValue || '0,00'}`).join('; ');
+      })();
+
+      // 1. Gera e dispara o PDF oficial direto
+      generateDiariaPDF(
+        selectedEvento,
+        valorDiaria,
+        relatorioViagem.trim(),
+        sNome,
+        cServidor,
+        stNome,
+        autPor,
+        distKm,
+        despesasStr
+      );
+
+      await fetchEventos();
       handleCloseModal();
+
+      // 2. Redireciona o usuário para a rota /Diarias/Lancamentos
+      window.history.pushState({}, '', '/Diarias/Lancamentos');
+      window.dispatchEvent(new Event('popstate'));
     } catch (err) {
       console.error(err);
       alert("Erro ao finalizar a aprovação e gerar a diária.");
@@ -1259,6 +1768,42 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                           ? (selectedEvento.veiculo_outro || 'Veículo Personalizado')
                           : (selectedEvento.veiculo || 'Não informado');
 
+                        const comprovantesList: Attachment[] = selectedEvento.comprovantes_gestor || [];
+                        const getDespesasNarrativa = () => {
+                          if (!comprovantesList || comprovantesList.length === 0) {
+                            return "Em relação às despesas, não foram anexados comprovantes adicionais.";
+                          }
+
+                          const despesasDetalhadas = comprovantesList
+                            .map(c => {
+                              const tipo = c.expenseType || c.name || 'Despesa';
+                              const valor = c.expenseValue ? `R$ ${c.expenseValue}` : '';
+                              return valor ? `${tipo} no valor de ${valor}` : tipo;
+                            })
+                            .join('; ');
+
+                          let totalNum = 0;
+                          let hasValidValue = false;
+
+                          comprovantesList.forEach(c => {
+                            if (c.expenseValue) {
+                              const num = parseFloat(c.expenseValue.toString().replace(/[^\d,.-]/g, '').replace(',', '.'));
+                              if (!isNaN(num)) {
+                                totalNum += num;
+                                hasValidValue = true;
+                              }
+                            }
+                          });
+
+                          const totalStr = hasValidValue 
+                            ? `, perfazendo um montante total de R$ ${totalNum.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} em despesas comprovadas.` 
+                            : '.';
+
+                          return `Durante o cumprimento da viagem, foram registradas e comprovadas as seguintes despesas: ${despesasDetalhadas}${totalStr}`;
+                        };
+
+                        const despesasTexto = getDespesasNarrativa();
+
                         return (
                           <div className="space-y-6">
                             <div className="bg-gradient-to-br from-indigo-50/50 via-slate-50 to-white p-6 rounded-2xl border border-indigo-100/70 shadow-inner space-y-3">
@@ -1267,7 +1812,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    const narrativeText = `O servidor ${servidorNome}, ocupante do cargo de ${cargoServidorStr}, atendendo no âmbito do ${setorNome}, realizou viagem oficial com destino a ${destinoStr}. O deslocamento teve saída realizada em ${dataSaidaStr} e retorno ocorrido em ${dataRetornoStr}, percorrendo uma distância total de aproximadamente ${distanciaKmStr}.\n\nA viagem foi devidamente autorizada por ${autorizadoPorStr}, tendo como fundamentação de interesse público: "${motivoJustificativaStr}".\n\nPara a realização do trajeto, foi utilizado o veículo ${veiculoStr}. Quanto à hospedagem, o registro constou como ${hospedagemStatusStr}${hospedagemNoitesStr}.`;
+                                    const narrativeText = `O servidor ${servidorNome}, ocupante do cargo de ${cargoServidorStr}, atendendo no âmbito do ${setorNome}, realizou viagem oficial com destino a ${destinoStr}. O deslocamento teve saída realizada em ${dataSaidaStr} e retorno ocorrido em ${dataRetornoStr}, percorrendo uma distância total de aproximadamente ${distanciaKmStr}.\n\nA viagem foi devidamente autorizada por ${autorizadoPorStr}, tendo como fundamentação de interesse público: "${motivoJustificativaStr}".\n\nPara a realização do trajeto, foi utilizado o veículo ${veiculoStr}. Quanto à hospedagem, o registro constou como ${hospedagemStatusStr}${hospedagemNoitesStr}.\n\n${despesasTexto}`;
                                     navigator.clipboard.writeText(narrativeText);
                                     setIsCopiedNarrative(true);
                                     setTimeout(() => setIsCopiedNarrative(false), 2000);
@@ -1296,6 +1841,9 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                               </p>
                               <p className="text-xs font-medium text-slate-800 leading-relaxed break-words whitespace-pre-wrap">
                                 Para a realização do trajeto, foi utilizado o veículo <strong>{veiculoStr}</strong>. Quanto à hospedagem, o registro constou como <strong>{hospedagemStatusStr}</strong>{hospedagemNoitesStr}.
+                              </p>
+                              <p className="text-xs font-medium text-slate-800 leading-relaxed break-words whitespace-pre-wrap">
+                                {despesasTexto}
                               </p>
                             </div>
 
