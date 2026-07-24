@@ -278,7 +278,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
         // Diárias Specific Buttons
         if (activeBlock === 'diarias') {
-            if (permissions.includes('parent_diarias_editor') || userRole === 'admin') {
+            if ((permissions.includes('parent_diarias_editor') || userRole === 'admin') && isModuleActive('parent_diarias_editor')) {
                 actionButtons.push({
                     label: 'Nova Solicitação',
                     desc: 'Criar novo registro',
@@ -287,7 +287,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                     color: config.color
                 });
             }
-            if (permissions.includes('parent_diarias_historico') || userRole === 'admin') {
+            if ((permissions.includes('parent_diarias_historico') || userRole === 'admin') && isModuleActive('parent_diarias_historico')) {
                 actionButtons.push({
                     label: 'Histórico',
                     desc: 'Consulte registros de Diárias',
@@ -296,7 +296,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                     color: 'purple'
                 });
             }
-            if (permissions.includes('parent_diarias_novo_evento') || userRole === 'admin') {
+            if ((permissions.includes('parent_diarias_novo_evento') || userRole === 'admin') && isModuleActive('parent_diarias_novo_evento')) {
                 actionButtons.push({
                     label: 'Nova Viagem',
                     desc: 'Informar nova viagem',
@@ -308,7 +308,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                     color: 'amber'
                 });
             }
-            if (permissions.includes('parent_diarias_lancamentos') || userRole === 'admin') {
+            if ((permissions.includes('parent_diarias_lancamentos') || userRole === 'admin') && isModuleActive('parent_diarias_lancamentos')) {
                 actionButtons.push({
                     label: 'Lançamentos',
                     desc: 'Acompanhar Eventos',
@@ -320,7 +320,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                     color: 'blue'
                 });
             }
-            if (permissions.includes('parent_diarias_gestores') || userRole === 'admin') {
+            if ((permissions.includes('parent_diarias_gestores') || userRole === 'admin') && isModuleActive('parent_diarias_gestores')) {
                 actionButtons.push({
                     label: 'Gestores',
                     desc: 'Vincular Gestores',
