@@ -4,6 +4,7 @@ import { HorasExtrasForm } from './HorasExtrasForm';
 import { HorasExtrasHistory } from './HorasExtrasHistory';
 import { Users, FileText, ArrowLeft, History, PlusCircle } from 'lucide-react';
 import { HorasExtrasPdfGenerator } from './HorasExtrasPdfGenerator';
+import { useSystemSettings } from '../../contexts/SystemSettingsContext';
 
 interface RHModuleProps {
     currentView: string;
@@ -36,7 +37,14 @@ export const RHModule: React.FC<RHModuleProps> = ({
     onLogout,
     onSaveForm
 }) => {
-    const isFormView = subView === 'horas-extras' || subView === 'historico';
+    const { moduleStatus } = useSystemSettings();
+    const isHorasExtrasActive = moduleStatus['parent_rh_horas_extras'] !== false;
+    const isHistoricoActive = moduleStatus['parent_rh_historico'] !== false;
+
+    const showHorasExtras = subView === 'horas-extras' && isHorasExtrasActive;
+    const showHistorico = subView === 'historico' && isHistoricoActive;
+    const isFormView = showHorasExtras || showHistorico;
+
     const [activeTab, setActiveTab] = useState<'novo' | 'historico'>(subView === 'historico' ? 'historico' : 'novo');
     const [highlightId, setHighlightId] = useState<string | null>(null);
     const [generatingPdfRecord, setGeneratingPdfRecord] = useState<RhHorasExtras | null>(null);
@@ -57,12 +65,12 @@ export const RHModule: React.FC<RHModuleProps> = ({
     }, []);
 
     useEffect(() => {
-        if (subView === 'historico') {
+        if (subView === 'historico' && isHistoricoActive) {
             setActiveTab('historico');
-        } else if (subView === 'horas-extras') {
+        } else if (subView === 'horas-extras' && isHorasExtrasActive) {
             setActiveTab('novo');
         }
-    }, [subView]);
+    }, [subView, isHistoricoActive, isHorasExtrasActive]);
 
     const handleDownloadPdf = (record: RhHorasExtras) => {
         setGeneratingPdfRecord(record);
@@ -116,44 +124,56 @@ export const RHModule: React.FC<RHModuleProps> = ({
                                 </div>
 
                                 {/* Quick Actions / Cards */}
-                                <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6 max-w-4xl animate-in zoom-in duration-500 fill-mode-backwards p-2">
+                                <div className={`w-full grid ${isHorasExtrasActive && isHistoricoActive ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 max-w-md'} gap-4 md:gap-6 max-w-4xl animate-in zoom-in duration-500 fill-mode-backwards p-2`}>
                                     {/* Card Horas Extras */}
-                                    <button
-                                        onClick={() => onNavigate('rh:horas-extras')}
-                                        className={`group relative w-full min-h-[140px] md:min-h-[180px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-fuchsia-500/30 hover:border-fuchsia-200 hover:from-white hover:to-fuchsia-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden text-center`}
-                                        style={{ animationDelay: `0ms` }}
-                                    >
-                                        <div className={`absolute top-0 right-0 w-32 h-32 bg-fuchsia-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150`}></div>
-                                        <div className={`absolute bottom-0 left-0 w-24 h-24 bg-fuchsia-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100`}></div>
+                                    {isHorasExtrasActive && (
+                                        <button
+                                            onClick={() => onNavigate('rh:horas-extras')}
+                                            className={`group relative w-full min-h-[140px] md:min-h-[180px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-fuchsia-500/30 hover:border-fuchsia-200 hover:from-white hover:to-fuchsia-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden text-center`}
+                                            style={{ animationDelay: `0ms` }}
+                                        >
+                                            <div className={`absolute top-0 right-0 w-32 h-32 bg-fuchsia-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150`}></div>
+                                            <div className={`absolute bottom-0 left-0 w-24 h-24 bg-fuchsia-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100`}></div>
 
-                                        <div className={`w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-gradient-to-br from-fuchsia-500 to-fuchsia-600 flex items-center justify-center mb-3 text-white group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300 shadow-lg shadow-fuchsia-500/30 ring-4 ring-white`}>
-                                            <PlusCircle className="w-6 h-6 md:w-7 md:h-7 drop-shadow-md" />
-                                        </div>
+                                            <div className={`w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-gradient-to-br from-fuchsia-500 to-fuchsia-600 flex items-center justify-center mb-3 text-white group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300 shadow-lg shadow-fuchsia-500/30 ring-4 ring-white`}>
+                                                <PlusCircle className="w-6 h-6 md:w-7 md:h-7 drop-shadow-md" />
+                                            </div>
 
-                                        <h3 className="text-lg md:text-2xl font-bold text-slate-800 mb-1 group-hover:text-slate-900 tracking-tight uppercase">Novo Lançamento</h3>
-                                        <p className="text-[10px] md:text-xs font-bold text-slate-400 group-hover:text-fuchsia-600 transition-colors uppercase tracking-widest text-center px-4">Horas Extras</p>
-                                    </button>
+                                            <h3 className="text-lg md:text-2xl font-bold text-slate-800 mb-1 group-hover:text-slate-900 tracking-tight uppercase">Novo Lançamento</h3>
+                                            <p className="text-[10px] md:text-xs font-bold text-slate-400 group-hover:text-fuchsia-600 transition-colors uppercase tracking-widest text-center px-4">Horas Extras</p>
+                                        </button>
+                                    )}
 
                                     {/* Card Historico */}
-                                    <button
-                                        onClick={() => onNavigate('rh:historico')}
-                                        className={`group relative w-full min-h-[140px] md:min-h-[180px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-indigo-500/30 hover:border-indigo-200 hover:from-white hover:to-indigo-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden text-center`}
-                                        style={{ animationDelay: `100ms` }}
-                                    >
-                                        <div className={`absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150`}></div>
-                                        <div className={`absolute bottom-0 left-0 w-24 h-24 bg-indigo-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100`}></div>
+                                    {isHistoricoActive && (
+                                        <button
+                                            onClick={() => onNavigate('rh:historico')}
+                                            className={`group relative w-full min-h-[140px] md:min-h-[180px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-indigo-500/30 hover:border-indigo-200 hover:from-white hover:to-indigo-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden text-center`}
+                                            style={{ animationDelay: `100ms` }}
+                                        >
+                                            <div className={`absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150`}></div>
+                                            <div className={`absolute bottom-0 left-0 w-24 h-24 bg-indigo-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100`}></div>
 
-                                        <div className={`w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center mb-3 text-white group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300 shadow-lg shadow-indigo-500/30 ring-4 ring-white`}>
-                                            <History className="w-6 h-6 md:w-7 md:h-7 drop-shadow-md" />
+                                            <div className={`w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center mb-3 text-white group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300 shadow-lg shadow-indigo-500/30 ring-4 ring-white`}>
+                                                <History className="w-6 h-6 md:w-7 md:h-7 drop-shadow-md" />
+                                            </div>
+
+                                            <h3 className="text-lg md:text-2xl font-bold text-slate-800 mb-1 group-hover:text-slate-900 tracking-tight uppercase">Histórico</h3>
+                                            <p className="text-[10px] md:text-xs font-bold text-slate-400 group-hover:text-indigo-600 transition-colors uppercase tracking-widest text-center px-4">Planilhas Fechadas</p>
+                                        </button>
+                                    )}
+
+                                    {!isHorasExtrasActive && !isHistoricoActive && (
+                                        <div className="col-span-full text-center p-8 bg-white border border-slate-200 rounded-[2rem] shadow-sm max-w-md mx-auto">
+                                            <Users className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+                                            <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Recursos Humanos</h3>
+                                            <p className="text-xs text-slate-500 mt-2">Todas as funcionalidades deste módulo foram desativadas temporariamente pelo administrador do sistema.</p>
                                         </div>
-
-                                        <h3 className="text-lg md:text-2xl font-bold text-slate-800 mb-1 group-hover:text-slate-900 tracking-tight uppercase">Histórico</h3>
-                                        <p className="text-[10px] md:text-xs font-bold text-slate-400 group-hover:text-indigo-600 transition-colors uppercase tracking-widest text-center px-4">Planilhas Fechadas</p>
-                                    </button>
+                                    )}
                                 </div>
                             </div>
                         </div>
-                    ) : activeTab === 'historico' ? (
+                    ) : showHistorico && activeTab === 'historico' ? (
                         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 flex-1 flex flex-col w-full h-full">
                             <HorasExtrasHistory
                                 userRole={userRole}
@@ -164,7 +184,7 @@ export const RHModule: React.FC<RHModuleProps> = ({
                                 onBack={() => onNavigate('rh')}
                             />
                         </div>
-                    ) : (
+                    ) : showHorasExtras ? (
                         <div className="max-w-7xl mx-auto w-full">
                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
                                 <button
@@ -204,7 +224,7 @@ export const RHModule: React.FC<RHModuleProps> = ({
                                 />
                             </div>
                         </div>
-                    )}
+                    ) : null}
                 </main>
             </div>
         </div>
