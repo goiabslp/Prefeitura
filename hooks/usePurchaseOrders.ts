@@ -41,6 +41,7 @@ export const usePurchaseOrders = () => {
             return comprasService.getAllPurchaseOrders(true); // true = lightweight
         },
         staleTime: 1000 * 60 * 5, // 5 minutes
+        refetchOnWindowFocus: false,
     });
 };
 
@@ -68,7 +69,8 @@ export const usePurchaseOrder = (id: string | null) => {
         queryKey: purchaseOrderKeys.detail(id || ''),
         queryFn: () => comprasService.getPurchaseOrderById(id!),
         enabled: !!id, // Only fetch if ID is present
-        staleTime: 1000 * 60 * 30, // 30 minutes for individual docs
+        staleTime: 1000 * 60 * 15, // 15 minutes for individual docs
+        refetchOnWindowFocus: false,
     });
 };
 

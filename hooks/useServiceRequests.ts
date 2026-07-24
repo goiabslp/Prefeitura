@@ -41,6 +41,7 @@ export const useServiceRequests = () => {
             return diariasService.getAllServiceRequests(true);
         },
         staleTime: 1000 * 60 * 5, // 5 minutes
+        refetchOnWindowFocus: false,
     });
 };
 
@@ -67,7 +68,8 @@ export const useServiceRequest = (id: string | null) => {
         queryKey: serviceRequestKeys.detail(id || ''),
         queryFn: () => diariasService.getServiceRequestById(id!),
         enabled: !!id, // Only fetch if ID is present
-        staleTime: 1000 * 60 * 30, // 30 minutes
+        staleTime: 1000 * 60 * 15, // 15 minutes
+        refetchOnWindowFocus: false,
     });
 };
 

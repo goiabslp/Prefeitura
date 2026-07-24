@@ -17,7 +17,8 @@ export const useOficio = (id: string | null) => {
         queryKey: oficioKeys.detail(id || ''),
         queryFn: () => oficiosService.getOficioById(id!),
         enabled: !!id,
-        staleTime: 1000 * 60 * 5, // 5 minutes
+        staleTime: 1000 * 60 * 15, // 15 minutes
+        refetchOnWindowFocus: false,
     });
 };
 
@@ -50,6 +51,7 @@ export const useOficios = () => {
         queryKey: oficioKeys.lists(),
         queryFn: () => oficiosService.getAllOficios(true), // lightweight = true
         staleTime: 1000 * 60 * 5, // 5 minutes
+        refetchOnWindowFocus: false,
     });
 };
 

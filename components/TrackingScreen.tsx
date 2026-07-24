@@ -133,7 +133,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
         isFetchingNextPage: isFetchingStrictOficios,
         isLoading: isOficiosLoading,
         isError: isOficiosError
-    } = useInfiniteOficios(20, searchTerm);
+    } = useInfiniteOficios(15, searchTerm);
 
     const oficiosData = React.useMemo(() => {
         const remote = infiniteOficios?.pages.flat() || [];
@@ -154,7 +154,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
         isLoading: isLoadingPurchaseOrders,
         isError: isPurchaseError
     } = useInfinitePurchaseOrders(
-        20,
+        15,
         searchTerm,
         (purchaseStatusFilter === 'pending_approval' || purchaseStatusFilter === 'rejected' || purchaseStatusFilter === 'payment_account') ? purchaseStatusFilter : undefined,
         (purchaseStatusFilter !== 'all' && purchaseStatusFilter !== 'pending_approval' && purchaseStatusFilter !== 'rejected' && purchaseStatusFilter !== 'payment_account' && !isLocalFilter) ? purchaseStatusFilter : undefined
@@ -241,7 +241,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
         isFetchingNextPage: isFetchingNextServiceRequests,
         isLoading: isLoadingServiceRequests,
         isError: isServiceRequestsError
-    } = useInfiniteServiceRequests(20, searchTerm);
+    } = useInfiniteServiceRequests(15, searchTerm);
 
     const serviceRequestsData = React.useMemo(() => {
         const remote = infiniteServiceRequests?.pages.flatMap(page => page) || [];
