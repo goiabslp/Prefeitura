@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { User, AppState, FarmaciaMedicamento, FarmaciaMovimentacao } from '../../types';
 import { ArrowLeft, Pill, Search, ClipboardList, Package, Settings, History, AlertTriangle, X, Info } from 'lucide-react';
+import { useSystemSettings } from '../../contexts/SystemSettingsContext';
 import * as db from '../../services/farmaciaService';
 import { FarmaciaDashboard } from './FarmaciaDashboard';
 import { ConsultarScreen } from './ConsultarScreen';
@@ -28,7 +29,6 @@ export const FarmaciaModule: React.FC<FarmaciaModuleProps> = ({
     onLogout,
     appState
 }) => {
-    const isSubView = !!subView;
     const isAdmin = currentUser.role === 'admin';
 
     // Data states for stock alerts
@@ -171,11 +171,27 @@ export const FarmaciaModule: React.FC<FarmaciaModuleProps> = ({
     }, [loading, lowStockMedicamentos, hasAlerted]);;
 
     // Permissions
-    const canAccessConsultar = currentUser.permissions?.includes('parent_farmacia') || isAdmin;
-    const canAccessRetirar = currentUser.permissions?.includes('parent_farmacia') || isAdmin;
-    const canAccessEstoque = currentUser.permissions?.includes('parent_farmacia') || isAdmin;
-    const canAccessHistorico = currentUser.permissions?.includes('parent_farmacia') || isAdmin;
-    const canAccessDados = currentUser.permissions?.includes('parent_farmacia_editar') || currentUser.permissions?.includes('parent_farmacia_aprovar') || isAdmin;
+    const { moduleStatus } = useSystemSettings();
+    const isConsultarActive = moduleStatus['parent_farmacia_consultar'] !== false;
+    const isRetirarActive = moduleStatus['parent_farmacia_retirar'] !== false;
+    const isEstoqueActive = moduleStatus['parent_farmacia_estoque'] !== false;
+    const isDashboardActive = moduleStatus['parent_farmacia_dashboard'] !== false;
+
+    const canAccessConsultar = (currentUser.permissions?.includes('parent_farmacia') || isAdmin) && isConsultarActive;
+    const canAccessRetirar = (currentUser.permissions?.includes('parent_farmacia') || isAdmin) && isRetirarActive;
+    const canAccessEstoque = (currentUser.permissions?.includes('parent_farmacia') || isAdmin) && isEstoqueActive;
+    const canAccessHistorico = (currentUser.permissions?.includes('parent_farmacia') || isAdmin);
+    const canAccessDados = (currentUser.permissions?.includes('parent_farmacia_editar') || currentUser.permissions?.includes('parent_farmacia_aprovar') || isAdmin) && isDashboardActive;
+
+    const showConsultar = subView === 'consultar' && canAccessConsultar;
+    const showRetirar = subView === 'retirar' && canAccessRetirar;
+    const showEstoque = subView === 'estoque' && canAccessEstoque;
+    const showDashboard = subView === 'dashboard' && canAccessDados;
+    const showDados = subView === 'dados' && (currentUser.permissions?.includes('parent_farmacia_editar') || isAdmin);
+    const showHistorico = subView === 'historico' && canAccessHistorico;
+    const showDashboardScreen = subView?.startsWith('dashboard') && canAccessDados;
+
+    const isSubView = showConsultar || showRetirar || showEstoque || showDashboard || showDados || showHistorico || showDashboardScreen;
 
     const renderSubNavigation = () => {
         if (!isSubView) return null;
@@ -289,37 +305,37 @@ export const FarmaciaModule: React.FC<FarmaciaModuleProps> = ({
                         currentUser={currentUser}
                         onNavigate={onNavigate}
                     />
-                ) : subView === 'consultar' ? (
+                ) : showConsultar ? (
                     <ConsultarScreen
                         currentUser={currentUser}
                         onBack={() => onNavigate('farmacia')}
                         appState={appState}
                     />
-                ) : subView === 'retirar' ? (
+                ) : showRetirar ? (
                     <RetirarScreen
                         currentUser={currentUser}
                         onBack={() => onNavigate('farmacia')}
                         onNavigate={onNavigate}
                         appState={appState}
                     />
-                ) : subView === 'estoque' ? (
+                ) : showEstoque ? (
                     <EstoqueScreen
                         currentUser={currentUser}
                         onBack={() => onNavigate('farmacia')}
                         appState={appState}
                     />
-                ) : subView === 'dados' ? (
+                ) : showDados ? (
                     <DadosScreen
                         currentUser={currentUser}
                         onBack={() => onNavigate('farmacia')}
                         onNavigate={onNavigate}
                     />
-                ) : subView === 'historico' ? (
+                ) : showHistorico ? (
                     <HistoricoScreen
                         currentUser={currentUser}
                         onBack={() => onNavigate('farmacia')}
                     />
-                ) : subView?.startsWith('dashboard') ? (
+                ) : showDashboardScreen ? (
                     <DashboardScreen
                         currentUser={currentUser}
                         onBack={() => onNavigate('farmacia')}
@@ -327,7 +343,10 @@ export const FarmaciaModule: React.FC<FarmaciaModuleProps> = ({
                         subView={subView}
                     />
                 ) : (
-                    <div className="text-center py-10 font-bold text-slate-400">Página Não Encontrada.</div>
+                    <FarmaciaDashboard
+                        currentUser={currentUser}
+                        onNavigate={onNavigate}
+                    />
                 )}
             </main>
 

@@ -1,6 +1,7 @@
 import React from 'react';
 import { User } from '../../types';
-import { Search, ClipboardList, Package, Settings, History } from 'lucide-react';
+import { Search, ClipboardList, Package, Settings, History, Pill } from 'lucide-react';
+import { useSystemSettings } from '../../contexts/SystemSettingsContext';
 
 interface FarmaciaDashboardProps {
     currentUser: User;
@@ -11,14 +12,18 @@ export const FarmaciaDashboard: React.FC<FarmaciaDashboardProps> = ({
     currentUser,
     onNavigate
 }) => {
-    const isAdmin = currentUser.role === 'admin';
+    const { moduleStatus } = useSystemSettings();
+    const isConsultarActive = moduleStatus['parent_farmacia_consultar'] !== false;
+    const isRetirarActive = moduleStatus['parent_farmacia_retirar'] !== false;
+    const isEstoqueActive = moduleStatus['parent_farmacia_estoque'] !== false;
+    const isDashboardActive = moduleStatus['parent_farmacia_dashboard'] !== false;
 
-    // Permissions
-    const canAccessConsultar = currentUser.permissions?.includes('parent_farmacia') || isAdmin;
-    const canAccessRetirar = currentUser.permissions?.includes('parent_farmacia') || isAdmin;
-    const canAccessEstoque = currentUser.permissions?.includes('parent_farmacia') || isAdmin;
-    const canAccessHistorico = currentUser.permissions?.includes('parent_farmacia') || isAdmin;
-    const canAccessDados = currentUser.permissions?.includes('parent_farmacia_editar') || currentUser.permissions?.includes('parent_farmacia_aprovar') || isAdmin;
+    const isAdmin = currentUser.role === 'admin';
+    const canAccessConsultar = (currentUser.permissions?.includes('parent_farmacia') || isAdmin) && isConsultarActive;
+    const canAccessRetirar = (currentUser.permissions?.includes('parent_farmacia') || isAdmin) && isRetirarActive;
+    const canAccessEstoque = (currentUser.permissions?.includes('parent_farmacia') || isAdmin) && isEstoqueActive;
+    const canAccessHistorico = (currentUser.permissions?.includes('parent_farmacia') || isAdmin);
+    const canAccessDados = (currentUser.permissions?.includes('parent_farmacia_editar') || currentUser.permissions?.includes('parent_farmacia_aprovar') || isAdmin) && isDashboardActive;
 
     return (
         <div className="flex-1 flex flex-col justify-center items-center w-full max-w-6xl mx-auto px-4 py-8 animate-in fade-in slide-in-from-bottom-6 duration-500">
@@ -156,8 +161,15 @@ export const FarmaciaDashboard: React.FC<FarmaciaDashboardProps> = ({
                         <p className="text-xs text-slate-400 mt-1 max-w-[180px]">Sem permissão de acesso.</p>
                     </div>
                 )}
-            </div>
+             </div>
 
+            {!canAccessConsultar && !canAccessRetirar && !canAccessEstoque && !canAccessDados && (
+                <div className="col-span-full text-center p-8 bg-white border border-slate-200 rounded-[2rem] shadow-sm max-w-md mx-auto">
+                    <Pill className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+                    <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Central de Medicamentos</h3>
+                    <p className="text-xs text-slate-500 mt-2">Nenhuma funcionalidade da Farmácia Popular está disponível no momento.</p>
+                </div>
+            )}
         </div>
     );
 };

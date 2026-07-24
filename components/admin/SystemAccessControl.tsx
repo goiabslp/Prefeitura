@@ -41,11 +41,11 @@ export const SystemAccessControl: React.FC<SystemAccessControlProps> = ({ onBack
         }
     };
 
-    // Grouping logic
+    // Grouping logic - ordenação alfabética pelo label
     const parentModules = useMemo(() => {
         return settings
             .filter(s => !s.parent_key)
-            .sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
+            .sort((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
     }, [settings]);
 
     const handleToggle = async (key: string, currentValue: boolean) => {

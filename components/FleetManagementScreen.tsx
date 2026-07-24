@@ -3,6 +3,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Vehicle, VehicleType, Sector, VehicleStatus, MaintenanceStatus, Person, Job, VehicleBrand, VehicleDocument } from '../types';
 import { fleetService } from '../services/fleetService';
+import { useSystemSettings } from '../contexts/SystemSettingsContext';
 import {
   Plus, Search, Edit2, Trash2, Save, X,
   Car, Truck, Wrench, CheckCircle2, Trash, Info,
@@ -56,7 +57,37 @@ const FUEL_OPTIONS = ['ALCOOL', 'GASOLINA', 'DIESEL'] as const;
 export const FleetManagementScreen: React.FC<FleetManagementScreenProps> = ({
   vehicles, sectors, persons, jobs, brands, onAddVehicle, onUpdateVehicle, onDeleteVehicle, onAddBrand, onBack, onFetchDetails
 }) => {
-  const [activeTab, setActiveTab] = useState<VehicleType | 'dashboard'>('dashboard');
+  const { moduleStatus } = useSystemSettings();
+  const isDashboardActive = moduleStatus['parent_frotas_dashboard'] !== false;
+  const isLeveActive = moduleStatus['parent_frotas_leve'] !== false;
+  const isPesadoActive = moduleStatus['parent_frotas_pesado'] !== false;
+  const isAcessorioActive = moduleStatus['parent_frotas_acessorio'] !== false;
+
+  const availableTabs = [
+    { id: 'dashboard', label: 'Dashboard', icon: Activity, active: isDashboardActive },
+    { id: 'leve', label: 'Leves', icon: Car, active: isLeveActive },
+    { id: 'pesado', label: 'Pesados', icon: Truck, active: isPesadoActive },
+    { id: 'acessorio', label: 'Acessórios', icon: Wrench, active: isAcessorioActive },
+  ].filter(t => t.active);
+
+  const defaultTab = isDashboardActive 
+    ? 'dashboard' 
+    : (isLeveActive ? 'leve' : (isPesadoActive ? 'pesado' : (isAcessorioActive ? 'acessorio' : 'dashboard')));
+
+  const [activeTab, setActiveTab] = useState<VehicleType | 'dashboard'>(defaultTab);
+
+  useEffect(() => {
+    if (activeTab === 'dashboard' && !isDashboardActive) {
+      setActiveTab(defaultTab);
+    } else if (activeTab === 'leve' && !isLeveActive) {
+      setActiveTab(defaultTab);
+    } else if (activeTab === 'pesado' && !isPesadoActive) {
+      setActiveTab(defaultTab);
+    } else if (activeTab === 'acessorio' && !isAcessorioActive) {
+      setActiveTab(defaultTab);
+    }
+  }, [isDashboardActive, isLeveActive, isPesadoActive, isAcessorioActive, defaultTab, activeTab]);
+
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isBrandModalOpen, setIsBrandModalOpen] = useState(false);
@@ -439,15 +470,17 @@ export const FleetManagementScreen: React.FC<FleetManagementScreenProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => handleOpenModal()}
-              className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-xl shadow-lg shadow-indigo-600/20 transition-all hover:-translate-y-0.5 active:scale-95 flex items-center gap-2 uppercase text-[10px] tracking-[0.2em]"
-            >
-              <Plus className="w-4 h-4" />
-              Novo Registro
-            </button>
-          </div>
+          {availableTabs.length > 0 && (
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => handleOpenModal()}
+                className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-xl shadow-lg shadow-indigo-600/20 transition-all hover:-translate-y-0.5 active:scale-95 flex items-center gap-2 uppercase text-[10px] tracking-[0.2em]"
+              >
+                <Plus className="w-4 h-4" />
+                Novo Registro
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Área de Filtros e Categorias */}
@@ -455,11 +488,11 @@ export const FleetManagementScreen: React.FC<FleetManagementScreenProps> = ({
           <div className="flex items-center gap-4">
             <div className="flex bg-white p-1 rounded-2xl border border-slate-200 shadow-sm w-fit gap-1">
               {[
-                { id: 'dashboard', label: 'Dashboard', icon: Activity },
-                { id: 'leve', label: 'Leves', icon: Car },
-                { id: 'pesado', label: 'Pesados', icon: Truck },
-                { id: 'acessorio', label: 'Acessórios', icon: Wrench },
-              ].map((tab) => (
+                { id: 'dashboard', label: 'Dashboard', icon: Activity, active: isDashboardActive },
+                { id: 'leve', label: 'Leves', icon: Car, active: isLeveActive },
+                { id: 'pesado', label: 'Pesados', icon: Truck, active: isPesadoActive },
+                { id: 'acessorio', label: 'Acessórios', icon: Wrench, active: isAcessorioActive },
+              ].filter(tab => tab.active).map((tab) => (
                 <button
                   key={tab.id}
                   onClick={() => { setActiveTab(tab.id as any); setSearchTerm(''); }}
@@ -503,10 +536,17 @@ export const FleetManagementScreen: React.FC<FleetManagementScreenProps> = ({
           </div>
         </div>
 
-        {/* Conteúdo de Grade 100% */}
         <div className="flex-1 overflow-y-auto custom-scrollbar p-6 md:p-8 bg-slate-50">
           <div className="max-w-[1920px] mx-auto">
-            {activeTab === 'dashboard' ? (
+            {availableTabs.length === 0 ? (
+              <div className="py-24 flex flex-col items-center justify-center text-center bg-white rounded-[3rem] border-2 border-dashed border-slate-200/80 max-w-4xl mx-auto shadow-sm">
+                <div className="w-20 h-20 bg-slate-50 rounded-[2.5rem] flex items-center justify-center mb-6">
+                  <Truck className="w-10 h-10 text-slate-300 animate-pulse" />
+                </div>
+                <h3 className="font-black text-xl text-slate-800 uppercase tracking-tight">Gestão de Frotas</h3>
+                <p className="text-xs text-slate-500 mt-2 max-w-sm">Todas as funcionalidades do módulo de Gestão de Frotas foram desativadas temporariamente pelo administrador.</p>
+              </div>
+            ) : activeTab === 'dashboard' ? (
               <div className="animate-fade-in">
                 <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
                   {vehicles

@@ -419,20 +419,21 @@ export const DiariaForm: React.FC<DiariaFormProps> = ({
       }
       
       const predefined: Record<string, number> = {
-        'JOÃO MONLEVADE': 45,
-        'BELO HORIZONTE': 160,
-        'IPATINGA': 90,
-        'ITABIRA': 85,
-        'ALVINÓPOLIS': 40,
-        'RIO PIRACICABA': 25,
-        'PONTE NOVA': 75,
-        'DOM SILVÉRIO': 35,
+        'JOÃO MONLEVADE': 76,
+        'BELO HORIZONTE': 182,
+        'IPATINGA': 82,
+        'ITABIRA': 105,
+        'ALVINÓPOLIS': 69,
+        'RIO PIRACICABA': 73,
+        'PONTE NOVA': 77,
+        'DOM SILVÉRIO': 55,
         'DIONÍSIO': 15,
-        'SÃO DOMINGOS DO PRATA': 30,
-        'RAUL SOARES': 45,
-        'NOVA ERA': 60,
-        'CARATINGA': 130,
-        'TIMÓTEO': 90
+        'SÃO DOMINGOS DO PRATA': 61,
+        'RAUL SOARES': 73,
+        'NOVA ERA': 80,
+        'CARATINGA': 142,
+        'TIMÓTEO': 59,
+        'CORONEL FABRICIANO': 69
       };
 
       if (predefined[destName]) {

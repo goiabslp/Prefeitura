@@ -5,6 +5,7 @@ import { ArrowLeft, PlusCircle, Activity, History, Database } from 'lucide-react
 import { NovoAgendamentoScreen } from './NovoAgendamentoScreen';
 import { AcompanharScreen } from './AcompanharScreen';
 import { DadosScreen } from './DadosScreen';
+import { useSystemSettings } from '../../contexts/SystemSettingsContext';
 
 interface ConsultasModuleProps {
     currentView: string;
@@ -23,13 +24,21 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
     onLogout,
     appState
 }) => {
-    const isSubView = subView === 'novo-agendamento' || subView === 'acompanhar' || subView === 'dados' || (subView?.startsWith('dados') ?? false);
-    
-    // Permission checks
+    const { moduleStatus } = useSystemSettings();
+    const isNovoAgendamentoActive = moduleStatus['parent_consultas_novo_agendamento'] !== false;
+    const isAcompanharActive = moduleStatus['parent_consultas_acompanhar'] !== false;
+    const isDadosActive = moduleStatus['parent_consultas_dados'] !== false;
+
     const isAdmin = currentUser.role === 'admin';
-    const canAccessNovoAgendamento = currentUser.permissions?.includes('parent_consultas_novo_agendamento') || isAdmin;
-    const canAccessAcompanhar = currentUser.permissions?.includes('parent_consultas_acompanhar') || isAdmin;
-    const canAccessDados = currentUser.permissions?.includes('parent_consultas_dados') || isAdmin;
+    const canAccessNovoAgendamento = (currentUser.permissions?.includes('parent_consultas_novo_agendamento') || isAdmin) && isNovoAgendamentoActive;
+    const canAccessAcompanhar = (currentUser.permissions?.includes('parent_consultas_acompanhar') || isAdmin) && isAcompanharActive;
+    const canAccessDados = (currentUser.permissions?.includes('parent_consultas_dados') || isAdmin) && isDadosActive;
+
+    const showNovoAgendamento = subView === 'novo-agendamento' && canAccessNovoAgendamento;
+    const showAcompanhar = subView === 'acompanhar' && canAccessAcompanhar;
+    const showDados = (subView === 'dados' || (subView?.startsWith('dados') ?? false)) && canAccessDados;
+    
+    const isSubView = showNovoAgendamento || showAcompanhar || showDados;
 
     const renderMainScreen = () => {
         return (
@@ -111,6 +120,14 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
                                 <p className="text-[10px] md:text-xs font-bold text-slate-400 group-hover:text-emerald-600 transition-colors uppercase tracking-widest text-center px-4">Indicadores e Administração</p>
                             </button>
                         )}
+
+                        {!canAccessNovoAgendamento && !canAccessAcompanhar && !canAccessDados && (
+                            <div className="col-span-full text-center p-8 bg-white border border-slate-200 rounded-[2rem] shadow-sm max-w-md mx-auto">
+                                <Activity className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+                                <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Regulação & Consultas</h3>
+                                <p className="text-xs text-slate-500 mt-2">Nenhuma funcionalidade deste módulo está disponível no momento.</p>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
@@ -123,27 +140,27 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
                 <main className="flex-1 overflow-y-auto md:overflow-hidden p-3 md:p-4 custom-scrollbar flex flex-col min-h-0">
                     {!isSubView ? (
                         renderMainScreen()
-                    ) : subView === 'novo-agendamento' ? (
+                    ) : showNovoAgendamento ? (
                         <NovoAgendamentoScreen
                             currentUser={currentUser}
                             onBack={() => onNavigate('consultas')}
                             onNavigate={onNavigate}
                             appState={appState}
                         />
-                    ) : subView === 'acompanhar' ? (
+                    ) : showAcompanhar ? (
                         <AcompanharScreen
                             currentUser={currentUser}
                             onBack={() => onNavigate('consultas')}
                             appState={appState}
                         />
-                    ) : (
+                    ) : showDados ? (
                         <DadosScreen
                             currentUser={currentUser}
                             onBack={() => onNavigate('consultas')}
                             subView={subView}
                             onNavigate={onNavigate}
                         />
-                    )}
+                    ) : renderMainScreen()}
                 </main>
             </div>
         </div>
