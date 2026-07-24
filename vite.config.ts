@@ -165,6 +165,7 @@ export default defineConfig({
   plugins: [react(), geminiDevPlugin()],
   server: {
     port: 3000,
+    host: true,
     hmr: {
       overlay: false,
     },

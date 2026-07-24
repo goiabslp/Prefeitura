@@ -23,7 +23,7 @@ interface DiariasStepWizardProps {
 export const DiariasStepWizard: React.FC<DiariasStepWizardProps> = ({
     state, content, allowedSignatures, handleUpdate, onUpdate, persons, sectors, jobs, activeBlock, onFinish, onBack, isLoading = false, currentUser
 }) => {
-    const [currentStep, setCurrentStep] = useState(1);
+    const [currentStep, setCurrentStep] = useState(2);
     const [showPreview, setShowPreview] = useState(false);
 
     // --- Status Calculation Logic ---
@@ -92,7 +92,8 @@ export const DiariasStepWizard: React.FC<DiariasStepWizardProps> = ({
     };
 
     const prevStep = () => {
-        setCurrentStep(prev => Math.max(prev - 1, 1));
+        const minStep = currentUser?.role === 'admin' ? 1 : 2;
+        setCurrentStep(prev => Math.max(prev - 1, minStep));
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
@@ -118,6 +119,7 @@ export const DiariasStepWizard: React.FC<DiariasStepWizardProps> = ({
 
     const handleStepClick = (step: number) => {
         if (isLoading) return;
+        if (step === 1 && currentUser?.role !== 'admin') return;
         setCurrentStep(step);
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
@@ -140,7 +142,7 @@ export const DiariasStepWizard: React.FC<DiariasStepWizardProps> = ({
                 {/* 2. Stepper */}
                 <div className="flex-1 flex justify-center">
                     <div className="w-full max-w-3xl">
-                        <DiariasStepper currentStep={currentStep} stepsStatus={stepsStatus} onStepClick={handleStepClick} />
+                        <DiariasStepper currentStep={currentStep} stepsStatus={stepsStatus} onStepClick={handleStepClick} isAdmin={currentUser?.role === 'admin'} />
                     </div>
                 </div>
 

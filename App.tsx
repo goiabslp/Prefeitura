@@ -3680,8 +3680,13 @@ const App: React.FC = () => {
             onClose={() => setToast(prev => ({ ...prev, isVisible: false }))}
           />
 
-          {/* Chat Components - Only for authenticated users and not on 'Consultas', 'Farmacia' or Admin Logs pages */}
-          {currentUser && currentView !== 'consultas' && currentView !== 'farmacia' && !(currentView === 'admin' && adminTab === 'logs') && (
+          {/* Chat Components - Only for authenticated users and not on 'Consultas', 'Farmacia', Admin Logs or any Diarias pages */}
+          {currentUser && 
+           currentView !== 'consultas' && 
+           currentView !== 'farmacia' && 
+           !currentView.includes('diarias') && 
+           !(currentView === 'home' && activeBlock === 'diarias') && 
+           !(currentView === 'admin' && adminTab === 'logs') && (
             <>
               <ChatWidget />
               <ChatWindow />

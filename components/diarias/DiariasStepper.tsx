@@ -7,9 +7,10 @@ interface DiariasStepperProps {
     currentStep: number;
     stepsStatus: Record<number, StepStatus>;
     onStepClick?: (step: number) => void;
+    isAdmin?: boolean;
 }
 
-export const DiariasStepper: React.FC<DiariasStepperProps> = ({ currentStep, stepsStatus, onStepClick }) => {
+export const DiariasStepper: React.FC<DiariasStepperProps> = ({ currentStep, stepsStatus, onStepClick, isAdmin = false }) => {
     const steps = [
         { id: 1, label: 'Prompt', icon: Sparkles },
         { id: 2, label: 'Modalidade', icon: Wallet },
@@ -19,13 +20,15 @@ export const DiariasStepper: React.FC<DiariasStepperProps> = ({ currentStep, ste
         { id: 6, label: 'Assinar', icon: ShieldCheck },
     ];
 
+    const filteredSteps = steps.filter(step => step.id !== 1 || isAdmin);
+
     return (
         <div className="w-full py-4">
             <div className="flex items-center justify-between w-full relative">
-                {steps.map((step, index) => {
+                {filteredSteps.map((step, index) => {
                     const status = stepsStatus[step.id] || 'empty';
                     const Icon = step.icon;
-                    const isLast = index === steps.length - 1;
+                    const isLast = index === filteredSteps.length - 1;
 
                     let circleClass = 'bg-white border-2 border-slate-200 text-slate-300';
                     let labelClass = 'text-slate-400';

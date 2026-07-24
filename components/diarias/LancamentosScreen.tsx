@@ -3,7 +3,7 @@ import {
   ArrowLeft, Loader2, Calendar, MapPin, Users, RefreshCw, 
   FileText, Search, Hash as HashIcon, CheckCircle2, 
   X, AlertTriangle, Upload, Paperclip, Check, Trash2,
-  Car, Navigation, Hotel, BookOpen, Copy, Download
+  Car, Navigation, Hotel, BookOpen, Copy, Download, XCircle
 } from 'lucide-react';
 import { DiariaEvento, User, Attachment, Sector, Job, Person } from '../../types';
 import { supabase } from '../../services/supabaseClient';
@@ -81,6 +81,10 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
   const [isCopiedNarrative, setIsCopiedNarrative] = useState(false);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [is2FAModalOpen, setIs2FAModalOpen] = useState(false);
+
+  // Estados para o Modal de Rejeição
+  const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState('');
 
 
   useEffect(() => {
@@ -275,6 +279,29 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
     } catch (err) {
       console.error(err);
       alert("Erro ao enviar aprovação do gestor.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleGestorReject = async () => {
+    if (!selectedEvento || !rejectionReason.trim()) {
+      alert("Por favor, preencha a justificativa de rejeição.");
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      await updateDiariaEvento(selectedEvento.id, {
+        status: 'rejeitado_gestor',
+        justificativa_gestor: `[REJEITADO pelo GESTOR] ${rejectionReason.trim()}`
+      });
+      fetchEventos();
+      setIsRejectModalOpen(false);
+      setRejectionReason('');
+      handleCloseModal();
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao rejeitar a diária.");
     } finally {
       setIsSubmitting(false);
     }
@@ -908,6 +935,8 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
     switch (s) {
       case 'aguardando_gestor':
         return { label: 'Aguardando Gestor', style: 'border-amber-200 bg-amber-50 text-amber-700' };
+      case 'rejeitado_gestor':
+        return { label: 'Rejeitado pelo Gestor', style: 'border-rose-200 bg-rose-50 text-rose-700' };
       case 'aguardando_administrador':
         return { label: 'Aguardando Admin', style: 'border-blue-200 bg-blue-50 text-blue-700' };
       case 'concluido':
@@ -932,11 +961,11 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                 >
                   <ArrowLeft className="transition-transform w-3 h-3" />
                 </button>
-                <h2 className="text-xl font-extrabold text-slate-900 tracking-tight flex items-center gap-3 shrink-0">
-                  <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-600/30">
-                    <FileText className="w-4 h-4 text-white" />
+                <h2 className="text-sm xs:text-base sm:text-lg md:text-xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2 sm:gap-3 shrink-0">
+                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-600/30">
+                    <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white" />
                   </div>
-                  <span className="truncate uppercase">Histórico: EVENTOS DE VIAGEM</span>
+                  <span className="truncate uppercase">Eventos de Viagem</span>
                 </h2>
               </div>
             </div>
@@ -964,7 +993,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
           </div>
         </div>
 
-        <div className="flex-1 overflow-auto bg-white">
+        <div className="flex-1 overflow-auto bg-slate-100/80">
           {isLoading ? (
             <div className="h-full flex flex-col items-center justify-center space-y-4">
               <Loader2 className="w-10 h-10 text-indigo-600 animate-spin" />
@@ -1032,37 +1061,52 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                   const canAct = gestorCanAct || adminCanAct;
 
                   return (
-                    <div key={evento.id} className="grid grid-cols-1 desktop:grid-cols-12 gap-4 px-8 py-5 hover:bg-slate-50/80 transition-colors items-center">
-                      <div className="md:col-span-2 flex justify-center gap-2 items-center">
-                        <div className="w-11 h-11 bg-white rounded-xl border border-slate-200 flex flex-col items-center justify-center shadow-sm shrink-0">
-                          <span className="text-[7px] font-black text-slate-400 uppercase">
-                            {monthName}/{yearLabel}
-                          </span>
-                          <span className="text-base font-black text-emerald-600 leading-none">
-                            {createdDate.getDate()}
+                    <div key={evento.id} className="mx-4 my-3 p-5 rounded-3xl bg-white border border-slate-200/80 shadow-[0_4px_20px_rgba(0,0,0,0.02)] hover:border-indigo-100 desktop:mx-0 desktop:my-0 desktop:rounded-none desktop:bg-transparent desktop:border-0 desktop:border-b desktop:border-slate-100 desktop:shadow-none desktop:px-8 desktop:py-5 flex flex-col desktop:grid desktop:grid-cols-12 gap-4 hover:bg-slate-50/80 transition-all duration-200 items-stretch desktop:items-center">
+                      <div className="desktop:col-span-2 flex items-center justify-between desktop:justify-center gap-3 pb-3 desktop:pb-0 border-b border-slate-100 desktop:border-b-0 shrink-0">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-10 h-10 bg-slate-50 rounded-xl border border-slate-150 flex flex-col items-center justify-center shadow-xs shrink-0">
+                            <span className="text-[7px] font-black text-slate-400 uppercase">
+                              {monthName}/{yearLabel}
+                            </span>
+                            <span className="text-sm font-black text-emerald-600 leading-none">
+                              {createdDate.getDate()}
+                            </span>
+                          </div>
+                          <div className="flex flex-col desktop:hidden">
+                            <span className="font-mono text-[9px] font-black text-indigo-600">
+                              EVT-{evento.id.slice(0,4).toUpperCase()}
+                            </span>
+                            <span className="text-[8px] text-slate-400 font-mono">
+                              {createdDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-slate-400 font-mono hidden desktop:inline">
+                            {createdDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                           </span>
                         </div>
-                        <span className="text-[10px] text-slate-400 font-mono hidden desktop:inline">
-                          {createdDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                        </span>
+                        <div className="desktop:hidden">
+                          <div className={`inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest shadow-sm ${badge.style}`}>
+                            {badge.label}
+                          </div>
+                        </div>
                       </div>
 
-                      <div className="md:col-span-1 flex justify-center">
+                      <div className="hidden desktop:flex desktop:col-span-1 justify-center">
                         <span className="font-mono text-[10px] font-bold text-indigo-600 bg-indigo-50/50 px-2 py-1 rounded border border-indigo-100/50">
                           EVT-{evento.id.slice(0,4).toUpperCase()}
                         </span>
                       </div>
 
-                      <div className="md:col-span-3">
+                      <div className="desktop:col-span-3 space-y-1 py-1 desktop:py-0">
                         <h3 className="text-sm font-bold text-slate-800 leading-tight truncate" title={evento.destino}>
                           {evento.destino}
                         </h3>
                         <p className="text-[10px] text-slate-400 font-medium mt-1 flex items-center gap-1">
-                          <Users className="w-3 h-3" /> {evento.pessoas[0]?.name || 'Servidor não informado'}
+                          <Users className="w-3 h-3 text-slate-400" /> {evento.pessoas[0]?.name || 'Servidor não informado'}
                         </p>
                       </div>
 
-                      <div className="md:col-span-3">
+                      <div className="desktop:col-span-3 space-y-1 py-1 desktop:py-0">
                         <p className="text-xs text-slate-600 font-medium line-clamp-2" title={evento.motivo}>
                           {evento.motivo}
                         </p>
@@ -1071,13 +1115,13 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                         </p>
                       </div>
 
-                      <div className="md:col-span-2 flex justify-center">
+                      <div className="hidden desktop:flex desktop:col-span-2 items-center justify-center py-2 desktop:py-0">
                          <div className={`inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest shadow-sm ${badge.style}`}>
                             {badge.label}
                          </div>
                       </div>
 
-                      <div className="md:col-span-1 flex items-center justify-center gap-2">
+                      <div className="desktop:col-span-1 flex items-center justify-end desktop:justify-center gap-2 pt-3 desktop:pt-0 border-t border-slate-100 desktop:border-t-0 mt-2 desktop:mt-0 w-full desktop:w-auto">
                         {canAct && evento.status !== 'concluido' ? (
                           <button 
                             onClick={() => handleOpenReview(evento)}
@@ -1128,71 +1172,71 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
       </div>
 
       {modalType === 'gestor' && selectedEvento && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/80 p-4 sm:p-6 lg:p-8 animate-fade-in" onClick={handleCloseModal}>
-          <div className="w-full max-w-6xl bg-white rounded-[2.5rem] shadow-2xl flex flex-col max-h-[92vh] overflow-hidden border border-slate-200/80 animate-slide-up" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-slate-950/80 p-0 sm:p-6 lg:p-8 animate-fade-in" onClick={handleCloseModal}>
+          <div className="w-full max-w-6xl bg-white rounded-t-[2rem] sm:rounded-[2.5rem] shadow-2xl flex flex-col h-[94vh] sm:h-auto max-h-[94vh] sm:max-h-[92vh] overflow-hidden border border-slate-200/80 animate-slide-up" onClick={e => e.stopPropagation()}>
             
-            <div className="px-8 py-6 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex items-center justify-between shrink-0 shadow-md">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-2xl bg-indigo-600/30 border border-indigo-400/30 flex items-center justify-center text-indigo-300 shadow-inner">
-                  <FileText className="w-6 h-6" />
+            <div className="px-4 sm:px-8 py-4 sm:py-6 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex items-center justify-between shrink-0 shadow-md">
+              <div className="flex items-center gap-3 sm:gap-4">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-indigo-600/30 border border-indigo-400/30 flex items-center justify-center text-indigo-300 shadow-inner shrink-0">
+                  <FileText className="w-5 h-5 sm:w-6 sm:h-6" />
                 </div>
-                <div>
-                  <div className="flex items-center gap-3">
-                    <h3 className="text-lg font-black tracking-tight">Aprovação do Gestor de Setor</h3>
-                    <span className="font-mono text-[10px] font-bold text-indigo-300 bg-indigo-500/20 px-2.5 py-0.5 rounded-full border border-indigo-400/30">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    <h3 className="text-sm sm:text-lg font-black tracking-tight">Aprovação do Gestor</h3>
+                    <span className="font-mono text-[9px] sm:text-[10px] font-bold text-indigo-300 bg-indigo-500/20 px-2 py-0.5 rounded-full border border-indigo-400/30 shrink-0">
                       EVT-{selectedEvento.id.slice(0,4).toUpperCase()}
                     </span>
                   </div>
-                  <p className="text-xs text-slate-400 font-medium mt-0.5">Revise os dados da solicitação de viagem e informe a justificativa pública.</p>
+                  <p className="text-[10px] sm:text-xs text-slate-400 font-medium mt-0.5 truncate sm:whitespace-normal">Revise os dados da solicitação e informe a justificativa.</p>
                 </div>
               </div>
-              <button onClick={handleCloseModal} className="p-2.5 hover:bg-white/10 rounded-full text-slate-300 hover:text-white transition-colors">
-                <X className="w-6 h-6" />
+              <button onClick={handleCloseModal} className="p-1.5 hover:bg-white/10 rounded-full text-slate-300 hover:text-white transition-colors shrink-0">
+                <X className="w-5 h-5 sm:w-6 sm:h-6" />
               </button>
             </div>
 
-            <div className="px-8 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border-t border-b border-slate-800/80 flex items-center gap-2 overflow-x-auto hide-scroll shrink-0">
+            <div className="px-4 sm:px-8 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border-t border-b border-slate-800/80 flex items-center gap-1 sm:gap-2 overflow-x-auto hide-scroll shrink-0">
               <button
                 type="button"
                 onClick={() => handleSelectModalTab('resumo')}
-                className={`flex items-center gap-2.5 px-6 py-3.5 border-b-2 text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap ${
+                className={`flex items-center gap-1.5 sm:gap-2.5 px-3 sm:px-6 py-2.5 sm:py-3.5 border-b-2 text-[10px] sm:text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap ${
                   modalActiveTab === 'resumo'
                     ? 'border-indigo-400 text-white bg-indigo-500/10'
                     : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/5'
                 }`}
               >
-                <FileText className="w-4 h-4 text-indigo-400" />
-                Resumo do Evento de Viagem
+                <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-400" />
+                Resumo
               </button>
 
               <button
                 type="button"
                 onClick={() => handleSelectModalTab('justificativa')}
-                className={`flex items-center gap-2.5 px-6 py-3.5 border-b-2 text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap ${
+                className={`flex items-center gap-1.5 sm:gap-2.5 px-3 sm:px-6 py-2.5 sm:py-3.5 border-b-2 text-[10px] sm:text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap ${
                   modalActiveTab === 'justificativa'
                     ? 'border-indigo-400 text-white bg-indigo-500/10'
                     : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/5'
                 }`}
               >
-                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                Justificativa do Gestor
+                <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-400" />
+                Justificativa
               </button>
 
               <button
                 type="button"
                 onClick={() => handleSelectModalTab('comprovantes')}
-                className={`flex items-center gap-2.5 px-6 py-3.5 border-b-2 text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap ${
+                className={`flex items-center gap-1.5 sm:gap-2.5 px-3 sm:px-6 py-2.5 sm:py-3.5 border-b-2 text-[10px] sm:text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap ${
                   modalActiveTab === 'comprovantes'
                     ? 'border-indigo-400 text-white bg-indigo-500/10'
                     : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/5'
                 }`}
               >
-                <Paperclip className="w-4 h-4 text-amber-400" />
-                Comprovantes de Despesas
+                <Paperclip className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" />
+                Comprovantes
               </button>
             </div>
             
-            <div className="flex-1 overflow-y-auto p-8 bg-slate-50/50">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-8 bg-slate-50/50">
               
               {modalActiveTab === 'resumo' && (
                 <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-6 animate-fade-in">
@@ -1486,21 +1530,30 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
               )}
             </div>
 
-            <div className="px-8 py-5 border-t border-slate-200 bg-white flex justify-end gap-3 shrink-0">
-              <button 
-                onClick={handleCloseModal}
-                className="px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs uppercase tracking-wider rounded-2xl transition-colors"
-              >
-                Fechar
-              </button>
+            <div className="px-4 sm:px-8 py-4 border-t border-slate-200 bg-white flex flex-row items-center justify-end gap-2 sm:gap-3 shrink-0">
+              {(selectedEvento.status === 'aguardando_gestor' || !selectedEvento.status) ? (
+                <button 
+                  onClick={() => setIsRejectModalOpen(true)}
+                  className="px-4 sm:px-6 py-2.5 sm:py-3 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 font-bold text-xs uppercase tracking-wider rounded-xl sm:rounded-2xl transition-colors w-full sm:w-auto text-center"
+                >
+                  Rejeitar
+                </button>
+              ) : (
+                <button 
+                  onClick={handleCloseModal}
+                  className="px-4 sm:px-6 py-2.5 sm:py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs uppercase tracking-wider rounded-xl sm:rounded-2xl transition-colors w-full sm:w-auto text-center"
+                >
+                  Fechar
+                </button>
+              )}
               {(selectedEvento.status === 'aguardando_gestor' || !selectedEvento.status) && (
                 <button 
                   onClick={handleGestorApprove}
                   disabled={justificativaGestor.trim().length < 300 || isSubmitting || isUploading}
-                  className="px-7 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white font-black text-xs uppercase tracking-widest rounded-2xl transition-all shadow-lg shadow-indigo-600/20 active:scale-95 flex items-center gap-2"
+                  className="px-4 sm:px-7 py-2.5 sm:py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white font-black text-xs uppercase tracking-widest rounded-xl sm:rounded-2xl transition-all shadow-lg shadow-indigo-600/20 active:scale-95 flex items-center justify-center gap-2 w-full sm:w-auto whitespace-nowrap"
                 >
                   {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
-                  {transferGestorCargo ? `Transferir para ${transferGestorCargo}` : 'Enviar para Administrador'}
+                  <span>{transferGestorCargo ? `Transferir` : 'Aprovar / Enviar'}</span>
                 </button>
               )}
             </div>
@@ -1509,74 +1562,74 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
       )}
 
       {modalType === 'admin' && selectedEvento && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/80 p-4 sm:p-6 lg:p-8 animate-fade-in" onClick={handleCloseModal}>
-          <div className="w-full max-w-6xl bg-white rounded-[2.5rem] shadow-2xl flex flex-col max-h-[92vh] overflow-hidden border border-slate-200/80 animate-slide-up" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-slate-950/80 p-0 sm:p-6 lg:p-8 animate-fade-in" onClick={handleCloseModal}>
+          <div className="w-full max-w-6xl bg-white rounded-t-[2rem] sm:rounded-[2.5rem] shadow-2xl flex flex-col h-[94vh] sm:h-auto max-h-[94vh] sm:max-h-[92vh] overflow-hidden border border-slate-200/80 animate-slide-up" onClick={e => e.stopPropagation()}>
             
-            <div className="px-8 py-6 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex items-center justify-between shrink-0 shadow-md">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-2xl bg-indigo-600/30 border border-indigo-400/30 flex items-center justify-center text-indigo-300 shadow-inner">
-                  <CheckCircle2 className="w-6 h-6" />
+            <div className="px-4 sm:px-8 py-4 sm:py-6 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex items-center justify-between shrink-0 shadow-md">
+              <div className="flex items-center gap-3 sm:gap-4">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-indigo-600/30 border border-indigo-400/30 flex items-center justify-center text-indigo-300 shadow-inner shrink-0">
+                  <CheckCircle2 className="w-5 h-5 sm:w-6 sm:h-6" />
                 </div>
-                <div>
-                  <div className="flex items-center gap-3">
-                    <h3 className="text-lg font-black tracking-tight">Aprovação do Administrador</h3>
-                    <span className="font-mono text-[10px] font-bold text-indigo-300 bg-indigo-500/20 px-2.5 py-0.5 rounded-full border border-indigo-400/30">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    <h3 className="text-sm sm:text-lg font-black tracking-tight">Aprovação do Administrador</h3>
+                    <span className="font-mono text-[9px] sm:text-[10px] font-bold text-indigo-300 bg-indigo-500/20 px-2.5 py-0.5 rounded-full border border-indigo-400/30 shrink-0">
                       EVT-{selectedEvento.id.slice(0,4).toUpperCase()}
                     </span>
                   </div>
-                  <p className="text-xs text-slate-400 font-medium mt-0.5">Revise todos os parâmetros da viagem e conclua a geração oficial da diária.</p>
+                  <p className="text-[10px] sm:text-xs text-slate-400 font-medium mt-0.5 truncate sm:whitespace-normal">Revise os parâmetros da viagem e conclua a geração.</p>
                 </div>
               </div>
-              <button onClick={handleCloseModal} className="p-2.5 hover:bg-white/10 rounded-full text-slate-300 hover:text-white transition-colors">
-                <X className="w-6 h-6" />
+              <button onClick={handleCloseModal} className="p-1.5 hover:bg-white/10 rounded-full text-slate-300 hover:text-white transition-colors shrink-0">
+                <X className="w-5 h-5 sm:w-6 sm:h-6" />
               </button>
             </div>
 
             {adminStep === 'review' && (
-              <div className="px-8 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border-t border-b border-slate-800/80 flex items-center gap-2 overflow-x-auto hide-scroll shrink-0">
+              <div className="px-4 sm:px-8 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border-t border-b border-slate-800/80 flex items-center gap-1 sm:gap-2 overflow-x-auto hide-scroll shrink-0">
                 <button
                   type="button"
                   onClick={() => handleSelectModalTab('resumo')}
-                  className={`flex items-center gap-2.5 px-6 py-3.5 border-b-2 text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap ${
+                  className={`flex items-center gap-1.5 sm:gap-2.5 px-3 sm:px-6 py-2.5 sm:py-3.5 border-b-2 text-[10px] sm:text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap ${
                     modalActiveTab === 'resumo'
                       ? 'border-indigo-400 text-white bg-indigo-500/10'
                       : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/5'
                   }`}
                 >
-                  <FileText className="w-4 h-4 text-indigo-400" />
-                  Resumo do Evento de Viagem
+                  <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-400" />
+                  Resumo
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handleSelectModalTab('justificativa')}
-                  className={`flex items-center gap-2.5 px-6 py-3.5 border-b-2 text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap ${
+                  className={`flex items-center gap-1.5 sm:gap-2.5 px-3 sm:px-6 py-2.5 sm:py-3.5 border-b-2 text-[10px] sm:text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap ${
                     modalActiveTab === 'justificativa'
                       ? 'border-indigo-400 text-white bg-indigo-500/10'
                       : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/5'
                   }`}
                 >
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  Justificativa do Gestor
+                  <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-400" />
+                  Justificativa
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handleSelectModalTab('comprovantes')}
-                  className={`flex items-center gap-2.5 px-6 py-3.5 border-b-2 text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap ${
+                  className={`flex items-center gap-1.5 sm:gap-2.5 px-3 sm:px-6 py-2.5 sm:py-3.5 border-b-2 text-[10px] sm:text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap ${
                     modalActiveTab === 'comprovantes'
                       ? 'border-indigo-400 text-white bg-indigo-500/10'
                       : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/5'
                   }`}
                 >
-                  <Paperclip className="w-4 h-4 text-amber-400" />
-                  Comprovantes de Despesas
+                  <Paperclip className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" />
+                  Comprovantes
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handleSelectModalTab('relatorio')}
-                  className={`flex items-center gap-2.5 px-6 py-3.5 border-b-2 text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap ${
+                  className={`flex items-center gap-1.5 sm:gap-2.5 px-3 sm:px-6 py-2.5 sm:py-3.5 border-b-2 text-[10px] sm:text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap ${
                     modalActiveTab === 'relatorio'
                       ? 'border-indigo-400 text-white bg-indigo-500/10'
                       : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-white/5'
@@ -2036,19 +2089,19 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
             </div>
 
             {/* Rodapé */}
-            <div className="px-8 py-5 border-t border-slate-200 bg-white flex justify-end gap-3 shrink-0">
+            <div className="px-4 sm:px-8 py-4 border-t border-slate-200 bg-white flex flex-row items-center justify-end gap-2 sm:gap-3 shrink-0">
               {adminStep === 'review' ? (
                 <>
                   <button 
                     onClick={handleCloseModal}
-                    className="px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs uppercase tracking-wider rounded-2xl transition-colors"
+                    className="px-4 sm:px-6 py-2.5 sm:py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs uppercase tracking-wider rounded-xl sm:rounded-2xl transition-colors w-full sm:w-auto text-center"
                   >
                     Fechar
                   </button>
                   {selectedEvento.status === 'aguardando_administrador' && (
                     <button 
                       onClick={() => setAdminStep('approve')}
-                      className="px-7 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase tracking-widest rounded-2xl transition-all shadow-lg shadow-indigo-600/20 active:scale-95"
+                      className="px-4 sm:px-7 py-2.5 sm:py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase tracking-widest rounded-xl sm:rounded-2xl transition-all shadow-lg shadow-indigo-600/20 active:scale-95 w-full sm:w-auto text-center whitespace-nowrap"
                     >
                       Aprovar Viagem
                     </button>
@@ -2058,17 +2111,17 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                 <>
                   <button 
                     onClick={() => setAdminStep('review')}
-                    className="px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs uppercase tracking-wider rounded-2xl transition-colors"
+                    className="px-4 sm:px-6 py-2.5 sm:py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs uppercase tracking-wider rounded-xl sm:rounded-2xl transition-colors w-full sm:w-auto text-center"
                   >
                     Voltar
                   </button>
                   <button 
                     onClick={() => handleAdminGenerate()}
                     disabled={!valorDiaria || !relatorioViagem.trim() || isSubmitting}
-                    className="px-7 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white font-black text-xs uppercase tracking-widest rounded-2xl transition-all shadow-lg shadow-emerald-600/20 active:scale-95 flex items-center gap-2"
+                    className="px-4 sm:px-7 py-2.5 sm:py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white font-black text-xs uppercase tracking-widest rounded-xl sm:rounded-2xl transition-all shadow-lg shadow-emerald-600/20 active:scale-95 flex items-center justify-center gap-2 w-full sm:w-auto text-center whitespace-nowrap"
                   >
                     {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
-                    Gerar Viagem
+                    <span>Gerar Viagem</span>
                   </button>
                 </>
               )}
@@ -2088,6 +2141,58 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
           secret2={currentUser.twoFactorEnabled2 ? (currentUser.twoFactorSecret2 || null) : null}
           signatureName={currentUser.name || ''}
         />
+      )}
+
+      {isRejectModalOpen && selectedEvento && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-950/80 p-4 sm:p-6 lg:p-8 animate-fade-in" onClick={() => setIsRejectModalOpen(false)}>
+          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl flex flex-col overflow-hidden border border-slate-200/80 animate-slide-up" onClick={e => e.stopPropagation()}>
+            
+            <div className="px-6 py-5 bg-gradient-to-r from-rose-600 to-red-700 text-white flex items-center justify-between shrink-0 shadow-md">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white/20 border border-white/30 flex items-center justify-center text-white shadow-inner">
+                  <XCircle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black tracking-tight uppercase">Justificativa de Rejeição</h3>
+                  <p className="text-[10px] text-rose-100 font-semibold mt-0.5">EVT-{selectedEvento.id.slice(0, 4).toUpperCase()}</p>
+                </div>
+              </div>
+              <button onClick={() => setIsRejectModalOpen(false)} className="p-1.5 hover:bg-white/10 rounded-full text-rose-200 hover:text-white transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="space-y-2">
+                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500">Motivo da Rejeição *</label>
+                <textarea
+                  value={rejectionReason}
+                  onChange={(e) => setRejectionReason(e.target.value)}
+                  placeholder="Informe detalhadamente a justificativa para rejeitar esta viagem..."
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-xs font-medium text-slate-900 outline-none focus:bg-white focus:border-rose-500 focus:ring-4 focus:ring-rose-500/5 transition-all min-h-[120px] resize-none leading-relaxed"
+                />
+              </div>
+
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setIsRejectModalOpen(false)}
+                  className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs uppercase tracking-wider rounded-xl transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={handleGestorReject}
+                  disabled={!rejectionReason.trim() || isSubmitting}
+                  className="flex-1 py-3 bg-rose-600 hover:bg-rose-700 disabled:bg-rose-300 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-rose-600/20 active:scale-95 flex items-center justify-center gap-2"
+                >
+                  {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
+                  <span>Confirmar Rejeição</span>
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
       )}
 
     </div>

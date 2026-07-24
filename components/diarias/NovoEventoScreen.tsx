@@ -447,9 +447,9 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
       setIsSuccess(true);
       setTimeout(() => {
         setIsSuccess(false);
-        if (onFinish) onFinish();
-        else onBack();
-      }, 2000);
+        window.history.pushState({}, '', '/Diarias/Lancamentos');
+        window.dispatchEvent(new Event('popstate'));
+      }, 2500);
     } catch (error) {
       alert("Erro ao salvar o evento. Tente novamente.");
     } finally {
@@ -475,16 +475,16 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
     <div className="flex flex-col h-full bg-slate-50 w-full relative">
       
       {/* NEW HEADER LAYOUT: Back Button | Stepper | Action Button */}
-      <div className="sticky top-0 z-40 bg-white border-b border-slate-200 px-6 py-1 flex items-center gap-6 shadow-sm min-h-[50px]">
+      <div className="sticky top-0 z-40 bg-white border-b border-slate-200 px-3 sm:px-6 py-1 flex items-center justify-between gap-2 sm:gap-6 shadow-sm min-h-[50px]">
           {/* 1. Voltar (Padrão) */}
-          <button onClick={onBack} disabled={isLoading} className={`flex items-center gap-2 group px-3 py-2 transition-all font-black uppercase tracking-tighter text-[11px] ${isLoading ? 'text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-slate-900'}`} title="Voltar para Diárias">
+          <button onClick={onBack} disabled={isLoading} className={`flex items-center gap-1 sm:gap-2 group px-2 sm:px-3 py-2 transition-all font-black uppercase tracking-tighter text-[10px] sm:text-[11px] ${isLoading ? 'text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-slate-900'}`} title="Voltar para Diárias">
               <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-              <span>Voltar</span>
+              <span className="hidden xs:inline">Voltar</span>
           </button>
 
           {/* 2. Stepper */}
-          <div className="flex-1 flex justify-center">
-              <div className="w-full max-w-lg py-4">
+          <div className="flex-1 flex justify-center max-w-[200px] xs:max-w-xs sm:max-w-lg">
+              <div className="w-full py-2 sm:py-4">
                   <div className="flex items-center justify-between w-full relative">
                       {steps.map((step, index) => {
                           const status = stepsStatus[step.id] || 'empty';
@@ -509,18 +509,18 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
                                           if (step.id === 1) setCurrentStep(1);
                                           if (step.id === 2 && isStep1Valid) setCurrentStep(2);
                                       }}
-                                      className={`flex flex-col items-center gap-2 relative z-10 cursor-pointer group px-2 bg-white rounded-xl transition-all duration-300 ${status === 'current' ? 'scale-110' : 'hover:scale-105'}`}
+                                      className={`flex flex-col items-center gap-1 sm:gap-2 relative z-10 cursor-pointer group px-1 sm:px-2 bg-white rounded-xl transition-all duration-300 ${status === 'current' ? 'scale-105' : 'hover:scale-102'}`}
                                   >
-                                      <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all shadow-sm ${circleClass}`}>
-                                          <Icon className="w-5 h-5" />
+                                      <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-all shadow-sm ${circleClass}`}>
+                                          <Icon className="w-4.5 h-4.5 sm:w-5 sm:h-5" />
                                       </div>
-                                      <span className={`text-[10px] uppercase tracking-wider transition-colors bg-white ${labelClass}`}>
+                                      <span className={`text-[9px] sm:text-[10px] uppercase tracking-wider transition-colors bg-white ${labelClass}`}>
                                           {step.label}
                                       </span>
                                   </div>
 
                                   {!isLast && (
-                                      <div className="flex-1 h-1 mx-2 rounded-full overflow-hidden bg-slate-100 relative -z-10">
+                                      <div className="flex-1 h-1 mx-1 sm:mx-2 rounded-full overflow-hidden bg-slate-100 relative -z-10">
                                           <div
                                               className={`h-full transition-all duration-500 ${status === 'completed' || currentStep > step.id ? 'bg-emerald-500' : 'bg-transparent'}`}
                                           />
@@ -534,7 +534,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
           </div>
 
           {/* 3. Botão de Ação (Avançar/Finalizar) */}
-          <div className="min-w-[140px] flex justify-end">
+          <div className="min-w-0 sm:min-w-[140px] flex justify-end shrink-0">
               {currentStep === 1 ? (
                   <button
                       onClick={() => {
@@ -545,19 +545,19 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
                         setCurrentStep(2);
                       }}
                       disabled={!isStep1Valid || isLoading}
-                      className="flex items-center gap-2 px-6 py-2.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 shadow-lg shadow-slate-900/20 active:scale-95 transition-all text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="flex items-center gap-1 sm:gap-2 px-3 sm:px-6 py-2 sm:py-2.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 shadow-lg shadow-slate-900/20 active:scale-95 transition-all text-xs sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                      Avançar
+                      <span>Avançar</span>
                       <ChevronRight className="w-4 h-4" />
                   </button>
               ) : (
                   <button
                       onClick={handleSubmit}
                       disabled={!isFormValid || isLoading || isSuccess}
-                      className="flex items-center gap-2 px-6 py-2.5 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 shadow-lg shadow-emerald-600/20 active:scale-95 transition-all text-sm animate-pulse disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="flex items-center gap-1 sm:gap-2 px-3 sm:px-6 py-2 sm:py-2.5 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 shadow-lg shadow-emerald-600/20 active:scale-95 transition-all text-xs sm:text-sm animate-pulse disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                       {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                      {isLoading ? 'Salvando...' : 'Finalizar'}
+                      <span>{isLoading ? 'Salvando...' : 'Finalizar'}</span>
                   </button>
               )}
           </div>
@@ -1082,6 +1082,24 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
               >
                 Entendido
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal - Sucesso no Cadastro do Evento */}
+      {isSuccess && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 sm:p-6 animate-fade-in">
+          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100 animate-slide-up text-center">
+            <div className="bg-gradient-to-br from-emerald-500 to-teal-600 p-8 text-white flex flex-col items-center">
+              <div className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center mb-4 border border-white/30 shadow-inner animate-bounce">
+                <CheckCircle2 className="w-10 h-10 text-white" />
+              </div>
+              <h3 className="text-xl font-black tracking-tight uppercase">Solicitação Finalizada!</h3>
+              <p className="text-xs text-emerald-100 font-semibold mt-2">Sua viagem foi registrada com sucesso.</p>
+            </div>
+            <div className="p-6">
+              <p className="text-sm font-semibold text-slate-500 mb-2">Redirecionando você para a tela de Lançamentos...</p>
+              <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mt-4"></div>
             </div>
           </div>
         </div>

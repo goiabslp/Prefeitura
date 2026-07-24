@@ -396,7 +396,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 </button>
 
                 <div className="w-full h-full flex flex-col relative animate-fade-in z-0 overflow-hidden">
-                    <div className="flex-1 w-full h-full p-4 desktop:p-8 pt-20 desktop:pt-24">
+                    <div className="flex-1 w-full p-4 desktop:p-8 pt-20 desktop:pt-24 overflow-y-auto custom-scrollbar">
                         <div className="w-full min-h-full flex flex-col items-center justify-center container mx-auto">
                             <div className="flex flex-col items-center mb-8 shrink-0 animation-delay-100 animate-in fade-in slide-in-from-bottom-4 duration-500">
                                 <div className={`p-5 rounded-[2rem] bg-gradient-to-br from-${config.color}-50 to-${config.color}-100/50 mb-5 shadow-sm ring-8 ring-white/50`}>
