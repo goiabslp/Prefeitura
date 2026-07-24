@@ -184,6 +184,12 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
   const [reason, setReason] = useState('');
   const [isExpiredModalOpen, setIsExpiredModalOpen] = useState(false);
 
+  const isGestorOrAdmin = currentUser && (
+    currentUser.role === 'admin' || 
+    currentUser.permissions?.includes('parent_diarias_gestores') || 
+    currentUser.permissions?.includes('parent_diarias')
+  );
+
   const isDateExpired = (returnDateStr: string): boolean => {
     if (!returnDateStr) return false;
     try {
@@ -309,7 +315,11 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
     fetchCities();
   }, []);
 
-  const calculateDistance = async (destinationCity: string) => {
+  const getGoogleMapsRouteUrl = () => {
+    if (!destination) return '';
+    const destClean = destination.split(' - ')[0];
+    return `https://www.google.com/maps/dir/${encodeURIComponent('São José do Goiabal, MG')}/${encodeURIComponent(destClean)}`;
+  };  const calculateDistance = async (destinationCity: string) => {
     try {
       if (!destinationCity) {
         setDistancia('');
@@ -325,8 +335,9 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
       if (destName === originName) {
          distVal = 0;
       } else {
+        // Distâncias pré-definidas de apenas IDA
         const predefined: Record<string, number> = {
-          'JOÃO MONLEVADE': 45,
+          'JOÃO MONLEVADE': 76,
           'BELO HORIZONTE': 160,
           'IPATINGA': 90,
           'ITABIRA': 85,
@@ -345,25 +356,48 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
         if (predefined[destName] !== undefined) {
            distVal = predefined[destName];
         } else {
-          const fetchCoords = async (cityStr: string) => {
-             const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cityStr + ', Minas Gerais, Brazil')}`);
-             const data = await res.json();
-             if (data && data.length > 0) {
-                return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
-             }
-             return null;
-          };
-
-          const originCoords = await fetchCoords(originName);
-          const destCoords = await fetchCoords(destName);
-
-          if (originCoords && destCoords) {
-             const osrmRes = await fetch(`https://router.project-osrm.org/route/v1/driving/${originCoords.lon},${originCoords.lat};${destCoords.lon},${destCoords.lat}?overview=false`);
-             const osrmData = await osrmRes.json();
-             if (osrmData.routes && osrmData.routes.length > 0) {
-                const distanceMeters = osrmData.routes[0].distance;
+          let calculated = false;
+          const googleMapsApiKey = (import.meta as any).env?.VITE_GOOGLE_MAPS_API_KEY || '';
+          
+          // 1. Tenta calcular via Google Maps Distance Matrix se a API Key estiver configurada
+          if (googleMapsApiKey) {
+            try {
+              const res = await fetch(`https://maps.googleapis.com/maps/api/distancematrix/json?origins=${encodeURIComponent('São José do Goiabal, MG')}&destinations=${encodeURIComponent(destName + ', MG, Brazil')}&key=${googleMapsApiKey}`);
+              const data = await res.json();
+              if (data.rows && data.rows[0]?.elements[0]?.status === 'OK') {
+                const distanceMeters = data.rows[0].elements[0].distance.value;
+                // Distância de apenas IDA
                 distVal = Math.round(distanceMeters / 1000);
-             }
+                calculated = true;
+              }
+            } catch (err) {
+              console.warn('Google Maps Distance Matrix failed, falling back to OSRM:', err);
+            }
+          }
+
+          // 2. Fallback para OSRM (Calculador de rota de carro de estrada real gratuito)
+          if (!calculated) {
+            const fetchCoords = async (cityStr: string) => {
+               const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cityStr + ', Minas Gerais, Brazil')}`);
+               const data = await res.json();
+               if (data && data.length > 0) {
+                  return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+               }
+               return null;
+            };
+
+            const originCoords = await fetchCoords(originName);
+            const destCoords = await fetchCoords(destName);
+
+            if (originCoords && destCoords) {
+               const osrmRes = await fetch(`https://router.project-osrm.org/route/v1/driving/${originCoords.lon},${originCoords.lat};${destCoords.lon},${destCoords.lat}?overview=false`);
+               const osrmData = await osrmRes.json();
+               if (osrmData.routes && osrmData.routes.length > 0) {
+                  const distanceMeters = osrmData.routes[0].distance;
+                  // Distância de apenas IDA
+                  distVal = Math.round(distanceMeters / 1000);
+               }
+            }
           }
         }
       }
@@ -683,28 +717,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
                 </div>
               </div>
             </div>
-              </div>
-
-               {/* Distância */}
-              <div className="space-y-3">
-                <label className={labelClass}>Distância (KM)</label>
-                <div className={`${inputContainerClass} bg-slate-100/80 border-slate-200 cursor-not-allowed`}>
-                  <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                  <input
-                    type="number"
-                    min="0"
-                    readOnly
-                    value={distancia}
-                    placeholder={isCalculatingDistance ? 'Calculando...' : 'Distância em KM'}
-                    className={`${inputClass} text-slate-500 cursor-not-allowed`}
-                  />
-                  {isCalculatingDistance && (
-                    <div className="absolute right-4 top-1/2 -translate-y-1/2">
-                      <Loader2 className="w-4 h-4 text-indigo-500 animate-spin" />
-                    </div>
-                  )}
-                </div>
-              </div>
+          </div>
 
               {/* Hospedagem */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
