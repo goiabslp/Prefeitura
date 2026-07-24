@@ -16,6 +16,8 @@ import {
 } from '../../services/diariasEventosService';
 import { getGlobalSettings } from '../../services/settingsService';
 import { uploadFile } from '../../services/storageService';
+import { TwoFactorModal } from '../TwoFactorModal';
+
 
 const GESTORES_CARGOS = [
   'Chefe do Departamento de Educação',
@@ -78,6 +80,8 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
   const [persons, setPersons] = useState<Person[]>([]);
   const [isCopiedNarrative, setIsCopiedNarrative] = useState(false);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [is2FAModalOpen, setIs2FAModalOpen] = useState(false);
+
 
   useEffect(() => {
     const loadAuxiliaryData = async () => {
@@ -285,7 +289,8 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
     setorNomeParam: string,
     autorizadoPorParam: string,
     distanciaKmParam: string,
-    despesasTextoParam: string
+    despesasTextoParam: string,
+    digitalSigParam?: any
   ) => {
     try {
       const printWindow = window.open('', '_blank');
@@ -457,6 +462,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
             .signature-line {
               border-top: 1.5px solid #0f172a;
               padding-top: 4px;
+              position: relative;
             }
             .signature-name {
               font-size: 9pt;
@@ -710,6 +716,16 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                   <div class="signature-role">Servidor Solicitante</div>
                 </div>
                 <div class="signature-line">
+                  ${(digitalSigParam || evento.digital_signature)?.enabled ? `
+                    <div style="position: absolute; bottom: 100%; left: 0; right: 0; text-align: center; font-size: 6.5pt; color: #16a34a; font-weight: 800; text-transform: uppercase; letter-spacing: 0.02em; padding-bottom: 2px; line-height: 1.1;">
+                      <span style="border: 1px solid #16a34a; padding: 1px 4px; border-radius: 3px; background-color: #f0fdf4; display: inline-block; margin-bottom: 2px;">Assinado Digitalmente</span><br/>
+                      <span style="font-size: 5.2pt; color: #475569; font-weight: 500; font-family: monospace; text-transform: none; display: block; line-height: 1.0;">
+                        IP: ${(digitalSigParam || evento.digital_signature).ip}<br/>
+                        ID: ${(digitalSigParam || evento.digital_signature).id.substring(0, 18)}...<br/>
+                        Data: ${new Date((digitalSigParam || evento.digital_signature).date).toLocaleString('pt-BR')}
+                      </span>
+                    </div>
+                  ` : ''}
                   <div class="signature-name">${autorizadoPorParam}</div>
                   <div class="signature-role">Gestor / Autorizador</div>
                 </div>
@@ -785,16 +801,32 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
     );
   };
 
-  const handleAdminGenerate = async () => {
+  const handleAdminGenerate = async (bypass2FA = false) => {
     if (!selectedEvento || !valorDiaria || !relatorioViagem.trim()) return;
+
+    if (!bypass2FA && currentUser && (currentUser.twoFactorEnabled || currentUser.twoFactorEnabled2)) {
+      setIs2FAModalOpen(true);
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const valorFloat = parseFloat(valorDiaria.replace(/[^\d,.-]/g, '').replace(',', '.'));
 
+      const digitalSigData = {
+        enabled: true,
+        method: currentUser && (currentUser.twoFactorEnabled || currentUser.twoFactorEnabled2) ? '2FA Token (App)' : 'Assinatura Simples (Login)',
+        ip: 'Client-Device',
+        date: new Date().toISOString(),
+        id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).substring(2),
+        signerName: currentUser?.name || 'Administrador'
+      };
+
       await updateDiariaEvento(selectedEvento.id, {
         valor_diaria: valorFloat,
         relatorio_viagem: relatorioViagem.trim(),
-        status: 'concluido'
+        status: 'concluido',
+        digital_signature: digitalSigData
       });
 
       const sNome = selectedEvento.pessoas[0]?.name || 'Servidor não informado';
@@ -839,7 +871,8 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
         stNome,
         autPor,
         distKm,
-        despesasStr
+        despesasStr,
+        digitalSigData
       );
 
       await fetchEventos();
@@ -2030,7 +2063,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                     Voltar
                   </button>
                   <button 
-                    onClick={handleAdminGenerate}
+                    onClick={() => handleAdminGenerate()}
                     disabled={!valorDiaria || !relatorioViagem.trim() || isSubmitting}
                     className="px-7 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white font-black text-xs uppercase tracking-widest rounded-2xl transition-all shadow-lg shadow-emerald-600/20 active:scale-95 flex items-center gap-2"
                   >
@@ -2042,6 +2075,19 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
             </div>
           </div>
         </div>
+      )}
+      {is2FAModalOpen && currentUser && (
+        <TwoFactorModal
+          isOpen={is2FAModalOpen}
+          onClose={() => setIs2FAModalOpen(false)}
+          onConfirm={() => {
+            setIs2FAModalOpen(false);
+            handleAdminGenerate(true);
+          }}
+          secret={currentUser.twoFactorEnabled ? (currentUser.twoFactorSecret || '') : ''}
+          secret2={currentUser.twoFactorEnabled2 ? (currentUser.twoFactorSecret2 || null) : null}
+          signatureName={currentUser.name || ''}
+        />
       )}
 
     </div>

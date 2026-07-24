@@ -530,6 +530,14 @@ export interface DiariaEvento {
   veiculo_outro?: string;
   distancia?: number;
   gestor_transferido_cargo?: string;
+  digital_signature?: {
+    enabled: boolean;
+    method: string;
+    ip: string;
+    date: string;
+    id: string;
+    signerName?: string;
+  };
 }
 
 export interface ConsultaPaciente {

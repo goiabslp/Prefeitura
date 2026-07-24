@@ -421,7 +421,7 @@ export const DiariaForm: React.FC<DiariaFormProps> = ({
       const predefined: Record<string, number> = {
         'JOÃO MONLEVADE': 45,
         'BELO HORIZONTE': 160,
-        'IPATINGA': 110,
+        'IPATINGA': 90,
         'ITABIRA': 85,
         'ALVINÓPOLIS': 40,
         'RIO PIRACICABA': 25,
