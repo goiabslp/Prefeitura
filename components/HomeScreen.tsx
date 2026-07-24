@@ -256,9 +256,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         const actionButtons: Array<any> = [];
 
         // "New" Button
-        if (activeBlock !== 'abastecimento' && activeBlock !== 'tarefas') {
+        if (activeBlock !== 'abastecimento' && activeBlock !== 'tarefas' && activeBlock !== 'diarias') {
             actionButtons.push({
-                label: activeBlock === 'compras' ? 'Novo Pedido' : activeBlock === 'oficio' ? 'Novo Ofício' : activeBlock === 'diarias' ? 'Nova Solicitação' : 'Novo Registro',
+                label: activeBlock === 'compras' ? 'Novo Pedido' : activeBlock === 'oficio' ? 'Novo Ofício' : 'Novo Registro',
                 desc: "Criar novo registro",
                 icon: FilePlus,
                 onClick: () => onNewOrder(activeBlock || 'oficio', true), // Force state reset always when starting a new flow
@@ -278,6 +278,24 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
         // Diárias Specific Buttons
         if (activeBlock === 'diarias') {
+            if (permissions.includes('parent_diarias_editor') || userRole === 'admin') {
+                actionButtons.push({
+                    label: 'Nova Solicitação',
+                    desc: 'Criar novo registro',
+                    icon: FilePlus,
+                    onClick: () => onNewOrder('diarias', true),
+                    color: config.color
+                });
+            }
+            if (permissions.includes('parent_diarias_historico') || userRole === 'admin') {
+                actionButtons.push({
+                    label: 'Histórico',
+                    desc: 'Consulte registros de Diárias',
+                    icon: History,
+                    onClick: onTrackOrder,
+                    color: 'purple'
+                });
+            }
             if (permissions.includes('parent_diarias_novo_evento') || userRole === 'admin') {
                 actionButtons.push({
                     label: 'Nova Viagem',
@@ -302,7 +320,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                     color: 'blue'
                 });
             }
-            if (userRole === 'admin') {
+            if (permissions.includes('parent_diarias_gestores') || userRole === 'admin') {
                 actionButtons.push({
                     label: 'Gestores',
                     desc: 'Vincular Gestores',
