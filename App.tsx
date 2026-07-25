@@ -105,6 +105,7 @@ import { SystemUpdateScreen } from './components/SystemUpdateScreen';
 import { NovoEventoScreen } from './components/diarias/NovoEventoScreen';
 import { LancamentosScreen } from './components/diarias/LancamentosScreen';
 import { GestoresScreen } from './components/diarias/GestoresScreen';
+import { ViajarScreen } from './components/diarias/ViajarScreen';
 import { OficiosHistory } from './components/oficios/OficiosHistory';
 import { LicitacaoDashboard } from './components/licitacao/LicitacaoDashboard';
 import { LicitacaoWizard } from './components/licitacao/LicitacaoWizard';
@@ -137,6 +138,7 @@ const VIEW_TO_PATH: Record<string, string> = {
   'diarias-novo-evento': '/Diarias/NovoEvento',
   'diarias-lancamentos': '/Diarias/Lancamentos',
   'diarias-gestores': '/Diarias/Gestores',
+  'diarias-viajar': '/Diarias/Viajar',
   'editor:oficio': '/Editor/Oficio',
   'editor:compras': '/Editor/Compras',
   'editor:diarias': '/Editor/Diarias',
@@ -252,7 +254,7 @@ const mapLicitacaoProcessToOrder = (process: any): Order => {
 
 const App: React.FC = () => {
   // State controlling the active module view
-  const [currentView, setCurrentView] = useState<'login' | 'home' | 'admin' | 'tracking' | 'editor' | 'vehicle-scheduling' | 'abastecimento' | 'agricultura' | 'obras' | 'order-details' | 'tasks-dashboard' | 'purchase-inventory' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'diarias-novo-evento' | 'diarias-lancamentos' | 'diarias-gestores' | 'licitacao' | 'licitacao:new' | 'licitacao:view' | 'licitacao:details' | 'licitacao-all' | 'licitacao-screening' | 'consultas' | 'farmacia'>('login');
+  const [currentView, setCurrentView] = useState<'login' | 'home' | 'admin' | 'tracking' | 'editor' | 'vehicle-scheduling' | 'abastecimento' | 'agricultura' | 'obras' | 'order-details' | 'tasks-dashboard' | 'purchase-inventory' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'diarias-novo-evento' | 'diarias-lancamentos' | 'diarias-gestores' | 'diarias-viajar' | 'licitacao' | 'licitacao:new' | 'licitacao:view' | 'licitacao:details' | 'licitacao-all' | 'licitacao-screening' | 'consultas' | 'farmacia'>('login');
   const [remoteAccessState, setRemoteAccessState] = useState<any>(null);
 
   useEffect(() => {
@@ -1149,7 +1151,40 @@ const App: React.FC = () => {
     const onPopState = () => restoreStateFromUrl();
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
-  }, [authLoading, currentUser]); // Run once when auth finishes
+  }, [authLoading, currentUser]);
+
+  // Trava Global de Viagem em Andamento para todo o Módulo de Diárias
+  useEffect(() => {
+    const checkGlobalActiveTrip = async () => {
+      if (!currentUser || authLoading) return;
+      const path = window.location.pathname.toLowerCase();
+      if (!path.startsWith('/diarias')) return;
+
+      try {
+        const { getAllDiariaEventos } = await import('./services/diariasEventosService');
+        const allEvts = await getAllDiariaEventos();
+        const normalizeText = (t: string) => t ? t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim() : "";
+        const activeTrip = allEvts.find(evt => {
+          if (!evt.pessoas || !Array.isArray(evt.pessoas)) return false;
+          const p = evt.pessoas.find(x => x.id === currentUser.id || (x.name && normalizeText(x.name) === normalizeText(currentUser.name)));
+          return p && (p as any).viagem_inicio && !(p as any).viagem_fim;
+        });
+
+        if (activeTrip) {
+          const targetUrl = `/Diarias/Viajar/Detalhes?id=${activeTrip.id}`;
+          if (window.location.pathname + window.location.search !== targetUrl) {
+            window.history.pushState({}, '', targetUrl);
+            setCurrentView('diarias-viajar');
+          }
+        }
+      } catch (e) {}
+    };
+
+    checkGlobalActiveTrip();
+
+    window.addEventListener('popstate', checkGlobalActiveTrip);
+    return () => window.removeEventListener('popstate', checkGlobalActiveTrip);
+  }, [currentUser, authLoading, currentView]);
 
   /* Removed Initial Refresh Effect - Handled by Route Sync Effect */
 
@@ -4736,6 +4771,16 @@ const App: React.FC = () => {
               <GestoresScreen
                 persons={persons}
                 users={users}
+                currentUser={currentUser}
+                onBack={() => {
+                  window.history.pushState({}, '', '/Diarias');
+                  window.dispatchEvent(new Event('popstate'));
+                }}
+              />
+            )}
+
+            {currentView === 'diarias-viajar' && currentUser && (
+              <ViajarScreen
                 currentUser={currentUser}
                 onBack={() => {
                   window.history.pushState({}, '', '/Diarias');

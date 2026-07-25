@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { FilePlus, Package, History, FileText, ArrowRight, ArrowLeft, ShoppingCart, Gavel, Wallet, Inbox, CalendarRange, FileSearch, Droplet, Fuel, BarChart3, TrendingUp, LogOut, Sprout, HardHat, Activity, Car, ChevronDown, CalendarDays, Users, LayoutGrid, Megaphone, Database, Pill } from 'lucide-react';
-import { UserRole, UIConfig, AppPermission, BlockType } from '../types';
+import { FilePlus, Package, History, FileText, ArrowRight, ArrowLeft, ShoppingCart, Gavel, Wallet, Inbox, CalendarRange, FileSearch, Droplet, Fuel, BarChart3, TrendingUp, LogOut, Sprout, HardHat, Activity, Car, ChevronDown, CalendarDays, Users, LayoutGrid, Megaphone, Database, Pill, Timer } from 'lucide-react';
+import { UserRole, UIConfig, AppPermission, BlockType, DiariaEvento } from '../types';
 import { TasksDashboard } from './dashboard/TasksDashboard';
 import { QuickTaskCreation } from './dashboard/QuickTaskCreation';
 import { UpcomingEventsNotification } from './calendario/UpcomingEventsNotification';
@@ -83,11 +83,31 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     const [isMobileViewport, setIsMobileViewport] = useState(window.innerWidth < 700);
     const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
 
+    const [activeTrip, setActiveTrip] = useState<DiariaEvento | null>(null);
+
     useEffect(() => {
         const handleResize = () => setIsMobileViewport(window.innerWidth < 700);
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
     }, []);
+
+    useEffect(() => {
+        const checkActiveTrip = async () => {
+            if (!userId && !userName) return;
+            try {
+                const { getAllDiariaEventos } = await import('../services/diariasEventosService');
+                const allEvts = await getAllDiariaEventos();
+                const normalizeText = (t: string) => t ? t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim() : "";
+                const active = allEvts.find(evt => {
+                    if (!evt.pessoas || !Array.isArray(evt.pessoas)) return false;
+                    const p = evt.pessoas.find(x => x.id === userId || (x.name && normalizeText(x.name) === normalizeText(userName)));
+                    return p && (p as any).viagem_inicio && !(p as any).viagem_fim;
+                });
+                setActiveTrip(active || null);
+            } catch (e) {}
+        };
+        checkActiveTrip();
+    }, [userId, userName]);
 
     // Permission Checks (AND Global Status - Web or Mobile)
     const isModuleActive = (key: string) => {
@@ -329,6 +349,18 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                     color: 'indigo'
                 });
             }
+            if ((permissions.includes('parent_diarias_viajar') || userRole === 'admin') && isModuleActive('parent_diarias_viajar')) {
+                actionButtons.push({
+                    label: 'Viajar',
+                    desc: 'Iniciar/Finalizar Viagens',
+                    icon: Car,
+                    onClick: () => {
+                        window.history.pushState({}, '', '/Diarias/Viajar');
+                        window.dispatchEvent(new Event('popstate'));
+                    },
+                    color: 'emerald'
+                });
+            }
         }
 
         // Tarefas Specific Buttons
@@ -458,6 +490,44 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                                     Selecione um módulo para iniciar suas atividades.
                                 </p>
                             </div>
+
+                            {/* Banner de Viagem em Andamento */}
+                            {activeTrip && (
+                                <div
+                                    onClick={() => {
+                                        window.history.pushState({}, '', `/Diarias/Viajar/Detalhes?id=${activeTrip.id}`);
+                                        window.dispatchEvent(new Event('popstate'));
+                                    }}
+                                    className="mb-6 bg-gradient-to-r from-amber-500 via-emerald-600 to-indigo-600 p-0.5 rounded-[2rem] shadow-xl hover:shadow-2xl hover:scale-[1.01] active:scale-[0.99] transition-all cursor-pointer group"
+                                >
+                                    <div className="bg-white rounded-[1.9rem] p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-12 h-12 rounded-2xl bg-amber-500/10 text-amber-600 border border-amber-500/20 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                                                <Car className="w-6 h-6 animate-pulse" />
+                                            </div>
+                                            <div>
+                                                <div className="flex items-center gap-2 mb-0.5">
+                                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200 animate-pulse">
+                                                        <Timer className="w-3 h-3 text-amber-600" />
+                                                        <span>Você está em Viagem</span>
+                                                    </span>
+                                                </div>
+                                                <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight group-hover:text-indigo-600 transition-colors">
+                                                    {activeTrip.destino}
+                                                </h3>
+                                                <p className="text-slate-500 text-xs font-medium">
+                                                    Você possui uma viagem em andamento. Clique aqui para ir direto para a tela da viagem.
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-center gap-2 text-indigo-600 font-extrabold text-xs uppercase tracking-wider shrink-0 self-end sm:self-auto bg-indigo-50 px-4 py-2.5 rounded-2xl border border-indigo-100 group-hover:bg-indigo-600 group-hover:text-white transition-all">
+                                            <span>Ir para a Viagem</span>
+                                            <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Modules Grid */}
                             <div className="grid grid-cols-2 desktop:grid-cols-3 xl:grid-cols-4 wide:grid-cols-5 gap-3 desktop:gap-4">

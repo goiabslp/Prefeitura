@@ -981,7 +981,8 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                           { id: 'parent_diarias_historico', label: 'Histórico' },
                           { id: 'parent_diarias_novo_evento', label: 'Novo Evento' },
                           { id: 'parent_diarias_lancamentos', label: 'Lançamentos' },
-                          { id: 'parent_diarias_gestores', label: 'Gestores' }
+                          { id: 'parent_diarias_gestores', label: 'Gestores' },
+                          { id: 'parent_diarias_viajar', label: 'Viajar' }
                         ],
                         color: 'amber'
                       },

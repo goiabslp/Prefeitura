@@ -51,6 +51,21 @@ export const SystemSettingsProvider: React.FC<{ children: React.ReactNode }> = (
             if (data) {
                 const fetchedSettings = data as ModuleSetting[];
                 
+                // Garantir fallback estático para parent_diarias_viajar se ausente no banco
+                const hasViajar = fetchedSettings.some(s => s.module_key === 'parent_diarias_viajar');
+                if (!hasViajar) {
+                    fetchedSettings.push({
+                        id: 'fallback_viajar',
+                        module_key: 'parent_diarias_viajar',
+                        label: 'Viajar',
+                        is_enabled: true,
+                        is_enabled_mobile: true,
+                        parent_key: 'parent_diarias',
+                        order_index: 6,
+                        description: 'Permissão para iniciar e finalizar viagens em tempo real'
+                    });
+                }
+                
                 setSettings(fetchedSettings);
                 
                 const webStatusMap: Record<string, boolean> = {};

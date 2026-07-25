@@ -3,8 +3,9 @@ import {
   ArrowLeft, Loader2, Calendar, MapPin, Users, RefreshCw, 
   FileText, Search, Hash as HashIcon, CheckCircle2, 
   X, AlertTriangle, Upload, Paperclip, Check, Trash2,
-  Car, Navigation, Hotel, BookOpen, Copy, Download, XCircle
+  Car, Navigation, Hotel, BookOpen, Copy, Download, XCircle, Receipt
 } from 'lucide-react';
+import { getDiariasDespesasEnabled, setDiariasDespesasEnabled } from '../../services/diariasSettingsService';
 import { DiariaEvento, User, Attachment, Sector, Job, Person } from '../../types';
 import { supabase } from '../../services/supabaseClient';
 import { 
@@ -153,7 +154,56 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
     fetchEventos();
   }, [currentUser]);
 
-  const formatDate = (dateString: string) => {
+  useEffect(() => {
+    const checkActiveTrip = async () => {
+      if (!currentUser) return;
+      try {
+        const { getAllDiariaEventos } = await import('../../services/diariasEventosService');
+        const allEvts = await getAllDiariaEventos();
+        const normalizeText = (t: string) => t ? t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim() : "";
+        const active = allEvts.find(evt => {
+          if (!evt.pessoas || !Array.isArray(evt.pessoas)) return false;
+          const p = evt.pessoas.find(x => x.id === currentUser.id || (x.name && normalizeText(x.name) === normalizeText(currentUser.name)));
+          return p && (p as any).viagem_inicio && !(p as any).viagem_fim;
+        });
+        if (active) {
+          window.history.pushState({}, '', `/Diarias/Viajar/Detalhes?id=${active.id}`);
+          window.dispatchEvent(new Event('popstate'));
+        }
+      } catch (e) {}
+    };
+    checkActiveTrip();
+  }, [currentUser]);
+
+  const handleToggleEventoDespesas = async (evento: DiariaEvento) => {
+    try {
+      const nextVal = !evento.permitir_despesas_pos_finalizacao;
+      const updated = await updateDiariaEvento(evento.id, {
+        permitir_despesas_pos_finalizacao: nextVal
+      });
+      setEventos(prev => prev.map(e => e.id === evento.id ? updated : e));
+      window.dispatchEvent(new Event('diarias_settings_changed'));
+    } catch (err) {
+      console.error('Erro ao alternar permissao de despesas do registro:', err);
+      alert('Falha ao atualizar permissão de despesas deste registro.');
+    }
+  };
+
+  const getEffectiveDataSaida = (evento: DiariaEvento | null | undefined): string => {
+    if (!evento) return '';
+    if (evento.pessoas && Array.isArray(evento.pessoas)) {
+      const pWithInicio = evento.pessoas.find(p => (p as any).viagem_inicio);
+      if (pWithInicio && (pWithInicio as any).viagem_inicio) {
+        return (pWithInicio as any).viagem_inicio;
+      }
+    }
+    return evento.data_saida || '';
+  };
+
+  const formatDate = (dateString: string | null | undefined) => {
+    if (!dateString) return '---';
+    // Detectar data sentinela usada quando retorno será registrado pelo servidor em /Diarias/Viajar
+    if (dateString.startsWith('2099-12-31')) return 'A definir';
     try {
       const d = new Date(dateString);
       return new Intl.DateTimeFormat('pt-BR', {
@@ -166,23 +216,39 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
   };
 
   const filteredEventos = eventos.filter(evento => {
-    // Regra de visibilidade por perfil
-    const pessoaId = evento.pessoas[0]?.id || '';
-    const gestorId = gestoresMap[pessoaId] || '';
-    const isGestor = currentUser?.id === gestorId;
-    const isOwner = evento.user_id === currentUser?.id;
-
-    // Se não for admin, e não for gestor do servidor, e não for quem criou, oculta do histórico
-    if (currentUser?.role !== 'admin' && !isGestor && !isOwner) {
-      return false;
-    }
-
     const term = searchTerm.toLowerCase();
     const matchesSearch = evento.destino.toLowerCase().includes(term) ||
            evento.motivo.toLowerCase().includes(term) ||
            evento.pessoas.some(p => p.name.toLowerCase().includes(term)) ||
            (evento.status || '').toLowerCase().includes(term);
-    return matchesSearch;
+
+    if (!matchesSearch) return false;
+
+    // 1. ADMINISTRADOR deve visualizar todos os lançamentos de todos os usuários e gestores
+    if (currentUser?.role === 'admin') {
+      return true;
+    }
+
+    // 2. GESTOR / SERVIDOR só deve ver viagem que ele mesmo lançou, ou que ele é o gestor responsável, ou participante
+    const isOwner = evento.user_id === currentUser?.id;
+    
+    const isParticipant = evento.pessoas && Array.isArray(evento.pessoas) && evento.pessoas.some(p => {
+      if (!p || !currentUser) return false;
+      if (p.id === currentUser.id) return true;
+      const normalize = (t: string) => t ? t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim() : "";
+      return p.name && currentUser.name && normalize(p.name) === normalize(currentUser.name);
+    });
+
+    const isGestorOfAnyPerson = evento.pessoas && Array.isArray(evento.pessoas) && evento.pessoas.some(p => {
+      const gId = gestoresMap[p.id] || gestoresMap[p.name];
+      return gId === currentUser?.id;
+    });
+
+    const isTransferredGestor = evento.gestor_transferido_cargo && currentUser?.jobTitle
+      ? currentUser.jobTitle.trim().toLowerCase() === evento.gestor_transferido_cargo.trim().toLowerCase()
+      : false;
+
+    return isOwner || isParticipant || isGestorOfAnyPerson || isTransferredGestor;
   });
 
   const handleSelectModalTab = (tab: 'resumo' | 'justificativa' | 'comprovantes' | 'relatorio') => {
@@ -324,7 +390,9 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
       if (!printWindow) return;
 
       const dataSaidaFormatted = evento.data_saida ? new Date(evento.data_saida).toLocaleString('pt-BR') : '---';
-      const dataRetornoFormatted = evento.data_retorno ? new Date(evento.data_retorno).toLocaleString('pt-BR') : '---';
+      const dataRetornoFormatted = evento.data_retorno
+        ? (evento.data_retorno.startsWith('2099-12-31') ? 'A definir' : new Date(evento.data_retorno).toLocaleString('pt-BR'))
+        : '---';
       const pernoites = evento.hospedagem ? (evento.hospedagem_dias || 1) : 0;
       const protocol = `DIA-${evento.id.slice(0, 4).toUpperCase()}/${new Date().getFullYear()}`;
       const veiculoStr = evento.veiculo === 'OUTRO'
@@ -918,13 +986,12 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
 
   const handleDelete = async (id: string) => {
     if (window.confirm("Tem certeza que deseja excluir permanentemente este lançamento de viagem?")) {
-      setEventos(prev => prev.filter(e => e.id !== id));
+      setEventos(prev => prev.filter(e => String(e.id) !== String(id)));
       try {
         await deleteDiariaEvento(id);
         await fetchEventos();
       } catch (err) {
         console.error(err);
-        alert("Erro ao excluir o lançamento de viagem.");
         await fetchEventos();
       }
     }
@@ -933,6 +1000,10 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
   const getStatusBadge = (status?: string) => {
     const s = status || 'aguardando_gestor';
     switch (s) {
+      case 'viagem_programada':
+        return { label: 'Viagem Programada', style: 'border-indigo-200 bg-indigo-50 text-indigo-700' };
+      case 'em_viagem':
+        return { label: 'Em Viagem', style: 'border-emerald-300 bg-emerald-100 text-emerald-800 animate-pulse' };
       case 'aguardando_gestor':
         return { label: 'Aguardando Gestor', style: 'border-amber-200 bg-amber-50 text-amber-700' };
       case 'rejeitado_gestor':
@@ -941,6 +1012,9 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
         return { label: 'Aguardando Admin', style: 'border-blue-200 bg-blue-50 text-blue-700' };
       case 'concluido':
         return { label: 'Concluído', style: 'border-emerald-200 bg-emerald-50 text-emerald-700' };
+      case 'cancelado':
+      case 'viagem_cancelada':
+        return { label: 'Viagem Cancelada', style: 'border-slate-300 bg-slate-200 text-slate-700 font-bold' };
       default:
         return { label: 'Registrado', style: 'border-slate-200 bg-slate-50 text-slate-700' };
     }
@@ -1148,6 +1222,24 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                             <Download className="w-4 h-4" />
                           </button>
                         )}
+
+                        {currentUser?.role === 'admin' && (
+                          <button
+                            onClick={() => handleToggleEventoDespesas(evento)}
+                            className={`p-1.5 rounded-lg border transition-all ${
+                              evento.permitir_despesas_pos_finalizacao
+                                ? 'text-emerald-700 bg-emerald-50 border-emerald-300 hover:bg-emerald-100'
+                                : 'text-slate-400 hover:text-indigo-600 hover:bg-slate-100 border-slate-200'
+                            }`}
+                            title={
+                              evento.permitir_despesas_pos_finalizacao
+                                ? 'Despesas ATIVADAS para esta viagem (Clique para desativar)'
+                                : 'Ativar campo de Despesas para esta viagem'
+                            }
+                          >
+                            <Receipt className="w-4 h-4" />
+                          </button>
+                        )}
                         
                         {(currentUser?.role === 'admin' || 
                           evento.user_id === currentUser?.id || 
@@ -1319,7 +1411,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                           <div className="min-w-0 flex-1">
                             <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block leading-tight">Data/Hora Saída</span>
                             <p className="text-xs font-extrabold text-slate-900 leading-snug break-words">
-                              {formatDate(selectedEvento.data_saida)}
+                              {formatDate(getEffectiveDataSaida(selectedEvento))}
                             </p>
                           </div>
                         </div>
