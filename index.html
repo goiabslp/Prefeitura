@@ -99,7 +99,6 @@
   }
 }
 </script>
-  <link rel="stylesheet" href="/index.css">
 </head>
 
 <body class="bg-slate-50 text-slate-800 antialiased selection:bg-indigo-500 selection:text-white">
@@ -108,9 +107,14 @@
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js')
-          .then(reg => console.log('PWA Service Worker registrado com sucesso:', reg.scope))
-          .catch(err => console.error('Erro ao registrar Service Worker:', err));
+        navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })
+          .then(reg => {
+            reg.update();
+            console.log('PWA Service Worker ativo e atualizado:', reg.scope);
+          })
+          .catch(err => {
+            console.error('Erro ao registrar Service Worker:', err);
+          });
       });
     }
   </script>
