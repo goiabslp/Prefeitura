@@ -21,14 +21,9 @@ export const checkAndApplyAutoCancellation = (events: DiariaEvento[]): DiariaEve
       if (!hasStarted) {
         try {
           const scheduledDate = new Date(evt.data_saida);
-          const endOfScheduledDay = new Date(
-            scheduledDate.getFullYear(),
-            scheduledDate.getMonth(),
-            scheduledDate.getDate(),
-            23, 59, 59, 999
-          );
+          const limitTime = new Date(scheduledDate.getTime() + 2 * 60 * 60 * 1000);
 
-          if (agora > endOfScheduledDay) {
+          if (agora > limitTime) {
             const cancelledEvt = { ...evt, status: 'cancelado' };
             updateDiariaEvento(evt.id, { status: 'cancelado' }).catch(err => {
               console.warn('Erro ao atualizar status cancelado no Supabase:', err);

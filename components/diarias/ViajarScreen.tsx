@@ -152,11 +152,23 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
   };
 
   // Regra para liberação de início de viagem
-  const canIniciarViagem = (evento: DiariaEvento): { allowed: boolean; liberadoEm?: string } => {
+  const canIniciarViagem = (evento: DiariaEvento): { allowed: boolean; liberadoEm?: string; reason?: string } => {
     if (!evento.data_saida) return { allowed: true };
+    if (evento.status === 'cancelado' || evento.status === 'viagem_cancelada') {
+      return { allowed: false, reason: 'Esta viagem foi cancelada por ultrapassar o prazo limite de 02:00h após o horário previsto de saída.' };
+    }
     try {
       const dataSaida = new Date(evento.data_saida);
       const agora = new Date();
+
+      // Bloqueio se passar de 2 horas do horário previsto de saída
+      const duasHorasDepois = new Date(dataSaida.getTime() + 2 * 60 * 60 * 1000);
+      if (agora.getTime() > duasHorasDepois.getTime()) {
+        return { 
+          allowed: false, 
+          reason: 'O prazo limite de 02:00h após o horário previsto de saída expirou. A viagem foi cancelada.' 
+        };
+      }
 
       const mesmoDia =
         dataSaida.getFullYear() === agora.getFullYear() &&
@@ -697,13 +709,21 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
                       </button>
 
                       {!check.allowed && (
-                        <div className="max-w-xs bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 text-center shadow-xs">
-                          <div className="flex items-center justify-center gap-1.5 text-amber-700 font-black text-[10px] uppercase tracking-wider mb-1">
-                            <Clock className="w-3.5 h-3.5" />
-                            <span>Início Bloqueado</span>
+                        <div className={`max-w-xs rounded-2xl px-4 py-3 text-center shadow-xs border ${
+                          check.reason ? 'bg-rose-50 border-rose-200' : 'bg-amber-50 border-amber-200'
+                        }`}>
+                          <div className={`flex items-center justify-center gap-1.5 font-black text-[10px] uppercase tracking-wider mb-1 ${
+                            check.reason ? 'text-rose-700' : 'text-amber-700'
+                          }`}>
+                            {check.reason ? <AlertTriangle className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
+                            <span>{check.reason ? 'Viagem Cancelada' : 'Início Bloqueado'}</span>
                           </div>
-                          <p className="text-amber-800 text-xs font-semibold">
-                            Disponível a partir de: <strong className="text-amber-900 font-black">{check.liberadoEm}</strong>
+                          <p className={`text-xs font-semibold ${check.reason ? 'text-rose-800' : 'text-amber-800'}`}>
+                            {check.reason ? (
+                              check.reason
+                            ) : (
+                              <>Disponível a partir de: <strong className="text-amber-900 font-black">{check.liberadoEm}</strong></>
+                            )}
                           </p>
                         </div>
                       )}

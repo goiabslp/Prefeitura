@@ -49,7 +49,7 @@ const DateTimePickerModal = ({
      const finalDate = new Date(selectedDate);
      finalDate.setHours(hours, minutes, 0, 0);
      
-     const formatted = format(finalDate, "yyyy-MM-dd'T'HH:mm");
+     const formatted = finalDate.toISOString();
      onSelect(formatted);
      onClose();
   }
