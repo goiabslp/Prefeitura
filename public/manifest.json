@@ -1,19 +1,31 @@
 {
   "short_name": "Prefeitura",
-  "name": "Prefeitura Integrada - São José do Goiabal",
+  "name": "Prefeitura - São José do Goiabal",
   "description": "Sistema de Gestão Integrada da Prefeitura Municipal",
   "icons": [
     {
       "src": "/icon-192.png",
       "type": "image/png",
       "sizes": "192x192",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "maskable"
     },
     {
       "src": "/icon-512.png",
       "type": "image/png",
       "sizes": "512x512",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "maskable"
     },
     {
       "src": "/apple-touch-icon.png",
@@ -28,5 +40,10 @@
   "theme_color": "#4f46e5",
   "display": "standalone",
   "orientation": "portrait-primary",
-  "categories": ["government", "productivity", "utilities"]
+  "prefer_related_applications": false,
+  "categories": [
+    "government",
+    "productivity",
+    "utilities"
+  ]
 }
