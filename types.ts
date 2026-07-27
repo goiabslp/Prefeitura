@@ -519,7 +519,7 @@ export interface DiariaEvento {
   user_id: string;
   user_name: string;
   created_at?: string;
-  status?: 'aguardando_gestor' | 'aguardando_administrador' | 'aprovado' | 'rejeitado_gestor' | 'concluido' | 'viagem_programada' | 'em_viagem' | string;
+  status?: 'aguardando_aprovacao' | 'aguardando_gestor' | 'aguardando_administrador' | 'aprovado' | 'rejeitado_gestor' | 'concluido' | 'viagem_programada' | 'em_viagem' | string;
   justificativa_gestor?: string;
   comprovantes_gestor?: any[];
   valor_diaria?: number;

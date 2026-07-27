@@ -8,7 +8,7 @@ import {
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Person, User, Sector, Job, Vehicle } from '../../types';
-import { createDiariaEvento } from '../../services/diariasEventosService';
+import { createDiariaEvento, getDiariasGestores } from '../../services/diariasEventosService';
 import { useCachedVehicles } from '../../hooks/useCachedVehicles';
 import { supabase } from '../../services/supabaseClient';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -19,13 +19,15 @@ const DateTimePickerModal = ({
   onClose, 
   onSelect, 
   initialValue, 
-  title 
+  title,
+  isAdmin = false
 }: { 
   isOpen: boolean, 
   onClose: () => void, 
   onSelect: (val: string) => void, 
   initialValue: string, 
-  title: string 
+  title: string,
+  isAdmin?: boolean
 }) => {
   const [currentMonth, setCurrentMonth] = useState(() => initialValue ? parseISO(initialValue) : new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(() => initialValue ? parseISO(initialValue) : null);
@@ -55,38 +57,38 @@ const DateTimePickerModal = ({
   }
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 sm:p-6 animate-fade-in" onClick={onClose}>
-       <div className="w-full max-w-sm bg-white rounded-3xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
-           <div className="bg-indigo-600 p-6 text-white text-center relative">
-               <h3 className="text-sm font-bold uppercase tracking-wider text-indigo-200 mb-1">{title}</h3>
-               <div className="text-3xl font-black tracking-tight">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-3 sm:p-6 overflow-y-auto animate-fade-in" onClick={onClose}>
+       <div className="w-full max-w-sm bg-white rounded-3xl shadow-2xl overflow-hidden my-auto max-h-[92vh] flex flex-col" onClick={e => e.stopPropagation()}>
+           <div className="bg-indigo-600 p-5 text-white text-center relative shrink-0">
+               <h3 className="text-xs font-bold uppercase tracking-wider text-indigo-200 mb-1">{title}</h3>
+               <div className="text-2xl sm:text-3xl font-black tracking-tight">
                   {selectedDate ? format(selectedDate, "dd 'de' MMM", { locale: ptBR }) : 'Selecione'}
                </div>
-               <div className="text-lg font-medium text-indigo-200 mt-1">
-                  {time}
+               <div className="text-base font-semibold text-indigo-200 mt-0.5">
+                  {time} hs
                </div>
                <button onClick={onClose} className="absolute top-4 right-4 p-2 text-indigo-200 hover:text-white bg-white/10 hover:bg-white/20 rounded-full transition-colors">
                  <X className="w-5 h-5" />
                </button>
            </div>
            
-           <div className="p-6 space-y-6">
+           <div className="p-4 sm:p-6 space-y-4 sm:space-y-5 overflow-y-auto min-h-0 flex-1">
               <div className="flex items-center justify-between">
-                 <button onClick={() => setCurrentMonth(subMonths(currentMonth, 1))} className="p-2 hover:bg-slate-100 rounded-full text-slate-600 transition-colors">
+                 <button onClick={() => setCurrentMonth(subMonths(currentMonth, 1))} className="p-1.5 hover:bg-slate-100 rounded-full text-slate-600 transition-colors">
                     <ChevronLeft className="w-5 h-5" />
                  </button>
-                 <span className="font-bold text-slate-800 capitalize">
+                 <span className="font-bold text-slate-800 text-sm capitalize">
                     {format(currentMonth, "MMMM yyyy", { locale: ptBR })}
                  </span>
-                 <button onClick={() => setCurrentMonth(addMonths(currentMonth, 1))} className="p-2 hover:bg-slate-100 rounded-full text-slate-600 transition-colors">
+                 <button onClick={() => setCurrentMonth(addMonths(currentMonth, 1))} className="p-1.5 hover:bg-slate-100 rounded-full text-slate-600 transition-colors">
                     <ChevronRight className="w-5 h-5" />
                  </button>
               </div>
 
               <div>
-                 <div className="grid grid-cols-7 gap-1 mb-2">
+                 <div className="grid grid-cols-7 gap-1 mb-1">
                     {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((d, i) => (
-                       <div key={i} className="text-center text-xs font-bold text-slate-400">{d}</div>
+                       <div key={i} className="text-center text-[10px] font-bold text-slate-400">{d}</div>
                     ))}
                  </div>
                  <div className="grid grid-cols-7 gap-1">
@@ -94,12 +96,19 @@ const DateTimePickerModal = ({
                     {days.map(d => {
                        const isSelected = selectedDate && isSameDay(d, selectedDate);
                        const isToday = isSameDay(d, new Date());
+                       const now = new Date();
+                       const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                       const dayOnly = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+                       const isPast = !isAdmin && dayOnly.getTime() < today.getTime();
+
                        return (
                          <button
                            key={d.toISOString()}
+                           disabled={isPast}
                            onClick={() => setSelectedDate(d)}
-                           className={`w-8 h-8 mx-auto flex items-center justify-center rounded-full text-sm transition-all ${
-                             isSelected ? 'bg-indigo-600 text-white font-bold shadow-md scale-110' :
+                           className={`w-7 h-7 sm:w-8 sm:h-8 mx-auto flex items-center justify-center rounded-full text-xs sm:text-sm transition-all ${
+                             isPast ? 'opacity-25 cursor-not-allowed pointer-events-none text-slate-300' :
+                             isSelected ? 'bg-indigo-600 text-white font-bold shadow-md scale-105' :
                              isToday ? 'bg-indigo-50 text-indigo-600 font-bold' :
                              'text-slate-700 hover:bg-slate-100 font-medium'
                            }`}
@@ -111,22 +120,72 @@ const DateTimePickerModal = ({
                  </div>
               </div>
 
-              <div className="pt-4 border-t border-slate-100 flex flex-col items-center gap-3">
-                 <label className="text-xs font-bold uppercase tracking-widest text-slate-400">Horário</label>
-                 <input 
-                   type="time" 
-                   value={time}
-                   onChange={e => setTime(e.target.value)}
-                   className="text-2xl font-black text-slate-800 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all text-center w-full max-w-[160px]"
-                 />
+              <div className="pt-3 border-t border-slate-100 flex flex-col items-center gap-2">
+                 <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Horário</label>
+                 
+                 <div className="flex items-center justify-center gap-2 w-full">
+                   {/* Hora */}
+                   <div className="flex flex-col items-center flex-1 max-w-[100px]">
+                     <span className="text-[9px] font-bold text-slate-400 uppercase mb-1">Hora</span>
+                     <select
+                       value={time.split(':')[0] || '08'}
+                       onChange={e => {
+                         const mins = time.split(':')[1] || '00';
+                         setTime(`${e.target.value}:${mins}`);
+                       }}
+                       className="w-full text-base font-black text-slate-800 bg-slate-50 border border-slate-200 rounded-xl px-2 py-2 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all text-center cursor-pointer shadow-xs"
+                     >
+                       {Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0')).map(h => (
+                         <option key={h} value={h}>{h} h</option>
+                       ))}
+                     </select>
+                   </div>
+
+                   <span className="text-xl font-black text-slate-400 pt-3">:</span>
+
+                   {/* Minutos */}
+                   <div className="flex flex-col items-center flex-1 max-w-[100px]">
+                     <span className="text-[9px] font-bold text-slate-400 uppercase mb-1">Minuto</span>
+                     <select
+                       value={time.split(':')[1] || '00'}
+                       onChange={e => {
+                         const hrs = time.split(':')[0] || '08';
+                         setTime(`${hrs}:${e.target.value}`);
+                       }}
+                       className="w-full text-base font-black text-slate-800 bg-slate-50 border border-slate-200 rounded-xl px-2 py-2 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all text-center cursor-pointer shadow-xs"
+                     >
+                       {Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0')).map(m => (
+                         <option key={m} value={m}>{m} min</option>
+                       ))}
+                     </select>
+                   </div>
+                 </div>
+
+                 {/* Atalhos Rápidos */}
+                 <div className="flex flex-wrap items-center justify-center gap-1 pt-1 w-full">
+                   {['06:00', '07:00', '08:00', '09:00', '12:00', '13:00', '17:00', '18:00'].map(preset => (
+                     <button
+                       key={preset}
+                       type="button"
+                       onClick={() => setTime(preset)}
+                       className={`px-2 py-1 text-[10px] font-bold rounded-lg transition-all ${
+                         time === preset
+                           ? 'bg-indigo-600 text-white shadow-xs scale-105'
+                           : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                       }`}
+                     >
+                       {preset}
+                     </button>
+                   ))}
+                 </div>
               </div>
 
               <button 
                  onClick={handleConfirm}
                  disabled={!selectedDate || !time}
-                 className="w-full py-3.5 bg-slate-900 text-white font-bold rounded-xl shadow-lg hover:bg-slate-800 hover:shadow-xl active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                 className="w-full py-3 bg-slate-900 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-lg hover:bg-slate-800 hover:shadow-xl active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed shrink-0 mt-2"
               >
-                 Confirmar
+                 Confirmar Data e Hora
               </button>
            </div>
        </div>
@@ -226,11 +285,29 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
     checkActiveTrip();
   }, [currentUser]);
 
-  const isGestorOrAdmin = currentUser && (
-    currentUser.role === 'admin' || 
-    currentUser.permissions?.includes('parent_diarias_gestores') || 
-    currentUser.permissions?.includes('parent_diarias')
-  );
+  const [gestoresMap, setGestoresMap] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    const fetchGestoresMap = async () => {
+      try {
+        const gList = await getDiariasGestores();
+        const map: Record<string, string> = {};
+        gList.forEach(g => { map[g.pessoa_id] = g.gestor_id; });
+        setGestoresMap(map);
+      } catch (e) {
+        console.warn("Erro ao buscar gestores em NovoEventoScreen:", e);
+      }
+    };
+    fetchGestoresMap();
+  }, []);
+
+  const isGestorOrAdmin = useMemo(() => {
+    if (!currentUser) return false;
+    if (currentUser.role === 'admin') return true;
+    if (currentUser.permissions?.includes('parent_diarias_gestores')) return true;
+    if (currentUser.permissions?.includes('parent_diarias')) return true;
+    return Object.values(gestoresMap).includes(currentUser.id);
+  }, [currentUser, gestoresMap]);
 
   const isDateExpired = (returnDateStr: string): boolean => {
     if (!returnDateStr) return false;
@@ -259,8 +336,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
     const isAdmin = currentUser && currentUser.role === 'admin';
     const selectedDateTime = parseISO(val);
 
-    // 1. Regra absoluta (válida até mesmo para Administradores):
-    // Validar se a data de saída é posterior à data de retorno (se o retorno já estiver definido)
+    // 1. Regra absoluta: Validar se a data de saída é posterior à data de retorno (se o retorno já estiver definido)
     if (returnDateTime) {
       const retDateTime = parseISO(returnDateTime);
       if (selectedDateTime.getTime() > retDateTime.getTime()) {
@@ -273,32 +349,16 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
       }
     }
 
-    // 2. Regras restritas para usuários comuns (Administradores têm bypass):
+    // 2. Regras restritas para usuários comuns (Administradores têm permissão exclusiva para retroativos):
     if (!isAdmin) {
       const now = new Date();
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const selectedDateOnly = new Date(selectedDateTime.getFullYear(), selectedDateTime.getMonth(), selectedDateTime.getDate());
-
-      // Validar se a data de saída é anterior a hoje
-      if (selectedDateOnly.getTime() < today.getTime()) {
+      if (selectedDateTime.getTime() < now.getTime()) {
         setDateValidationError({
-          title: "Data de Saída Inválida",
-          message: "Não é permitido agendar uma viagem com data de saída anterior ao dia de hoje.",
-          law: "Lançamentos retroativos são de permissão exclusiva da administração."
+          title: "Data e Hora Inválidas",
+          message: "Não é permitido selecionar data e hora anteriores à data e hora atual.",
+          law: `Data e Hora selecionada: ${format(selectedDateTime, "dd/MM/yyyy HH:mm")} • Data e Hora atual: ${format(now, "dd/MM/yyyy HH:mm")}. Lançamentos retroativos são de permissão exclusiva da administração.`
         });
         return;
-      }
-
-      // Validar se a hora de saída é anterior à hora atual (na data de hoje)
-      if (selectedDateOnly.getTime() === today.getTime()) {
-        if (selectedDateTime.getTime() < now.getTime()) {
-          setDateValidationError({
-            title: "Horário de Saída Inválido",
-            message: "Para viagens iniciando no dia de hoje, a hora de saída não pode ser anterior ao horário atual.",
-            law: `Horário selecionado: ${format(selectedDateTime, "HH:mm")} • Horário atual: ${format(now, "HH:mm")}`
-          });
-          return;
-        }
       }
     }
 
@@ -314,8 +374,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
     const isAdmin = currentUser && currentUser.role === 'admin';
     const selectedReturnDateTime = parseISO(val);
 
-    // 1. Regra absoluta (válida até mesmo para Administradores):
-    // Validar se o retorno é anterior à saída (se a saída já estiver definida)
+    // 1. Regra absoluta: Validar se o retorno é anterior à saída (se a saída já estiver definida)
     if (departureDateTime) {
       const depDateTime = parseISO(departureDateTime);
       if (selectedReturnDateTime.getTime() < depDateTime.getTime()) {
@@ -328,11 +387,23 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
       }
     }
 
-    // 2. Regras restritas para usuários comuns (Administradores têm bypass):
-    if (isDateExpired(val) && !isAdmin) {
-      setReturnDateTime('');
-      setIsExpiredModalOpen(true);
-      return;
+    // 2. Regras restritas para usuários comuns (Administradores têm permissão exclusiva para retroativos):
+    if (!isAdmin) {
+      const now = new Date();
+      if (selectedReturnDateTime.getTime() < now.getTime()) {
+        setDateValidationError({
+          title: "Data e Hora de Retorno Inválidas",
+          message: "Não é permitido selecionar data e hora de retorno anteriores à data e hora atual.",
+          law: `Data e Hora selecionada: ${format(selectedReturnDateTime, "dd/MM/yyyy HH:mm")} • Data e Hora atual: ${format(now, "dd/MM/yyyy HH:mm")}. Lançamentos retroativos são de permissão exclusiva da administração.`
+        });
+        return;
+      }
+
+      if (isDateExpired(val)) {
+        setReturnDateTime('');
+        setIsExpiredModalOpen(true);
+        return;
+      }
     }
 
     setReturnDateTime(val);
@@ -621,22 +692,24 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
     if (!isFormValid || !currentUser) return;
     setIsLoading(true);
     
-    const hasReturn = !!returnDateTime.trim();
+    const hasReturn = !!returnDateTime.trim() && isGestorOrAdmin;
+
+    const initialStatus = isGestorOrAdmin
+      ? (hasReturn ? 'aguardando_gestor' : 'viagem_programada')
+      : 'aguardando_aprovacao';
 
     try {
       await createDiariaEvento({
         pessoas: selectedPerson ? [selectedPerson] : [],
         destino: destination,
         data_saida: departureDateTime,
-        // Se o campo RETORNO estiver preenchido, salva a data; caso contrário (data futura sem retorno), salva sentinela para o fluxo Viajar
+        // Se o campo RETORNO for preenchido por gestor/admin, salva a data; caso contrário, salva sentinela para o fluxo Viajar
         data_retorno: hasReturn ? returnDateTime : '2099-12-31T00:00:00.000Z',
         motivo: reason.trim(),
         setor_id: currentUser.sectorId,
         user_id: currentUser.id,
         user_name: currentUser.name,
-        // Se o retorno foi preenchido, vai direto para 'aguardando_gestor' (não vai para /Diarias/Viajar);
-        // Se não tiver retorno preenchido, ativa o fluxo 'viagem_programada' para o card /Diarias/Viajar
-        status: hasReturn ? 'aguardando_gestor' : 'viagem_programada',
+        status: initialStatus,
         hospedagem,
         hospedagem_dias: hospedagem ? hospedagemDias : 0,
         veiculo: selectedVehicle,
@@ -647,8 +720,12 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
       setIsSuccess(true);
       setTimeout(() => {
         setIsSuccess(false);
-        window.history.pushState({}, '', '/Diarias/Lancamentos');
-        window.dispatchEvent(new Event('popstate'));
+        if (onFinish) {
+          onFinish();
+        } else {
+          window.history.pushState({}, '', '/Diarias');
+          window.dispatchEvent(new Event('popstate'));
+        }
       }, 2500);
     } catch (error) {
       alert("Erro ao salvar o evento. Tente novamente.");
@@ -694,23 +771,43 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
     })
   };
 
+  const mobileStepsList = useMemo(() => {
+    const steps = [
+      { key: 'servidor', title: 'Servidor' },
+      { key: 'destino', title: 'Destino' },
+      { key: 'saida', title: 'Data de Saída' },
+    ];
+    if (isGestorOrAdmin) {
+      steps.push({ key: 'retorno', title: 'Data de Retorno' });
+    }
+    steps.push(
+      { key: 'hospedagem', title: 'Hospedagem' },
+      { key: 'veiculo', title: 'Veículo' },
+      { key: 'motivo', title: 'Motivo' },
+      { key: 'revisao', title: 'Revisão' }
+    );
+    return steps;
+  }, [isGestorOrAdmin]);
+
   const isMobileStepValid = (step: number) => {
-    switch (step) {
-      case 1:
+    const stepObj = mobileStepsList[step - 1];
+    if (!stepObj) return false;
+    switch (stepObj.key) {
+      case 'servidor':
         return selectedPerson !== null;
-      case 2:
+      case 'destino':
         return destination !== '' && !isCalculatingDistance;
-      case 3:
+      case 'saida':
         return departureDateTime !== '';
-      case 4:
+      case 'retorno':
         return !returnDateTime || !isDateExpired(returnDateTime);
-      case 5:
+      case 'hospedagem':
         return !hospedagem || (hospedagem && hospedagemDias > 0);
-      case 6:
+      case 'veiculo':
         return selectedVehicle !== '' && (selectedVehicle !== 'OUTRO' || customVehicle.trim() !== '');
-      case 7:
+      case 'motivo':
         return reason.trim().length >= 30;
-      case 8:
+      case 'revisao':
         return isFormValid;
       default:
         return false;
@@ -718,7 +815,8 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
   };
 
   if (isMobile) {
-    const totalMobileSteps = 8;
+    const totalMobileSteps = mobileStepsList.length;
+    const currentMobileStepObj = mobileStepsList[mobileStep - 1] || mobileStepsList[0];
     const canChangePerson = currentUser && (currentUser.role === 'admin' || currentUser.permissions?.includes('parent_diarias'));
     const selectedPersonData = selectedPerson ? persons.find(p => p.id === selectedPerson.id) : null;
     const selectedPersonJob = selectedPersonData 
@@ -770,14 +868,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
             <div className="text-center">
               <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Passo {mobileStep} de {totalMobileSteps}</span>
               <h2 className="text-xs font-bold text-slate-800">
-                {mobileStep === 1 && "Servidor"}
-                {mobileStep === 2 && "Destino"}
-                {mobileStep === 3 && "Data de Saída"}
-                {mobileStep === 4 && "Data de Retorno"}
-                {mobileStep === 5 && "Hospedagem"}
-                {mobileStep === 6 && "Veículo"}
-                {mobileStep === 7 && "Motivo"}
-                {mobileStep === 8 && "Revisão"}
+                {currentMobileStepObj.title}
               </h2>
             </div>
             
@@ -797,12 +888,12 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
                 animate="center"
                 exit="exit"
                 className={`w-full max-w-sm bg-white border border-slate-200/80 rounded-3xl shadow-xl flex flex-col items-center justify-start text-center absolute top-0 ${
-                  mobileStep === 8 ? 'p-4 space-y-3' : 'p-6 space-y-5'
+                  currentMobileStepObj.key === 'revisao' ? 'p-4 space-y-3' : 'p-6 space-y-5'
                 }`}
               >
                 
-                {/* PASSO 1: SERVIDOR */}
-                {mobileStep === 1 && (
+                {/* PASSO: SERVIDOR */}
+                {currentMobileStepObj.key === 'servidor' && (
                   <div className="w-full space-y-6">
                     <div className="space-y-2">
                       <div className="w-14 h-14 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto text-indigo-600 shadow-inner">
@@ -834,8 +925,8 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
                   </div>
                 )}
 
-                {/* PASSO 2: DESTINO */}
-                {mobileStep === 2 && (
+                {/* PASSO: DESTINO */}
+                {currentMobileStepObj.key === 'destino' && (
                   <div className="w-full space-y-6">
                     <div className="space-y-2">
                       <div className="w-14 h-14 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto text-indigo-600 shadow-inner">
@@ -867,8 +958,8 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
                   </div>
                 )}
 
-                {/* PASSO 3: DATA DE SAÍDA */}
-                {mobileStep === 3 && (
+                {/* PASSO: DATA DE SAÍDA */}
+                {currentMobileStepObj.key === 'saida' && (
                   <div className="w-full space-y-6">
                     <div className="space-y-2">
                       <div className="w-14 h-14 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto text-indigo-600 shadow-inner">
@@ -893,8 +984,8 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
                   </div>
                 )}
 
-                {/* PASSO 4: DATA DE RETORNO */}
-                {mobileStep === 4 && (
+                {/* PASSO: DATA DE RETORNO */}
+                {currentMobileStepObj.key === 'retorno' && (
                   <div className="w-full space-y-6">
                     <div className="space-y-2 text-center">
                       <div className="w-14 h-14 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto text-indigo-600 shadow-inner">
@@ -946,8 +1037,8 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
                   </div>
                 )}
 
-                {/* PASSO 5: HOSPEDAGEM */}
-                {mobileStep === 5 && (
+                {/* PASSO: HOSPEDAGEM */}
+                {currentMobileStepObj.key === 'hospedagem' && (
                   <div className="w-full space-y-6">
                     <div className="space-y-2">
                       <div className="w-14 h-14 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto text-indigo-600 shadow-inner">
@@ -1021,8 +1112,8 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
                   </div>
                 )}
 
-                {/* PASSO 6: VEÍCULO */}
-                {mobileStep === 6 && (
+                {/* PASSO: VEÍCULO */}
+                {currentMobileStepObj.key === 'veiculo' && (
                   <div className="w-full space-y-6">
                     <div className="space-y-2">
                       <div className="w-14 h-14 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto text-indigo-600 shadow-inner">
@@ -1070,8 +1161,8 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
                   </div>
                 )}
 
-                {/* PASSO 7: MOTIVO DA VIAGEM */}
-                {mobileStep === 7 && (
+                {/* PASSO: MOTIVO DA VIAGEM */}
+                {currentMobileStepObj.key === 'motivo' && (
                   <div className="w-full space-y-6">
                     <div className="space-y-2">
                       <div className="w-14 h-14 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto text-indigo-600 shadow-inner">
@@ -1103,8 +1194,8 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
                   </div>
                 )}
 
-                {/* PASSO 8: RESUMO & ENVIO */}
-                {mobileStep === 8 && (
+                {/* PASSO: REVISÃO */}
+                {currentMobileStepObj.key === 'revisao' && (
                   <div className="w-full space-y-4">
                     <div className="space-y-1">
                       <div className="w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto text-emerald-600 shadow-inner mb-1">
@@ -1434,6 +1525,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
           onSelect={handleDepartureSelect}
           initialValue={departureDateTime}
           title="Data e Hora de Saída"
+          isAdmin={currentUser?.role === 'admin'}
         />
         
         <DateTimePickerModal
@@ -1442,6 +1534,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
           onSelect={handleReturnSelect}
           initialValue={returnDateTime}
           title="Data e Hora de Retorno"
+          isAdmin={currentUser?.role === 'admin'}
         />
 
         {isExpiredModalOpen && (
@@ -1494,7 +1587,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
                 <p className="text-xs text-emerald-100 font-semibold mt-2">Sua viagem foi registrada com sucesso.</p>
               </div>
               <div className="p-6">
-                <p className="text-sm font-semibold text-slate-500 mb-2">Redirecionando você para a tela de Lançamentos...</p>
+                <p className="text-sm font-semibold text-slate-500 mb-2">Redirecionando você para o Módulo de Diárias...</p>
                 <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mt-4"></div>
               </div>
             </div>
@@ -1752,7 +1845,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
                     </div>
                   </div>
                   {/* Datas */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className={`grid grid-cols-1 ${isGestorOrAdmin ? 'md:grid-cols-2' : ''} gap-6`}>
               <div className="space-y-3">
                 <label className={labelClass}>Saída</label>
                 <div 
@@ -1768,33 +1861,35 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
                   </div>
                 </div>
               </div>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className={labelClass}>Retorno (Opcional)</label>
-                  {returnDateTime && (
-                    <button
-                      type="button"
-                      onClick={() => setReturnDateTime('')}
-                      className="text-[10px] font-bold text-rose-600 hover:text-rose-700 flex items-center gap-1 transition-colors"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                      <span>Limpar (Ativa Viajar)</span>
-                    </button>
-                  )}
-                </div>
-                <div 
-                  onClick={() => setActiveDateModal('return')}
-                  className={`${inputContainerClass} cursor-pointer ${activeDateModal === 'return' ? 'bg-white border-indigo-500 ring-4 ring-indigo-500/5' : ''}`}
-                >
-                  <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                  <span className={`w-full bg-transparent pl-11 pr-10 py-3 text-sm font-medium outline-none truncate ${returnDateTime ? 'text-slate-900' : 'text-slate-400 italic'}`}>
-                    {returnDateTime ? format(parseISO(returnDateTime), "dd/MM/yyyy 'às' HH:mm") : 'Deixar em branco para registrar em /Diarias/Viajar'}
-                  </span>
-                  <div className="absolute right-4 top-1/2 -translate-y-1/2">
-                    <ChevronDown className="w-4 h-4 text-slate-400" />
+              {isGestorOrAdmin && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className={labelClass}>Retorno (Opcional)</label>
+                    {returnDateTime && (
+                      <button
+                        type="button"
+                        onClick={() => setReturnDateTime('')}
+                        className="text-[10px] font-bold text-rose-600 hover:text-rose-700 flex items-center gap-1 transition-colors"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                        <span>Limpar (Ativa Viajar)</span>
+                      </button>
+                    )}
+                  </div>
+                  <div 
+                    onClick={() => setActiveDateModal('return')}
+                    className={`${inputContainerClass} cursor-pointer ${activeDateModal === 'return' ? 'bg-white border-indigo-500 ring-4 ring-indigo-500/5' : ''}`}
+                  >
+                    <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                    <span className={`w-full bg-transparent pl-11 pr-10 py-3 text-sm font-medium outline-none truncate ${returnDateTime ? 'text-slate-900' : 'text-slate-400 italic'}`}>
+                      {returnDateTime ? format(parseISO(returnDateTime), "dd/MM/yyyy 'às' HH:mm") : 'Deixar em branco para registrar em /Diarias/Viajar'}
+                    </span>
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                      <ChevronDown className="w-4 h-4 text-slate-400" />
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
 
@@ -2194,7 +2289,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
               <p className="text-xs text-emerald-100 font-semibold mt-2">Sua viagem foi registrada com sucesso.</p>
             </div>
             <div className="p-6">
-              <p className="text-sm font-semibold text-slate-500 mb-2">Redirecionando você para a tela de Lançamentos...</p>
+              <p className="text-sm font-semibold text-slate-500 mb-2">Redirecionando você para o Módulo de Diárias...</p>
               <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mt-4"></div>
             </div>
           </div>

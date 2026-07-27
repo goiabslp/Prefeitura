@@ -330,7 +330,28 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
   };
 
   const handleGestorApprove = async () => {
-    if (!selectedEvento || justificativaGestor.trim().length < 300) return;
+    if (!selectedEvento) return;
+
+    if (selectedEvento.status === 'aguardando_aprovacao') {
+      setIsSubmitting(true);
+      try {
+        await updateDiariaEvento(selectedEvento.id, {
+          status: 'viagem_programada',
+          justificativa_gestor: justificativaGestor.trim() || undefined,
+          comprovantes_gestor: comprovantes
+        });
+        await fetchEventos();
+        handleCloseModal();
+      } catch (err) {
+        console.error(err);
+        alert("Erro ao aprovar solicitação de viagem.");
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
+
+    if (justificativaGestor.trim().length < 300) return;
     setIsSubmitting(true);
     try {
       const isTransferring = Boolean(transferGestorCargo);
@@ -1004,6 +1025,8 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
         return { label: 'Viagem Programada', style: 'border-indigo-200 bg-indigo-50 text-indigo-700' };
       case 'em_viagem':
         return { label: 'Em Viagem', style: 'border-emerald-300 bg-emerald-100 text-emerald-800 animate-pulse' };
+      case 'aguardando_aprovacao':
+        return { label: 'Aguardando Aprovação', style: 'border-amber-200 bg-amber-50 text-amber-700' };
       case 'aguardando_gestor':
         return { label: 'Aguardando Gestor', style: 'border-amber-200 bg-amber-50 text-amber-700' };
       case 'rejeitado_gestor':
@@ -1121,18 +1144,25 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                   
                   const pessoaId = evento.pessoas[0]?.id || '';
                   const gestorId = gestoresMap[pessoaId] || '';
+                  const hasGestor = !!gestorId;
+
                   const isConfiguredGestor = currentUser?.id === gestorId;
+                  const isAdmin = currentUser?.role === 'admin';
 
                   const isTransferredGestor = evento.gestor_transferido_cargo
-                    ? (currentUser?.jobTitle?.trim().toLowerCase() === evento.gestor_transferido_cargo.trim().toLowerCase() || currentUser?.role === 'admin')
+                    ? (currentUser?.jobTitle?.trim().toLowerCase() === evento.gestor_transferido_cargo.trim().toLowerCase() || isAdmin)
                     : false;
 
-                  const isCurrentUserGestor = evento.gestor_transferido_cargo ? isTransferredGestor : (isConfiguredGestor || currentUser?.role === 'admin');
+                  const isCurrentUserGestor = evento.gestor_transferido_cargo ? isTransferredGestor : (isConfiguredGestor || isAdmin);
+
+                  const canApproveAguardandoAprovacao = evento.status === 'aguardando_aprovacao' && (
+                    hasGestor ? (isConfiguredGestor || isAdmin) : isAdmin
+                  );
 
                   const gestorCanAct = (evento.status === 'aguardando_gestor' || !evento.status) && isCurrentUserGestor;
-                  const adminCanAct = evento.status === 'aguardando_administrador' && currentUser?.role === 'admin';
+                  const adminCanAct = evento.status === 'aguardando_administrador' && isAdmin;
 
-                  const canAct = gestorCanAct || adminCanAct;
+                  const canAct = canApproveAguardandoAprovacao || gestorCanAct || adminCanAct;
 
                   return (
                     <div key={evento.id} className="mx-4 my-3 p-5 rounded-3xl bg-white border border-slate-200/80 shadow-[0_4px_20px_rgba(0,0,0,0.02)] hover:border-indigo-100 desktop:mx-0 desktop:my-0 desktop:rounded-none desktop:bg-transparent desktop:border-0 desktop:border-b desktop:border-slate-100 desktop:shadow-none desktop:px-8 desktop:py-5 flex flex-col desktop:grid desktop:grid-cols-12 gap-4 hover:bg-slate-50/80 transition-all duration-200 items-stretch desktop:items-center">
@@ -1623,7 +1653,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
             </div>
 
             <div className="px-4 sm:px-8 py-4 border-t border-slate-200 bg-white flex flex-row items-center justify-end gap-2 sm:gap-3 shrink-0">
-              {(selectedEvento.status === 'aguardando_gestor' || !selectedEvento.status) ? (
+              {(selectedEvento.status === 'aguardando_gestor' || selectedEvento.status === 'aguardando_aprovacao' || !selectedEvento.status) ? (
                 <button 
                   onClick={() => setIsRejectModalOpen(true)}
                   className="px-4 sm:px-6 py-2.5 sm:py-3 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 font-bold text-xs uppercase tracking-wider rounded-xl sm:rounded-2xl transition-colors w-full sm:w-auto text-center"
@@ -1636,6 +1666,16 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                   className="px-4 sm:px-6 py-2.5 sm:py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs uppercase tracking-wider rounded-xl sm:rounded-2xl transition-colors w-full sm:w-auto text-center"
                 >
                   Fechar
+                </button>
+              )}
+              {selectedEvento.status === 'aguardando_aprovacao' && (
+                <button 
+                  onClick={handleGestorApprove}
+                  disabled={isSubmitting || isUploading}
+                  className="px-4 sm:px-7 py-2.5 sm:py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white font-black text-xs uppercase tracking-widest rounded-xl sm:rounded-2xl transition-all shadow-lg shadow-emerald-600/20 active:scale-95 flex items-center justify-center gap-2 w-full sm:w-auto whitespace-nowrap"
+                >
+                  {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                  <span>Aprovar Viagem</span>
                 </button>
               )}
               {(selectedEvento.status === 'aguardando_gestor' || !selectedEvento.status) && (
