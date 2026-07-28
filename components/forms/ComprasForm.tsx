@@ -30,6 +30,7 @@ interface ComprasFormProps {
   canFinish?: boolean; // Added to validate mandatory steps before finishing
   isLoading?: boolean;
   currentUser: UserType;
+  isMobile?: boolean;
 }
 
 const UNIT_OPTIONS = [
@@ -63,7 +64,8 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
   onFinish,
   canFinish = true,
   isLoading = false,
-  currentUser
+  currentUser,
+  isMobile = false
 }) => {
   // ORDENAÇÃO ALFABÉTICA DAS ASSINATURAS
   const sortedSignatures = useMemo(() => {
@@ -256,10 +258,8 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
       </div> 
       */}
 
-      {/* END OF HEADER BLOCK */}
-
-      {/* STEP 1: DETALHES (Solicitante, Requisição, Justificativa) */}
-      {currentStep === 1 && (
+      {/* END OF HEAD      {/* STEP 1 (Desktop): DETALHES (Solicitante, Requisição, Justificativa) */}
+      {!isMobile && currentStep === 1 && (
         <>
           {/* Requisição (Reordenado - Primeiro Bloco) */}
           <div className="space-y-4 border-t border-slate-200 pt-6">
@@ -325,7 +325,6 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
                   {PRIORITY_OPTIONS.map((opt) => {
                     const Icon = opt.icon;
                     const isSelected = content.priority === opt.value;
-                    // Colors for selected state
                     const selectedColors = {
                       slate: 'bg-white text-slate-700 shadow-sm ring-1 ring-black/5',
                       indigo: 'bg-indigo-600 text-white shadow-md shadow-indigo-500/30',
@@ -444,19 +443,225 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
               </div>
             </div>
           </div>
-
-
         </>
       )}
 
-      {/* STEP 2: ITENS DA REQUISIÇÃO */}
-      {currentStep === 2 && (
-        <div className="space-y-4 border-t border-slate-200 pt-6">
-          <div className="mb-6">
-            <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-              <Plus className="w-4 h-4 text-emerald-600" /> Itens da Requisição
-            </h3>
+      {/* MOBILE STEP 1: Solicitante */}
+      {isMobile && currentStep === 1 && (
+        <div className="space-y-4">
+          <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+            <User className="w-4 h-4 text-emerald-600" /> Dados do Solicitante
+          </h3>
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+            <div>
+              <label className={labelClass}>NOME COMPLETO</label>
+              <div
+                onClick={() => setIsRequesterOpen(true)}
+                className={`${inputClass} flex items-center justify-between cursor-pointer py-3 hover:border-emerald-500 transition-colors bg-white`}
+              >
+                <span className={content.requesterName ? 'text-slate-900 font-bold' : 'text-slate-400'}>
+                  {content.requesterName || 'Selecione o Solicitante...'}
+                </span>
+                <ChevronDown className="w-4 h-4 text-slate-400" />
+              </div>
+
+              <SelectionModal<Person>
+                isOpen={isRequesterOpen}
+                onClose={() => setIsRequesterOpen(false)}
+                title="Selecionar Solicitante"
+                subtitle="Escolha a pessoa que está realizando a solicitação"
+                options={persons}
+                searchPlaceholder="Buscar por nome..."
+                filterFunction={(person, query) => normalizeText(person.name).includes(normalizeText(query))}
+                getInternalId={(person) => person.id}
+                selectedItem={persons.find(p => p.name === content.requesterName)}
+                onSelect={(person) => handlePersonSelect(person.id)}
+                renderItem={(person, isSelected) => (
+                  <div className="flex items-center gap-4 px-4 py-3">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shrink-0 ${isSelected ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                      {person.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1">
+                      <p className={`font-bold text-sm ${isSelected ? 'text-emerald-950' : 'text-slate-700'}`}>{person.name}</p>
+                      <p className="text-[11px] text-slate-400 font-medium">
+                        {jobs.find(j => j.id === person.jobId)?.name || 'Sem cargo'} • {sectors.find(s => s.id === person.sectorId)?.name || 'Sem setor'}
+                      </p>
+                    </div>
+                    {isSelected && (
+                      <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+                        <Check className="w-3.5 h-3.5 text-emerald-600" />
+                      </div>
+                    )}
+                  </div>
+                )}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className={labelClass}>Cargo</label>
+                <input
+                  type="text" value={content.requesterRole || ''}
+                  readOnly
+                  className={`${inputClass} bg-slate-100/50 cursor-not-allowed text-slate-500`}
+                  placeholder="Cargo automático"
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Setor</label>
+                <input
+                  type="text" value={content.requesterSector || ''}
+                  readOnly
+                  className={`${inputClass} bg-slate-100/50 cursor-not-allowed text-slate-500`}
+                  placeholder="Setor automático"
+                />
+              </div>
+            </div>
           </div>
+        </div>
+      )}
+
+      {/* MOBILE STEP 2: Finalidade */}
+      {isMobile && currentStep === 2 && (
+        <div className="space-y-4 animate-fade-in">
+          <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+            <ShoppingCart className="w-4 h-4 text-emerald-600" /> Finalidade do Pedido
+          </h3>
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+            <div>
+              <div className="flex justify-between items-center mb-1.5 flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <label className={labelClass}>Finalidade</label>
+                  <button
+                    type="button"
+                    onClick={handlePolishTitle}
+                    disabled={isPolishingTitle || !content.title?.trim()}
+                    className="px-2 py-0.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-lg text-[9px] font-black uppercase tracking-wider transition-all disabled:opacity-40 flex items-center justify-center gap-1 shadow-xs active:scale-95 shrink-0"
+                    title="Melhorar finalidade com IA Gemini"
+                  >
+                    {isPolishingTitle ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
+                        <span>Lapidando...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                        <span>Lapidar IA</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+                <span className={`text-xs font-black tracking-wider uppercase px-3 py-1.5 rounded-full flex items-center gap-1.5 border transition-all duration-300 ${
+                  (content.title?.length || 0) >= 100 
+                    ? 'bg-emerald-100 text-emerald-800 border-emerald-200 shadow-sm' 
+                    : 'bg-rose-100 text-rose-800 border-rose-200 shadow-sm animate-pulse'
+                }`}>
+                  {(content.title?.length || 0) >= 100 ? (
+                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                  ) : (
+                    <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                  )}
+                  <span>{content.title?.length || 0} / 100</span>
+                </span>
+              </div>
+              <div className="relative group">
+                <textarea
+                  value={content.title || ''}
+                  onChange={(e) => handleUpdate('content', 'title', e.target.value)}
+                  disabled={isPolishingTitle}
+                  className="w-full min-h-[220px] bg-slate-50/50 border border-slate-200 rounded-2xl p-4 text-sm font-bold text-slate-900 outline-none focus:bg-white focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/5 transition-all resize-none leading-relaxed disabled:opacity-60"
+                  placeholder="Descreva detalhadamente a finalidade do pedido (mínimo de 100 caracteres)..."
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MOBILE STEP 3: Prioridade */}
+      {isMobile && currentStep === 3 && (
+        <div className="space-y-4 animate-fade-in">
+          <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+            <Info className="w-4 h-4 text-emerald-600" /> Nível de Urgência
+          </h3>
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+            <div className="flex flex-col gap-3">
+              <div>
+                <label className={labelClass}>Prioridade</label>
+                <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Selecione o nível de urgência</p>
+              </div>
+              <div className="flex bg-slate-100/80 p-1 rounded-full gap-1 w-full border border-slate-200/50">
+                {PRIORITY_OPTIONS.map((opt) => {
+                  const Icon = opt.icon;
+                  const isSelected = content.priority === opt.value;
+                  const selectedColors = {
+                    slate: 'bg-white text-slate-700 shadow-sm ring-1 ring-black/5',
+                    indigo: 'bg-indigo-600 text-white shadow-md shadow-indigo-500/30',
+                    amber: 'bg-amber-500 text-white shadow-md shadow-amber-500/30',
+                    rose: 'bg-rose-500 text-white shadow-md shadow-rose-500/30',
+                  };
+
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => handleUpdate('content', 'priority', opt.value)}
+                      className={`
+                        flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-full text-[10px] font-black uppercase tracking-wider transition-all duration-300
+                        ${isSelected
+                          ? selectedColors[opt.color as keyof typeof selectedColors]
+                          : 'text-slate-400 hover:bg-white/50 hover:text-slate-600'}
+                      `}
+                    >
+                      <Icon className={`w-3.5 h-3.5 ${isSelected ? '' : 'opacity-70'}`} />
+                      <span>{opt.label.slice(0, 3)}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {showPriorityJustification && (
+              <div className="pt-4 animate-slide-up">
+                <label className={labelClass}>Justificativa da {content.priority}</label>
+                <div className="relative">
+                  <textarea
+                    value={content.priorityJustification || ''}
+                    onChange={(e) => handleUpdate('content', 'priorityJustification', e.target.value)}
+                    className={`${inputClass} min-h-[120px] resize-none leading-relaxed p-4 border-rose-100 bg-rose-50/20`}
+                    placeholder={`Por que este pedido tem prioridade ${content.priority}?`}
+                  />
+                  <MessageSquare className="absolute right-3 top-3 w-4 h-4 text-rose-300 pointer-events-none" />
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* STEP 2: ITENS DA REQUISIÇÃO */}
+      {((!isMobile && currentStep === 2) || (isMobile && currentStep === 4)) && (
+        <div className={isMobile ? "w-full bg-white border border-slate-200/80 rounded-3xl shadow-xl p-6 space-y-5 flex flex-col" : "space-y-4 border-t border-slate-200 pt-6"}>
+          {isMobile ? (
+            <div className="text-center flex flex-col items-center space-y-4 mb-4">
+              <div className="w-14 h-14 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto text-emerald-600 shadow-inner">
+                <ShoppingCart className="w-7 h-7" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-xl font-black text-slate-900 tracking-tight">Itens do Pedido</h3>
+                <p className="text-slate-500 text-xs font-medium max-w-xs mx-auto">
+                  Adicione os produtos ou serviços que deseja solicitar.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="mb-6">
+              <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                <Plus className="w-4 h-4 text-emerald-600" /> Itens da Requisição
+              </h3>
+            </div>
+          )}
 
           <div className="space-y-4" ref={dropdownRef}>
             {/* SORTABLE / LIST LIST */}
@@ -648,12 +853,26 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
       )}
 
       {/* STEP 3: JUSTIFICATIVA (Moved from Step 1) */}
-      {currentStep === 3 && (
-        <div className="space-y-4 border-t border-slate-200 pt-6">
-          <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-            <MessageSquare className="w-4 h-4 text-emerald-600" /> Justificativa do Pedido
-          </h3>
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+      {((!isMobile && currentStep === 3) || (isMobile && currentStep === 5)) && (
+        <div className={isMobile ? "w-full bg-white border border-slate-200/80 rounded-3xl shadow-xl p-6 space-y-5 flex flex-col animate-fade-in" : "space-y-4 border-t border-slate-200 pt-6"}>
+          {isMobile ? (
+            <div className="text-center flex flex-col items-center space-y-4 mb-2">
+              <div className="w-14 h-14 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto text-emerald-600 shadow-inner">
+                <MessageSquare className="w-7 h-7" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-xl font-black text-slate-900 tracking-tight">Justificativa da Compra</h3>
+                <p className="text-slate-500 text-xs font-medium max-w-xs mx-auto">
+                  Forneça o embasamento legal e justificativa pública da necessidade.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+              <MessageSquare className="w-4 h-4 text-emerald-600" /> Justificativa do Pedido
+            </h3>
+          )}
+          <div className={isMobile ? "space-y-4 text-left w-full" : "bg-white p-6 rounded-2xl border border-slate-200 shadow-sm"}>
             <div className="flex justify-between items-center mb-2 flex-wrap gap-2">
               <div className="flex items-center gap-2">
                 <label className={labelClass}>Descrição da Necessidade</label>
@@ -709,12 +928,26 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
       )}
 
       {/* STEP 4: ANEXOS (Formerly Cotação) */}
-      {currentStep === 4 && (
-        <div className="space-y-4 border-t border-slate-200 pt-6">
-          <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-            <Paperclip className="w-4 h-4 text-emerald-600" /> Anexos e Cotações
-          </h3>
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+      {((!isMobile && currentStep === 4) || (isMobile && currentStep === 6)) && (
+        <div className={isMobile ? "w-full bg-white border border-slate-200/80 rounded-3xl shadow-xl p-6 space-y-5 flex flex-col animate-fade-in" : "space-y-4 border-t border-slate-200 pt-6"}>
+          {isMobile ? (
+            <div className="text-center flex flex-col items-center space-y-4 mb-2">
+              <div className="w-14 h-14 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto text-emerald-600 shadow-inner">
+                <Paperclip className="w-7 h-7" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-xl font-black text-slate-900 tracking-tight">Arquivos Anexos</h3>
+                <p className="text-slate-500 text-xs font-medium max-w-xs mx-auto">
+                  Adicione orçamentos, cotações ou outros arquivos relevantes (opcional).
+                </p>
+              </div>
+            </div>
+          ) : (
+            <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+              <Paperclip className="w-4 h-4 text-emerald-600" /> Anexos e Cotações
+            </h3>
+          )}
+          <div className={isMobile ? "space-y-4 text-left w-full" : "bg-white p-6 rounded-2xl border border-slate-200 shadow-sm"}>
 
             {/* Upload Area */}
             <div className="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center hover:bg-slate-50 transition-colors cursor-pointer relative">
@@ -814,20 +1047,25 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
       )}
 
       {/* STEP 5: FICHA */}
-      {currentStep === 5 && (
-        <div className="space-y-8 animate-fade-in pt-6 flex flex-col items-center justify-center min-h-[40vh]">
-          <div className="w-full max-w-md text-center space-y-6">
-            <div className="space-y-2">
-              <h3 className="text-2xl font-black text-slate-900 tracking-tight flex items-center justify-center gap-3">
-                <CreditCard className="w-8 h-8 text-emerald-600" /> Ficha Orçamentária
+      {((!isMobile && currentStep === 5) || (isMobile && currentStep === 7)) && (
+        <div className={isMobile ? "w-full bg-white border border-slate-200/80 rounded-3xl shadow-xl p-6 space-y-5 flex flex-col items-center animate-fade-in" : "space-y-8 animate-fade-in pt-6 flex flex-col items-center justify-center min-h-[40vh]"}>
+          <div className={isMobile ? "w-full space-y-6" : "w-full max-w-md text-center space-y-6"}>
+            <div className="space-y-2 text-center flex flex-col items-center">
+              {isMobile ? (
+                <div className="w-14 h-14 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto text-emerald-600 shadow-inner mb-2">
+                  <CreditCard className="w-7 h-7" />
+                </div>
+              ) : null}
+              <h3 className={isMobile ? "text-xl font-black text-slate-900 tracking-tight" : "text-2xl font-black text-slate-900 tracking-tight flex items-center justify-center gap-3"}>
+                {!isMobile && <CreditCard className="w-8 h-8 text-emerald-600" />} Ficha Orçamentária
               </h3>
-              <p className="text-sm text-slate-500 font-medium">
+              <p className="text-xs text-slate-500 font-medium max-w-xs mx-auto">
                 Informe a Ficha Orçamentária para a destinação do recurso.
               </p>
             </div>
             
-            <div className="space-y-4">
-              <div className="bg-white p-6 rounded-2xl border-2 border-slate-200 focus-within:border-emerald-500 focus-within:ring-4 focus-within:ring-emerald-500/20 shadow-sm transition-all text-left">
+            <div className="space-y-4 w-full">
+              <div className={isMobile ? "bg-slate-50 p-6 rounded-2xl border-2 border-slate-200 focus-within:border-emerald-500 focus-within:ring-4 focus-within:ring-emerald-500/20 shadow-xs transition-all text-left" : "bg-white p-6 rounded-2xl border-2 border-slate-200 focus-within:border-emerald-500 focus-within:ring-4 focus-within:ring-emerald-500/20 shadow-sm transition-all text-left"}>
                 <label className="block text-xs font-black uppercase tracking-wider text-slate-500 mb-2">
                   Número da Ficha (Obrigatório)
                 </label>
@@ -845,14 +1083,19 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
       )}
 
       {/* STEP 6: ORIGEM */}
-      {currentStep === 6 && (
-        <div className="space-y-8 animate-fade-in pt-6 flex flex-col items-center justify-center min-h-[40vh]">
-          <div className="w-full max-w-lg text-center space-y-6">
-            <div className="space-y-2">
-              <h3 className="text-2xl font-black text-slate-900 tracking-tight flex items-center justify-center gap-3">
-                <FileText className="w-8 h-8 text-indigo-600" /> Origem
+      {((!isMobile && currentStep === 6) || (isMobile && currentStep === 8)) && (
+        <div className={isMobile ? "w-full bg-white border border-slate-200/80 rounded-3xl shadow-xl p-6 space-y-5 flex flex-col items-center animate-fade-in" : "space-y-8 animate-fade-in pt-6 flex flex-col items-center justify-center min-h-[40vh]"}>
+          <div className={isMobile ? "w-full space-y-6" : "w-full max-w-lg text-center space-y-6"}>
+            <div className="space-y-2 text-center flex flex-col items-center">
+              {isMobile ? (
+                <div className="w-14 h-14 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto text-indigo-600 shadow-inner mb-2">
+                  <FileText className="w-7 h-7" />
+                </div>
+              ) : null}
+              <h3 className={isMobile ? "text-xl font-black text-slate-900 tracking-tight" : "text-2xl font-black text-slate-900 tracking-tight flex items-center justify-center gap-3"}>
+                {!isMobile && <FileText className="w-8 h-8 text-indigo-600" />} Origem do Pedido
               </h3>
-              <p className="text-sm text-slate-500 font-medium">
+              <p className="text-xs text-slate-500 font-medium max-w-xs mx-auto">
                 Selecione a origem e informe o número correspondente.
               </p>
             </div>
@@ -912,11 +1155,25 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
       )}
 
       {/* STEP 7: ASSINAR (Formerly Conclusão) */}
-      {currentStep === 7 && (
-        <div className="space-y-4 border-t border-slate-200 pt-6">
-          <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-            <ShieldCheck className="w-4 h-4 text-emerald-600" /> Assinatura Digital
-          </h3>
+      {((!isMobile && currentStep === 7) || (isMobile && currentStep === 9)) && (
+        <div className={isMobile ? "w-full bg-white border border-slate-200/80 rounded-3xl shadow-xl p-6 space-y-5 flex flex-col animate-fade-in" : "space-y-4 border-t border-slate-200 pt-6"}>
+          {isMobile ? (
+            <div className="text-center flex flex-col items-center space-y-4 mb-2">
+              <div className="w-14 h-14 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto text-emerald-600 shadow-inner">
+                <ShieldCheck className="w-7 h-7" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-xl font-black text-slate-900 tracking-tight">Assinatura Digital</h3>
+                <p className="text-slate-500 text-xs font-medium max-w-xs mx-auto">
+                  Revise os dados e assine digitalmente para finalizar o pedido.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-emerald-600" /> Assinatura Digital
+            </h3>
+          )}
 
           {/* STEP 5 LOGIC: 2FA & Certificate */}
           {/* If Signed, show ONLY the Certificate */}

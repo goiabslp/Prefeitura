@@ -5,7 +5,7 @@ import {
   MessageSquare, ArrowRight, ChevronRight, Car, AlertTriangle,
   Bed, Plus, Minus, Trash2, Mic, MicOff, Sparkles, Wand2, Info
 } from 'lucide-react';
-import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, parseISO, addMinutes } from 'date-fns';
+import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, parseISO, addMinutes, addHours } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Person, User, Sector, Job, Vehicle, DiariaEvento } from '../../types';
 import { createDiariaEvento, getDiariasGestores, getAllDiariaEventos } from '../../services/diariasEventosService';
@@ -341,8 +341,28 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
       const evtVeiculoStr = normalize(typeof evt.veiculo === 'string' ? evt.veiculo : (evt.veiculo as any)?.plate || (evt.veiculo as any)?.model || '');
       if (!evtVeiculoStr) return false;
 
-      if (vPlate && evtVeiculoStr.includes(vPlate)) return true;
-      if (vBrandModel && evtVeiculoStr.includes(vBrandModel)) return true;
+      const isSameVehicle = (vPlate && evtVeiculoStr.includes(vPlate)) || (vBrandModel && evtVeiculoStr.includes(vBrandModel));
+      if (!isSameVehicle) return false;
+
+      // Validação de interseção de períodos
+      if (departureDateTime) {
+        try {
+          const novaSaida = parseISO(departureDateTime);
+          const novaRetorno = returnDateTime ? parseISO(returnDateTime) : addHours(novaSaida, 4);
+
+          const evtSaida = evt.data_saida ? parseISO(evt.data_saida) : null;
+          const evtRetorno = evt.data_retorno ? parseISO(evt.data_retorno) : (evtSaida ? addHours(evtSaida, 4) : null);
+
+          if (evtSaida && evtRetorno) {
+            // Se houver sobreposição, o veículo fica indisponível para este período
+            const hasOverlap = (novaSaida.getTime() < evtRetorno.getTime()) && (novaRetorno.getTime() > evtSaida.getTime());
+            return hasOverlap;
+          }
+        } catch (e) {
+          console.warn("Erro ao processar as datas na validação de disponibilidade:", e);
+        }
+      }
+
       return false;
     });
 
@@ -591,7 +611,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
       return;
     }
 
-    const isAdmin = currentUser && currentUser.role === 'admin';
+    const isAdmin = currentUser && (currentUser.role === 'admin' || currentUser.permissions?.includes('parent_diarias_gestores'));
     const selectedDateTime = parseISO(val);
 
     // 1. Regra absoluta: Validar se a data de saída é posterior à data de retorno (se o retorno já estiver definido)
@@ -631,7 +651,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
       return;
     }
 
-    const isAdmin = currentUser && currentUser.role === 'admin';
+    const isAdmin = currentUser && (currentUser.role === 'admin' || currentUser.permissions?.includes('parent_diarias_gestores'));
     const selectedReturnDateTime = parseISO(val);
 
     // 1. Regra absoluta: Validar se o retorno é anterior à saída (se a saída já estiver definida)
@@ -738,8 +758,12 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
     selectedPersons.every(p => p && p.id && p.name) &&
     destination && 
     departureDateTime && 
-    (!returnDateTime || !isDateExpired(returnDateTime)) &&
+    (!returnDateTime || !isDateExpired(returnDateTime) || isGestorOrAdmin) &&
     (selectedVehicle !== '' && (selectedVehicle !== 'OUTRO' || customVehicle.trim() !== '')) &&
+    (selectedVehicle === '' || selectedVehicle === 'OUTRO' || (() => {
+      const v = vehicles.find(veh => `${veh.brand} ${veh.model} - ${veh.plate}` === selectedVehicle);
+      return v ? getVehicleStatusInfo(v).isAvailable : true;
+    })()) &&
     (!hospedagem || (hospedagem && hospedagemDias > 0)) &&
     distancia !== '';
   
@@ -973,12 +997,12 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
     return allowedVehicles.filter(v => 
       normalizeText(`${v.brand} ${v.model} ${v.plate}`).includes(term)
     );
-  }, [vehicles, vehicleSearch]);
+  }, [vehicles, vehicleSearch, departureDateTime, returnDateTime, diariaEvents]);
 
   const isFormValid = isStep1Valid && reason.trim().length >= 50;
 
   const handleSubmit = async () => {
-    if (returnDateTime && isDateExpired(returnDateTime) && currentUser?.role !== 'admin') {
+    if (returnDateTime && isDateExpired(returnDateTime) && !isGestorOrAdmin) {
       setIsExpiredModalOpen(true);
       return;
     }
@@ -1095,7 +1119,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
       case 'saida':
         return departureDateTime !== '';
       case 'retorno':
-        return !returnDateTime || !isDateExpired(returnDateTime);
+        return !returnDateTime || !isDateExpired(returnDateTime) || isGestorOrAdmin;
       case 'hospedagem':
         return !hospedagem || (hospedagem && hospedagemDias > 0);
       case 'veiculo':
@@ -1940,7 +1964,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
           onSelect={handleDepartureSelect}
           initialValue={departureDateTime}
           title="Data e Hora de Saída"
-          isAdmin={currentUser?.role === 'admin'}
+          isAdmin={currentUser?.role === 'admin' || currentUser?.permissions?.includes('parent_diarias_gestores')}
         />
         
         <DateTimePickerModal
@@ -1949,7 +1973,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
           onSelect={handleReturnSelect}
           initialValue={returnDateTime}
           title="Data e Hora de Retorno"
-          isAdmin={currentUser?.role === 'admin'}
+          isAdmin={currentUser?.role === 'admin' || currentUser?.permissions?.includes('parent_diarias_gestores')}
         />
 
         {isExpiredModalOpen && (
@@ -2152,7 +2176,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
               {currentStep === 1 ? (
                   <button
                       onClick={() => {
-                        if (returnDateTime && isDateExpired(returnDateTime) && currentUser?.role !== 'admin') {
+                        if (returnDateTime && isDateExpired(returnDateTime) && !isGestorOrAdmin) {
                           setIsExpiredModalOpen(true);
                           return;
                         }
@@ -2769,7 +2793,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
         onSelect={handleDepartureSelect}
         initialValue={departureDateTime}
         title="Data e Hora de Saída"
-        isAdmin={currentUser?.role === 'admin'}
+        isAdmin={currentUser?.role === 'admin' || currentUser?.permissions?.includes('parent_diarias_gestores')}
       />
       
       <DateTimePickerModal
@@ -2778,7 +2802,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
         onSelect={handleReturnSelect}
         initialValue={returnDateTime}
         title="Data e Hora de Retorno"
-        isAdmin={currentUser?.role === 'admin'}
+        isAdmin={currentUser?.role === 'admin' || currentUser?.permissions?.includes('parent_diarias_gestores')}
       />
 
       {/* Modal - Data da Diária Expirada (Regra dos 10 Dias) */}
