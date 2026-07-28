@@ -298,12 +298,14 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
       `}} />
 
         {/* Lado Direito: Ações e Perfil */}
-        < div className="flex items-center gap-2 md:gap-4" >
+        <div className="flex items-center gap-2 md:gap-4">
 
-          {/* Usuários Online */}
-          <OnlineUsers currentUser={currentUser} />
+          {/* Usuários Online - Desktop apenas */}
+          <div className="hidden md:flex items-center">
+            <OnlineUsers currentUser={currentUser} />
+          </div>
 
-          {/* REFRESH BUTTON */}
+          {/* REFRESH BUTTON - Desktop apenas */}
           <button
             onClick={() => {
               if (isFormScreen()) {
@@ -313,7 +315,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
               handleSmartRefresh();
             }}
             disabled={isRefreshing}
-            className={`p-2 rounded-xl transition-all active:scale-95 group relative
+            className={`hidden md:flex p-2 rounded-xl transition-all active:scale-95 group relative
               ${isRefreshing ? 'bg-indigo-50 text-indigo-600' : 'text-slate-400 hover:bg-slate-50 hover:text-indigo-600'}
               ${isFormScreen() ? 'opacity-50 cursor-help text-slate-300' : ''}
             `}
@@ -327,22 +329,25 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
           {isNotHome && (
             <button
               onClick={onGoHome}
-              className="flex items-center gap-2 px-4 py-2 text-slate-600 hover:text-indigo-600 hover:bg-slate-50 text-xs font-bold rounded-xl transition-all active:scale-95"
+              className="hidden md:flex items-center gap-2 px-4 py-2 text-slate-600 hover:text-indigo-600 hover:bg-slate-50 text-xs font-bold rounded-xl transition-all active:scale-95"
             >
               <Home className="w-4 h-4" />
               <span className="hidden desktop:inline">Início</span>
             </button>
           )}
 
+          {/* 2FA Status - Desktop apenas */}
+          <div className="hidden md:block">
+            <TwoFactorStatus />
+          </div>
 
+          {/* Notification Center - Desktop apenas */}
+          <div className="hidden md:block">
+            <NotificationBell />
+          </div>
 
-          {/* Notification Center */}
-          <TwoFactorStatus />
-
-          <div className="w-2"></div>
-          <NotificationBell />
-
-          <div className="flex items-center gap-3 pl-2">
+          {/* Profile Dropdown - Desktop apenas */}
+          <div className="hidden md:flex items-center gap-3 pl-2">
             <div className="hidden lg:flex flex-col items-end">
               <span className="text-xs font-bold text-slate-900 leading-none">{currentUser.name.split(' ')[0]}</span>
               <span className="text-[10px] font-medium text-slate-500 mt-0.5">{currentUser.jobTitle || 'Usuário'}</span>
@@ -385,22 +390,19 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                 </button>
               </div>
             </div>
-
-            {
-              isAdmin && currentView !== 'admin' && (
-                <button
-                  onClick={() => onOpenAdmin(null)}
-                  className="p-2 rounded-xl text-slate-400 hover:bg-slate-50 hover:text-indigo-600 transition-all active:scale-95 group"
-                  title="Administração"
-                >
-                  <Settings className="w-5 h-5" />
-                </button>
-              )
-            }
           </div>
-        </div >
-      </div >
-    </header >
+
+          {/* Botão de Configurações - Visível no mobile e no desktop */}
+          <button
+            onClick={() => onOpenAdmin(null)}
+            className="p-2 rounded-xl text-slate-500 hover:bg-slate-50 hover:text-indigo-600 transition-all active:scale-95 group"
+            title="Configurações"
+          >
+            <Settings className="w-5 h-5 text-slate-600 group-hover:text-indigo-600 transition-colors" />
+          </button>
+        </div>
+      </div>
+    </header>
   );
 };
 

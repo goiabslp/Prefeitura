@@ -3721,7 +3721,7 @@ const App: React.FC = () => {
             </>
           )}
 
-          <div className="hidden md:block">
+          <div className="w-full">
             {currentUser && <AppHeader
               currentUser={currentUser}
               uiConfig={appState.ui}
