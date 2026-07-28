@@ -1,10 +1,11 @@
 
 import React, { useState, useEffect } from 'react';
-import { User, Lock, ArrowRight, FileText, ShieldCheck, CheckCircle2, Eye, EyeOff, ShoppingCart, Truck, Users, Leaf, HardHat } from 'lucide-react';
+import { User, Lock, ArrowRight, FileText, ShieldCheck, CheckCircle2, Eye, EyeOff, ShoppingCart, Truck, Users, Leaf, HardHat, ScanFace, Fingerprint } from 'lucide-react';
 import { UIConfig } from '../types';
 import { getCachedImage, IMAGE_KEYS } from '../services/cacheService';
 import { supabase } from '../services/supabaseClient';
 import { auditLogService } from '../services/auditLogService';
+import { authenticateWithBiometrics, setBiometricsEnabled } from '../services/biometricService';
 
 interface LoginScreenProps {
   onLogin: (username: string, password: string) => Promise<{ error?: any; data?: any }>;
@@ -40,6 +41,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, uiConfig, onL
     }
   }, [isUpdatingSystem]);
 
+  const [hasSavedBiometrics, setHasSavedBiometrics] = useState<boolean>(false);
+
   // Carrega credenciais salvas ao montar o componente
   useEffect(() => {
     setIsVisible(true);
@@ -50,8 +53,37 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, uiConfig, onL
       setUsername(savedUser);
       setPassword(savedPass);
       setRememberMe(true);
+      setHasSavedBiometrics(true);
     }
   }, []);
+
+  const handleBiometricLogin = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const creds = await authenticateWithBiometrics();
+      if (creds && creds.user && creds.pass) {
+        setUsername(creds.user);
+        setPassword(creds.pass);
+        const emailToUse = creds.user.includes('@') ? creds.user : `${creds.user}@projeto.local`;
+        const { error } = await onLogin(emailToUse, creds.pass);
+        if (!error) {
+          setBiometricsEnabled(true, creds.user, creds.pass);
+          setIsUpdatingSystem(true);
+          onLoginSuccess?.();
+        } else {
+          setError('Falha na verificação de credenciais salvas.');
+        }
+      } else {
+        setError('Nenhuma credencial biométrica encontrada.');
+      }
+    } catch (err: any) {
+      console.error(err);
+      setError('Autenticação por Face ID / Biometria cancelada.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -228,6 +260,18 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, uiConfig, onL
                 <div className="w-1.5 h-1.5 bg-red-500 rounded-full"></div>
                 {error}
               </div>
+            )}
+
+            {hasSavedBiometrics && (
+              <button
+                type="button"
+                onClick={handleBiometricLogin}
+                disabled={loading}
+                className="w-full py-3.5 px-4 bg-gradient-to-r from-emerald-500/20 via-teal-500/20 to-indigo-500/20 hover:from-emerald-500/30 hover:to-indigo-500/30 border border-emerald-500/40 rounded-xl text-white text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2.5 shadow-lg active:scale-95 group"
+              >
+                <ScanFace className="w-5 h-5 text-emerald-400 group-hover:scale-110 transition-transform" />
+                <span>Entrar com Face ID / Touch ID</span>
+              </button>
             )}
 
             <button
