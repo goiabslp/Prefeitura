@@ -403,10 +403,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 actionButtons.push({ label: 'Novo Abastecimento', desc: 'Registrar entrada', icon: Fuel, onClick: () => onAbastecimento?.('new'), color: 'cyan', hideOnMobile: false });
             }
             if (isModuleActive('parent_abastecimento_gestao') && permissions.includes('parent_abastecimento_gestao')) {
-                actionButtons.push({ label: 'Gestão', desc: 'Histórico Completo', icon: History, onClick: () => onAbastecimento?.('management'), color: 'blue', hideOnMobile: true });
+                actionButtons.push({ label: 'Gestão', desc: 'Histórico Completo', icon: History, onClick: () => onAbastecimento?.('management'), color: 'blue', hideOnMobile: false });
             }
             if (isModuleActive('parent_abastecimento_dashboard') && permissions.includes('parent_abastecimento_dashboard')) {
-                actionButtons.push({ label: 'Dashboard', desc: 'Indicadores', icon: BarChart3, onClick: () => onAbastecimento?.('dashboard'), color: 'emerald', hideOnMobile: true });
+                actionButtons.push({ label: 'Dashboard', desc: 'Indicadores', icon: BarChart3, onClick: () => onAbastecimento?.('dashboard'), color: 'emerald', hideOnMobile: false });
             }
         }
 

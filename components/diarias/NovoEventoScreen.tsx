@@ -2764,6 +2764,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
         onSelect={handleDepartureSelect}
         initialValue={departureDateTime}
         title="Data e Hora de Saída"
+        isAdmin={currentUser?.role === 'admin'}
       />
       
       <DateTimePickerModal
@@ -2772,6 +2773,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
         onSelect={handleReturnSelect}
         initialValue={returnDateTime}
         title="Data e Hora de Retorno"
+        isAdmin={currentUser?.role === 'admin'}
       />
 
       {/* Modal - Data da Diária Expirada (Regra dos 10 Dias) */}
