@@ -4,7 +4,7 @@ import {
   FileText, Search, Hash as HashIcon, CheckCircle2, 
   X, AlertTriangle, Upload, Paperclip, Check, Trash2,
   Car, Navigation, Hotel, BookOpen, Copy, Download, FileDown, XCircle, Receipt,
-  UserPlus, Square, Timer, Clock, Plus, ArrowRightLeft, UserCheck, Play
+  UserPlus, Square, Timer, Clock, Plus, ArrowRightLeft, UserCheck, Play, ShieldCheck
 } from 'lucide-react';
 import { getDiariasDespesasEnabled, setDiariasDespesasEnabled } from '../../services/diariasSettingsService';
 import { DiariaEvento, User, Attachment, Sector, Job, Person, Order } from '../../types';
@@ -1806,6 +1806,43 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                             </p>
                           </div>
                         </div>
+
+                        {/* Status de Validação da Saída */}
+                        {(selectedEvento.modo_inicio || selectedEvento.status === 'em_viagem' || selectedEvento.status === 'aguardando_gestor' || selectedEvento.status === 'concluido') && (
+                          <div className="bg-slate-50/90 border border-slate-200/70 p-3 rounded-xl flex items-start gap-2.5 shadow-sm sm:col-span-2 md:col-span-1 lg:col-span-2">
+                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 border ${
+                              selectedEvento.modo_inicio === 'manual' || selectedEvento.saida_validada
+                                ? 'bg-emerald-50 border-emerald-100 text-emerald-600'
+                                : selectedEvento.modo_inicio === 'automatico' && !selectedEvento.saida_validada
+                                ? 'bg-rose-50 border-rose-100 text-rose-600'
+                                : 'bg-slate-50 border-slate-150 text-slate-600'
+                            }`}>
+                              <ShieldCheck className="w-4 h-4" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block leading-tight">Validação da Saída</span>
+                              <p className={`text-xs font-extrabold mt-0.5 ${
+                                selectedEvento.modo_inicio === 'manual' || selectedEvento.saida_validada
+                                  ? 'text-emerald-700'
+                                  : selectedEvento.modo_inicio === 'automatico' && !selectedEvento.saida_validada
+                                  ? 'text-rose-700'
+                                  : 'text-slate-700'
+                              }`}>
+                                {selectedEvento.modo_inicio === 'manual' ? (
+                                  'Saída Validada (Iniciada Manualmente)'
+                                ) : selectedEvento.modo_inicio === 'automatico' ? (
+                                  selectedEvento.saida_validada ? (
+                                    'Saída Validada (Início Automático via GPS)'
+                                  ) : (
+                                    'Saída Inválida (Sem checkpoint fora do município de origem)'
+                                  )
+                                ) : (
+                                  'Saída Validada (Legado/Manual)'
+                                )}
+                              </p>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })()}

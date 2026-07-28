@@ -41,6 +41,48 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
     return false;
   };
 
+  // Verifica e inicia viagens programadas cujo horário programado de saída já passou
+  const verificarEIniciarViagensAutomaticas = async (viagens: DiariaEvento[]) => {
+    const agora = new Date();
+    let houveAlteracao = false;
+
+    for (const evt of viagens) {
+      const isProgramado = evt.status === 'viagem_programada' || evt.status === 'aprovado' || !evt.status;
+      if (isProgramado && evt.data_saida) {
+        try {
+          const dataSaida = new Date(evt.data_saida);
+          if (agora.getTime() >= dataSaida.getTime()) {
+            const hasStarted = evt.pessoas && evt.pessoas.some(p => (p as any).viagem_inicio);
+            if (!hasStarted) {
+              console.log(`[Auto-Start] Iniciando viagem ${evt.id} em segundo plano.`);
+              const inicioIso = agora.toISOString();
+              const updatedPessoas = (evt.pessoas && evt.pessoas.length > 0)
+                ? evt.pessoas.map(p => ({
+                    ...p,
+                    viagem_inicio: (p as any).viagem_inicio || inicioIso
+                  }))
+                : [{ id: currentUser.id, name: currentUser.name, viagem_inicio: inicioIso }] as any;
+
+              await updateDiariaEvento(evt.id, {
+                pessoas: updatedPessoas,
+                status: 'em_viagem',
+                modo_inicio: 'automatico',
+                saida_validada: false
+              } as any);
+              houveAlteracao = true;
+            }
+          }
+        } catch (e) {
+          console.warn('Erro ao auto-iniciar viagem:', e);
+        }
+      }
+    }
+
+    if (houveAlteracao) {
+      setTimeout(() => loadViagens(false), 500);
+    }
+  };
+
   // Carrega as viagens do Supabase
   const loadViagens = async (showIndicator = true) => {
     if (showIndicator) setLoading(true);
@@ -51,6 +93,7 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
         return evt.pessoas.some(p => isPersonMatch(p, currentUser));
       });
       setEventos(minhasViagens);
+      verificarEIniciarViagensAutomaticas(minhasViagens);
     } catch (error) {
       console.error('Erro ao buscar viagens:', error);
     } finally {
@@ -208,6 +251,28 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
       stateData.hasLeftOrigin = true;
       localStorage.setItem(storageKey, JSON.stringify(stateData));
       systemMsg = `🚀 Checkpoint FORA da origem registrado em: ${cityName}`;
+    }
+
+    // Validação da saída em segundo plano (se iniciada automaticamente e o checkpoint for fora em até 60 minutos)
+    if (currentTrip.modo_inicio === 'automatico' && !currentTrip.saida_validada) {
+      if (isOutside) {
+        const scheduledTime = new Date(currentTrip.data_saida).getTime();
+        const diffMs = Date.now() - scheduledTime;
+        const oneHourMs = 60 * 60 * 1000;
+        
+        if (diffMs >= 0 && diffMs <= oneHourMs) {
+          try {
+            await updateDiariaEvento(currentTrip.id, {
+              saida_validada: true
+            } as any);
+            systemMsg = `✅ Saída da viagem automática VALIDADA! Checkpoint fora da origem (${cityName}) registrado em menos de 60 minutos.`;
+            currentTrip.saida_validada = true;
+            setTimeout(() => loadViagens(false), 500);
+          } catch (e) {
+            console.warn('Erro ao validar checkpoint de saída automática:', e);
+          }
+        }
+      }
     }
 
     // REGRA 3: Se já esteve fora da origem E AGORA RETORNOU À ORIGEM -> FINALIZAR VIAGEM IMEDIATAMENTE!
@@ -516,6 +581,8 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
       pessoas: updatedPessoas,
       data_saida: inicioIso,
       status: 'em_viagem',
+      modo_inicio: 'manual',
+      saida_validada: true,
       checklist: {
         ...checklistData,
         date: inicioIso,
@@ -532,6 +599,8 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
         pessoas: updatedPessoas,
         data_saida: inicioIso,
         status: 'em_viagem',
+        modo_inicio: 'manual',
+        saida_validada: true,
         checklist: {
           ...checklistData,
           date: inicioIso,
@@ -558,7 +627,9 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
       ...evento,
       pessoas: updatedPessoas,
       data_saida: inicioIso,
-      status: 'em_viagem'
+      status: 'em_viagem',
+      modo_inicio: 'manual',
+      saida_validada: true
     };
 
     // 1. Atualização OTIMISTA instantânea (sem delay)
@@ -569,7 +640,9 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
       const updated = await updateDiariaEvento(evento.id, {
         pessoas: updatedPessoas,
         data_saida: inicioIso,
-        status: 'em_viagem'
+        status: 'em_viagem',
+        modo_inicio: 'manual',
+        saida_validada: true
       });
       setEventos(prev => prev.map(e => e.id === evento.id ? updated : e));
     } catch (err) {
@@ -1123,6 +1196,53 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
                             </div>
                           )}
                         </div>
+
+                        {/* Status de Validação da Saída */}
+                        {selectedEvento && (
+                          <div className="w-full bg-white p-3 rounded-xl border border-slate-200/80 shadow-2xs text-left text-xs font-semibold space-y-1.5 mt-2">
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Validação da Saída</span>
+                            {selectedEvento.modo_inicio === 'manual' ? (
+                              <div className="text-emerald-700 flex items-center gap-1.5 font-bold">
+                                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                                <span>Saída Validada (Iniciada Manualmente)</span>
+                              </div>
+                            ) : selectedEvento.modo_inicio === 'automatico' ? (
+                              selectedEvento.saida_validada ? (
+                                <div className="text-emerald-700 flex items-center gap-1.5 font-bold">
+                                  <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                                  <span>Saída Validada via GPS (Início Automático)</span>
+                                </div>
+                              ) : (() => {
+                                const scheduledTime = new Date(selectedEvento.data_saida).getTime();
+                                const elapsedMin = Math.floor((Date.now() - scheduledTime) / (60 * 1000));
+                                const remainingMin = 60 - elapsedMin;
+                                
+                                if (remainingMin > 0) {
+                                  return (
+                                    <div className="text-amber-700 flex flex-col gap-0.5 font-bold">
+                                      <div className="flex items-center gap-1.5">
+                                        <div className="w-2.5 h-2.5 bg-amber-500 rounded-full animate-pulse shrink-0"></div>
+                                        <span>Aguardando checkpoint fora do município de origem</span>
+                                      </div>
+                                      <span className="text-[10px] text-slate-500 font-bold block pl-4">
+                                        Tempo restante para validar: {remainingMin} min
+                                      </span>
+                                    </div>
+                                  );
+                                } else {
+                                  return (
+                                    <div className="text-rose-700 flex items-center gap-1.5 font-bold">
+                                      <AlertTriangle className="w-4 h-4 text-rose-500" />
+                                      <span>Saída Não Validada (Tempo limite de 60 min expirado)</span>
+                                    </div>
+                                  );
+                                }
+                              })()
+                            ) : (
+                              <span className="text-slate-500">Aguardando início</span>
+                            )}
+                          </div>
+                        )}
                       </div>
 
                       {/* Botão de Finalizar */}

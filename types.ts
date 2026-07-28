@@ -540,6 +540,8 @@ export interface DiariaEvento {
   };
   permitir_despesas_pos_finalizacao?: boolean;
   checklist?: any;
+  modo_inicio?: 'manual' | 'automatico' | string;
+  saida_validada?: boolean;
 }
 
 export interface ConsultaPaciente {
