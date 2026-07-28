@@ -5,7 +5,7 @@ import {
   MessageSquare, ArrowRight, ChevronRight, Car, AlertTriangle,
   Bed, Plus, Minus, Trash2
 } from 'lucide-react';
-import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, parseISO } from 'date-fns';
+import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, parseISO, addMinutes } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Person, User, Sector, Job, Vehicle } from '../../types';
 import { createDiariaEvento, getDiariasGestores } from '../../services/diariasEventosService';
@@ -29,24 +29,87 @@ const DateTimePickerModal = ({
   title: string,
   isAdmin?: boolean
 }) => {
+  const getMinAllowed = () => addMinutes(new Date(), 30);
+
   const [currentMonth, setCurrentMonth] = useState(() => initialValue ? parseISO(initialValue) : new Date());
-  const [selectedDate, setSelectedDate] = useState<Date | null>(() => initialValue ? parseISO(initialValue) : null);
+  const [selectedDate, setSelectedDate] = useState<Date | null>(() => {
+    if (initialValue) {
+      const parsed = parseISO(initialValue);
+      if (!isAdmin && parsed.getTime() < getMinAllowed().getTime()) {
+        return getMinAllowed();
+      }
+      return parsed;
+    }
+    return new Date();
+  });
+
   const [time, setTime] = useState(() => {
     if (initialValue) {
       const d = parseISO(initialValue);
+      const minDt = getMinAllowed();
+      if (!isAdmin && d.getTime() < minDt.getTime()) {
+        return format(minDt, "HH:mm");
+      }
       return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
     }
-    return '08:00';
+    return format(getMinAllowed(), "HH:mm");
   });
 
+  useEffect(() => {
+    if (isOpen) {
+      const minDt = getMinAllowed();
+      if (initialValue) {
+        const parsed = parseISO(initialValue);
+        setCurrentMonth(parsed);
+        if (!isAdmin && parsed.getTime() < minDt.getTime()) {
+          setSelectedDate(minDt);
+          setTime(format(minDt, "HH:mm"));
+        } else {
+          setSelectedDate(parsed);
+          setTime(`${String(parsed.getHours()).padStart(2, '0')}:${String(parsed.getMinutes()).padStart(2, '0')}`);
+        }
+      } else {
+        const now = new Date();
+        setSelectedDate(now);
+        setCurrentMonth(now);
+        setTime(format(minDt, "HH:mm"));
+      }
+    }
+  }, [isOpen, initialValue, isAdmin]);
+
   if (!isOpen) return null;
+
+  const minAllowed = getMinAllowed();
+  const getTargetDateTime = () => {
+    if (!selectedDate) return null;
+    const [hours, minutes] = time.split(':').map(Number);
+    const dt = new Date(selectedDate);
+    dt.setHours(hours || 0, minutes || 0, 0, 0);
+    return dt;
+  };
+
+  const targetDateTime = getTargetDateTime();
+  const isTimeTooSoon = !isAdmin && targetDateTime ? targetDateTime.getTime() < minAllowed.getTime() : false;
+
+  const handleDateClick = (d: Date) => {
+    setSelectedDate(d);
+    if (!isAdmin && isSameDay(d, new Date())) {
+      const [h, m] = time.split(':').map(Number);
+      const checkDt = new Date(d);
+      checkDt.setHours(h || 0, m || 0, 0, 0);
+      const minDt = getMinAllowed();
+      if (checkDt.getTime() < minDt.getTime()) {
+        setTime(format(minDt, "HH:mm"));
+      }
+    }
+  };
 
   const days = eachDayOfInterval({ start: startOfMonth(currentMonth), end: endOfMonth(currentMonth) });
   const startDay = startOfMonth(currentMonth).getDay();
   const paddingDays = Array.from({ length: startDay }).map((_, i) => i);
 
   const handleConfirm = () => {
-     if (!selectedDate) return;
+     if (!selectedDate || isTimeTooSoon) return;
      const [hours, minutes] = time.split(':').map(Number);
      const finalDate = new Date(selectedDate);
      finalDate.setHours(hours, minutes, 0, 0);
@@ -105,7 +168,7 @@ const DateTimePickerModal = ({
                          <button
                            key={d.toISOString()}
                            disabled={isPast}
-                           onClick={() => setSelectedDate(d)}
+                           onClick={() => handleDateClick(d)}
                            className={`w-7 h-7 sm:w-8 sm:h-8 mx-auto flex items-center justify-center rounded-full text-xs sm:text-sm transition-all ${
                              isPast ? 'opacity-25 cursor-not-allowed pointer-events-none text-slate-300' :
                              isSelected ? 'bg-indigo-600 text-white font-bold shadow-md scale-105' :
@@ -161,28 +224,17 @@ const DateTimePickerModal = ({
                    </div>
                  </div>
 
-                 {/* Atalhos Rápidos */}
-                 <div className="flex flex-wrap items-center justify-center gap-1 pt-1 w-full">
-                   {['06:00', '07:00', '08:00', '09:00', '12:00', '13:00', '17:00', '18:00'].map(preset => (
-                     <button
-                       key={preset}
-                       type="button"
-                       onClick={() => setTime(preset)}
-                       className={`px-2 py-1 text-[10px] font-bold rounded-lg transition-all ${
-                         time === preset
-                           ? 'bg-indigo-600 text-white shadow-xs scale-105'
-                           : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                       }`}
-                     >
-                       {preset}
-                     </button>
-                   ))}
-                 </div>
+                 {isTimeTooSoon && (
+                   <div className="p-2.5 bg-amber-50 border border-amber-200/80 rounded-xl text-center text-amber-900 text-[11px] font-bold flex items-center justify-center gap-1.5 w-full mt-1 animate-fade-in">
+                     <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                     <span>Antecedência mínima de 30 min (mínimo: {format(minAllowed, "HH:mm")} hs)</span>
+                   </div>
+                 )}
               </div>
 
               <button 
                  onClick={handleConfirm}
-                 disabled={!selectedDate || !time}
+                 disabled={!selectedDate || !time || isTimeTooSoon}
                  className="w-full py-3 bg-slate-900 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-lg hover:bg-slate-800 hover:shadow-xl active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed shrink-0 mt-2"
               >
                  Confirmar Data e Hora
@@ -306,9 +358,28 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
     if (!currentUser) return false;
     if (currentUser.role === 'admin') return true;
     if (currentUser.permissions?.includes('parent_diarias_gestores')) return true;
-    if (currentUser.permissions?.includes('parent_diarias')) return true;
     return Object.values(gestoresMap).includes(currentUser.id);
   }, [currentUser, gestoresMap]);
+
+  const shouldShowHospedagem = useMemo(() => {
+    if (!departureDateTime || !returnDateTime) return false;
+    try {
+      const dep = parseISO(departureDateTime);
+      const ret = parseISO(returnDateTime);
+      const diffMs = ret.getTime() - dep.getTime();
+      const diffHours = diffMs / (1000 * 60 * 60);
+      return diffHours >= 12;
+    } catch (e) {
+      return false;
+    }
+  }, [departureDateTime, returnDateTime]);
+
+  useEffect(() => {
+    if (!shouldShowHospedagem) {
+      setHospedagem(false);
+      setHospedagemDias(0);
+    }
+  }, [shouldShowHospedagem]);
 
   const canAddExtraServer = useMemo(() => {
     if (!currentUser) return false;
@@ -360,11 +431,12 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
     // 2. Regras restritas para usuários comuns (Administradores têm permissão exclusiva para retroativos):
     if (!isAdmin) {
       const now = new Date();
-      if (selectedDateTime.getTime() < now.getTime()) {
+      const minAllowed = addMinutes(now, 30);
+      if (selectedDateTime.getTime() < minAllowed.getTime()) {
         setDateValidationError({
-          title: "Data e Hora Inválidas",
-          message: "Não é permitido selecionar data e hora anteriores à data e hora atual.",
-          law: `Data e Hora selecionada: ${format(selectedDateTime, "dd/MM/yyyy HH:mm")} • Data e Hora atual: ${format(now, "dd/MM/yyyy HH:mm")}. Lançamentos retroativos são de permissão exclusiva da administração.`
+          title: "Horário de Saída Inválido",
+          message: "Não é permitido realizar viagens com a hora ou data ultrapassada. O horário de saída deve ser de no mínimo 30 minutos a partir do horário atual.",
+          law: `Data/Hora selecionada: ${format(selectedDateTime, "dd/MM/yyyy HH:mm")} • Mínimo permitido: ${format(minAllowed, "dd/MM/yyyy HH:mm")}. Lançamentos retroativos são de permissão exclusiva da administração.`
         });
         return;
       }
@@ -716,7 +788,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
     );
   }, [vehicles, vehicleSearch]);
 
-  const isFormValid = isStep1Valid && reason.trim().length >= 30;
+  const isFormValid = isStep1Valid && reason.trim().length >= 50;
 
   const handleSubmit = async () => {
     if (returnDateTime && isDateExpired(returnDateTime) && currentUser?.role !== 'admin') {
@@ -814,14 +886,16 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
     if (isGestorOrAdmin) {
       steps.push({ key: 'retorno', title: 'Data de Retorno' });
     }
+    if (shouldShowHospedagem) {
+      steps.push({ key: 'hospedagem', title: 'Hospedagem' });
+    }
     steps.push(
-      { key: 'hospedagem', title: 'Hospedagem' },
       { key: 'veiculo', title: 'Veículo' },
       { key: 'motivo', title: 'Motivo' },
       { key: 'revisao', title: 'Revisão' }
     );
     return steps;
-  }, [isGestorOrAdmin]);
+  }, [isGestorOrAdmin, shouldShowHospedagem]);
 
   const isMobileStepValid = (step: number) => {
     const stepObj = mobileStepsList[step - 1];
@@ -840,7 +914,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
       case 'veiculo':
         return selectedVehicle !== '' && (selectedVehicle !== 'OUTRO' || customVehicle.trim() !== '');
       case 'motivo':
-        return reason.trim().length >= 30;
+        return reason.trim().length >= 50;
       case 'revisao':
         return isFormValid;
       default:
@@ -878,7 +952,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
     };
 
     return (
-      <div className="flex flex-col h-[100dvh] bg-slate-100 w-full relative overflow-hidden">
+      <div className="flex flex-col h-full bg-slate-100 w-full relative overflow-hidden">
         
         {/* Barra de progresso e Cabeçalho Mobile */}
         <div className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-sm shrink-0">
@@ -911,8 +985,8 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
         </div>
 
         {/* Área central com animações */}
-        <div className="flex-1 flex flex-col justify-between p-4 overflow-y-auto min-h-0">
-          <div className="flex-1 flex flex-col justify-start items-center pt-2 pb-4 relative min-h-[350px]">
+        <div className="flex-1 overflow-y-auto p-4 flex flex-col items-center justify-start min-h-0">
+          <div className="w-full max-w-sm flex-1 flex flex-col justify-start items-center pt-2 pb-4 relative min-h-[350px]">
             <AnimatePresence initial={false} custom={direction} mode="wait">
               <motion.div
                 key={mobileStep}
@@ -1245,7 +1319,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
                         <FileText className="w-7 h-7" />
                       </div>
                       <h3 className="text-xl font-black text-slate-900 tracking-tight">Qual o motivo da viagem?</h3>
-                      <p className="text-slate-500 text-xs font-medium max-w-xs mx-auto">Forneça justificativa pública detalhada (mínimo de 30 caracteres).</p>
+                      <p className="text-slate-500 text-xs font-medium max-w-xs mx-auto">Forneça justificativa pública detalhada (mínimo de 50 caracteres).</p>
                     </div>
 
                     <div className="w-full text-left space-y-2">
@@ -1259,11 +1333,11 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
                         />
                       </div>
                       <div className="flex justify-between items-center text-[10px] font-bold px-1 mt-1">
-                        <span className={reason.trim().length >= 30 ? "text-emerald-600" : "text-amber-600"}>
-                          {reason.trim().length >= 30 ? "Requisito mínimo atingido!" : `Faltam ${30 - reason.trim().length} caracteres`}
+                        <span className={reason.trim().length >= 50 ? "text-emerald-600" : "text-amber-600"}>
+                          {reason.trim().length >= 50 ? "Requisito mínimo atingido!" : `Faltam ${50 - reason.trim().length} caracteres`}
                         </span>
                         <span className="text-slate-400 font-mono">
-                          {reason.trim().length} / 30
+                          {reason.trim().length} / 50
                         </span>
                       </div>
                     </div>
@@ -1316,20 +1390,22 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
                         </div>
                       )}
 
-                      <div className="py-2 px-3 flex justify-between items-center gap-4">
-                        <div>
-                          <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-0.5">Hospedagem</span>
-                          <p className="text-sm font-bold text-slate-800">
-                            {hospedagem ? `Sim (${hospedagemDias} noites)` : 'Não'}
-                          </p>
+                      {shouldShowHospedagem && (
+                        <div className="py-2 px-3 flex justify-between items-center gap-4">
+                          <div>
+                            <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-0.5">Hospedagem</span>
+                            <p className="text-sm font-bold text-slate-800">
+                              {hospedagem ? `Sim (${hospedagemDias} noites)` : 'Não'}
+                            </p>
+                          </div>
+                          <div>
+                            <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-0.5">Veículo</span>
+                            <p className="text-sm font-bold text-slate-800 break-words">
+                              {selectedVehicle === 'OUTRO' ? customVehicle : selectedVehicle}
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-0.5">Veículo</span>
-                          <p className="text-sm font-bold text-slate-800 break-words">
-                            {selectedVehicle === 'OUTRO' ? customVehicle : selectedVehicle}
-                          </p>
-                        </div>
-                      </div>
+                      )}
 
                       <div className="py-2 px-3 flex justify-between items-center gap-4">
                         <div className="flex-1 min-w-0">
@@ -1354,41 +1430,41 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
               </motion.div>
             </AnimatePresence>
           </div>
+        </div>
 
-          {/* Botões de Ação Inferiores do Mobile */}
-          <div className="pt-4 pb-10 px-2 border-t border-slate-200/60 flex items-center gap-4 w-full bg-slate-100 sticky bottom-0 shrink-0">
+        {/* Botões de Ação Inferiores do Mobile */}
+        <div className="p-3.5 px-4 border-t border-slate-200/80 flex items-center gap-3 w-full bg-white shrink-0 shadow-lg z-30 pb-[max(1rem,env(safe-area-inset-bottom))]">
+          <button
+            type="button"
+            onClick={handleMobileBack}
+            disabled={isLoading}
+            className="flex items-center justify-center gap-1.5 py-3 px-5 bg-white border border-slate-200 text-slate-700 font-bold uppercase tracking-widest text-[10px] rounded-xl active:bg-slate-50 disabled:opacity-50 transition-all shadow-sm shrink-0"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            <span>Voltar</span>
+          </button>
+
+          {mobileStep < totalMobileSteps ? (
             <button
               type="button"
-              onClick={handleMobileBack}
-              disabled={isLoading}
-              className="flex items-center justify-center gap-1.5 py-4 px-5 bg-white border border-slate-200 text-slate-600 font-black uppercase tracking-widest text-[10px] rounded-2xl active:bg-slate-50 disabled:opacity-50 transition-all shadow-sm"
+              onClick={handleMobileNext}
+              disabled={!isMobileStepValid(mobileStep) || isLoading}
+              className="flex-1 flex items-center justify-center gap-1.5 py-3 px-6 bg-slate-900 text-white font-bold uppercase tracking-widest text-[10px] rounded-xl active:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-md shadow-slate-950/15"
             >
-              <ChevronLeft className="w-4 h-4" />
-              <span>Voltar</span>
+              <span>Avançar</span>
+              <ChevronRight className="w-4 h-4" />
             </button>
-
-            {mobileStep < totalMobileSteps ? (
-              <button
-                type="button"
-                onClick={handleMobileNext}
-                disabled={!isMobileStepValid(mobileStep) || isLoading}
-                className="flex-1 flex items-center justify-center gap-1.5 py-4 px-6 bg-slate-900 text-white font-black uppercase tracking-widest text-[10px] rounded-2xl active:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-md shadow-slate-950/15"
-              >
-                <span>Avançar</span>
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={handleSubmit}
-                disabled={!isFormValid || isLoading || isSuccess}
-                className="flex-1 flex items-center justify-center gap-1.5 py-4 px-6 bg-emerald-600 text-white font-black uppercase tracking-widest text-[10px] rounded-2xl active:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-emerald-600/20"
-              >
-                {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                <span>{isLoading ? 'Enviando...' : 'Finalizar'}</span>
-              </button>
-            )}
-          </div>
+          ) : (
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={!isFormValid || isLoading || isSuccess}
+              className="flex-1 flex items-center justify-center gap-1.5 py-3 px-6 bg-emerald-600 text-white font-bold uppercase tracking-widest text-[10px] rounded-xl active:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-emerald-600/20"
+            >
+              {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+              <span>{isLoading ? 'Enviando...' : 'Finalizar'}</span>
+            </button>
+          )}
         </div>
 
         {/* Modais reaproveitados */}
@@ -2019,58 +2095,60 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
           </div>
 
               {/* Hospedagem */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-3">
-                  <label className={labelClass}>Hospedagem</label>
-                  <div className="flex gap-3">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setHospedagem(true);
-                        setHospedagemDias(1);
-                      }}
-                      className={`flex-1 py-3 text-sm font-bold rounded-xl border transition-all ${
-                        hospedagem 
-                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-600/10' 
-                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                      }`}
-                    >
-                      Sim
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setHospedagem(false);
-                        setHospedagemDias(0);
-                      }}
-                      className={`flex-1 py-3 text-sm font-bold rounded-xl border transition-all ${
-                        !hospedagem 
-                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-600/10' 
-                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                      }`}
-                    >
-                      Não
-                    </button>
-                  </div>
-                </div>
-
-                {hospedagem && (
-                  <div className="space-y-3 animate-fade-in">
-                    <label className={labelClass}>Quantas Noites?</label>
-                    <div className={inputContainerClass}>
-                      <Clock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                      <input
-                        type="number"
-                        min="1"
-                        value={hospedagemDias}
-                        onChange={(e) => setHospedagemDias(Math.max(1, parseInt(e.target.value) || 1))}
-                        className={inputClass}
-                        placeholder="Número de noites"
-                      />
+              {shouldShowHospedagem && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-3">
+                    <label className={labelClass}>Hospedagem</label>
+                    <div className="flex gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setHospedagem(true);
+                          setHospedagemDias(1);
+                        }}
+                        className={`flex-1 py-3 text-sm font-bold rounded-xl border transition-all ${
+                          hospedagem 
+                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-600/10' 
+                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        Sim
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setHospedagem(false);
+                          setHospedagemDias(0);
+                        }}
+                        className={`flex-1 py-3 text-sm font-bold rounded-xl border transition-all ${
+                          !hospedagem 
+                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-600/10' 
+                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        Não
+                      </button>
                     </div>
                   </div>
-                )}
-              </div>
+
+                  {hospedagem && (
+                    <div className="space-y-3 animate-fade-in">
+                      <label className={labelClass}>Quantas Noites?</label>
+                      <div className={inputContainerClass}>
+                        <Clock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                        <input
+                          type="number"
+                          min="1"
+                          value={hospedagemDias}
+                          onChange={(e) => setHospedagemDias(Math.max(1, parseInt(e.target.value) || 1))}
+                          className={inputClass}
+                          placeholder="Número de noites"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Veículo */}
               <div className="space-y-3">
@@ -2124,11 +2202,11 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
                   />
                 </div>
                 <div className="flex justify-between items-center text-[10px] font-bold mt-1 px-1">
-                  <span className={reason.trim().length >= 30 ? "text-emerald-600" : "text-amber-600"}>
-                    {reason.trim().length >= 30 ? "Requisito mínimo de caracteres atingido!" : `Mínimo de 30 caracteres necessário (faltam ${30 - reason.trim().length} caracteres)`}
+                  <span className={reason.trim().length >= 50 ? "text-emerald-600" : "text-amber-600"}>
+                    {reason.trim().length >= 50 ? "Requisito mínimo de caracteres atingido!" : `Mínimo de 50 caracteres necessário (faltam ${50 - reason.trim().length} caracteres)`}
                   </span>
                   <span className="text-slate-400 font-mono">
-                    {reason.trim().length} / 30
+                    {reason.trim().length} / 50
                   </span>
                 </div>
               </div>

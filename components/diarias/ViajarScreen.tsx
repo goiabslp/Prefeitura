@@ -155,11 +155,23 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
   };
 
   // Regra para liberação de início de viagem
-  const canIniciarViagem = (evento: DiariaEvento): { allowed: boolean; liberadoEm?: string; reason?: string } => {
-    if (!evento.data_saida) return { allowed: true };
-    if (evento.status === 'cancelado' || evento.status === 'viagem_cancelada') {
-      return { allowed: false, reason: 'Esta viagem foi cancelada por ultrapassar o prazo limite de 02:00h após o horário previsto de saída.' };
+  const canIniciarViagem = (evento: DiariaEvento): { allowed: boolean; liberadoEm?: string; reason?: string; isPendingApproval?: boolean } => {
+    if (!evento) return { allowed: false };
+
+    if (evento.status === 'aguardando_aprovacao' || evento.status === 'aguardando_gestor') {
+      return { 
+        allowed: false, 
+        isPendingApproval: true,
+        reason: 'Esta solicitação de viagem está aguardando aprovação do seu gestor ou o administrador. O botão de início será liberado automaticamente após a aprovação.' 
+      };
     }
+
+    if (evento.status === 'cancelado' || evento.status === 'viagem_cancelada' || evento.status === 'rejeitado_gestor' || evento.status === 'rejeitado_administrador') {
+      return { allowed: false, reason: 'Esta viagem foi cancelada ou rejeitada pela administração.' };
+    }
+
+    if (!evento.data_saida) return { allowed: true };
+
     try {
       const dataSaida = new Date(evento.data_saida);
       const agora = new Date();
@@ -534,6 +546,11 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
                             <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200 animate-pulse shrink-0">
                               Em Percurso
                             </span>
+                          ) : (evt.status === 'aguardando_aprovacao' || evt.status === 'aguardando_gestor') ? (
+                            <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200 flex items-center gap-1 shrink-0">
+                              <Lock className="w-3 h-3 text-amber-600" />
+                              <span>Aguardando Aprovação</span>
+                            </span>
                           ) : (
                             <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-100 shrink-0">
                               Pronta para Iniciar
@@ -644,6 +661,11 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
                           <Timer className="w-4 h-4 text-emerald-600" />
                           <span>Em Percurso</span>
                         </span>
+                      ) : (selectedEvento.status === 'aguardando_aprovacao' || selectedEvento.status === 'aguardando_gestor') ? (
+                        <span className="px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200 flex items-center gap-1.5">
+                          <Lock className="w-4 h-4 text-amber-600" />
+                          <span>Aguardando Aprovação</span>
+                        </span>
                       ) : (
                         <span className="px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-100">
                           Aguardando Início
@@ -707,11 +729,14 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
                 {/* ======================================================== */}
                 <div className="bg-white rounded-3xl border border-slate-200/80 shadow-md p-6 md:p-8 flex flex-col items-center justify-center text-center w-full">
                   
-                  {/* ESTADO 1: ANTES DE INICIAR (Tem APENAS o Botão INICIAR) */}
+                  {/* ESTADO 1: ANTES DE INICIAR (Tem APENAS o Botão INICIAR ou Bloqueio por Aprovação) */}
                   {!isStarted && !isFinished && (
                     <div className="flex flex-col items-center gap-4 w-full py-4">
                       <p className="text-slate-500 text-xs md:text-sm font-semibold max-w-sm">
-                        Para começar o registro da viagem e contar o tempo em tempo real, clique no botão de início abaixo.
+                        {check.isPendingApproval 
+                          ? "Esta solicitação precisa ser aprovada antes de iniciar a viagem."
+                          : "Para começar o registro da viagem e contar o tempo em tempo real, clique no botão de início abaixo."
+                        }
                       </p>
 
                       <button
@@ -720,27 +745,41 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
                         className={`w-36 h-36 rounded-full flex flex-col items-center justify-center text-white shadow-2xl transition-all duration-300 border-[6px] border-white group/btn relative ${
                           check.allowed
                             ? 'bg-emerald-600 hover:bg-emerald-700 hover:scale-105 active:scale-95 shadow-emerald-600/40 cursor-pointer'
+                            : check.isPendingApproval
+                            ? 'bg-amber-500 shadow-amber-500/30 cursor-not-allowed opacity-90'
                             : 'bg-slate-400 shadow-slate-400/30 cursor-not-allowed opacity-70'
                         }`}
                       >
                         {check.allowed && (
                           <div className="absolute inset-0 rounded-full bg-emerald-500/20 animate-ping group-hover/btn:animate-none -z-10"></div>
                         )}
-                        <Play className="w-10 h-10 fill-white text-white group-hover/btn:scale-110 transition-transform mb-1 ml-1" />
-                        <span className="font-black text-sm uppercase tracking-wider">INICIAR</span>
+                        {check.isPendingApproval ? (
+                          <Lock className="w-10 h-10 text-white mb-1" />
+                        ) : (
+                          <Play className="w-10 h-10 fill-white text-white group-hover/btn:scale-110 transition-transform mb-1 ml-1" />
+                        )}
+                        <span className="font-black text-[11px] uppercase tracking-wider text-center px-2">
+                          {check.isPendingApproval ? 'AGUARDANDO APROVAÇÃO' : 'INICIAR'}
+                        </span>
                       </button>
 
                       {!check.allowed && (
                         <div className={`max-w-xs rounded-2xl px-4 py-3 text-center shadow-xs border ${
+                          check.isPendingApproval ? 'bg-amber-50 border-amber-200' :
                           check.reason ? 'bg-rose-50 border-rose-200' : 'bg-amber-50 border-amber-200'
                         }`}>
                           <div className={`flex items-center justify-center gap-1.5 font-black text-[10px] uppercase tracking-wider mb-1 ${
+                            check.isPendingApproval ? 'text-amber-800' :
                             check.reason ? 'text-rose-700' : 'text-amber-700'
                           }`}>
-                            {check.reason ? <AlertTriangle className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
-                            <span>{check.reason ? 'Viagem Cancelada' : 'Início Bloqueado'}</span>
+                            {check.isPendingApproval ? <Lock className="w-3.5 h-3.5 text-amber-600" /> :
+                             check.reason ? <AlertTriangle className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
+                            <span>{check.isPendingApproval ? 'Aprovação Necessária' : check.reason ? 'Viagem Indisponível' : 'Início Bloqueado'}</span>
                           </div>
-                          <p className={`text-xs font-semibold ${check.reason ? 'text-rose-800' : 'text-amber-800'}`}>
+                          <p className={`text-xs font-semibold ${
+                            check.isPendingApproval ? 'text-amber-900' :
+                            check.reason ? 'text-rose-800' : 'text-amber-800'
+                          }`}>
                             {check.reason ? (
                               check.reason
                             ) : (
