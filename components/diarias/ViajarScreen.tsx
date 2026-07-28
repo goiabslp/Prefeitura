@@ -113,6 +113,145 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
   const [elapsedTime, setElapsedTime] = useState<string>('00:00:00');
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Estado para GPS e Rastreamento em Tempo Real
+  const [gpsLocation, setGpsLocation] = useState<{
+    cityName: string;
+    isAtOrigin: boolean;
+    hasLeftOrigin: boolean;
+    lat: number | null;
+    lon: number | null;
+    lastCheck: string;
+    message: string | null;
+  }>({
+    cityName: 'Buscando GPS...',
+    isAtOrigin: true,
+    hasLeftOrigin: false,
+    lat: null,
+    lon: null,
+    lastCheck: '',
+    message: null
+  });
+
+  const watchIdRef = useRef<number | null>(null);
+
+  // Helper para Reverse Geocoding via Nominatim OpenStreetMap
+  const getCityFromCoords = async (lat: number, lon: number): Promise<string> => {
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=10`);
+      if (res.ok) {
+        const data = await res.json();
+        const city = data.address?.city || data.address?.town || data.address?.municipality || data.address?.village || data.address?.county;
+        if (city) return city;
+      }
+    } catch (e) {
+      console.warn('Erro ao obter município por GPS:', e);
+    }
+    return 'Município Detectado';
+  };
+
+  // Processa Posição de GPS e executa regras de Negócio de Diárias
+  const processGpsUpdate = async (lat: number, lon: number, currentTrip: DiariaEvento) => {
+    const cityName = await getCityFromCoords(lat, lon);
+    const originCity = (currentTrip as any).origem || 'São José do Goiabal';
+
+    const normCity = normalizeText(cityName);
+    const normOrigin = normalizeText(originCity);
+
+    const isAtOrigin = normCity.includes(normOrigin) || normOrigin.includes(normCity) || normCity === 'municipio detectado';
+    const isOutside = !isAtOrigin;
+
+    const storageKey = `gps_trip_state_${currentTrip.id}`;
+    const stored = localStorage.getItem(storageKey);
+    let stateData = stored ? JSON.parse(stored) : {
+      hasLeftOrigin: false,
+      startTime: new Date(getPessoaViagemData(currentTrip).viagem_inicio || Date.now()).getTime(),
+      lastCity: cityName
+    };
+
+    const nowMs = Date.now();
+    const elapsedMs = nowMs - stateData.startTime;
+    const oneHourMs = 60 * 60 * 1000;
+
+    let systemMsg: string | null = null;
+
+    // REGRA 1: Se esteve na Origem por mais de 1 hora sem ter saído da cidade -> REINICIAR CRONÔMETRO!
+    if (!stateData.hasLeftOrigin && isAtOrigin && elapsedMs >= oneHourMs) {
+      const newInicioIso = new Date().toISOString();
+      const updatedPessoas = (currentTrip.pessoas || []).map(p => ({
+        ...p,
+        viagem_inicio: newInicioIso
+      }));
+
+      await updateDiariaEvento(currentTrip.id, {
+        pessoas: updatedPessoas,
+        data_saida: newInicioIso
+      });
+
+      stateData.startTime = nowMs;
+      localStorage.setItem(storageKey, JSON.stringify(stateData));
+      systemMsg = '🕒 1 hora no município de origem verificada. Horário de início e cronômetro reiniciados automaticamente.';
+      setGpsLocation({
+        cityName,
+        isAtOrigin: true,
+        hasLeftOrigin: false,
+        lat,
+        lon,
+        lastCheck: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+        message: systemMsg
+      });
+      loadViagens(false);
+      return;
+    }
+
+    // REGRA 2: Marcar que o motorista saiu do município de origem
+    if (isOutside && !stateData.hasLeftOrigin) {
+      stateData.hasLeftOrigin = true;
+      localStorage.setItem(storageKey, JSON.stringify(stateData));
+      systemMsg = `🚀 Checkpoint FORA da origem registrado em: ${cityName}`;
+    }
+
+    // REGRA 3: Se já esteve fora da origem E AGORA RETORNOU À ORIGEM -> FINALIZAR VIAGEM IMEDIATAMENTE!
+    if (stateData.hasLeftOrigin && isAtOrigin) {
+      const fimIso = new Date().toISOString();
+      const updatedPessoas = (currentTrip.pessoas || []).map(p => ({
+        ...p,
+        viagem_fim: (p as any).viagem_fim || fimIso
+      }));
+
+      await updateDiariaEvento(currentTrip.id, {
+        pessoas: updatedPessoas,
+        data_retorno: fimIso,
+        status: 'aguardando_gestor'
+      });
+
+      localStorage.removeItem(storageKey);
+
+      setSummaryModal({
+        isOpen: true,
+        saidaReal: new Date(stateData.startTime).toLocaleString('pt-BR'),
+        retornoReal: new Date(fimIso).toLocaleString('pt-BR'),
+        duracaoText: 'Viagem Finalizada Automática via GPS ao Retornar à Origem'
+      });
+      loadViagens(false);
+      return;
+    }
+
+    stateData.lastCity = cityName;
+    localStorage.setItem(storageKey, JSON.stringify(stateData));
+
+    setGpsLocation({
+      cityName,
+      isAtOrigin,
+      hasLeftOrigin: stateData.hasLeftOrigin,
+      lat,
+      lon,
+      lastCheck: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      message: systemMsg
+    });
+  };
+
+
+
   // Modal de confirmação ao clicar em Finalizar
   const [isConfirmFinalizeOpen, setIsConfirmFinalizeOpen] = useState<boolean>(false);
   const [isHospedagemModalOpen, setIsHospedagemModalOpen] = useState<boolean>(false);
@@ -288,6 +427,39 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
   }, [activeTrip, selectedEventoId]);
 
   const selectedEvento = eventos.find(e => e.id === selectedEventoId) || null;
+
+  // Effect para Ativar GPS WatchPosition durante a Viagem
+  useEffect(() => {
+    if (!selectedEvento) return;
+    const data = getPessoaViagemData(selectedEvento);
+    const isStarted = !!data.viagem_inicio && !data.viagem_fim && selectedEvento.status === 'em_viagem';
+
+    if (isStarted && typeof window !== 'undefined' && 'geolocation' in navigator) {
+      const handlePosition = (pos: GeolocationPosition) => {
+        processGpsUpdate(pos.coords.latitude, pos.coords.longitude, selectedEvento);
+      };
+
+      const handleError = (err: GeolocationPositionError) => {
+        console.warn('Aviso de leitura do GPS:', err.message);
+      };
+
+      navigator.geolocation.getCurrentPosition(handlePosition, handleError, { enableHighAccuracy: true });
+
+      const watchId = navigator.geolocation.watchPosition(handlePosition, handleError, {
+        enableHighAccuracy: true,
+        maximumAge: 10000,
+        timeout: 20000
+      });
+
+      watchIdRef.current = watchId;
+
+      return () => {
+        if (watchIdRef.current !== null) {
+          navigator.geolocation.clearWatch(watchIdRef.current);
+        }
+      };
+    }
+  }, [selectedEvento]);
 
   // Cronômetro para o evento selecionado
   useEffect(() => {
@@ -911,10 +1083,10 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
                     </div>
                   )}
 
-                  {/* ESTADO 2: EM PERCURSO (Exibe o indicador "EM PERCURSO" e botão de FINALIZAR) */}
+                  {/* ESTADO 2: EM PERCURSO (Exibe o indicador "EM PERCURSO", GPS e botão de FINALIZAR) */}
                   {isStarted && !isFinished && (
                     <div className="flex flex-col items-center gap-6 w-full py-2">
-                      <div className="w-full max-w-sm flex flex-col items-center bg-slate-50 border border-slate-200 p-5 rounded-2xl shadow-inner">
+                      <div className="w-full max-w-sm flex flex-col items-center bg-slate-50 border border-slate-200 p-5 rounded-2xl shadow-inner space-y-3">
                         <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1 flex items-center gap-1.5 animate-pulse">
                           <Timer className="w-4 h-4" />
                           <span>EM PERCURSO</span>
@@ -925,6 +1097,32 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
                         <span className="text-[10px] text-slate-400 font-semibold">
                           Saída registrada em: {formatDate(data.viagem_inicio)}
                         </span>
+
+                        {/* RASTREAMENTO GPS EM TEMPO REAL */}
+                        <div className="w-full bg-white p-3 rounded-xl border border-slate-200/80 shadow-2xs space-y-2 mt-2">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-ping"></span>
+                              <div className="text-left">
+                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Localização GPS</span>
+                                <span className="text-xs font-bold text-slate-800">{gpsLocation.cityName}</span>
+                              </div>
+                            </div>
+                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border ${
+                              gpsLocation.hasLeftOrigin 
+                                ? 'bg-purple-50 text-purple-700 border-purple-200' 
+                                : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            }`}>
+                              {gpsLocation.hasLeftOrigin ? 'Fora da Origem' : 'Na Origem'}
+                            </span>
+                          </div>
+
+                          {gpsLocation.message && (
+                            <div className="p-2 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-[10px] font-semibold text-center">
+                              {gpsLocation.message}
+                            </div>
+                          )}
+                        </div>
                       </div>
 
                       {/* Botão de Finalizar */}
