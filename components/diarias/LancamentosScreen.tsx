@@ -1007,9 +1007,10 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
 
   const handleDelete = async (id: string) => {
     if (window.confirm("Tem certeza que deseja excluir permanentemente este lançamento de viagem?")) {
-      setEventos(prev => prev.filter(e => String(e.id) !== String(id)));
+      const targetId = String(id).trim();
+      setEventos(prev => prev.filter(e => String(e.id).trim() !== targetId));
       try {
-        await deleteDiariaEvento(id);
+        await deleteDiariaEvento(targetId);
         await fetchEventos();
       } catch (err) {
         console.error(err);

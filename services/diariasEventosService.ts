@@ -216,7 +216,7 @@ export const saveDiariaGestor = async (pessoaId: string, gestorId: string): Prom
 
 export const deleteDiariaEvento = async (id: string): Promise<boolean> => {
   const cleanId = String(id).trim();
-  markEventAsDeleted(cleanId);
+  await markEventAsDeleted(cleanId);
   try {
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanId);
 
@@ -229,6 +229,11 @@ export const deleteDiariaEvento = async (id: string): Promise<boolean> => {
       if (error && error.code !== '42883') {
         console.warn('Alerta ao excluir evento de diária:', error.message);
       }
+
+      await supabase
+        .from('service_requests')
+        .delete()
+        .eq('id', cleanId);
     } else {
       // Se for id numérico/timestamp, executa exclusão tratada para evitar exceção de operador Postgres 42883
       const { error } = await supabase
@@ -239,6 +244,11 @@ export const deleteDiariaEvento = async (id: string): Promise<boolean> => {
       if (error) {
         console.warn('Alerta na exclusao com ID nao-UUID:', error.message);
       }
+
+      await supabase
+        .from('service_requests')
+        .delete()
+        .filter('id', 'eq', cleanId);
     }
   } catch (err) {
     console.warn('Exclusão tratada:', err);

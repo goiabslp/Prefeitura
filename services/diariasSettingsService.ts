@@ -171,18 +171,30 @@ export const getGlobalDeletedEventIds = async (): Promise<string[]> => {
 
 export const addGlobalDeletedEventId = async (eventId: string | number): Promise<string[]> => {
   const sId = String(eventId);
-  const current = await getGlobalDeletedEventIds();
-  if (!current.includes(sId)) {
-    current.push(sId);
+  
+  // 1. Salva imediatamente no localStorage de forma síncrona para sumir instantaneamente da UI
+  let localIds: string[] = [];
+  try {
+    const stored = localStorage.getItem('deleted_diarias_eventos_ids');
+    if (stored) {
+      localIds = JSON.parse(stored);
+    }
+  } catch (e) {
+    console.warn('Erro ao ler IDs excluidos do localStorage:', e);
+  }
+
+  if (!localIds.includes(sId)) {
+    localIds.push(sId);
   }
 
   try {
-    localStorage.setItem('deleted_diarias_eventos_ids', JSON.stringify(current));
+    localStorage.setItem('deleted_diarias_eventos_ids', JSON.stringify(localIds));
     window.dispatchEvent(new Event('diarias_settings_changed'));
   } catch (e) {
     console.warn('Erro ao salvar ID excluido no localStorage:', e);
   }
 
+  // 2. Sincroniza com as configurações globais do Supabase
   try {
     const { data: orgData } = await supabase
       .from('organization_settings')
@@ -191,18 +203,30 @@ export const addGlobalDeletedEventId = async (eventId: string | number): Promise
       .single();
 
     const currentUiConfig = orgData?.ui_config || {};
+    const dbIds: string[] = Array.isArray(currentUiConfig.deleted_diarias_eventos_ids)
+      ? currentUiConfig.deleted_diarias_eventos_ids
+      : [];
+
+    const merged = Array.from(new Set([...localIds, ...dbIds]));
+
     const updatedUiConfig = {
       ...currentUiConfig,
-      deleted_diarias_eventos_ids: current
+      deleted_diarias_eventos_ids: merged
     };
 
     await supabase
       .from('organization_settings')
       .update({ ui_config: updatedUiConfig })
       .eq('id', 'global_config');
+
+    try {
+      localStorage.setItem('deleted_diarias_eventos_ids', JSON.stringify(merged));
+    } catch {}
+
+    return merged;
   } catch (e) {
     console.warn('Erro ao sincronizar ID excluido no Supabase:', e);
   }
 
-  return current;
+  return localIds;
 };
