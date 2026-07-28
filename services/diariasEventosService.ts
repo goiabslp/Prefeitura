@@ -155,6 +155,7 @@ export const updateDiariaEvento = async (id: string, updates: Partial<DiariaEven
     const fallbackUpdates = { ...cleanUpdates };
     delete fallbackUpdates.gestor_transferido_cargo;
     delete fallbackUpdates.permitir_despesas_pos_finalizacao;
+    delete fallbackUpdates.checklist;
 
     const fallbackRes = await supabase
       .from('diarias_eventos')
@@ -164,6 +165,7 @@ export const updateDiariaEvento = async (id: string, updates: Partial<DiariaEven
       .single();
 
     if (!fallbackRes.error) {
+      window.dispatchEvent(new Event('diarias_eventos_updated'));
       const map = await getEnabledDespesasEventsMap();
       return {
         ...fallbackRes.data,
@@ -177,6 +179,8 @@ export const updateDiariaEvento = async (id: string, updates: Partial<DiariaEven
     throw new Error('Falha ao atualizar o lançamento de viagem.');
   }
 
+  window.dispatchEvent(new Event('diarias_eventos_updated'));
+  window.dispatchEvent(new Event('diarias_eventos_updated'));
   const map = await getEnabledDespesasEventsMap();
   return {
     ...data,

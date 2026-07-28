@@ -4,7 +4,7 @@ import {
   FileText, Search, Hash as HashIcon, CheckCircle2, 
   X, AlertTriangle, Upload, Paperclip, Check, Trash2,
   Car, Navigation, Hotel, BookOpen, Copy, Download, FileDown, XCircle, Receipt,
-  UserPlus, Square, Timer, Clock, Plus, ArrowRightLeft, UserCheck
+  UserPlus, Square, Timer, Clock, Plus, ArrowRightLeft, UserCheck, Play
 } from 'lucide-react';
 import { getDiariasDespesasEnabled, setDiariasDespesasEnabled } from '../../services/diariasSettingsService';
 import { DiariaEvento, User, Attachment, Sector, Job, Person, Order } from '../../types';
@@ -59,6 +59,12 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
 
   // Controle de Modais
   const [selectedEvento, setSelectedEvento] = useState<DiariaEvento | null>(null);
+  // Estados para modal de finalização direta de viagem no Lançamentos
+  const [finalizeEventoModal, setFinalizeEventoModal] = useState<DiariaEvento | null>(null);
+  const [isFinalizeHospedagemStep, setIsFinalizeHospedagemStep] = useState<boolean>(false);
+  const [finalHospedagem, setFinalHospedagem] = useState<boolean>(false);
+  const [finalHospedagemDias, setFinalHospedagemDias] = useState<number>(1);
+  const [isFinalizingSubmitting, setIsFinalizingSubmitting] = useState<boolean>(false);
   const [modalType, setModalType] = useState<'gestor' | 'admin' | null>(null);
 
   // Estados para o Modal do Gestor
@@ -118,7 +124,6 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
   }, [currentUser, gestoresMap]);
 
   // Estados dos modais de gestão na lista de lançamentos
-  const [finalizeEventoModal, setFinalizeEventoModal] = useState<DiariaEvento | null>(null);
   const [addServerEventoModal, setAddServerEventoModal] = useState<DiariaEvento | null>(null);
   const [addServerSearch, setAddServerSearch] = useState('');
   const [transferServerEventoModal, setTransferServerEventoModal] = useState<DiariaEvento | null>(null);
@@ -269,6 +274,18 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
   useEffect(() => {
     fetchEventos(eventos.length === 0);
   }, [currentUser?.id]);
+
+  useEffect(() => {
+    const handleRefresh = () => {
+      fetchEventos(false);
+    };
+    window.addEventListener('diarias_eventos_updated', handleRefresh);
+    window.addEventListener('popstate', handleRefresh);
+    return () => {
+      window.removeEventListener('diarias_eventos_updated', handleRefresh);
+      window.removeEventListener('popstate', handleRefresh);
+    };
+  }, []);
 
   useEffect(() => {
     const checkActiveTrip = async () => {
@@ -491,6 +508,68 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
 
   const removeComprovante = (id: string) => {
     setComprovantes(prev => prev.filter(c => c.id !== id));
+  };
+
+  const handleOpenFinalizeModal = (evento: DiariaEvento) => {
+    setFinalizeEventoModal(evento);
+    const pWithInicio = evento.pessoas?.find(p => (p as any).viagem_inicio);
+    const inicioStr = pWithInicio ? (pWithInicio as any).viagem_inicio : (evento.data_saida || evento.created_at);
+    
+    let diffHours = 0;
+    if (inicioStr) {
+      const inicioDate = new Date(inicioStr);
+      const agora = new Date();
+      diffHours = (agora.getTime() - inicioDate.getTime()) / (1000 * 60 * 60);
+    }
+
+    if (diffHours >= 12) {
+      setIsFinalizeHospedagemStep(true);
+      setFinalHospedagem(false);
+      setFinalHospedagemDias(1);
+    } else {
+      setIsFinalizeHospedagemStep(false);
+    }
+  };
+
+  const handleConfirmFinalizarViagemInLancamentos = async () => {
+    if (!finalizeEventoModal) return;
+    setIsFinalizingSubmitting(true);
+    const fimIso = new Date().toISOString();
+
+    const updatedPessoas = (finalizeEventoModal.pessoas && finalizeEventoModal.pessoas.length > 0)
+      ? finalizeEventoModal.pessoas.map(p => ({
+          ...p,
+          viagem_fim: (p as any).viagem_fim || fimIso
+        }))
+      : [{ id: currentUser.id, name: currentUser.name, viagem_fim: fimIso }] as any;
+
+    const pWithInicio = finalizeEventoModal.pessoas?.find(p => (p as any).viagem_inicio);
+    const inicioStr = pWithInicio ? (pWithInicio as any).viagem_inicio : (finalizeEventoModal.data_saida || fimIso);
+    const diffMs = new Date(fimIso).getTime() - new Date(inicioStr).getTime();
+    const diffHours = diffMs / (1000 * 60 * 60);
+
+    const useHospedagem = diffHours >= 12 ? finalHospedagem : (finalizeEventoModal.hospedagem || false);
+    const useHospedagemDias = diffHours >= 12 ? (finalHospedagem ? finalHospedagemDias : 0) : (finalizeEventoModal.hospedagem_dias || 0);
+
+    try {
+      const updated = await updateDiariaEvento(finalizeEventoModal.id, {
+        pessoas: updatedPessoas,
+        data_retorno: fimIso,
+        status: 'aguardando_gestor',
+        hospedagem: useHospedagem,
+        hospedagem_dias: useHospedagemDias
+      });
+
+      setEventos(prev => prev.map(e => e.id === finalizeEventoModal.id ? updated : e));
+      setFinalizeEventoModal(null);
+      alert('Viagem finalizada com sucesso!');
+      fetchEventos(false);
+    } catch (err) {
+      console.error('Erro ao finalizar viagem em Lançamentos:', err);
+      alert('Falha ao finalizar a viagem.');
+    } finally {
+      setIsFinalizingSubmitting(false);
+    }
   };
 
   const handleGestorApprove = async () => {
@@ -1287,23 +1366,23 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
             </div>
           ) : (
             <div className="min-w-full">
-              <div className="border-b border-slate-100 bg-slate-50 hidden desktop:grid desktop:grid-cols-12 gap-4 px-6 py-3 sticky top-0 z-10">
-                <div className="desktop:col-span-2 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-center gap-2 whitespace-nowrap">
-                  <Calendar className="w-3 h-3" /> Data Solicitação
+              <div className="border-b border-slate-100 bg-slate-50 hidden desktop:grid desktop:grid-cols-12 gap-3 px-6 py-3 sticky top-0 z-10">
+                <div className="desktop:col-span-1 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-center gap-1.5 whitespace-nowrap">
+                  <Calendar className="w-3 h-3" /> Data
                 </div>
-                <div className="desktop:col-span-1 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-center gap-2 whitespace-nowrap">
+                <div className="desktop:col-span-1 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-center gap-1.5 whitespace-nowrap">
                   <HashIcon className="w-3 h-3" /> ID
                 </div>
-                <div className="desktop:col-span-3 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 whitespace-nowrap">
+                <div className="desktop:col-span-3 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5 whitespace-nowrap">
                   <MapPin className="w-3 h-3" /> Destino / Servidor
                 </div>
-                <div className="desktop:col-span-2 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 whitespace-nowrap">
-                  <FileText className="w-3 h-3" /> Motivo da Viagem
+                <div className="desktop:col-span-2 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5 whitespace-nowrap">
+                  <FileText className="w-3 h-3" /> Motivo
                 </div>
-                <div className="desktop:col-span-2 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-center gap-2 whitespace-nowrap">
+                <div className="desktop:col-span-2 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-center gap-1.5 whitespace-nowrap">
                   Status
                 </div>
-                <div className="desktop:col-span-2 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-end gap-2 whitespace-nowrap pr-2">
+                <div className="desktop:col-span-3 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-end gap-1.5 whitespace-nowrap pr-2">
                   Ações
                 </div>
               </div>
@@ -1353,7 +1432,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
 
                   return (
                     <div key={evento.id} className="mx-4 my-3 p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:border-indigo-100 desktop:mx-0 desktop:my-0 desktop:rounded-none desktop:bg-transparent desktop:border-0 desktop:border-b desktop:border-slate-100 desktop:shadow-none desktop:px-6 desktop:py-3 flex flex-col desktop:grid desktop:grid-cols-12 gap-4 hover:bg-slate-50/80 transition-all duration-200 items-stretch desktop:items-center">
-                      <div className="desktop:col-span-2 flex items-center justify-between desktop:justify-center gap-3 pb-2 desktop:pb-0 border-b border-slate-100 desktop:border-b-0 shrink-0">
+                      <div className="desktop:col-span-1 flex items-center justify-between desktop:justify-center gap-3 pb-2 desktop:pb-0 border-b border-slate-100 desktop:border-b-0 shrink-0">
                         <div className="flex items-center gap-2.5">
                           <div className="w-9 h-9 bg-slate-50 rounded-xl border border-slate-150 flex flex-col items-center justify-center shadow-xs shrink-0">
                             <span className="text-[7px] font-black text-slate-400 uppercase">
@@ -1429,15 +1508,29 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                          )}
                       </div>
 
-                      <div className="desktop:col-span-2 flex items-center justify-end gap-1 pt-2 desktop:pt-0 border-t border-slate-100 desktop:border-t-0 mt-1 desktop:mt-0 w-full desktop:w-auto shrink-0 flex-nowrap overflow-x-auto">
-                        {/* Botão de Finalizar Viagem para Gestor/Admin quando em percurso */}
-                        {isGestorOrAdmin && isEmViagem && (
+                      <div className="desktop:col-span-3 flex items-center justify-end gap-1.5 pt-2 desktop:pt-0 border-t border-slate-100 desktop:border-t-0 mt-1 desktop:mt-0 w-full shrink-0 flex-nowrap overflow-x-auto">
+                        {/* Botão de Iniciar Viagem (Apenas para Viagens Programadas) */}
+                        {evento.status === 'viagem_programada' && (isCurrentUserGestor || isAdmin || evento.user_id === currentUser?.id || (evento.pessoas && evento.pessoas.some(p => p.id === currentUser?.id))) && (
                           <button
-                            onClick={() => setFinalizeEventoModal(evento)}
-                            className="px-2 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 shadow-xs flex items-center gap-1 shrink-0"
+                            onClick={() => {
+                              window.history.pushState({}, '', `/Diarias/Viajar/Detalhes?id=${evento.id}`);
+                              window.dispatchEvent(new Event('popstate'));
+                            }}
+                            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 shadow-xs flex items-center gap-1 shrink-0"
+                            title="Iniciar esta Viagem"
+                          >
+                            <Play className="w-3 h-3 fill-white text-white shrink-0" />
+                            <span>Iniciar</span>
+                          </button>
+                        )}
+
+                        {/* Botão de Finalizar Viagem para Gestor/Admin quando em percurso */}
+                        {isEmViagem && (isCurrentUserGestor || isAdmin || evento.user_id === currentUser?.id || (evento.pessoas && evento.pessoas.some(p => p.id === currentUser?.id))) && (
+                          <button
+                            onClick={() => handleOpenFinalizeModal(evento)}
+                            className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 shadow-xs shrink-0"
                             title="Finalizar Viagem em Andamento"
                           >
-                            <Square className="w-3 h-3 fill-white text-white" />
                             <span>Finalizar</span>
                           </button>
                         )}
@@ -2792,6 +2885,116 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
         orders={mappedOrdersForReport}
         onUpdatePaymentStatus={handleUpdatePaymentStatus}
       />
+      {/* Modal de Finalização Direta em Lançamentos */}
+      {finalizeEventoModal && (
+        <div 
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4 animate-fade-in"
+          onClick={() => setFinalizeEventoModal(null)}
+        >
+          <div 
+            className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100 animate-slide-up text-left"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="bg-rose-600 p-6 text-white text-center relative flex flex-col items-center">
+              <div className="w-14 h-14 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center mb-3 border border-white/30 shadow-inner">
+                <AlertTriangle className="w-8 h-8 text-white" />
+              </div>
+              <h3 className="text-lg font-black tracking-tight uppercase">Finalizar Viagem</h3>
+              <p className="text-xs text-rose-100 font-semibold mt-1">Destino: {finalizeEventoModal.destino}</p>
+              <button 
+                onClick={() => setFinalizeEventoModal(null)} 
+                className="absolute top-4 right-4 p-2 text-white/80 hover:text-white bg-black/10 hover:bg-black/20 rounded-full transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-5">
+              {isFinalizeHospedagemStep ? (
+                <div className="space-y-4">
+                  <p className="text-xs font-semibold text-slate-700 leading-relaxed text-center">
+                    A viagem teve uma duração superior a 12 horas. Por favor, informe se houve hospedagem:
+                  </p>
+
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block text-center">
+                      Houve Hospedagem?
+                    </label>
+                    <div className="flex gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setFinalHospedagem(false)}
+                        className={`flex-1 py-3 text-xs font-black uppercase tracking-wider rounded-2xl border transition-all ${
+                          !finalHospedagem
+                            ? 'bg-slate-900 text-white border-slate-900 shadow-md'
+                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        Não
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFinalHospedagem(true)}
+                        className={`flex-1 py-3 text-xs font-black uppercase tracking-wider rounded-2xl border transition-all ${
+                          finalHospedagem
+                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-600/30'
+                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        Sim
+                      </button>
+                    </div>
+                  </div>
+
+                  {finalHospedagem && (
+                    <div className="space-y-2 animate-fade-in pt-1">
+                      <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 block">
+                        Quantas Noites de Hospedagem?
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={finalHospedagemDias}
+                        onChange={(e) => setFinalHospedagemDias(Math.max(1, parseInt(e.target.value) || 1))}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-bold text-slate-900 outline-none"
+                      />
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center space-y-2">
+                  <p className="text-xs font-bold text-slate-800 leading-relaxed">
+                    Confirma o encerramento imediato da viagem para <span className="font-black text-rose-700">{finalizeEventoModal.destino}</span>?
+                  </p>
+                  <p className="text-[11px] text-slate-500">
+                    O horário de retorno será registrado com a hora atual e a viagem seguirá para prestação de contas.
+                  </p>
+                </div>
+              )}
+
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setFinalizeEventoModal(null)}
+                  disabled={isFinalizingSubmitting}
+                  className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs uppercase tracking-wider rounded-xl transition-all disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmFinalizarViagemInLancamentos}
+                  disabled={isFinalizingSubmitting}
+                  className="flex-1 py-3 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-rose-600/30 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isFinalizingSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />}
+                  <span>Sim, Finalizar</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

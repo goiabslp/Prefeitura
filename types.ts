@@ -539,6 +539,7 @@ export interface DiariaEvento {
     signerName?: string;
   };
   permitir_despesas_pos_finalizacao?: boolean;
+  checklist?: any;
 }
 
 export interface ConsultaPaciente {

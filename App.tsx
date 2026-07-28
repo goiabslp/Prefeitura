@@ -1054,6 +1054,20 @@ const App: React.FC = () => {
       const path = rawPath.replace(/\/$/, '').toLowerCase() || '/';
 
       // Look up path case-insensitively and ignoring trailing slash
+      if (path.startsWith('/diarias/viajar')) {
+        setCurrentView('diarias-viajar');
+        return;
+      } else if (path.startsWith('/diarias/lancamentos')) {
+        setCurrentView('diarias-lancamentos');
+        return;
+      } else if (path.startsWith('/diarias/gestores')) {
+        setCurrentView('diarias-gestores');
+        return;
+      } else if (path.startsWith('/diarias/novo')) {
+        setCurrentView('diarias-novo-evento');
+        return;
+      }
+
       const matchedEntry = Object.entries(PATH_TO_STATE).find(
         ([key]) => key.replace(/\/$/, '').toLowerCase() === path
       );

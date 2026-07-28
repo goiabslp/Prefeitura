@@ -3,7 +3,7 @@ import {
   Car, MapPin, Calendar, Clock, Play, Square, Timer, ArrowLeft, 
   ChevronRight, CheckCircle2, AlertTriangle, ShieldCheck, RefreshCw,
   FileText, History, Info, Sparkles, Camera, Upload, Trash2, Paperclip,
-  DollarSign, ExternalLink, Image as ImageIcon, X, Loader2, Plus, Receipt, Lock, ChevronDown
+  DollarSign, ExternalLink, Image as ImageIcon, X, Loader2, Plus, Receipt, Lock, ChevronDown, Check, Hotel
 } from 'lucide-react';
 import { DiariaEvento, User, Attachment } from '../../types';
 import { getAllDiariaEventos, updateDiariaEvento } from '../../services/diariasEventosService';
@@ -85,6 +85,20 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
 
   useEffect(() => {
     loadViagens();
+
+    const handleUpdate = () => {
+      loadViagens(false);
+    };
+
+    window.addEventListener('diarias_eventos_updated', handleUpdate);
+    const interval = setInterval(() => {
+      loadViagens(false);
+    }, 3000);
+
+    return () => {
+      window.removeEventListener('diarias_eventos_updated', handleUpdate);
+      clearInterval(interval);
+    };
   }, [currentUser]);
 
   // Estados para Upload de Comprovante de Despesa
@@ -101,6 +115,25 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
 
   // Modal de confirmação ao clicar em Finalizar
   const [isConfirmFinalizeOpen, setIsConfirmFinalizeOpen] = useState<boolean>(false);
+  const [isHospedagemModalOpen, setIsHospedagemModalOpen] = useState<boolean>(false);
+  const [finalHospedagem, setFinalHospedagem] = useState<boolean>(false);
+  const [finalHospedagemDias, setFinalHospedagemDias] = useState<number>(1);
+
+  // Estados para Modal de Checklist do Veículo Pré-Viagem
+  const [isChecklistModalOpen, setIsChecklistModalOpen] = useState<boolean>(false);
+  const [isConfirmChecklistAlertOpen, setIsConfirmChecklistAlertOpen] = useState<boolean>(false);
+  const [checklistData, setChecklistData] = useState({
+    lataria: true,
+    pneus: true,
+    farois: true,
+    oleo: true,
+    agua: true,
+    combustivel: true,
+    documentacao: true,
+    estepe: true,
+    temAvaria: false,
+    observacoes: ''
+  });
 
   // Modal de sucesso ao finalizar
   const [summaryModal, setSummaryModal] = useState<{
@@ -241,6 +274,7 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
 
   // Procura por viagem ativa em andamento para o usuário logado
   const activeTrip = eventos.find(evt => {
+    if (evt.status !== 'em_viagem') return false;
     const data = getPessoaViagemData(evt);
     return data.viagem_inicio && !data.viagem_fim;
   });
@@ -292,18 +326,61 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
     };
   }, [selectedEvento, eventos]);
 
+  // Ação de Iniciar Viagem com salvamento do Checklist
+  const handleIniciarViagemWithChecklist = async (evento: DiariaEvento) => {
+    setIsConfirmChecklistAlertOpen(false);
+    setIsChecklistModalOpen(false);
+
+    const inicioIso = new Date().toISOString();
+    const updatedPessoas = (evento.pessoas && evento.pessoas.length > 0)
+      ? evento.pessoas.map(p => ({
+          ...p,
+          viagem_inicio: (p as any).viagem_inicio || inicioIso
+        }))
+      : [{ id: currentUser.id, name: currentUser.name, viagem_inicio: inicioIso }] as any;
+
+    const optimisticEvento: DiariaEvento = {
+      ...evento,
+      pessoas: updatedPessoas,
+      data_saida: inicioIso,
+      status: 'em_viagem',
+      checklist: {
+        ...checklistData,
+        date: inicioIso,
+        user_name: currentUser.name
+      }
+    };
+
+    // 1. Atualização OTIMISTA instantânea (sem delay)
+    setEventos(prev => prev.map(e => e.id === evento.id ? optimisticEvento : e));
+
+    // 2. Envio em segundo plano para o Supabase
+    try {
+      const updated = await updateDiariaEvento(evento.id, {
+        pessoas: updatedPessoas,
+        data_saida: inicioIso,
+        status: 'em_viagem',
+        checklist: {
+          ...checklistData,
+          date: inicioIso,
+          user_name: currentUser.name
+        }
+      } as any);
+      setEventos(prev => prev.map(e => e.id === evento.id ? updated : e));
+    } catch (err) {
+      console.warn('Erro em segundo plano ao salvar início de viagem e checklist:', err);
+    }
+  };
+
   // Ação de Iniciar Viagem (Atualização Instantânea Otimista)
   const handleIniciarViagem = async (evento: DiariaEvento) => {
     const inicioIso = new Date().toISOString();
-    const updatedPessoas = evento.pessoas.map(p => {
-      if (isPersonMatch(p, currentUser)) {
-        return {
+    const updatedPessoas = (evento.pessoas && evento.pessoas.length > 0)
+      ? evento.pessoas.map(p => ({
           ...p,
-          viagem_inicio: inicioIso
-        };
-      }
-      return p;
-    }) as any;
+          viagem_inicio: (p as any).viagem_inicio || inicioIso
+        }))
+      : [{ id: currentUser.id, name: currentUser.name, viagem_inicio: inicioIso }] as any;
 
     const optimisticEvento: DiariaEvento = {
       ...evento,
@@ -328,30 +405,55 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
     }
   };
 
+  const handleInitiateFinalizeCheck = () => {
+    if (!selectedEvento) return;
+    const data = getPessoaViagemData(selectedEvento);
+    const inicioStr = data.viagem_inicio || selectedEvento.data_saida;
+
+    let diffHours = 0;
+    if (inicioStr) {
+      const inicioDate = new Date(inicioStr);
+      const agora = new Date();
+      diffHours = (agora.getTime() - inicioDate.getTime()) / (1000 * 60 * 60);
+    }
+
+    if (diffHours >= 12) {
+      setFinalHospedagem(false);
+      setFinalHospedagemDias(1);
+      setIsHospedagemModalOpen(true);
+    } else {
+      setIsConfirmFinalizeOpen(true);
+    }
+  };
+
   // Ação de Finalizar Viagem (Atualização Instantânea Otimista)
   const handleFinalizarViagem = async (evento: DiariaEvento) => {
     const fimIso = new Date().toISOString();
     const data = getPessoaViagemData(evento);
     const inicio = data.viagem_inicio || new Date().toISOString();
 
-    const updatedPessoas = evento.pessoas.map(p => {
-      if (isPersonMatch(p, currentUser)) {
-        return {
+    const updatedPessoas = (evento.pessoas && evento.pessoas.length > 0)
+      ? evento.pessoas.map(p => ({
           ...p,
-          viagem_fim: fimIso
-        };
-      }
-      return p;
-    }) as any;
+          viagem_fim: (p as any).viagem_fim || fimIso
+        }))
+      : [{ id: currentUser.id, name: currentUser.name, viagem_inicio: inicio, viagem_fim: fimIso }] as any;
+
+    const diffMs = new Date(fimIso).getTime() - new Date(inicio).getTime();
+    const diffHours = diffMs / (1000 * 60 * 60);
+
+    const useHospedagem = diffHours >= 12 ? finalHospedagem : (evento.hospedagem || false);
+    const useHospedagemDias = diffHours >= 12 ? (finalHospedagem ? finalHospedagemDias : 0) : (evento.hospedagem_dias || 0);
 
     const optimisticEvento: DiariaEvento = {
       ...evento,
       pessoas: updatedPessoas,
       data_retorno: fimIso,
-      status: 'aguardando_gestor'
+      status: 'aguardando_gestor',
+      hospedagem: useHospedagem,
+      hospedagem_dias: useHospedagemDias
     };
 
-    const diffMs = new Date(fimIso).getTime() - new Date(inicio).getTime();
     const totalSecs = Math.floor(diffMs / 1000);
     const hrs = Math.floor(totalSecs / 3600);
     const mins = Math.floor((totalSecs % 3600) / 60);
@@ -378,7 +480,9 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
       const updated = await updateDiariaEvento(evento.id, {
         pessoas: updatedPessoas,
         data_retorno: fimIso,
-        status: 'aguardando_gestor'
+        status: 'aguardando_gestor',
+        hospedagem: useHospedagem,
+        hospedagem_dias: useHospedagemDias
       });
       setEventos(prev => prev.map(e => e.id === evento.id ? updated : e));
     } catch (err) {
@@ -740,7 +844,23 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
                       </p>
 
                       <button
-                        onClick={() => check.allowed && handleIniciarViagem(selectedEvento)}
+                        onClick={() => {
+                          if (check.allowed) {
+                            setChecklistData({
+                              lataria: true,
+                              pneus: true,
+                              farois: true,
+                              oleo: true,
+                              agua: true,
+                              combustivel: true,
+                              documentacao: true,
+                              estepe: true,
+                              temAvaria: false,
+                              observacoes: ''
+                            });
+                            setIsChecklistModalOpen(true);
+                          }
+                        }}
                         disabled={!check.allowed}
                         className={`w-36 h-36 rounded-full flex flex-col items-center justify-center text-white shadow-2xl transition-all duration-300 border-[6px] border-white group/btn relative ${
                           check.allowed
@@ -809,7 +929,7 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
 
                       {/* Botão de Finalizar */}
                       <button
-                        onClick={() => setIsConfirmFinalizeOpen(true)}
+                        onClick={handleInitiateFinalizeCheck}
                         className="w-36 h-36 bg-rose-600 hover:bg-rose-700 rounded-full flex flex-col items-center justify-center text-white shadow-2xl transition-all duration-300 hover:scale-105 active:scale-95 shadow-rose-600/40 cursor-pointer border-[6px] border-white group/btn"
                       >
                         <Square className="w-10 h-10 fill-white text-white group-hover/btn:scale-110 transition-transform mb-1" />
@@ -980,7 +1100,7 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
                               className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 transition-colors"
                               title="Excluir"
                             >
-                              <Trash2 className="w-4 h-4" />
+                          <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
                         </div>
@@ -1022,35 +1142,35 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
               </button>
             </div>
 
-            <div className="p-6 space-y-5 text-center">
-              <div className="bg-rose-50/80 border border-rose-150 rounded-2xl p-4 text-slate-800 text-left space-y-1.5">
+            <div className="p-6 space-y-4">
+              <div className="space-y-2 text-center">
                 <p className="text-xs font-bold text-slate-900 leading-relaxed">
-                  Tem certeza que deseja finalizar a viagem para <span className="font-black text-rose-700">{selectedEvento.destino}</span>?
+                  Confirma a finalização da viagem para <span className="font-black text-rose-700">{selectedEvento.destino}</span>?
                 </p>
-                <p className="text-[11px] font-medium text-slate-600 leading-normal">
-                  O horário de retorno será registrado imediatamente e a viagem passará para o status de concluída.
+                {finalHospedagem && (
+                  <div className="bg-indigo-50 p-2.5 rounded-xl border border-indigo-200 text-[11px] text-indigo-900 font-bold">
+                    Hospedagem informada: {finalHospedagemDias} {finalHospedagemDias === 1 ? 'noite' : 'noites'}
+                  </div>
+                )}
+                <p className="text-[11px] text-slate-500">
+                  Ao finalizar, o horário de retorno será registrado com a hora atual e a viagem seguirá para prestação de contas.
                 </p>
               </div>
 
-              <div className="flex flex-col sm:flex-row items-center gap-3">
+              <div className="flex items-center gap-3 pt-2">
                 <button
                   type="button"
                   onClick={() => setIsConfirmFinalizeOpen(false)}
-                  className="w-full py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs uppercase tracking-wider rounded-xl transition-all"
+                  className="flex-1 py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs uppercase tracking-wider rounded-xl transition-all"
                 >
                   Cancelar
                 </button>
-
                 <button
                   type="button"
-                  onClick={() => {
-                    setIsConfirmFinalizeOpen(false);
-                    handleFinalizarViagem(selectedEvento);
-                  }}
-                  className="w-full py-3.5 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-rose-600/30 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                  onClick={() => handleFinalizarViagem(selectedEvento)}
+                  className="flex-1 py-3.5 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-rose-600/30 transition-all active:scale-95"
                 >
-                  <Square className="w-4 h-4 fill-white" />
-                  <span>Sim, Finalizar</span>
+                  Sim, Finalizar
                 </button>
               </div>
             </div>
@@ -1058,31 +1178,134 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
         </div>
       )}
 
-      {/* Modal Resumo e Finalização */}
+      {/* ======================================================== */}
+      {/* MODAL PERGUNTA DE HOSPEDAGEM (QUANDO VIAGEM > 12 HORAS) */}
+      {/* ======================================================== */}
+      {isHospedagemModalOpen && selectedEvento && (
+        <div 
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4 animate-fade-in"
+          onClick={() => setIsHospedagemModalOpen(false)}
+        >
+          <div 
+            className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100 animate-slide-up text-left"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="bg-indigo-600 p-6 text-white text-center relative flex flex-col items-center">
+              <div className="w-14 h-14 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center mb-3 border border-white/30 shadow-inner">
+                <Hotel className="w-8 h-8 text-white" />
+              </div>
+              <h3 className="text-lg font-black tracking-tight uppercase">Informação de Hospedagem</h3>
+              <p className="text-xs text-indigo-100 font-semibold mt-1">Viagem com duração superior a 12 horas</p>
+              <button 
+                onClick={() => setIsHospedagemModalOpen(false)} 
+                className="absolute top-4 right-4 p-2 text-white/80 hover:text-white bg-black/10 hover:bg-black/20 rounded-full transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-5">
+              <p className="text-xs font-semibold text-slate-700 leading-relaxed text-center">
+                A sua viagem teve uma duração superior a 12 horas. Por favor, informe se houve necessidade de hospedagem:
+              </p>
+
+              <div className="space-y-3">
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block text-center">
+                  Houve Hospedagem?
+                </label>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setFinalHospedagem(false)}
+                    className={`flex-1 py-3 text-xs font-black uppercase tracking-wider rounded-2xl border transition-all ${
+                      !finalHospedagem
+                        ? 'bg-slate-900 text-white border-slate-900 shadow-md'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    Não
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFinalHospedagem(true)}
+                    className={`flex-1 py-3 text-xs font-black uppercase tracking-wider rounded-2xl border transition-all ${
+                      finalHospedagem
+                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-600/30'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    Sim
+                  </button>
+                </div>
+              </div>
+
+              {finalHospedagem && (
+                <div className="space-y-2 animate-fade-in pt-1">
+                  <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 block">
+                    Quantas Noites de Hospedagem?
+                  </label>
+                  <div className="relative flex items-center w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 focus-within:bg-white focus-within:border-indigo-500 focus-within:ring-4 focus-within:ring-indigo-500/10 transition-all">
+                    <Clock className="w-4 h-4 text-slate-400 shrink-0 mr-3" />
+                    <input
+                      type="number"
+                      min="1"
+                      value={finalHospedagemDias}
+                      onChange={(e) => setFinalHospedagemDias(Math.max(1, parseInt(e.target.value) || 1))}
+                      className="w-full bg-transparent text-sm font-bold text-slate-900 outline-none"
+                      placeholder="Número de noites"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsHospedagemModalOpen(false)}
+                  className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs uppercase tracking-wider rounded-xl transition-all"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsHospedagemModalOpen(false);
+                    setIsConfirmFinalizeOpen(true);
+                  }}
+                  className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-indigo-600/30 transition-all active:scale-95"
+                >
+                  Confirmar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Sucesso ao Finalizar Viagem */}
       {summaryModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-fade-in">
-          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden text-center p-6 space-y-4">
-            <div className="w-16 h-16 rounded-full bg-emerald-50 border-[5px] border-emerald-100 flex items-center justify-center mx-auto">
-              <CheckCircle2 className="w-8 h-8 text-emerald-500" />
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="w-full max-w-sm bg-white rounded-3xl shadow-2xl p-6 text-center space-y-4 animate-scale-up border border-slate-100">
+            <div className="w-14 h-14 bg-emerald-100 rounded-2xl flex items-center justify-center mx-auto text-emerald-600 shadow-inner">
+              <CheckCircle2 className="w-8 h-8" />
             </div>
-            
             <div>
-              <h4 className="text-xl font-black text-slate-900">Viagem Concluída!</h4>
-              <p className="text-slate-500 text-xs font-semibold mt-1">Seus horários reais foram salvos com sucesso.</p>
+              <h3 className="text-lg font-black text-slate-900">Viagem Finalizada!</h3>
+              <p className="text-slate-500 text-xs mt-1">Horário de término registrado com sucesso.</p>
             </div>
             
-            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-150 text-left text-xs space-y-3 font-semibold text-slate-600">
-              <div className="flex justify-between border-b border-slate-200 pb-2">
-                <span className="text-slate-400">SAÍDA REAL:</span>
-                <span className="text-slate-900 font-bold">{summaryModal.saidaReal}</span>
+            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 text-left space-y-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-slate-400 font-bold">Saída Real:</span>
+                <span className="font-bold text-slate-800">{summaryModal.saidaReal}</span>
               </div>
-              <div className="flex justify-between border-b border-slate-200 pb-2">
-                <span className="text-slate-400">RETORNO REAL:</span>
-                <span className="text-slate-900 font-bold">{summaryModal.retornoReal}</span>
+              <div className="flex justify-between">
+                <span className="text-slate-400 font-bold">Retorno Real:</span>
+                <span className="font-bold text-slate-800">{summaryModal.retornoReal}</span>
               </div>
-              <div className="flex justify-between pt-1">
-                <span className="text-slate-400">DURAÇÃO TOTAL:</span>
-                <span className="text-emerald-600 font-extrabold">{summaryModal.duracaoText}</span>
+              <div className="flex justify-between border-t border-slate-200/60 pt-2 text-indigo-600">
+                <span className="font-bold">Tempo Total:</span>
+                <span className="font-black">{summaryModal.duracaoText}</span>
               </div>
             </div>
 
@@ -1091,10 +1314,210 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
                 setSummaryModal(null);
                 navigateToList();
               }}
-              className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-2xl active:scale-95 transition-all shadow-lg text-xs md:text-sm"
+              className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-emerald-600/30 transition-all active:scale-95"
             >
               OK, Entendido
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL CHECKLIST DO VEÍCULO (PRÉ-VIAGEM) */}
+      {/* ======================================================== */}
+      {isChecklistModalOpen && selectedEvento && (
+        <div 
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4 animate-fade-in"
+          onClick={() => setIsChecklistModalOpen(false)}
+        >
+          <div 
+            className="w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100 animate-slide-up flex flex-col max-h-[90vh] text-left"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Cabeçalho */}
+            <div className="bg-slate-900 p-5 text-white flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-emerald-600/30 border border-emerald-400/30 rounded-xl flex items-center justify-center">
+                  <Car className="w-5 h-5 text-emerald-400" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-sm text-white uppercase tracking-wider">Checklist do Veículo</h3>
+                  <p className="text-[11px] text-slate-400 font-medium">Vistoria pré-viagem obrigatória</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsChecklistModalOpen(false)} 
+                className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-full transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Informações do Veículo */}
+            <div className="p-4 bg-emerald-50/70 border-b border-emerald-200/60 text-xs text-emerald-950 shrink-0 space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="font-bold flex items-center gap-1.5 text-emerald-900">
+                  <Car className="w-4 h-4 text-emerald-700 shrink-0" />
+                  Veículo Alocado:
+                </span>
+                <span className="font-black text-slate-900 text-xs bg-white px-2.5 py-0.5 rounded-lg border border-emerald-200 shadow-xs">
+                  {selectedEvento.veiculo === 'OUTRO' ? (selectedEvento.veiculo_outro || 'Outro Veículo') : (selectedEvento.veiculo || 'Não especificado')}
+                </span>
+              </div>
+              <p className="text-[11px] text-emerald-800 font-medium">
+                <strong>Destino:</strong> {selectedEvento.destino} • <strong>Condutor:</strong> {currentUser.name}
+              </p>
+            </div>
+
+            {/* Lista do Checklist */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-3.5">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
+                Marque a situação dos itens de segurança:
+              </p>
+
+              {[
+                { key: 'lataria', label: 'Lataria sem avarias' },
+                { key: 'pneus', label: 'Pneus em boas condições' },
+                { key: 'farois', label: 'Faróis e lanternas funcionando' },
+                { key: 'oleo', label: 'Nível do óleo do motor adequado' },
+                { key: 'agua', label: 'Nível da água/líquido de arrefecimento adequado' },
+                { key: 'combustivel', label: 'Combustível suficiente' },
+                { key: 'documentacao', label: 'Documentação no veículo' },
+                { key: 'estepe', label: 'Estepe, macaco e chave de roda presentes' },
+              ].map(item => {
+                const isChecked = (checklistData as any)[item.key];
+                return (
+                  <button
+                    key={item.key}
+                    type="button"
+                    onClick={() => setChecklistData(prev => ({ ...prev, [item.key]: !isChecked }))}
+                    className={`w-full p-3 rounded-2xl border transition-all flex items-center justify-between text-left ${
+                      isChecked 
+                        ? 'bg-emerald-50/50 border-emerald-200 text-slate-800 shadow-xs' 
+                        : 'bg-amber-50/40 border-amber-200 text-amber-900'
+                    }`}
+                  >
+                    <span className="text-xs font-bold">{item.label}</span>
+                    <div className={`w-6 h-6 rounded-lg flex items-center justify-center transition-colors shrink-0 ${
+                      isChecked ? 'bg-emerald-600 text-white' : 'bg-amber-200 text-amber-800'
+                    }`}>
+                      {isChecked ? <Check className="w-4 h-4" /> : <X className="w-3.5 h-3.5" />}
+                    </div>
+                  </button>
+                );
+              })}
+
+              {/* Pergunta: Há alguma avaria ou problema? (Sim/Não) */}
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-2 mt-4">
+                <label className="text-xs font-black text-slate-800 block">
+                  Há alguma avaria ou problema no veículo?
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setChecklistData(prev => ({ ...prev, temAvaria: false, observacoes: '' }))}
+                    className={`flex-1 py-2.5 rounded-xl font-bold text-xs border transition-all ${
+                      !checklistData.temAvaria
+                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-600/20'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    Não
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChecklistData(prev => ({ ...prev, temAvaria: true }))}
+                    className={`flex-1 py-2.5 rounded-xl font-bold text-xs border transition-all ${
+                      checklistData.temAvaria
+                        ? 'bg-rose-600 text-white border-rose-600 shadow-md shadow-rose-600/20'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    Sim
+                  </button>
+                </div>
+              </div>
+
+              {/* Campo de Observações (Exibido apenas quando SIM é selecionado) */}
+              {checklistData.temAvaria && (
+                <div className="space-y-1.5 pt-1 animate-fade-in">
+                  <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 block">
+                    Observações / Detalhes de Avarias
+                  </label>
+                  <textarea
+                    value={checklistData.observacoes}
+                    onChange={(e) => setChecklistData(prev => ({ ...prev, observacoes: e.target.value }))}
+                    placeholder="Escreva os detalhes das avarias existentes ou observações da vistoria..."
+                    rows={3}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-3 text-xs text-slate-800 outline-none focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 resize-none transition-all"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Rodapé do Modal */}
+            <div className="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsChecklistModalOpen(false)}
+                className="px-4 py-3 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs rounded-xl transition-all"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsConfirmChecklistAlertOpen(true)}
+                className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-emerald-600/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+              >
+                <span>Finalizar Checklist</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* ALERTA DE CONFIRMAÇÃO DO CHECKLIST & INÍCIO DE VIAGEM */}
+      {/* ======================================================== */}
+      {isConfirmChecklistAlertOpen && selectedEvento && (
+        <div 
+          className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 animate-fade-in"
+          onClick={() => setIsConfirmChecklistAlertOpen(false)}
+        >
+          <div 
+            className="w-full max-w-sm bg-white rounded-3xl shadow-2xl border border-slate-100 p-6 text-center space-y-5 animate-scale-up"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="w-14 h-14 bg-emerald-100 rounded-2xl flex items-center justify-center mx-auto text-emerald-600 shadow-inner">
+              <CheckCircle2 className="w-8 h-8" />
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="font-extrabold text-slate-900 text-lg">Concluir Vistoria?</h3>
+              <p className="text-xs font-semibold text-slate-600 leading-relaxed">
+                Deseja fechar o checklist de vistoria e <strong className="text-emerald-700 font-black">iniciar a viagem</strong> agora em tempo real?
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => handleIniciarViagemWithChecklist(selectedEvento)}
+                className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-emerald-600/30 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+              >
+                <Play className="w-4 h-4 fill-white" />
+                <span>Sim, Iniciar Viagem</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsConfirmChecklistAlertOpen(false)}
+                className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all"
+              >
+                Voltar ao Checklist
+              </button>
+            </div>
           </div>
         </div>
       )}
