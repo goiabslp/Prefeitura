@@ -96,6 +96,24 @@ export default async function handler(req: Request) {
         4. FORMATO TEXTUAL: NÃO utilize marcações ou formatações Markdown (não utilize asteriscos ** para negrito, nem hashtags # para títulos, etc). O retorno deve ser exclusivamente em formato de texto simples (plain text).
         5. Não é necessario repetir dados como justificativa da viagem, dados pessoais. Apenas faça o detalhamento do co calculo das despesas e sobre o dispositivel legal que embasa o calculo e regras.
      `;
+    } else if (tipo === 'lapidar_motivo') {
+      promptText = `
+        Você é um assistente de IA especialista em redação administrativa para prefeituras e órgãos públicos.
+        
+        TAREFA:
+        Transforme a transcrição de voz fornecida pelo usuário em uma justificativa pública de viagem formal, clara, objetiva, profissional e perfeitamente redigida em Português do Brasil.
+        
+        TRANSCRIÇÃO DE VOZ DO USUÁRIO:
+        """
+        ${dados.promptText}
+        """
+        
+        REGRAS ESSENCIAIS:
+        1. Preserve a intenção e os detalhes citados (cidade, evento, reuniões, objetivo).
+        2. Corrija falhas de dicção, hesitações (ex: "é...", "tipo assim", "né") e informalidade.
+        3. O texto resultante DEVE ter pelo menos 50 caracteres (se a fala for muito curta, expanda suavemente com redação institucional formal).
+        4. NÃO use Markdown (sem negritos, asteriscos ou hashtags). Retorne exclusivamente o texto limpo da justificativa.
+      `;
     } else if (tipo === 'documento') {
       promptText = `
         Atue como um redator profissional especializado em documentos corporativos e governamentais.

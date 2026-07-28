@@ -3,14 +3,15 @@ import {
   ArrowLeft, MapPin, Calendar, Clock, FileText, CheckCircle2, 
   Loader2, Search, ChevronDown, Users, X, Check, ChevronLeft,
   MessageSquare, ArrowRight, ChevronRight, Car, AlertTriangle,
-  Bed, Plus, Minus, Trash2
+  Bed, Plus, Minus, Trash2, Mic, MicOff, Sparkles, Wand2, Info
 } from 'lucide-react';
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, parseISO, addMinutes } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Person, User, Sector, Job, Vehicle } from '../../types';
-import { createDiariaEvento, getDiariasGestores } from '../../services/diariasEventosService';
+import { Person, User, Sector, Job, Vehicle, DiariaEvento } from '../../types';
+import { createDiariaEvento, getDiariasGestores, getAllDiariaEventos } from '../../services/diariasEventosService';
 import { useCachedVehicles } from '../../hooks/useCachedVehicles';
 import { supabase } from '../../services/supabaseClient';
+import { polishMotivoWithAI } from '../../services/geminiService';
 import { motion, AnimatePresence } from 'framer-motion';
 
 
@@ -297,6 +298,180 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
   const [departureDateTime, setDepartureDateTime] = useState('');
   const [returnDateTime, setReturnDateTime] = useState('');
   const [reason, setReason] = useState('');
+  const [isRecording, setIsRecording] = useState(false);
+  const [isPolishingAI, setIsPolishingAI] = useState(false);
+  const recognitionRef = useRef<any>(null);
+
+  // Estados para status de alocação de veículos e modal dinâmico de situação
+  const [diariaEvents, setDiariaEvents] = useState<DiariaEvento[]>([]);
+  const [vehicleStatusModal, setVehicleStatusModal] = useState<{
+    vehicleName: string;
+    plate: string;
+    statusKey: 'em_viagem' | 'viagem_programada' | 'aguardando_aprovacao';
+    statusLabel: string;
+    badgeClass: string;
+    evento?: DiariaEvento;
+  } | null>(null);
+
+  useEffect(() => {
+    const fetchDiariaEvents = async () => {
+      try {
+        const events = await getAllDiariaEventos();
+        setDiariaEvents(events);
+      } catch (e) {
+        console.warn('Erro ao carregar eventos de diárias:', e);
+      }
+    };
+    fetchDiariaEvents();
+  }, []);
+
+  const getVehicleStatusInfo = (vehicle: Vehicle) => {
+    const normalize = (str: string) => str ? str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim() : "";
+    const vPlate = normalize(vehicle.plate);
+    const vBrandModel = normalize(`${vehicle.brand} ${vehicle.model}`);
+
+    const activeEvt = diariaEvents.find(evt => {
+      if (evt.status === 'concluido' || evt.status === 'cancelado' || evt.status === 'rejeitado_gestor' || evt.status === 'rejeitado_administrador') {
+        return false;
+      }
+      const evtVeiculoStr = normalize(typeof evt.veiculo === 'string' ? evt.veiculo : (evt.veiculo as any)?.plate || (evt.veiculo as any)?.model || '');
+      if (!evtVeiculoStr) return false;
+
+      if (vPlate && evtVeiculoStr.includes(vPlate)) return true;
+      if (vBrandModel && evtVeiculoStr.includes(vBrandModel)) return true;
+      return false;
+    });
+
+    if (!activeEvt) {
+      return {
+        isAvailable: true,
+        statusKey: 'disponivel',
+        statusLabel: 'Disponível',
+        badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-300'
+      };
+    }
+
+    if (activeEvt.status === 'em_viagem') {
+      return {
+        isAvailable: false,
+        statusKey: 'em_viagem',
+        statusLabel: 'Em Viagem',
+        badgeClass: 'bg-rose-50 text-rose-700 border-rose-300',
+        evento: activeEvt
+      };
+    }
+
+    if (activeEvt.status === 'viagem_programada') {
+      return {
+        isAvailable: false,
+        statusKey: 'viagem_programada',
+        statusLabel: 'Viagem Programada',
+        badgeClass: 'bg-amber-50 text-amber-700 border-amber-300',
+        evento: activeEvt
+      };
+    }
+
+    return {
+      isAvailable: false,
+      statusKey: 'aguardando_aprovacao',
+      statusLabel: 'Aguardando Aprovação',
+      badgeClass: 'bg-blue-50 text-blue-700 border-blue-300',
+      evento: activeEvt
+    };
+  };
+
+  const startRecordingSpeech = () => {
+    if (typeof window === 'undefined') return;
+
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert('O reconhecimento de voz não é suportado pelo seu navegador neste dispositivo. Tente no Google Chrome, Edge ou Safari.');
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'pt-BR';
+      recognition.continuous = true;
+      recognition.interimResults = true;
+
+      recognition.onstart = () => {
+        setIsRecording(true);
+      };
+
+      recognition.onresult = (event: any) => {
+        let transcript = '';
+        for (let i = 0; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript;
+        }
+        if (transcript.trim()) {
+          setReason(transcript);
+        }
+      };
+
+      recognition.onerror = (event: any) => {
+        console.warn('Erro no reconhecimento de voz:', event.error);
+        setIsRecording(false);
+      };
+
+      recognition.onend = () => {
+        setIsRecording(false);
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch (e) {
+      console.error(e);
+      setIsRecording(false);
+    }
+  };
+
+  const stopRecordingAndPolish = async () => {
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch (e) {}
+    }
+    setIsRecording(false);
+
+    if (reason && reason.trim().length > 3) {
+      setIsPolishingAI(true);
+      try {
+        const polishedText = await polishMotivoWithAI(reason);
+        if (polishedText) {
+          setReason(polishedText);
+        }
+      } catch (e) {
+        console.warn(e);
+      } finally {
+        setIsPolishingAI(false);
+      }
+    }
+  };
+
+  const handleToggleMic = () => {
+    if (isRecording) {
+      stopRecordingAndPolish();
+    } else {
+      startRecordingSpeech();
+    }
+  };
+
+  const handleManualPolishing = async () => {
+    if (!reason || !reason.trim()) return;
+    setIsPolishingAI(true);
+    try {
+      const polishedText = await polishMotivoWithAI(reason);
+      if (polishedText) {
+        setReason(polishedText);
+      }
+    } catch (e) {
+      console.warn(e);
+    } finally {
+      setIsPolishingAI(false);
+    }
+  };
+
   const [isExpiredModalOpen, setIsExpiredModalOpen] = useState(false);
   const [dateValidationError, setDateValidationError] = useState<{
     title: string;
@@ -1323,12 +1498,62 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
                     </div>
 
                     <div className="w-full text-left space-y-2">
+                      <div className="flex items-center justify-between gap-2 bg-slate-100/90 p-1.5 rounded-2xl border border-slate-200/80">
+                        <button
+                          type="button"
+                          onClick={handleToggleMic}
+                          disabled={isPolishingAI}
+                          className={`flex-1 py-2.5 px-3 rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-xs ${
+                            isRecording 
+                              ? 'bg-rose-600 text-white animate-pulse shadow-rose-600/30' 
+                              : 'bg-white text-slate-700 hover:bg-slate-50 border border-slate-200'
+                          }`}
+                        >
+                          {isRecording ? (
+                            <>
+                              <MicOff className="w-4 h-4 text-white" />
+                              <span>Parar & Lapidar IA</span>
+                            </>
+                          ) : (
+                            <>
+                              <Mic className="w-4 h-4 text-indigo-600" />
+                              <span>Falar Motivo por Voz</span>
+                            </>
+                          )}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleManualPolishing}
+                          disabled={isRecording || isPolishingAI || !reason.trim()}
+                          className="py-2.5 px-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all disabled:opacity-40 flex items-center justify-center gap-1.5 shadow-xs"
+                          title="Formatar texto com IA Gemini"
+                        >
+                          <Sparkles className="w-4 h-4 text-amber-300" />
+                          <span>Lapidar IA</span>
+                        </button>
+                      </div>
+
+                      {isRecording && (
+                        <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-bold flex items-center justify-center gap-2 animate-fade-in">
+                          <span className="w-2.5 h-2.5 bg-rose-600 rounded-full animate-ping"></span>
+                          <span>Ouvindo sua voz... Fale o motivo e toque para finalizar.</span>
+                        </div>
+                      )}
+
+                      {isPolishingAI && (
+                        <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-xl text-indigo-700 text-xs font-bold flex items-center justify-center gap-2 animate-fade-in">
+                          <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
+                          <span>Inteligência Artificial Gemini lapidando a justificativa...</span>
+                        </div>
+                      )}
+
                       <div className="relative flex items-start w-full bg-slate-50/90 border border-slate-200/80 rounded-2xl p-4 focus-within:border-indigo-500 focus-within:ring-4 focus-within:ring-indigo-500/5 transition-all shadow-sm">
                         <MessageSquare className="w-4 h-4 text-slate-400 shrink-0 mr-3 mt-1" />
                         <textarea
                           value={reason}
                           onChange={(e) => setReason(e.target.value)}
-                          placeholder="Descreva a agenda do evento, reuniões ou atividades a serem realizadas no destino..."
+                          placeholder="Descreva a agenda do evento ou clique em Falar Motivo por Voz acima..."
                           className="w-full min-h-[140px] bg-transparent text-base font-medium text-slate-900 outline-none resize-none leading-relaxed"
                         />
                       </div>
@@ -1633,26 +1858,51 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
 
                   {filteredVehicles.length > 0 ? (
                     filteredVehicles.map((v) => {
+                      const statusInfo = getVehicleStatusInfo(v);
                       const vehicleValue = `${v.brand} ${v.model} - ${v.plate}`;
                       const isSelected = selectedVehicle === vehicleValue;
                       return (
                         <button
                           key={v.id}
+                          type="button"
                           onClick={() => {
+                            if (!statusInfo.isAvailable) {
+                              setVehicleStatusModal({
+                                vehicleName: `${v.brand} ${v.model}`,
+                                plate: v.plate,
+                                statusKey: statusInfo.statusKey as any,
+                                statusLabel: statusInfo.statusLabel,
+                                badgeClass: statusInfo.badgeClass,
+                                evento: statusInfo.evento
+                              });
+                              return;
+                            }
                             setSelectedVehicle(vehicleValue);
                             setCustomVehicle('');
                             setIsVehiclesOpen(false);
                             setVehicleSearch('');
                           }}
-                          className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-left text-sm font-medium transition-all group ${isSelected ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-slate-50 text-slate-700'}`}
+                          className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-left text-sm font-medium transition-all group ${
+                            !statusInfo.isAvailable 
+                              ? 'bg-slate-50/60 opacity-90 cursor-pointer hover:bg-slate-100/80 border border-slate-200/60' 
+                              : isSelected 
+                                ? 'bg-indigo-50 text-indigo-700' 
+                                : 'hover:bg-slate-50 text-slate-700'
+                          }`}
                         >
-                          <div className="flex flex-col">
-                            <span className={`${isSelected ? 'font-bold' : ''}`}>{v.brand} {v.model}</span>
+                          <div className="flex flex-col pr-2">
+                            <div className="flex items-center gap-2">
+                              <span className={`${isSelected ? 'font-bold' : 'font-semibold text-slate-800'}`}>{v.brand} {v.model}</span>
+                              <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border ${statusInfo.badgeClass}`}>
+                                {statusInfo.statusLabel}
+                              </span>
+                            </div>
                             <span className={`text-[10px] font-normal ${isSelected ? 'text-indigo-500' : 'text-slate-400'}`}>
                               Placa: {v.plate} | Cor: {v.color} | Setor: {sectors.find(s => s.id === (v.sector_id || v.sectorId))?.name || 'Sem Setor'}
                             </span>
                           </div>
-                          {isSelected && <Check className="w-5 h-5 text-indigo-600" />}
+                          {isSelected && <Check className="w-5 h-5 text-indigo-600 shrink-0" />}
+                          {!statusInfo.isAvailable && <Info className="w-4 h-4 text-slate-400 shrink-0" />}
                         </button>
                       );
                     })
@@ -2192,12 +2442,63 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
               {/* Motivo */}
               <div className="space-y-3">
                 <label className={labelClass}>Motivo da Viagem</label>
+                
+                <div className="flex items-center justify-between gap-2 bg-slate-100/90 p-1.5 rounded-2xl border border-slate-200/80">
+                  <button
+                    type="button"
+                    onClick={handleToggleMic}
+                    disabled={isPolishingAI}
+                    className={`flex-1 py-2.5 px-3 rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-xs ${
+                      isRecording 
+                        ? 'bg-rose-600 text-white animate-pulse shadow-rose-600/30' 
+                        : 'bg-white text-slate-700 hover:bg-slate-50 border border-slate-200'
+                    }`}
+                  >
+                    {isRecording ? (
+                      <>
+                        <MicOff className="w-4 h-4 text-white" />
+                        <span>Parar & Lapidar IA</span>
+                      </>
+                    ) : (
+                      <>
+                        <Mic className="w-4 h-4 text-indigo-600" />
+                        <span>Falar Motivo por Voz</span>
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleManualPolishing}
+                    disabled={isRecording || isPolishingAI || !reason.trim()}
+                    className="py-2.5 px-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all disabled:opacity-40 flex items-center justify-center gap-1.5 shadow-xs"
+                    title="Formatar texto com IA Gemini"
+                  >
+                    <Sparkles className="w-4 h-4 text-amber-300" />
+                    <span>Lapidar IA</span>
+                  </button>
+                </div>
+
+                {isRecording && (
+                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-bold flex items-center justify-center gap-2 animate-fade-in">
+                    <span className="w-2.5 h-2.5 bg-rose-600 rounded-full animate-ping"></span>
+                    <span>Ouvindo sua voz... Fale o motivo e clique em Parar.</span>
+                  </div>
+                )}
+
+                {isPolishingAI && (
+                  <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-xl text-indigo-700 text-xs font-bold flex items-center justify-center gap-2 animate-fade-in">
+                    <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
+                    <span>Inteligência Artificial Gemini lapidando a justificativa...</span>
+                  </div>
+                )}
+
                 <div className={`${inputContainerClass} items-start`}>
                   <FileText className="absolute left-4 top-4 w-4 h-4 text-slate-400 pointer-events-none" />
                   <textarea
                     value={reason}
                     onChange={(e) => setReason(e.target.value)}
-                    placeholder="Descreva detalhadamente o objetivo da viagem e a agenda do evento..."
+                    placeholder="Descreva detalhadamente o objetivo da viagem ou clique no botão de voz acima..."
                     className={`${inputClass} min-h-[160px] resize-none leading-relaxed`}
                   />
                 </div>
@@ -2385,26 +2686,51 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
 
                 {filteredVehicles.length > 0 ? (
                   filteredVehicles.map((v) => {
+                    const statusInfo = getVehicleStatusInfo(v);
                     const vehicleValue = `${v.brand} ${v.model} - ${v.plate}`;
                     const isSelected = selectedVehicle === vehicleValue;
                     return (
                       <button
                         key={v.id}
+                        type="button"
                         onClick={() => {
+                          if (!statusInfo.isAvailable) {
+                            setVehicleStatusModal({
+                              vehicleName: `${v.brand} ${v.model}`,
+                              plate: v.plate,
+                              statusKey: statusInfo.statusKey as any,
+                              statusLabel: statusInfo.statusLabel,
+                              badgeClass: statusInfo.badgeClass,
+                              evento: statusInfo.evento
+                            });
+                            return;
+                          }
                           setSelectedVehicle(vehicleValue);
                           setCustomVehicle('');
                           setIsVehiclesOpen(false);
                           setVehicleSearch('');
                         }}
-                        className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-left text-sm font-medium transition-all group ${isSelected ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-slate-50 text-slate-700'}`}
+                        className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-left text-sm font-medium transition-all group ${
+                          !statusInfo.isAvailable 
+                            ? 'bg-slate-50/60 opacity-90 cursor-pointer hover:bg-slate-100/80 border border-slate-200/60' 
+                            : isSelected 
+                              ? 'bg-indigo-50 text-indigo-700' 
+                              : 'hover:bg-slate-50 text-slate-700'
+                        }`}
                       >
-                        <div className="flex flex-col">
-                          <span className={`${isSelected ? 'font-bold' : ''}`}>{v.brand} {v.model}</span>
+                        <div className="flex flex-col pr-2">
+                          <div className="flex items-center gap-2">
+                            <span className={`${isSelected ? 'font-bold' : 'font-semibold text-slate-800'}`}>{v.brand} {v.model}</span>
+                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border ${statusInfo.badgeClass}`}>
+                              {statusInfo.statusLabel}
+                            </span>
+                          </div>
                           <span className={`text-[10px] font-normal ${isSelected ? 'text-indigo-500' : 'text-slate-400'}`}>
                             Placa: {v.plate} | Cor: {v.color} | Setor: {sectors.find(s => s.id === (v.sector_id || v.sectorId))?.name || 'Sem Setor'}
                           </span>
                         </div>
-                        {isSelected && <Check className="w-5 h-5 text-indigo-600" />}
+                        {isSelected && <Check className="w-5 h-5 text-indigo-600 shrink-0" />}
+                        {!statusInfo.isAvailable && <Info className="w-4 h-4 text-slate-400 shrink-0" />}
                       </button>
                     );
                   })
@@ -2540,6 +2866,90 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
         </div>
       )}
 
+      {/* Modal Dinâmico de Situação do Veículo */}
+      {vehicleStatusModal && (
+        <div 
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4 animate-fade-in text-left"
+          onClick={() => setVehicleStatusModal(null)}
+        >
+          <div 
+            className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100 animate-slide-up"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className={`p-6 text-white text-center relative flex flex-col items-center ${
+              vehicleStatusModal.statusKey === 'em_viagem' 
+                ? 'bg-rose-600' 
+                : vehicleStatusModal.statusKey === 'viagem_programada' 
+                  ? 'bg-amber-600' 
+                  : 'bg-indigo-600'
+            }`}>
+              <div className="w-14 h-14 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center mb-3 border border-white/30 shadow-inner">
+                <Car className="w-8 h-8 text-white" />
+              </div>
+              <span className="px-3 py-1 bg-white/20 backdrop-blur-md rounded-full text-[10px] font-black uppercase tracking-widest text-white mb-1 border border-white/30">
+                Veículo Indisponível
+              </span>
+              <h3 className="text-lg font-black tracking-tight uppercase">{vehicleStatusModal.vehicleName}</h3>
+              <p className="text-xs text-white/90 font-medium mt-0.5">Placa: {vehicleStatusModal.plate}</p>
+              
+              <button 
+                onClick={() => setVehicleStatusModal(null)} 
+                className="absolute top-4 right-4 p-2 text-white/80 hover:text-white bg-black/10 hover:bg-black/20 rounded-full transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-5">
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Situação Atual</span>
+                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border ${vehicleStatusModal.badgeClass}`}>
+                    {vehicleStatusModal.statusLabel}
+                  </span>
+                </div>
+
+                {vehicleStatusModal.evento && (
+                  <div className="space-y-2 pt-2 border-t border-slate-200/60 text-xs">
+                    <div>
+                      <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400">Destino</span>
+                      <span className="font-bold text-slate-800">{vehicleStatusModal.evento.destino}</span>
+                    </div>
+
+                    <div>
+                      <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400">Servidores Alocados</span>
+                      <span className="font-bold text-slate-800">
+                        {vehicleStatusModal.evento.pessoas?.map(p => p.name).join(', ') || vehicleStatusModal.evento.user_name}
+                      </span>
+                    </div>
+
+                    {vehicleStatusModal.evento.data_saida && (
+                      <div>
+                        <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400">Previsão de Saída</span>
+                        <span className="font-bold text-slate-800">
+                          {new Date(vehicleStatusModal.evento.data_saida).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <p className="text-xs text-slate-500 font-medium text-center leading-relaxed">
+                Este veículo não pode ser selecionado para uma nova viagem no momento pois possui alocação ativa.
+              </p>
+
+              <button
+                type="button"
+                onClick={() => setVehicleStatusModal(null)}
+                className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-md active:scale-95"
+              >
+                Entendi, Escolher Outro Veículo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

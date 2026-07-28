@@ -44,3 +44,28 @@ export const generateDocumentContent = async (
     };
   }
 };
+
+export const polishMotivoWithAI = async (rawSpeechText: string): Promise<string> => {
+  if (!rawSpeechText || !rawSpeechText.trim()) return '';
+  try {
+    const res = await fetch('/api/gemini', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tipo: 'lapidar_motivo',
+        dados: { promptText: rawSpeechText.trim() }
+      })
+    });
+
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({}));
+      throw new Error(errJson.error || 'Erro na requisição da IA.');
+    }
+
+    const data = await res.json();
+    return data.text ? data.text.trim() : rawSpeechText;
+  } catch (error) {
+    console.warn('Erro ao lapidar motivo com IA, mantendo transcrição original:', error);
+    return rawSpeechText;
+  }
+};
