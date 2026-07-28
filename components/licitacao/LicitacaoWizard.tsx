@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Check, ChevronRight, Gavel, Plus, Trash2, FileText, FileSignature, AlertCircle, Save, Loader2, CheckCircle2, ShoppingCart, Minus, ChevronDown, FolderOpen, Download, CreditCard } from 'lucide-react';
+import { ArrowLeft, Check, ChevronRight, Gavel, Plus, Trash2, FileText, FileSignature, AlertCircle, Save, Loader2, CheckCircle2, ShoppingCart, Minus, ChevronDown, FolderOpen, Download, CreditCard, Sparkles } from 'lucide-react';
 import { User } from '../../types';
 import { useCreateLicitacaoProcessCompleto, useDeleteLicitacaoDocument } from '../../hooks/useLicitacaoModule';
 import { TwoFactorModal } from '../TwoFactorModal';
 import { LicitacaoDocumentModal } from './LicitacaoDocumentModal';
 import { ConfirmModal } from '../modals/ConfirmModal';
 import { ToastNotification, ToastType } from '../common/ToastNotification';
+import { polishMotivoWithAI } from '../../services/geminiService';
 
 const AutoResizingTextarea: React.FC<{
     value: string;
@@ -111,6 +112,22 @@ export const LicitacaoWizard: React.FC<LicitacaoWizardProps> = ({ currentUser, o
     
     // Justificativa State
     const [justificativa, setJustificativa] = useState('');
+    const [isPolishingAI, setIsPolishingAI] = useState(false);
+
+    const handlePolishJustificativa = async () => {
+        if (!justificativa || !justificativa.trim()) return;
+        setIsPolishingAI(true);
+        try {
+            const polishedText = await polishMotivoWithAI(justificativa);
+            if (polishedText) {
+                setJustificativa(polishedText);
+            }
+        } catch (e) {
+            console.warn('Erro ao lapidar justificativa da licitação:', e);
+        } finally {
+            setIsPolishingAI(false);
+        }
+    };
 
     // Resolução / Origem State
     const [resolucaoDescricao, setResolucaoDescricao] = useState('');
@@ -623,14 +640,37 @@ export const LicitacaoWizard: React.FC<LicitacaoWizardProps> = ({ currentUser, o
                     {/* Step 3: Justificativa */}
                     {currentStep === 2 && (
                         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 bg-white rounded-2xl shadow-sm border border-slate-100 p-8">
-                            <h2 className="text-2xl font-black text-slate-800 mb-2">Justificativa da Licitação</h2>
+                            <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+                                <h2 className="text-2xl font-black text-slate-800">Justificativa da Licitação</h2>
+                                {!readOnly && (
+                                    <button
+                                        type="button"
+                                        onClick={handlePolishJustificativa}
+                                        disabled={isPolishingAI || !justificativa.trim()}
+                                        className="px-2.5 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition-all disabled:opacity-40 flex items-center justify-center gap-1 shadow-xs active:scale-95 shrink-0"
+                                        title="Melhorar justificativa com IA Gemini"
+                                    >
+                                        {isPolishingAI ? (
+                                            <>
+                                                <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
+                                                <span>Lapidando...</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                                                <span>Lapidar IA</span>
+                                            </>
+                                        )}
+                                    </button>
+                                )}
+                            </div>
                             <p className="text-slate-500 mb-6">Descreva os motivos pelos quais esta licitação se faz necessária.</p>
                             <textarea 
                                 value={justificativa}
-                                disabled={readOnly}
+                                disabled={readOnly || isPolishingAI}
                                 onChange={(e) => setJustificativa(e.target.value)}
                                 placeholder="Digite o embasamento legal e técnico..."
-                                className="w-full h-80 p-6 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none resize-none text-slate-700 leading-relaxed"
+                                className="w-full h-80 p-6 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none resize-none text-slate-700 leading-relaxed disabled:opacity-60"
                             />
                         </div>
                     )}

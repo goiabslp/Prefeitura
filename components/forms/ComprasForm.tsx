@@ -4,7 +4,7 @@ import {
   ShoppingCart, FileText, PenTool, CheckCircle2, Columns,
   Plus, Trash2, Hash, Layers, MessageSquare, AlignLeft,
   Minus, ChevronDown, Package, Archive, Scale, Briefcase, Box, Lock, Key,
-  AlertTriangle, ShieldAlert, Zap, Info, User, Search, Check, UserCheck, Paperclip, Upload, ShieldCheck, QrCode, CreditCard, Loader2
+  AlertTriangle, ShieldAlert, Zap, Info, User, Search, Check, UserCheck, Paperclip, Upload, ShieldCheck, QrCode, CreditCard, Loader2, Sparkles
 } from 'lucide-react';
 import { AppState, ContentData, DocumentConfig, Signature, PurchaseItem, Person, Sector, Job, Attachment } from '../../types';
 import { uploadFile } from '../../services/storageService';
@@ -13,6 +13,7 @@ import { ItemSelectionModal } from '../compras/ItemSelectionModal';
 import { SelectionModal } from '../SelectionModal';
 import { normalizeText } from '../../utils/stringUtils';
 import { X } from 'lucide-react';
+import { polishMotivoWithAI } from '../../services/geminiService';
 
 interface ComprasFormProps {
   state: AppState;
@@ -82,6 +83,39 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isItemSelectionOpen, setIsItemSelectionOpen] = useState(false);
+
+  const [isPolishingTitle, setIsPolishingTitle] = useState(false);
+  const [isPolishingBody, setIsPolishingBody] = useState(false);
+
+  const handlePolishTitle = async () => {
+    if (!content.title || !content.title.trim()) return;
+    setIsPolishingTitle(true);
+    try {
+      const polishedText = await polishMotivoWithAI(content.title);
+      if (polishedText) {
+        handleUpdate('content', 'title', polishedText);
+      }
+    } catch (e) {
+      console.warn('Erro ao lapidar finalidade do pedido:', e);
+    } finally {
+      setIsPolishingTitle(false);
+    }
+  };
+
+  const handlePolishBody = async () => {
+    if (!content.body || !content.body.trim()) return;
+    setIsPolishingBody(true);
+    try {
+      const polishedText = await polishMotivoWithAI(content.body);
+      if (polishedText) {
+        handleUpdate('content', 'body', polishedText);
+      }
+    } catch (e) {
+      console.warn('Erro ao lapidar justificativa do pedido:', e);
+    } finally {
+      setIsPolishingBody(false);
+    }
+  };
 
   // Effects to enforce initial state empty values have been removed to prevent 
   // unintended state resets during user interaction.
@@ -234,8 +268,29 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
             </h3>
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
               <div>
-                <div className="flex justify-between items-center mb-1.5">
-                  <label className={labelClass}>Finalidade do Pedido</label>
+                <div className="flex justify-between items-center mb-1.5 flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <label className={labelClass}>Finalidade do Pedido</label>
+                    <button
+                      type="button"
+                      onClick={handlePolishTitle}
+                      disabled={isPolishingTitle || !content.title?.trim()}
+                      className="px-2 py-0.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-lg text-[9px] font-black uppercase tracking-wider transition-all disabled:opacity-40 flex items-center justify-center gap-1 shadow-xs active:scale-95 shrink-0"
+                      title="Melhorar finalidade com IA Gemini"
+                    >
+                      {isPolishingTitle ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
+                          <span>Lapidando...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                          <span>Lapidar IA</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                   <span className={`text-xs font-black tracking-wider uppercase px-3 py-1.5 rounded-full flex items-center gap-1.5 border transition-all duration-300 ${
                     (content.title?.length || 0) >= 100 
                       ? 'bg-emerald-100 text-emerald-800 border-emerald-200 shadow-sm' 
@@ -253,7 +308,8 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
                   <textarea
                     value={content.title || ''}
                     onChange={(e) => handleUpdate('content', 'title', e.target.value)}
-                    className="w-full min-h-[120px] bg-slate-50/50 border border-slate-200 rounded-2xl p-4 text-sm font-bold text-slate-900 outline-none focus:bg-white focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/5 transition-all resize-none leading-relaxed"
+                    disabled={isPolishingTitle}
+                    className="w-full min-h-[120px] bg-slate-50/50 border border-slate-200 rounded-2xl p-4 text-sm font-bold text-slate-900 outline-none focus:bg-white focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/5 transition-all resize-none leading-relaxed disabled:opacity-60"
                     placeholder="Descreva detalhadamente a finalidade do pedido (mínimo de 100 caracteres)..."
                   />
                 </div>
@@ -598,8 +654,29 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
             <MessageSquare className="w-4 h-4 text-emerald-600" /> Justificativa do Pedido
           </h3>
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-            <div className="flex justify-between items-center mb-2">
-              <label className={labelClass}>Descrição da Necessidade</label>
+            <div className="flex justify-between items-center mb-2 flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <label className={labelClass}>Descrição da Necessidade</label>
+                <button
+                  type="button"
+                  onClick={handlePolishBody}
+                  disabled={isPolishingBody || !content.body?.trim()}
+                  className="px-2 py-0.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-lg text-[9px] font-black uppercase tracking-wider transition-all disabled:opacity-40 flex items-center justify-center gap-1 shadow-xs active:scale-95 shrink-0"
+                  title="Melhorar justificativa com IA Gemini"
+                >
+                  {isPolishingBody ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
+                      <span>Lapidando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                      <span>Lapidar IA</span>
+                    </>
+                  )}
+                </button>
+              </div>
               <span className={`text-xs font-black tracking-wider uppercase px-3 py-1.5 rounded-full flex items-center gap-1.5 border transition-all duration-300 ${
                 (content.body?.length || 0) >= 400 
                   ? 'bg-emerald-100 text-emerald-800 border-emerald-200 shadow-sm' 
@@ -615,9 +692,10 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
             </div>
             <div className="relative">
               <textarea
-                value={content.body}
+                value={content.body || ''}
                 onChange={(e) => handleUpdate('content', 'body', e.target.value)}
-                className={`${inputClass} min-h-[300px] resize-none leading-relaxed p-6 text-base`}
+                disabled={isPolishingBody}
+                className={`${inputClass} min-h-[300px] resize-none leading-relaxed p-6 text-base disabled:opacity-60`}
                 placeholder="Descreva aqui o motivo da solicitação e a justificativa para a aquisição dos itens..."
                 autoFocus
               />

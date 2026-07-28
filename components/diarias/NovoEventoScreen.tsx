@@ -1561,7 +1561,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
                           value={reason}
                           onChange={(e) => setReason(e.target.value)}
                           placeholder="Descreva a agenda do evento ou clique em Falar Motivo por Voz acima..."
-                          className="w-full min-h-[140px] bg-transparent text-base font-medium text-slate-900 outline-none resize-none leading-relaxed"
+                          className="w-full min-h-[260px] bg-transparent text-base font-medium text-slate-900 outline-none resize-none overflow-y-auto leading-relaxed"
                         />
                       </div>
                       <div className="flex justify-between items-center text-[10px] font-bold px-1 mt-1">

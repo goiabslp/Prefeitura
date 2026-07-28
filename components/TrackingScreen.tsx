@@ -20,6 +20,7 @@ import { useOficios, useOficio, useUpdateOficioDescription, useInfiniteOficios }
 import { usePurchaseOrders, usePurchaseOrder, useInfinitePurchaseOrders, useUpdatePurchaseOrderAccount, purchaseOrderKeys } from '../hooks/usePurchaseOrders';
 import { useServiceRequests, useServiceRequest, useInfiniteServiceRequests } from '../hooks/useServiceRequests';
 import { DiariasReportModal } from './diarias/DiariasReportModal';
+import { polishMotivoWithAI } from '../services/geminiService';
 
 
 const HashIcon = ({ className }: { className?: string }) => (
@@ -281,6 +282,23 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
     const [adminApprovalOrder, setAdminApprovalOrder] = useState<Order | null>(null);
     const [adminRejectionOrder, setAdminRejectionOrder] = useState<Order | null>(null);
     const [rejectionReason, setRejectionReason] = useState('');
+    const [isPolishingAI, setIsPolishingAI] = useState(false);
+
+    const handlePolishRejectionReason = async () => {
+        if (!rejectionReason || !rejectionReason.trim()) return;
+        setIsPolishingAI(true);
+        try {
+            const polishedText = await polishMotivoWithAI(rejectionReason);
+            if (polishedText) {
+                setRejectionReason(polishedText);
+            }
+        } catch (e) {
+            console.warn('Erro ao lapidar a justificativa de rejeição:', e);
+        } finally {
+            setIsPolishingAI(false);
+        }
+    };
+
     const [statusSelectionOrder, setStatusSelectionOrder] = useState<Order | null>(null);
     const [licitacaoPhaseOrder, setLicitacaoPhaseOrder] = useState<Order | null>(null);
     const [accountSelectionOrder, setAccountSelectionOrder] = useState<Order | null>(null);
@@ -2039,11 +2057,33 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                     </p>
 
                                     <div>
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Motivo do Descarte (Obrigatório)</label>
+                                        <div className="flex items-center justify-between mb-2">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block select-none">Motivo do Descarte (Obrigatório)</label>
+                                            <button
+                                                type="button"
+                                                onClick={handlePolishRejectionReason}
+                                                disabled={isPolishingAI || !rejectionReason.trim()}
+                                                className="px-2.5 py-1 bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-700 hover:to-rose-700 text-white rounded-lg text-[9px] font-black uppercase tracking-wider transition-all disabled:opacity-40 flex items-center justify-center gap-1 shadow-sm active:scale-95 shrink-0"
+                                                title="Melhorar justificativa com IA Gemini"
+                                            >
+                                                {isPolishingAI ? (
+                                                    <>
+                                                        <Loader2 className="w-3 h-3 animate-spin text-white" />
+                                                        <span>Lapidando...</span>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Sparkles className="w-3 h-3 text-amber-300" />
+                                                        <span>Lapidar IA</span>
+                                                    </>
+                                                )}
+                                            </button>
+                                        </div>
                                         <textarea
                                             value={rejectionReason}
                                             onChange={(e) => setRejectionReason(e.target.value)}
-                                            className="w-full h-32 p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-rose-500 transition-all resize-none font-medium text-sm"
+                                            disabled={isPolishingAI}
+                                            className="w-full h-32 p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-rose-500 transition-all resize-none font-medium text-sm disabled:opacity-60"
                                             placeholder="Descreva detalhadamente o motivo pelo qual este pedido não poderá ser atendido..."
                                         />
                                     </div>
