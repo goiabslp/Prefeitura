@@ -103,7 +103,7 @@
 
 <body class="bg-slate-50 text-slate-800 antialiased selection:bg-indigo-500 selection:text-white">
   <div id="root"></div>
-  <div id="pwa-install-banner" class="hidden fixed bottom-4 left-4 right-4 z-[9999] bg-slate-900 text-white p-4 rounded-2xl shadow-2xl border border-indigo-500/30 flex items-center justify-between gap-3 animate-slide-up">
+  <div id="pwa-install-banner" class="hidden md:hidden fixed bottom-4 left-4 right-4 z-[9999] bg-slate-900 text-white p-4 rounded-2xl shadow-2xl border border-indigo-500/30 flex items-center justify-between gap-3 animate-slide-up">
     <div class="flex items-center gap-3">
       <img src="/icon-192.png" alt="App Icon" class="w-10 h-10 rounded-xl shadow-md" />
       <div>
@@ -140,8 +140,9 @@
     window.addEventListener('beforeinstallprompt', (e) => {
       e.preventDefault();
       deferredPrompt = e;
+      const isMobile = window.innerWidth < 768 || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
       const banner = document.getElementById('pwa-install-banner');
-      if (banner) banner.classList.remove('hidden');
+      if (banner && isMobile) banner.classList.remove('hidden');
     });
 
     document.getElementById('pwa-install-btn')?.addEventListener('click', async () => {

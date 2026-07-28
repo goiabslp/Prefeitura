@@ -4,7 +4,7 @@ import {
   FileText, Search, Hash as HashIcon, CheckCircle2, 
   X, AlertTriangle, Upload, Paperclip, Check, Trash2,
   Car, Navigation, Hotel, BookOpen, Copy, Download, FileDown, XCircle, Receipt,
-  UserPlus, Square, Timer, Clock, Plus
+  UserPlus, Square, Timer, Clock, Plus, ArrowRightLeft, UserCheck
 } from 'lucide-react';
 import { getDiariasDespesasEnabled, setDiariasDespesasEnabled } from '../../services/diariasSettingsService';
 import { DiariaEvento, User, Attachment, Sector, Job, Person, Order } from '../../types';
@@ -121,6 +121,8 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
   const [finalizeEventoModal, setFinalizeEventoModal] = useState<DiariaEvento | null>(null);
   const [addServerEventoModal, setAddServerEventoModal] = useState<DiariaEvento | null>(null);
   const [addServerSearch, setAddServerSearch] = useState('');
+  const [transferServerEventoModal, setTransferServerEventoModal] = useState<DiariaEvento | null>(null);
+  const [transferServerSearch, setTransferServerSearch] = useState('');
 
   const handleFinalizarViagemFromLancamentos = async (evento: DiariaEvento) => {
     const fimIso = new Date().toISOString();
@@ -175,6 +177,32 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
     }
   };
 
+  const handleTransferServerInEvento = async (evento: DiariaEvento, newPerson: Person) => {
+    if (evento.pessoas?.some(p => p.id === newPerson.id)) {
+      alert("Esta viagem já pertence a este servidor.");
+      return;
+    }
+
+    const updatedPessoas = [{ id: newPerson.id, name: newPerson.name }];
+    const optimistic: DiariaEvento = {
+      ...evento,
+      pessoas: updatedPessoas
+    };
+
+    setEventos(prev => prev.map(e => e.id === evento.id ? optimistic : e));
+    setTransferServerEventoModal(null);
+    setTransferServerSearch('');
+
+    try {
+      await updateDiariaEvento(evento.id, {
+        pessoas: updatedPessoas
+      });
+    } catch (err) {
+      console.warn("Erro ao transferir viagem via Lancamentos:", err);
+      alert("Falha ao transferir a viagem para o novo servidor.");
+    }
+  };
+
 
   useEffect(() => {
     const loadAuxiliaryData = async () => {
@@ -214,8 +242,8 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
     loadAuxiliaryData();
   }, []);
 
-  const fetchEventos = async () => {
-    setIsLoading(true);
+  const fetchEventos = async (showFullLoading = false) => {
+    if (showFullLoading) setIsLoading(true);
     try {
       // 1. Buscar gestores mapeados
       const gestores = await getDiariasGestores();
@@ -239,8 +267,8 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
   };
 
   useEffect(() => {
-    fetchEventos();
-  }, [currentUser]);
+    fetchEventos(eventos.length === 0);
+  }, [currentUser?.id]);
 
   useEffect(() => {
     const checkActiveTrip = async () => {
@@ -1216,7 +1244,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                 <Search className="absolute top-1/2 -translate-y-1/2 text-slate-400 left-3 w-3.5 h-3.5" />
               </div>
               <button
-                onClick={fetchEventos}
+                onClick={() => fetchEventos(false)}
                 disabled={isLoading}
                 className="flex items-center gap-2 px-4 py-2 bg-slate-50 border border-slate-200 rounded-2xl text-slate-600 hover:text-indigo-600 hover:border-indigo-200 transition-all font-bold text-[10px] uppercase tracking-widest whitespace-nowrap active:scale-95 shadow-sm disabled:opacity-50"
               >
@@ -1259,23 +1287,23 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
             </div>
           ) : (
             <div className="min-w-full">
-              <div className="border-b border-slate-100 bg-slate-50 hidden desktop:grid desktop:grid-cols-12 gap-4 px-8 py-4 sticky top-0 z-10">
-                <div className="md:col-span-2 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-center gap-2 whitespace-nowrap">
+              <div className="border-b border-slate-100 bg-slate-50 hidden desktop:grid desktop:grid-cols-12 gap-4 px-6 py-3 sticky top-0 z-10">
+                <div className="desktop:col-span-2 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-center gap-2 whitespace-nowrap">
                   <Calendar className="w-3 h-3" /> Data Solicitação
                 </div>
-                <div className="md:col-span-1 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-center gap-2 whitespace-nowrap">
+                <div className="desktop:col-span-1 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-center gap-2 whitespace-nowrap">
                   <HashIcon className="w-3 h-3" /> ID
                 </div>
-                <div className="md:col-span-3 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 whitespace-nowrap">
+                <div className="desktop:col-span-3 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 whitespace-nowrap">
                   <MapPin className="w-3 h-3" /> Destino / Servidor
                 </div>
-                <div className="md:col-span-3 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 whitespace-nowrap">
+                <div className="desktop:col-span-2 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 whitespace-nowrap">
                   <FileText className="w-3 h-3" /> Motivo da Viagem
                 </div>
-                <div className="md:col-span-2 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-center gap-2 whitespace-nowrap">
+                <div className="desktop:col-span-2 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-center gap-2 whitespace-nowrap">
                   Status
                 </div>
-                <div className="md:col-span-1 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-center gap-2 whitespace-nowrap">
+                <div className="desktop:col-span-2 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-end gap-2 whitespace-nowrap pr-2">
                   Ações
                 </div>
               </div>
@@ -1324,14 +1352,14 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                   }
 
                   return (
-                    <div key={evento.id} className="mx-4 my-3 p-5 rounded-3xl bg-white border border-slate-200/80 shadow-[0_4px_20px_rgba(0,0,0,0.02)] hover:border-indigo-100 desktop:mx-0 desktop:my-0 desktop:rounded-none desktop:bg-transparent desktop:border-0 desktop:border-b desktop:border-slate-100 desktop:shadow-none desktop:px-8 desktop:py-5 flex flex-col desktop:grid desktop:grid-cols-12 gap-4 hover:bg-slate-50/80 transition-all duration-200 items-stretch desktop:items-center">
-                      <div className="desktop:col-span-2 flex items-center justify-between desktop:justify-center gap-3 pb-3 desktop:pb-0 border-b border-slate-100 desktop:border-b-0 shrink-0">
+                    <div key={evento.id} className="mx-4 my-3 p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:border-indigo-100 desktop:mx-0 desktop:my-0 desktop:rounded-none desktop:bg-transparent desktop:border-0 desktop:border-b desktop:border-slate-100 desktop:shadow-none desktop:px-6 desktop:py-3 flex flex-col desktop:grid desktop:grid-cols-12 gap-4 hover:bg-slate-50/80 transition-all duration-200 items-stretch desktop:items-center">
+                      <div className="desktop:col-span-2 flex items-center justify-between desktop:justify-center gap-3 pb-2 desktop:pb-0 border-b border-slate-100 desktop:border-b-0 shrink-0">
                         <div className="flex items-center gap-2.5">
-                          <div className="w-10 h-10 bg-slate-50 rounded-xl border border-slate-150 flex flex-col items-center justify-center shadow-xs shrink-0">
+                          <div className="w-9 h-9 bg-slate-50 rounded-xl border border-slate-150 flex flex-col items-center justify-center shadow-xs shrink-0">
                             <span className="text-[7px] font-black text-slate-400 uppercase">
                               {monthName}/{yearLabel}
                             </span>
-                            <span className="text-sm font-black text-emerald-600 leading-none">
+                            <span className="text-xs font-black text-emerald-600 leading-none">
                               {createdDate.getDate()}
                             </span>
                           </div>
@@ -1362,51 +1390,51 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                       </div>
 
                       <div className="hidden desktop:flex desktop:col-span-1 justify-center">
-                        <span className="font-mono text-[10px] font-bold text-indigo-600 bg-indigo-50/50 px-2 py-1 rounded border border-indigo-100/50">
+                        <span className="font-mono text-[10px] font-bold text-indigo-600 bg-indigo-50/50 px-2 py-0.5 rounded border border-indigo-100/50">
                           EVT-{evento.id.slice(0,4).toUpperCase()}
                         </span>
                       </div>
 
-                      <div className="desktop:col-span-3 space-y-1 py-1 desktop:py-0">
-                        <h3 className="text-sm font-bold text-slate-800 leading-tight truncate" title={evento.destino}>
+                      <div className="desktop:col-span-3 space-y-0.5 py-0.5 desktop:py-0 min-w-0">
+                        <h3 className="text-xs font-bold text-slate-800 leading-tight truncate" title={evento.destino}>
                           {evento.destino}
                         </h3>
-                        <p className="text-[10px] text-slate-400 font-medium mt-1 flex items-center gap-1">
-                          <Users className="w-3 h-3 text-slate-400" /> {evento.pessoas && evento.pessoas.length > 0 ? evento.pessoas.map(p => p.name).join(', ') : 'Servidor não informado'}
+                        <p className="text-[10px] text-slate-500 font-medium flex items-center gap-1 truncate">
+                          <Users className="w-3 h-3 text-slate-400 shrink-0" /> <span className="truncate">{evento.pessoas && evento.pessoas.length > 0 ? evento.pessoas.map(p => p.name).join(', ') : 'Servidor não informado'}</span>
                         </p>
                       </div>
 
-                      <div className="desktop:col-span-3 space-y-1 py-1 desktop:py-0">
-                        <p className="text-xs text-slate-600 font-medium line-clamp-2" title={evento.motivo}>
+                      <div className="desktop:col-span-2 space-y-0.5 py-0.5 desktop:py-0 min-w-0">
+                        <p className="text-xs text-slate-600 font-medium line-clamp-1" title={evento.motivo}>
                           {evento.motivo}
                         </p>
-                        <p className="text-[9px] text-slate-400 font-medium mt-1">
-                           Lançado por {evento.user_name}
+                        <p className="text-[9px] text-slate-400 font-medium truncate">
+                          Lançado por {evento.user_name}
                         </p>
                       </div>
 
-                      <div className="hidden desktop:flex desktop:col-span-2 items-center justify-center py-2 desktop:py-0 flex-col gap-1">
+                      <div className="hidden desktop:flex desktop:col-span-2 items-center justify-center py-1 desktop:py-0 flex-col gap-1">
                          {isEmViagem ? (
-                           <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 rounded-full border border-emerald-300 text-[10px] font-black animate-pulse shadow-xs">
-                             <Timer className="w-3.5 h-3.5 text-emerald-600 animate-spin" style={{ animationDuration: '3s' }} />
+                           <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-full border border-emerald-300 text-[9px] font-black animate-pulse shadow-xs">
+                             <Timer className="w-3 h-3 text-emerald-600 animate-spin" style={{ animationDuration: '3s' }} />
                              <span>EM PERCURSO</span>
-                             <span className="font-mono bg-emerald-600 text-white px-1.5 py-0.5 rounded text-[9px] font-bold">
+                             <span className="font-mono bg-emerald-600 text-white px-1.5 py-0.5 rounded text-[8px] font-bold">
                                {formattedTimer}
                              </span>
                            </div>
                          ) : (
-                           <div className={`inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest shadow-sm ${badge.style}`}>
+                           <div className={`inline-flex items-center justify-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[8px] font-black uppercase tracking-wider shadow-xs ${badge.style}`}>
                               {badge.label}
                            </div>
                          )}
                       </div>
 
-                      <div className="desktop:col-span-1 flex items-center justify-end desktop:justify-center gap-2 pt-3 desktop:pt-0 border-t border-slate-100 desktop:border-t-0 mt-2 desktop:mt-0 w-full desktop:w-auto flex-wrap">
+                      <div className="desktop:col-span-2 flex items-center justify-end gap-1 pt-2 desktop:pt-0 border-t border-slate-100 desktop:border-t-0 mt-1 desktop:mt-0 w-full desktop:w-auto shrink-0 flex-nowrap overflow-x-auto">
                         {/* Botão de Finalizar Viagem para Gestor/Admin quando em percurso */}
                         {isGestorOrAdmin && isEmViagem && (
                           <button
                             onClick={() => setFinalizeEventoModal(evento)}
-                            className="px-2.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 shadow-md shadow-rose-600/20 flex items-center gap-1 shrink-0"
+                            className="px-2 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 shadow-xs flex items-center gap-1 shrink-0"
                             title="Finalizar Viagem em Andamento"
                           >
                             <Square className="w-3 h-3 fill-white text-white" />
@@ -1414,48 +1442,65 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                           </button>
                         )}
 
+                        {/* Botão de Transferir Viagem (não iniciada) */}
+                        {!isEmViagem && evento.status !== 'concluido' && (isGestorOrAdmin || evento.user_id === currentUser?.id || currentUser?.permissions?.includes('parent_diarias_lancamentos')) && (
+                          <button
+                            onClick={() => {
+                              setTransferServerEventoModal(evento);
+                              setTransferServerSearch('');
+                            }}
+                            className="p-1.5 text-amber-600 hover:text-amber-800 hover:bg-amber-50 rounded-lg transition-all border border-amber-200/80 shrink-0"
+                            title="Transferir Viagem para Outro Servidor"
+                          >
+                            <ArrowRightLeft className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+
                         {/* Botão de Adicionar Servidor para Gestor/Admin */}
                         {isGestorOrAdmin && (
                           <button
-                            onClick={() => setAddServerEventoModal(evento)}
+                            onClick={() => {
+                              setAddServerEventoModal(evento);
+                              setAddServerSearch('');
+                            }}
                             className="p-1.5 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-lg transition-all border border-indigo-200/60 shrink-0"
                             title="Adicionar + Servidor nesta Viagem"
                           >
-                            <UserPlus className="w-4 h-4" />
+                            <UserPlus className="w-3.5 h-3.5" />
                           </button>
                         )}
 
                         {canAct && evento.status !== 'concluido' ? (
                           <button 
                             onClick={() => handleOpenReview(evento)}
-                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 shadow-md shadow-indigo-600/10"
+                            className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 shadow-xs shrink-0"
                           >
                             Revisar
                           </button>
                         ) : (
                           <button 
                             onClick={() => handleOpenReview(evento)}
-                            className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-all"
+                            className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-all shrink-0"
                             title="Ver Detalhes"
                           >
-                            <FileText className="w-4 h-4" />
+                            <FileText className="w-3.5 h-3.5" />
                           </button>
                         )}
 
                         {evento.status === 'concluido' && (
                           <button
                             onClick={() => handleDownloadPDF(evento)}
-                            className="p-1.5 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg transition-all border border-indigo-200/80 shadow-xs"
+                            className="p-1.5 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg transition-all border border-indigo-200/80 shrink-0"
                             title="Baixar / Imprimir PDF da Diária Concluída"
                           >
-                            <Download className="w-4 h-4" />
+                            <Download className="w-3.5 h-3.5" />
                           </button>
                         )}
 
                         {currentUser?.role === 'admin' && (
                           <button
                             onClick={() => handleToggleEventoDespesas(evento)}
-                            className={`p-1.5 rounded-lg border transition-all ${
+                            className={`p-1.5 rounded-lg border transition-all shrink-0 ${
                               evento.permitir_despesas_pos_finalizacao
                                 ? 'text-emerald-700 bg-emerald-50 border-emerald-300 hover:bg-emerald-100'
                                 : 'text-slate-400 hover:text-indigo-600 hover:bg-slate-100 border-slate-200'
@@ -1466,7 +1511,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                                 : 'Ativar campo de Despesas para esta viagem'
                             }
                           >
-                            <Receipt className="w-4 h-4" />
+                            <Receipt className="w-3.5 h-3.5" />
                           </button>
                         )}
                         
@@ -1476,10 +1521,10 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                           currentUser?.permissions?.includes('parent_diarias')) && (
                           <button 
                             onClick={() => handleDelete(evento.id)}
-                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all shrink-0"
                             title="Excluir Viagem"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         )}
                       </div>
@@ -2649,6 +2694,88 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                       <div className="flex items-center gap-1 text-xs font-black text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-xl border border-indigo-200/60 group-hover:bg-indigo-600 group-hover:text-white transition-all">
                         <Plus className="w-3.5 h-3.5" />
                         <span>Adicionar</span>
+                      </div>
+                    </button>
+                  );
+                })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal para Transferir Viagem para Outro Servidor */}
+      {transferServerEventoModal && (
+        <div 
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4 animate-fade-in"
+          onClick={() => { setTransferServerEventoModal(null); setTransferServerSearch(''); }}
+        >
+          <div 
+            className="w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100 animate-slide-up flex flex-col max-h-[85vh] text-left"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="bg-slate-900 p-5 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-amber-600/30 border border-amber-400/30 rounded-xl flex items-center justify-center">
+                  <ArrowRightLeft className="w-5 h-5 text-amber-400" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-white">Transferir Viagem</h3>
+                  <p className="text-[11px] text-slate-400 font-medium truncate max-w-xs">{transferServerEventoModal.destino}</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => { setTransferServerEventoModal(null); setTransferServerSearch(''); }} 
+                className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-full transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 bg-amber-50/70 border-b border-amber-200/60 text-xs text-amber-900">
+              <p className="font-bold flex items-center gap-1.5 text-amber-950">
+                <UserCheck className="w-4 h-4 text-amber-700 shrink-0" />
+                Servidor Atual: {transferServerEventoModal.pessoas?.map(p => p.name).join(', ') || 'Nenhum'}
+              </p>
+              <p className="text-[11px] text-amber-800 leading-snug mt-1">
+                Selecione abaixo o novo servidor que assumirá o registro desta viagem.
+              </p>
+            </div>
+
+            <div className="p-4 border-b border-slate-100 relative">
+              <Search className="absolute left-7 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+              <input
+                type="text"
+                value={transferServerSearch}
+                onChange={(e) => setTransferServerSearch(e.target.value)}
+                placeholder="Buscar por nome do servidor..."
+                autoFocus
+                className="w-full bg-slate-50 border border-slate-200 pl-10 pr-4 py-3 rounded-xl text-sm font-medium text-slate-900 outline-none focus:bg-white focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 transition-all"
+              />
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-3 space-y-1">
+              {persons
+                .filter(p => {
+                  if (transferServerEventoModal.pessoas?.some(existing => existing.id === p.id)) return false;
+                  if (!transferServerSearch.trim()) return true;
+                  const norm = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+                  return norm(p.name).includes(norm(transferServerSearch));
+                })
+                .map(person => {
+                  const personJob = jobs.find(j => j.id === person.jobId)?.name || 'Sem Cargo';
+                  return (
+                    <button
+                      key={person.id}
+                      onClick={() => handleTransferServerInEvento(transferServerEventoModal, person)}
+                      className="w-full flex items-center justify-between p-3.5 hover:bg-amber-50/70 rounded-2xl text-left border border-transparent hover:border-amber-200 transition-all group"
+                    >
+                      <div className="flex flex-col">
+                        <span className="text-sm font-extrabold text-slate-800 group-hover:text-amber-800">{person.name}</span>
+                        <span className="text-[11px] text-slate-400 font-semibold">{personJob}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs font-black text-amber-700 bg-amber-100 px-3 py-1.5 rounded-xl border border-amber-200 group-hover:bg-amber-600 group-hover:text-white transition-all">
+                        <ArrowRightLeft className="w-3.5 h-3.5" />
+                        <span>Transferir</span>
                       </div>
                     </button>
                   );
