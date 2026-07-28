@@ -1159,6 +1159,9 @@ const App: React.FC = () => {
     // Restore only after auth is ready and user is logged in
     if (!authLoading && currentUser) {
       restoreStateFromUrl();
+      import('./services/notificationService').then(({ notificationService }) => {
+        notificationService.requestBrowserPermission();
+      }).catch(e => console.warn(e));
     }
 
     // Listen for Back/Forward only after mount

@@ -28,6 +28,41 @@ export const notificationService = {
         return data as Notification[];
     },
 
+    async requestBrowserPermission(): Promise<boolean> {
+        if (typeof window !== 'undefined' && 'Notification' in window) {
+            try {
+                const permission = await Notification.requestPermission();
+                return permission === 'granted';
+            } catch (e) {
+                console.warn('Erro ao solicitar permissão de notificação:', e);
+            }
+        }
+        return false;
+    },
+
+    showNativeNotification(title: string, message: string, link?: string): void {
+        if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+            try {
+                const n = new Notification(title, {
+                    body: message,
+                    icon: '/pwa-192x192.png',
+                    badge: '/pwa-192x192.png',
+                    tag: title
+                });
+                if (link) {
+                    n.onclick = () => {
+                        window.focus();
+                        window.history.pushState({}, '', link);
+                        window.dispatchEvent(new Event('popstate'));
+                        n.close();
+                    };
+                }
+            } catch (err) {
+                console.warn('Alerta notificação nativa:', err);
+            }
+        }
+    },
+
     async createNotification(notification: Omit<Notification, 'id' | 'created_at' | 'read'>): Promise<void> {
         const { error } = await supabase
             .from('notifications')
@@ -36,6 +71,8 @@ export const notificationService = {
         if (error) {
             console.error('Error creating notification:', error);
         }
+
+        this.showNativeNotification(notification.title, notification.message, notification.link);
     },
 
     async markAsRead(id: string): Promise<void> {

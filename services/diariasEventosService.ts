@@ -1,6 +1,7 @@
 import { supabase } from './supabaseClient';
 import { DiariaEvento } from '../types';
 import { getEnabledDespesasEventsMap, setEventoDespesasEnabled, getGlobalDeletedEventIds, addGlobalDeletedEventId } from './diariasSettingsService';
+import { notificationService } from './notificationService';
 
 export const getDeletedEventIds = async (): Promise<Set<string>> => {
   const ids = await getGlobalDeletedEventIds();
@@ -80,12 +81,30 @@ export const createDiariaEvento = async (evento: Omit<DiariaEvento, 'id' | 'crea
     }
   }
 
-  if (error) {
-    console.error('Erro ao criar evento de diária:', error);
-    throw new Error('Falha ao registrar novo evento. Tente novamente mais tarde.');
+  const createdData = data as DiariaEvento;
+
+  // Notificar participantes da nova viagem
+  try {
+    const notifyUserIds = new Set<string>();
+    if (createdData.user_id) notifyUserIds.add(createdData.user_id);
+    if (createdData.pessoas && Array.isArray(createdData.pessoas)) {
+      createdData.pessoas.forEach(p => { if (p.id) notifyUserIds.add(p.id); });
+    }
+
+    for (const userId of notifyUserIds) {
+      notificationService.createNotification({
+        user_id: userId,
+        title: '✈️ Nova Viagem Agendada',
+        message: `Uma viagem para ${createdData.destino} foi cadastrada para você.`,
+        type: 'info',
+        link: `/Diarias/Viajar/Detalhes?id=${createdData.id}`
+      }).catch(e => console.warn(e));
+    }
+  } catch (err) {
+    console.warn('Erro ao notificar criacao de viagem:', err);
   }
 
-  return data as DiariaEvento;
+  return createdData;
 };
 
 export const getDiariaEventosBySector = async (sectorId?: string): Promise<DiariaEvento[]> => {
@@ -180,12 +199,56 @@ export const updateDiariaEvento = async (id: string, updates: Partial<DiariaEven
   }
 
   window.dispatchEvent(new Event('diarias_eventos_updated'));
-  window.dispatchEvent(new Event('diarias_eventos_updated'));
   const map = await getEnabledDespesasEventsMap();
-  return {
+  const updatedData = {
     ...data,
     permitir_despesas_pos_finalizacao: isDespesasEnabledOverride ?? !!map[id]
   } as DiariaEvento;
+
+  // Notificações de mudança de status da viagem
+  try {
+    const notifyUserIds = new Set<string>();
+    if (updatedData.user_id) notifyUserIds.add(updatedData.user_id);
+    if (updatedData.pessoas && Array.isArray(updatedData.pessoas)) {
+      updatedData.pessoas.forEach(p => { if (p.id) notifyUserIds.add(p.id); });
+    }
+
+    if (updates.status === 'viagem_programada') {
+      for (const userId of notifyUserIds) {
+        notificationService.createNotification({
+          user_id: userId,
+          title: '✅ Viagem Aprovada!',
+          message: `A solicitação de viagem para ${updatedData.destino} foi aprovada.`,
+          type: 'success',
+          link: `/Diarias/Viajar/Detalhes?id=${updatedData.id}`
+        }).catch(e => console.warn(e));
+      }
+    } else if (updates.status === 'em_viagem') {
+      for (const userId of notifyUserIds) {
+        notificationService.createNotification({
+          user_id: userId,
+          title: '🚗 Viagem Iniciada!',
+          message: `A viagem para ${updatedData.destino} está em andamento.`,
+          type: 'info',
+          link: `/Diarias/Viajar/Detalhes?id=${updatedData.id}`
+        }).catch(e => console.warn(e));
+      }
+    } else if (updates.status === 'aguardando_gestor' || updates.data_retorno) {
+      for (const userId of notifyUserIds) {
+        notificationService.createNotification({
+          user_id: userId,
+          title: '🏁 Viagem Finalizada',
+          message: `A viagem para ${updatedData.destino} foi encerrada.`,
+          type: 'warning',
+          link: `/Diarias/Viajar/Detalhes?id=${updatedData.id}`
+        }).catch(e => console.warn(e));
+      }
+    }
+  } catch (err) {
+    console.warn('Erro ao disparar notificacao de update de viagem:', err);
+  }
+
+  return updatedData;
 };
 
 export const getDiariasGestores = async (): Promise<{ pessoa_id: string; gestor_id: string }[]> => {
