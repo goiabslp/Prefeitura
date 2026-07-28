@@ -99,6 +99,9 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
   const [elapsedTime, setElapsedTime] = useState<string>('00:00:00');
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Modal de confirmação ao clicar em Finalizar
+  const [isConfirmFinalizeOpen, setIsConfirmFinalizeOpen] = useState<boolean>(false);
+
   // Modal de sucesso ao finalizar
   const [summaryModal, setSummaryModal] = useState<{
     isOpen: boolean;
@@ -277,86 +280,97 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
     };
   }, [selectedEvento, eventos]);
 
-  // Ação de Iniciar Viagem
+  // Ação de Iniciar Viagem (Atualização Instantânea Otimista)
   const handleIniciarViagem = async (evento: DiariaEvento) => {
-    try {
-      setRefreshing(true);
-      const inicioIso = new Date().toISOString();
-      const updatedPessoas = evento.pessoas.map(p => {
-        if (isPersonMatch(p, currentUser)) {
-          return {
-            ...p,
-            viagem_inicio: inicioIso
-          };
-        }
-        return p;
-      }) as any;
+    const inicioIso = new Date().toISOString();
+    const updatedPessoas = evento.pessoas.map(p => {
+      if (isPersonMatch(p, currentUser)) {
+        return {
+          ...p,
+          viagem_inicio: inicioIso
+        };
+      }
+      return p;
+    }) as any;
 
+    const optimisticEvento: DiariaEvento = {
+      ...evento,
+      pessoas: updatedPessoas,
+      data_saida: inicioIso,
+      status: 'em_viagem'
+    };
+
+    // 1. Atualização OTIMISTA instantânea (sem delay)
+    setEventos(prev => prev.map(e => e.id === evento.id ? optimisticEvento : e));
+
+    // 2. Envio em segundo plano para o Supabase
+    try {
       const updated = await updateDiariaEvento(evento.id, {
         pessoas: updatedPessoas,
         data_saida: inicioIso,
         status: 'em_viagem'
       });
-      
       setEventos(prev => prev.map(e => e.id === evento.id ? updated : e));
     } catch (err) {
-      console.error('Erro ao iniciar viagem:', err);
-      alert('Falha ao iniciar viagem. Tente novamente.');
-    } finally {
-      setRefreshing(false);
+      console.warn('Erro em segundo plano ao salvar início de viagem:', err);
     }
   };
 
-  // Ação de Finalizar Viagem
+  // Ação de Finalizar Viagem (Atualização Instantânea Otimista)
   const handleFinalizarViagem = async (evento: DiariaEvento) => {
+    const fimIso = new Date().toISOString();
+    const data = getPessoaViagemData(evento);
+    const inicio = data.viagem_inicio || new Date().toISOString();
+
+    const updatedPessoas = evento.pessoas.map(p => {
+      if (isPersonMatch(p, currentUser)) {
+        return {
+          ...p,
+          viagem_fim: fimIso
+        };
+      }
+      return p;
+    }) as any;
+
+    const optimisticEvento: DiariaEvento = {
+      ...evento,
+      pessoas: updatedPessoas,
+      data_retorno: fimIso,
+      status: 'aguardando_gestor'
+    };
+
+    const diffMs = new Date(fimIso).getTime() - new Date(inicio).getTime();
+    const totalSecs = Math.floor(diffMs / 1000);
+    const hrs = Math.floor(totalSecs / 3600);
+    const mins = Math.floor((totalSecs % 3600) / 60);
+    
+    let duracaoText = '';
+    if (hrs > 0) duracaoText += `${hrs} ${hrs === 1 ? 'hora' : 'horas'}`;
+    if (mins > 0) {
+      if (duracaoText) duracaoText += ' e ';
+      duracaoText += `${mins} ${mins === 1 ? 'minuto' : 'minutos'}`;
+    }
+    if (!duracaoText) duracaoText = 'Menos de um minuto';
+
+    // 1. Atualização OTIMISTA instantânea e exibição imediata do modal de resumo
+    setEventos(prev => prev.map(e => e.id === evento.id ? optimisticEvento : e));
+    setSummaryModal({
+      isOpen: true,
+      saidaReal: new Date(inicio).toLocaleString('pt-BR'),
+      retornoReal: new Date(fimIso).toLocaleString('pt-BR'),
+      duracaoText
+    });
+
+    // 2. Envio em segundo plano para o Supabase
     try {
-      setRefreshing(true);
-      const fimIso = new Date().toISOString();
-      const data = getPessoaViagemData(evento);
-      const inicio = data.viagem_inicio || new Date().toISOString();
-
-      const updatedPessoas = evento.pessoas.map(p => {
-        if (isPersonMatch(p, currentUser)) {
-          return {
-            ...p,
-            viagem_fim: fimIso
-          };
-        }
-        return p;
-      }) as any;
-
       const updated = await updateDiariaEvento(evento.id, {
         pessoas: updatedPessoas,
         data_retorno: fimIso,
         status: 'aguardando_gestor'
       });
-
-      const diffMs = new Date(fimIso).getTime() - new Date(inicio).getTime();
-      const totalSecs = Math.floor(diffMs / 1000);
-      const hrs = Math.floor(totalSecs / 3600);
-      const mins = Math.floor((totalSecs % 3600) / 60);
-      
-      let duracaoText = '';
-      if (hrs > 0) duracaoText += `${hrs} ${hrs === 1 ? 'hora' : 'horas'}`;
-      if (mins > 0) {
-        if (duracaoText) duracaoText += ' e ';
-        duracaoText += `${mins} ${mins === 1 ? 'minuto' : 'minutos'}`;
-      }
-      if (!duracaoText) duracaoText = 'Menos de um minuto';
-
-      setSummaryModal({
-        isOpen: true,
-        saidaReal: new Date(inicio).toLocaleString('pt-BR'),
-        retornoReal: new Date(fimIso).toLocaleString('pt-BR'),
-        duracaoText
-      });
-
       setEventos(prev => prev.map(e => e.id === evento.id ? updated : e));
     } catch (err) {
-      console.error('Erro ao finalizar viagem:', err);
-      alert('Falha ao finalizar viagem. Tente novamente.');
-    } finally {
-      setRefreshing(false);
+      console.warn('Erro em segundo plano ao salvar finalização de viagem:', err);
     }
   };
 
@@ -667,6 +681,14 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
                           <span className="text-slate-400 text-[10px] font-bold uppercase block">Veículo Alocado</span>
                           <p className="text-slate-900 font-black mt-0.5">{selectedEvento.veiculo || 'Não informado'}</p>
                         </div>
+                        <div className="sm:col-span-2 md:col-span-3 border-t border-slate-200/60 pt-2 mt-1">
+                          <span className="text-slate-400 text-[10px] font-bold uppercase block">Servidor(es) na Viagem</span>
+                          <p className="text-slate-900 font-bold mt-0.5">
+                            {selectedEvento.pessoas && selectedEvento.pessoas.length > 0
+                              ? selectedEvento.pessoas.map(p => p.name).join(', ')
+                              : 'Não informado'}
+                          </p>
+                        </div>
                       </div>
 
                       {/* MOTIVO COMPLETO */}
@@ -694,7 +716,7 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
 
                       <button
                         onClick={() => check.allowed && handleIniciarViagem(selectedEvento)}
-                        disabled={refreshing || !check.allowed}
+                        disabled={!check.allowed}
                         className={`w-36 h-36 rounded-full flex flex-col items-center justify-center text-white shadow-2xl transition-all duration-300 border-[6px] border-white group/btn relative ${
                           check.allowed
                             ? 'bg-emerald-600 hover:bg-emerald-700 hover:scale-105 active:scale-95 shadow-emerald-600/40 cursor-pointer'
@@ -748,8 +770,7 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
 
                       {/* Botão de Finalizar */}
                       <button
-                        onClick={() => handleFinalizarViagem(selectedEvento)}
-                        disabled={refreshing}
+                        onClick={() => setIsConfirmFinalizeOpen(true)}
                         className="w-36 h-36 bg-rose-600 hover:bg-rose-700 rounded-full flex flex-col items-center justify-center text-white shadow-2xl transition-all duration-300 hover:scale-105 active:scale-95 shadow-rose-600/40 cursor-pointer border-[6px] border-white group/btn"
                       >
                         <Square className="w-10 h-10 fill-white text-white group-hover/btn:scale-110 transition-transform mb-1" />
@@ -937,6 +958,66 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
         )}
 
       </main>
+
+      {/* Modal de Confirmação para Finalizar a Viagem */}
+      {isConfirmFinalizeOpen && selectedEvento && (
+        <div 
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4 animate-fade-in"
+          onClick={() => setIsConfirmFinalizeOpen(false)}
+        >
+          <div 
+            className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100 animate-slide-up"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="bg-gradient-to-br from-rose-600 to-red-700 p-6 text-white text-center relative flex flex-col items-center">
+              <div className="w-14 h-14 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center mb-3 border border-white/30 shadow-inner">
+                <AlertTriangle className="w-8 h-8 text-white" />
+              </div>
+              <h3 className="text-lg font-black tracking-tight uppercase">Finalizar Viagem?</h3>
+              <p className="text-xs text-rose-100 font-semibold mt-1">Confirmação de Término do Percurso</p>
+              <button 
+                onClick={() => setIsConfirmFinalizeOpen(false)} 
+                className="absolute top-4 right-4 p-2 text-white/80 hover:text-white bg-black/10 hover:bg-black/20 rounded-full transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-5 text-center">
+              <div className="bg-rose-50/80 border border-rose-150 rounded-2xl p-4 text-slate-800 text-left space-y-1.5">
+                <p className="text-xs font-bold text-slate-900 leading-relaxed">
+                  Tem certeza que deseja finalizar a viagem para <span className="font-black text-rose-700">{selectedEvento.destino}</span>?
+                </p>
+                <p className="text-[11px] font-medium text-slate-600 leading-normal">
+                  O horário de retorno será registrado imediatamente e a viagem passará para o status de concluída.
+                </p>
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsConfirmFinalizeOpen(false)}
+                  className="w-full py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs uppercase tracking-wider rounded-xl transition-all"
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsConfirmFinalizeOpen(false);
+                    handleFinalizarViagem(selectedEvento);
+                  }}
+                  className="w-full py-3.5 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-rose-600/30 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                >
+                  <Square className="w-4 h-4 fill-white" />
+                  <span>Sim, Finalizar</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal Resumo e Finalização */}
       {summaryModal && (

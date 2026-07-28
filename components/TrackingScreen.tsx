@@ -350,8 +350,8 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
             } else {
                 hasPermission = isSameSector || isCreator;
             }
-        } else if (activeBlock === 'oficio') {
-            hasPermission = true; // Oficios are visible to all users
+        } else if (activeBlock === 'oficio' || activeBlock === 'diarias') {
+            hasPermission = true; // Oficios e Diarias sao visiveis no historico para usuarios autorizados
         } else if (isLicitacao) {
             const orderSector = order.documentSnapshot?.content?.requesterSector || order.requestingSector || '';
             const userSector = currentUser.sector || '';

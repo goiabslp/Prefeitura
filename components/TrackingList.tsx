@@ -94,6 +94,8 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                 const userSector = currentUser.sector || '';
                 hasPermission = userSector !== '' && orderSector.trim().toLowerCase() === userSector.trim().toLowerCase();
             }
+        } else if (isOficio || isDiarias) {
+            hasPermission = true;
         } else {
             hasPermission = isAdmin || order.userId === currentUser.id;
         }

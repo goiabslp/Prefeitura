@@ -83,10 +83,9 @@ export const getAllServiceRequests = async (lightweight = true, page = 0, pageSi
 
     if (error) {
         console.error('Error fetching service requests:', error);
-        return [];
     }
 
-    return data.map((item: any) => {
+    let serviceRequestOrders: Order[] = (data || []).map((item: any) => {
         if (lightweight) {
             const reqName = item.reqName || item.reqNameLegacy || item.reqNameUnderscore || item.reqNameLegacyUnderscore || item.user_name || '';
             const destination = item.dest || item.destLegacy || 'Destino n/a';
@@ -138,25 +137,15 @@ export const getAllServiceRequests = async (lightweight = true, page = 0, pageSi
                     ui: {
                         loginLogoUrl: null,
                         loginLogoHeight: 80,
-                        headerLogoUrl: null,
-                        headerLogoHeight: 40,
-                        homeLogoPosition: 'left' as any
+                        roundedCorners: true,
+                        compactMode: false,
+                        tableStriped: true
                     },
-                    isLightweight: true,
                     content: {
-                        title: item.title,
-                        protocol: item.protocol,
-                        subType: undefined,
-                        body: '',
-                        leftBlockText: '',
-                        rightBlockText: '',
                         requesterName: reqName,
-                        requesterRole: '',
                         destination: destination,
                         departureDateTime: departureDateTime,
                         returnDateTime: returnDateTime,
-                        requesterSector: undefined,
-                        priority: 'Normal',
                         authorizedBy: '',
                         requestedValue: '',
                         descriptionReason: descReason,
@@ -188,6 +177,98 @@ export const getAllServiceRequests = async (lightweight = true, page = 0, pageSi
             documentSnapshot: normalizeDiariasSnapshot(item, item.document_snapshot)
         };
     });
+
+    // 2. Buscar também da tabela diarias_eventos para garantir exibição completa no Histórico
+    try {
+        let eventosQuery = supabase
+            .from('diarias_eventos')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (searchTerm) {
+            eventosQuery = eventosQuery.or(`destino.ilike.%${searchTerm}%,motivo.ilike.%${searchTerm}%,user_name.ilike.%${searchTerm}%`);
+        }
+
+        const { data: eventosData } = await eventosQuery;
+
+        if (eventosData && eventosData.length > 0) {
+            let deletedSet = new Set<string>();
+            try {
+                const { getGlobalDeletedEventIds } = await import('./diariasSettingsService');
+                const deletedIds = await getGlobalDeletedEventIds();
+                deletedSet = new Set(deletedIds);
+            } catch (e) {
+                console.warn('Erro ao obter IDs deletados:', e);
+            }
+
+            eventosData.forEach((evt: any) => {
+                if (deletedSet.has(String(evt.id))) return;
+                if (serviceRequestOrders.some(o => String(o.id) === String(evt.id))) return;
+
+                const requesterNames = evt.pessoas && Array.isArray(evt.pessoas) && evt.pessoas.length > 0
+                    ? evt.pessoas.map((p: any) => p.name).join(', ')
+                    : evt.user_name || 'Servidor não informado';
+
+                const mapStatus = (st: string) => {
+                  if (st === 'concluido') return 'completed';
+                  if (st === 'cancelado' || st === 'rejeitado') return 'rejected';
+                  if (st === 'em_viagem') return 'approved';
+                  return 'awaiting_approval';
+                };
+
+                const mapPaymentStatus = (st: string) => {
+                  if (st === 'concluido') return 'paid';
+                  return 'pending';
+                };
+
+                serviceRequestOrders.push({
+                    id: evt.id,
+                    protocol: `EVT-${String(evt.id).slice(0, 6).toUpperCase()}`,
+                    title: `Viagem Oficial: ${evt.destino}`,
+                    status: mapStatus(evt.status),
+                    paymentStatus: mapPaymentStatus(evt.status),
+                    createdAt: evt.created_at || new Date().toISOString(),
+                    userId: evt.user_id,
+                    userName: evt.user_name || requesterNames,
+                    blockType: 'diarias',
+                    documentSnapshot: {
+                        branding: {
+                            logoUrl: null,
+                            primaryColor: '#4f46e5',
+                            secondaryColor: '#0f172a',
+                            fontFamily: 'font-sans' as any,
+                            logoWidth: 76,
+                            logoAlignment: 'left' as any,
+                            watermark: { enabled: false, imageUrl: null, opacity: 20, size: 55, grayscale: true }
+                        },
+                        document: {
+                            headerText: '', footerText: '', city: '', showDate: true, showPageNumbers: true,
+                            showSignature: false, showLeftBlock: true, showRightBlock: true,
+                            titleStyle: { size: 12, color: '#000000', alignment: 'left' as any },
+                            leftBlockStyle: { size: 10, color: '#000000' },
+                            rightBlockStyle: { size: 10, color: '#000000' }
+                        },
+                        ui: { loginLogoUrl: null, loginLogoHeight: 80, roundedCorners: true, compactMode: false, tableStriped: true },
+                        content: {
+                            requesterName: requesterNames,
+                            destination: evt.destino,
+                            departureDateTime: evt.data_saida,
+                            returnDateTime: evt.data_retorno,
+                            descriptionReason: evt.motivo,
+                            subType: evt.veiculo,
+                            requestedValue: evt.valor ? `R$ ${Number(evt.valor).toFixed(2)}` : 'R$ 0,00',
+                            distanceKm: evt.distancia || 0,
+                            lodgingCount: evt.hospedagem_dias || 0
+                        }
+                    }
+                } as unknown as Order);
+            });
+        }
+    } catch (e) {
+        console.warn('Erro ao carregar diarias_eventos no historico:', e);
+    }
+
+    return serviceRequestOrders;
 };
 
 export const getServiceRequestById = async (id: string): Promise<Order> => {
@@ -195,24 +276,72 @@ export const getServiceRequestById = async (id: string): Promise<Order> => {
         .from('service_requests')
         .select('*')
         .eq('id', id)
+        .maybeSingle();
+
+    if (data) {
+        return {
+            id: data.id,
+            protocol: data.protocol,
+            title: data.title,
+            status: data.status,
+            paymentStatus: data.payment_status,
+            paymentDate: data.payment_date,
+            statusHistory: data.status_history,
+            createdAt: data.created_at,
+            userId: data.user_id,
+            userName: data.user_name,
+            blockType: 'diarias',
+            documentSnapshot: normalizeDiariasSnapshot(data, data.document_snapshot)
+        };
+    }
+
+    // Fallback: consultar tabela diarias_eventos
+    const { data: evtData, error: evtError } = await supabase
+        .from('diarias_eventos')
+        .select('*')
+        .eq('id', id)
         .single();
 
-    if (error) throw error;
+    if (evtError || !evtData) throw error || evtError || new Error('Diária não encontrada');
+
+    const requesterNames = evtData.pessoas && Array.isArray(evtData.pessoas) && evtData.pessoas.length > 0
+        ? evtData.pessoas.map((p: any) => p.name).join(', ')
+        : evtData.user_name || 'Servidor não informado';
+
+    const mapStatus = (st: string) => {
+      if (st === 'concluido') return 'completed';
+      if (st === 'cancelado' || st === 'rejeitado') return 'rejected';
+      if (st === 'em_viagem') return 'approved';
+      return 'awaiting_approval';
+    };
 
     return {
-        id: data.id,
-        protocol: data.protocol,
-        title: data.title,
-        status: data.status,
-        paymentStatus: data.payment_status,
-        paymentDate: data.payment_date,
-        statusHistory: data.status_history,
-        createdAt: data.created_at,
-        userId: data.user_id,
-        userName: data.user_name,
+        id: evtData.id,
+        protocol: `EVT-${String(evtData.id).slice(0, 6).toUpperCase()}`,
+        title: `Viagem Oficial: ${evtData.destino}`,
+        status: mapStatus(evtData.status),
+        paymentStatus: evtData.status === 'concluido' ? 'paid' : 'pending',
+        createdAt: evtData.created_at || new Date().toISOString(),
+        userId: evtData.user_id,
+        userName: evtData.user_name || requesterNames,
         blockType: 'diarias',
-        documentSnapshot: normalizeDiariasSnapshot(data, data.document_snapshot)
-    };
+        documentSnapshot: {
+            branding: { logoUrl: null, primaryColor: '#4f46e5', secondaryColor: '#0f172a', fontFamily: 'font-sans' as any, logoWidth: 76, logoAlignment: 'left' as any, watermark: { enabled: false, imageUrl: null, opacity: 20, size: 55, grayscale: true } },
+            document: { headerText: '', footerText: '', city: '', showDate: true, showPageNumbers: true, showSignature: false, showLeftBlock: true, showRightBlock: true, titleStyle: { size: 12, color: '#000000', alignment: 'left' as any }, leftBlockStyle: { size: 10, color: '#000000' }, rightBlockStyle: { size: 10, color: '#000000' } },
+            ui: { loginLogoUrl: null, loginLogoHeight: 80, roundedCorners: true, compactMode: false, tableStriped: true },
+            content: {
+                requesterName: requesterNames,
+                destination: evtData.destino,
+                departureDateTime: evtData.data_saida,
+                returnDateTime: evtData.data_retorno,
+                descriptionReason: evtData.motivo,
+                subType: evtData.veiculo,
+                requestedValue: evtData.valor ? `R$ ${Number(evtData.valor).toFixed(2)}` : 'R$ 0,00',
+                distanceKm: evtData.distancia || 0,
+                lodgingCount: evtData.hospedagem_dias || 0
+            }
+        }
+    } as unknown as Order;
 };
 
 export const saveServiceRequest = async (order: Order): Promise<Order> => {

@@ -3,7 +3,7 @@ import {
   ArrowLeft, MapPin, Calendar, Clock, FileText, CheckCircle2, 
   Loader2, Search, ChevronDown, Users, X, Check, ChevronLeft,
   MessageSquare, ArrowRight, ChevronRight, Car, AlertTriangle,
-  Bed, Plus, Minus
+  Bed, Plus, Minus, Trash2
 } from 'lucide-react';
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -232,14 +232,15 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
     return n.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   };
 
-  const [selectedPerson, setSelectedPerson] = useState<{ id: string; name: string } | null>(() => {
+  const [selectedPersons, setSelectedPersons] = useState<{ id: string; name: string }[]>(() => {
     if (currentUser) {
       const match = persons.find(p => normalizeName(p.name) === normalizeName(currentUser.name));
-      if (match) return { id: match.id, name: match.name };
-      return { id: currentUser.id, name: currentUser.name };
+      if (match) return [{ id: match.id, name: match.name }];
+      return [{ id: currentUser.id, name: currentUser.name }];
     }
-    return null;
+    return [];
   });
+  const [editingPersonIndex, setEditingPersonIndex] = useState<number | null>(null);
   const [destination, setDestination] = useState('');
   const [departureDateTime, setDepartureDateTime] = useState('');
   const [returnDateTime, setReturnDateTime] = useState('');
@@ -306,6 +307,13 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
     if (currentUser.role === 'admin') return true;
     if (currentUser.permissions?.includes('parent_diarias_gestores')) return true;
     if (currentUser.permissions?.includes('parent_diarias')) return true;
+    return Object.values(gestoresMap).includes(currentUser.id);
+  }, [currentUser, gestoresMap]);
+
+  const canAddExtraServer = useMemo(() => {
+    if (!currentUser) return false;
+    if (currentUser.role === 'admin') return true;
+    if (currentUser.permissions?.includes('parent_diarias_gestores')) return true;
     return Object.values(gestoresMap).includes(currentUser.id);
   }, [currentUser, gestoresMap]);
 
@@ -443,10 +451,39 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
   
   const [currentStep, setCurrentStep] = useState(1);
   
-  // Verifica se o servidor selecionado é diferente do usuário logado
-  const isOutroServidor = !!(selectedPerson && currentUser && selectedPerson.id !== currentUser.id);
+  // Handlers para gerenciar múltiplos servidores na mesma viagem
+  const handleAddPerson = () => {
+    setEditingPersonIndex(null);
+    setIsPersonsOpen(true);
+  };
 
-  const isStep1Valid = selectedPerson !== null && 
+  const handleRemovePerson = (index: number) => {
+    if (selectedPersons.length <= 1) return;
+    setSelectedPersons(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSelectPerson = (person: { id: string; name: string }) => {
+    if (editingPersonIndex !== null && editingPersonIndex < selectedPersons.length) {
+      setSelectedPersons(prev => {
+        const updated = [...prev];
+        updated[editingPersonIndex] = person;
+        return updated;
+      });
+    } else {
+      setSelectedPersons(prev => {
+        if (prev.some(p => p.id === person.id)) return prev;
+        return [...prev, person];
+      });
+    }
+    setIsPersonsOpen(false);
+    setPersonSearch('');
+    setEditingPersonIndex(null);
+  };
+
+  const isOutroServidor = selectedPersons.some(p => currentUser && p.id !== currentUser.id);
+
+  const isStep1Valid = selectedPersons.length > 0 &&
+    selectedPersons.every(p => p && p.id && p.name) &&
     destination && 
     departureDateTime && 
     (!returnDateTime || !isDateExpired(returnDateTime)) &&
@@ -472,13 +509,10 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
   const [activeDateModal, setActiveDateModal] = useState<'departure' | 'return' | null>(null);
 
   useEffect(() => {
-    if (currentUser && persons.length > 0) {
-      const isPersonInList = selectedPerson ? persons.some(p => p.id === selectedPerson.id) : false;
-      if (!isPersonInList) {
-        const match = persons.find(p => normalizeName(p.name) === normalizeName(currentUser.name));
-        if (match) {
-          setSelectedPerson({ id: match.id, name: match.name });
-        }
+    if (currentUser && persons.length > 0 && selectedPersons.length === 0) {
+      const match = persons.find(p => normalizeName(p.name) === normalizeName(currentUser.name));
+      if (match) {
+        setSelectedPersons([{ id: match.id, name: match.name }]);
       }
     }
   }, [persons, currentUser]);
@@ -700,7 +734,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
 
     try {
       await createDiariaEvento({
-        pessoas: selectedPerson ? [selectedPerson] : [],
+        pessoas: selectedPersons,
         destino: destination,
         data_saida: departureDateTime,
         // Se o campo RETORNO for preenchido por gestor/admin, salva a data; caso contrário, salva sentinela para o fluxo Viajar
@@ -794,7 +828,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
     if (!stepObj) return false;
     switch (stepObj.key) {
       case 'servidor':
-        return selectedPerson !== null;
+        return selectedPersons.length > 0 && selectedPersons.every(p => p && p.id && p.name);
       case 'destino':
         return destination !== '' && !isCalculatingDistance;
       case 'saida':
@@ -817,8 +851,8 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
   if (isMobile) {
     const totalMobileSteps = mobileStepsList.length;
     const currentMobileStepObj = mobileStepsList[mobileStep - 1] || mobileStepsList[0];
-    const canChangePerson = currentUser && (currentUser.role === 'admin' || currentUser.permissions?.includes('parent_diarias'));
-    const selectedPersonData = selectedPerson ? persons.find(p => p.id === selectedPerson.id) : null;
+    const canChangePerson = canAddExtraServer;
+    const selectedPersonData = selectedPersons[0] ? persons.find(p => p.id === selectedPersons[0].id) : null;
     const selectedPersonJob = selectedPersonData 
       ? (jobs.find(j => j.id === selectedPersonData.jobId)?.name || 'Sem Cargo')
       : 'Sem Cargo';
@@ -894,34 +928,76 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
                 
                 {/* PASSO: SERVIDOR */}
                 {currentMobileStepObj.key === 'servidor' && (
-                  <div className="w-full space-y-6">
+                  <div className="w-full space-y-4">
                     <div className="space-y-2">
                       <div className="w-14 h-14 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto text-indigo-600 shadow-inner">
                         <Users className="w-7 h-7" />
                       </div>
-                      <h3 className="text-xl font-black text-slate-900 tracking-tight">Quem realizará a viagem?</h3>
-                      <p className="text-slate-500 text-xs font-medium max-w-xs mx-auto">Selecione o servidor beneficiário das diárias para esta viagem.</p>
+                      <h3 className="text-xl font-black text-slate-900 tracking-tight">Servidores na Viagem</h3>
+                      <p className="text-slate-500 text-xs font-medium max-w-xs mx-auto">
+                        Adicione um ou mais servidores para esta viagem.
+                      </p>
                     </div>
 
-                    <div 
-                      onClick={() => canChangePerson && setIsPersonsOpen(true)}
-                      className={`w-full p-5 rounded-2xl border text-left transition-all ${
-                        canChangePerson 
-                          ? 'bg-slate-50/90 border-slate-200/80 hover:border-indigo-500 hover:ring-4 hover:ring-indigo-500/5 cursor-pointer shadow-sm active:scale-[0.98]' 
-                          : 'bg-slate-100/80 border-slate-200/60 cursor-not-allowed'
-                      }`}
-                    >
-                      <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1">Servidor Selecionado</span>
-                      <span className="block text-base font-bold text-slate-800 break-words">
-                        {selectedPerson ? selectedPerson.name : 'Selecionar Servidor...'}
-                      </span>
-                      <span className="block text-xs text-slate-500 font-medium mt-1">
-                        Cargo: {selectedPersonJob}
-                      </span>
-                      {canChangePerson && (
-                        <span className="block text-[10px] text-indigo-600 font-bold mt-3 text-right">Toque para alterar →</span>
-                      )}
+                    <div className="space-y-3 w-full max-h-[240px] overflow-y-auto pr-1">
+                      {selectedPersons.map((pItem, idx) => {
+                        const personData = persons.find(p => p.id === pItem.id);
+                        const personJob = personData
+                          ? (jobs.find(j => j.id === personData.jobId)?.name || 'Sem Cargo')
+                          : 'Sem Cargo';
+
+                        return (
+                          <div 
+                            key={pItem.id || idx}
+                            className="p-4 rounded-2xl border border-slate-200 bg-slate-50/90 text-left relative flex flex-col gap-1 shadow-xs"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">Servidor {idx + 1}</span>
+                              {selectedPersons.length > 1 && canChangePerson && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRemovePerson(idx);
+                                  }}
+                                  className="p-1 text-slate-400 hover:text-rose-600 rounded-lg transition-colors"
+                                  title="Remover Servidor"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                            <div 
+                              onClick={() => {
+                                if (canChangePerson) {
+                                  setEditingPersonIndex(idx);
+                                  setIsPersonsOpen(true);
+                                }
+                              }}
+                              className={canChangePerson ? 'cursor-pointer' : ''}
+                            >
+                              <span className="block text-sm font-extrabold text-slate-800 break-words">
+                                {pItem.name}
+                              </span>
+                              <span className="block text-[11px] text-slate-500 font-medium mt-0.5">
+                                Cargo: {personJob}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
+
+                    {canChangePerson && (
+                      <button
+                        type="button"
+                        onClick={handleAddPerson}
+                        className="w-full py-3 px-4 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-extrabold text-xs uppercase tracking-wider rounded-2xl border border-indigo-200/80 flex items-center justify-center gap-2 transition-all active:scale-95 shadow-xs"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>Adicionar outro Servidor</span>
+                      </button>
+                    )}
                   </div>
                 )}
 
@@ -1209,9 +1285,8 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
                     <div className="w-full bg-slate-50 border border-slate-200 rounded-2xl shadow-sm text-left overflow-hidden divide-y divide-slate-100">
                       
                       <div className="py-2 px-3">
-                        <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-0.5">Servidor</span>
-                        <p className="text-sm font-bold text-slate-800">{selectedPerson?.name}</p>
-                        <p className="text-[10px] text-slate-500 font-semibold">{selectedPersonJob}</p>
+                        <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-0.5">Servidores ({selectedPersons.length})</span>
+                        <p className="text-sm font-bold text-slate-800">{selectedPersons.map(p => p.name).join(', ')}</p>
                       </div>
 
                       <div className="py-2 px-3">
@@ -1318,11 +1393,13 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
 
         {/* Modais reaproveitados */}
         {isPersonsOpen && (
-          <div className="fixed inset-0 z-[100] flex items-start sm:items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 pt-12 sm:p-6 animate-fade-in" onClick={() => setIsPersonsOpen(false)}>
+          <div className="fixed inset-0 z-[100] flex items-start sm:items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 pt-12 sm:p-6 animate-fade-in" onClick={() => { setIsPersonsOpen(false); setEditingPersonIndex(null); }}>
             <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl flex flex-col h-[70vh] sm:h-auto sm:max-h-[85vh] overflow-hidden animate-slide-up" onClick={e => e.stopPropagation()}>
               <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-                <h3 className="font-bold text-slate-900">Selecionar Pessoa</h3>
-                <button onClick={() => setIsPersonsOpen(false)} className="p-2 hover:bg-slate-200 rounded-full text-slate-500 transition-colors">
+                <h3 className="font-bold text-slate-900">
+                  {editingPersonIndex !== null ? `Alterar Servidor ${editingPersonIndex + 1}` : 'Adicionar Servidor na Viagem'}
+                </h3>
+                <button onClick={() => { setIsPersonsOpen(false); setEditingPersonIndex(null); }} className="p-2 hover:bg-slate-200 rounded-full text-slate-500 transition-colors">
                   <X className="w-5 h-5" />
                 </button>
               </div>
@@ -1341,16 +1418,16 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
                 <div className="hide-scroll space-y-1">
                   {filteredPersons.length > 0 ? (
                     filteredPersons.map((person) => {
-                      const isSelected = selectedPerson?.id === person.id;
+                      const isAlreadyAdded = selectedPersons.some(p => p.id === person.id);
+                      const isCurrentEditing = editingPersonIndex !== null && selectedPersons[editingPersonIndex]?.id === person.id;
+                      const isSelected = isAlreadyAdded;
                       return (
                         <button
                           key={person.id}
                           onClick={() => {
-                            setSelectedPerson({ id: person.id, name: person.name });
-                            setIsPersonsOpen(false);
-                            setPersonSearch('');
+                            handleSelectPerson({ id: person.id, name: person.name });
                           }}
-                          className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-left text-sm font-medium transition-all group ${isSelected ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-slate-50 text-slate-700'}`}
+                          className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-left text-sm font-medium transition-all group ${isCurrentEditing || isSelected ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-slate-50 text-slate-700'}`}
                         >
                           <div className="flex flex-col">
                             <span className={`${isSelected ? 'font-bold' : ''}`}>{person.name}</span>
@@ -1779,49 +1856,97 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
                 
                 {/* Pessoas */}
                 {(() => {
-                  const canChangePerson = currentUser && (currentUser.role === 'admin' || currentUser.permissions.includes('parent_diarias'));
-                  const selectedPersonData = selectedPerson ? persons.find(p => p.id === selectedPerson.id) : null;
-                  const selectedPersonJob = selectedPersonData 
-                    ? (jobs.find(j => j.id === selectedPersonData.jobId)?.name || 'Sem Cargo')
-                    : 'Sem Cargo';
+                  const canChangePerson = canAddExtraServer;
 
                   return (
-                    <>
-                      <div className="relative space-y-3">
-                        <label className={labelClass}>Servidor</label>
-                        <div 
-                          onClick={() => {
-                            if (canChangePerson) {
-                              setIsPersonsOpen(true);
-                            }
-                          }}
-                          className={`${inputContainerClass} ${canChangePerson ? 'cursor-pointer' : 'bg-slate-100/80 border-slate-200 cursor-not-allowed'} ${isPersonsOpen && canChangePerson ? 'bg-white border-indigo-500 ring-4 ring-indigo-500/5' : ''}`}
-                        >
-                          <Users className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                          <span className={`w-full bg-transparent pl-11 pr-10 py-3 text-sm font-medium outline-none truncate ${selectedPerson ? (canChangePerson ? 'text-slate-900' : 'text-slate-500') : 'text-slate-500'}`}>
-                            {selectedPerson ? selectedPerson.name : 'Clique para selecionar o servidor...'}
-                          </span>
-                          {canChangePerson && (
-                            <div className="absolute right-4 top-1/2 -translate-y-1/2">
-                              <ChevronDown className="w-4 h-4 text-slate-400" />
-                            </div>
-                          )}
-                        </div>
+                    <div className="space-y-4 border-b border-slate-150 pb-6">
+                      <div className="flex items-center justify-between">
+                        <label className={labelClass}>Servidores na Viagem</label>
+                        <span className="text-[10px] font-bold text-slate-400">
+                          {selectedPersons.length} {selectedPersons.length === 1 ? 'servidor' : 'servidores'}
+                        </span>
                       </div>
 
-                      <div className="relative space-y-3">
-                        <label className={labelClass}>Cargo</label>
-                        <div className={`${inputContainerClass} bg-slate-100/80 border-slate-200 cursor-not-allowed`}>
-                          <Users className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                          <input
-                            type="text"
-                            readOnly
-                            value={selectedPersonJob}
-                            className={`${inputClass} text-slate-500 cursor-not-allowed`}
-                          />
-                        </div>
+                      <div className="space-y-3">
+                        {selectedPersons.map((pItem, idx) => {
+                          const personData = persons.find(p => p.id === pItem.id);
+                          const personJob = personData
+                            ? (jobs.find(j => j.id === personData.jobId)?.name || 'Sem Cargo')
+                            : 'Sem Cargo';
+
+                          return (
+                            <div key={pItem.id || idx} className="p-4 rounded-2xl border border-slate-200 bg-slate-50/80 space-y-3 relative group hover:border-indigo-200 transition-all">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                                  Servidor {idx + 1}
+                                </span>
+                                {selectedPersons.length > 1 && canChangePerson && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemovePerson(idx)}
+                                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+                                    title="Remover servidor da viagem"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </div>
+
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {/* Campo Servidor */}
+                                <div className="space-y-1.5">
+                                  <label className="text-[9px] font-bold text-slate-400 uppercase">Nome do Servidor</label>
+                                  <div
+                                    onClick={() => {
+                                      if (canChangePerson) {
+                                        setEditingPersonIndex(idx);
+                                        setIsPersonsOpen(true);
+                                      }
+                                    }}
+                                    className={`${inputContainerClass} ${canChangePerson ? 'cursor-pointer' : 'bg-slate-100/80 border-slate-200 cursor-not-allowed'}`}
+                                  >
+                                    <Users className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                                    <span className={`w-full bg-transparent pl-11 pr-10 py-3 text-sm font-medium outline-none truncate ${pItem.name ? 'text-slate-900 font-bold' : 'text-slate-400'}`}>
+                                      {pItem.name || 'Clique para selecionar servidor...'}
+                                    </span>
+                                    {canChangePerson && (
+                                      <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                                        <ChevronDown className="w-4 h-4 text-slate-400" />
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Campo Cargo */}
+                                <div className="space-y-1.5">
+                                  <label className="text-[9px] font-bold text-slate-400 uppercase">Cargo</label>
+                                  <div className={`${inputContainerClass} bg-slate-100/80 border-slate-200 cursor-not-allowed`}>
+                                    <Users className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                                    <input
+                                      type="text"
+                                      readOnly
+                                      value={personJob}
+                                      className={`${inputClass} text-slate-500 cursor-not-allowed`}
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
-                    </>
+
+                      {canChangePerson && (
+                        <button
+                          type="button"
+                          onClick={handleAddPerson}
+                          className="w-full py-3 px-4 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-extrabold text-xs uppercase tracking-wider rounded-2xl border border-indigo-200/80 flex items-center justify-center gap-2 transition-all active:scale-95 shadow-xs"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span>Adicionar outro Servidor nesta viagem</span>
+                        </button>
+                      )}
+                    </div>
                   );
                 })()}
 
@@ -2040,16 +2165,16 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
               <div className="hide-scroll space-y-1">
                 {filteredPersons.length > 0 ? (
                   filteredPersons.map((person) => {
-                    const isSelected = selectedPerson?.id === person.id;
+                    const isAlreadyAdded = selectedPersons.some(p => p.id === person.id);
+                    const isCurrentEditing = editingPersonIndex !== null && selectedPersons[editingPersonIndex]?.id === person.id;
+                    const isSelected = isAlreadyAdded;
                     return (
                       <button
                         key={person.id}
                         onClick={() => {
-                          setSelectedPerson({ id: person.id, name: person.name });
-                          setIsPersonsOpen(false);
-                          setPersonSearch('');
+                          handleSelectPerson({ id: person.id, name: person.name });
                         }}
-                        className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-left text-sm font-medium transition-all group ${isSelected ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-slate-50 text-slate-700'}`}
+                        className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-left text-sm font-medium transition-all group ${isCurrentEditing || isSelected ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-slate-50 text-slate-700'}`}
                       >
                         <div className="flex flex-col">
                           <span className={`${isSelected ? 'font-bold' : ''}`}>{person.name}</span>

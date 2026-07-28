@@ -3,10 +3,11 @@ import {
   ArrowLeft, Loader2, Calendar, MapPin, Users, RefreshCw, 
   FileText, Search, Hash as HashIcon, CheckCircle2, 
   X, AlertTriangle, Upload, Paperclip, Check, Trash2,
-  Car, Navigation, Hotel, BookOpen, Copy, Download, XCircle, Receipt
+  Car, Navigation, Hotel, BookOpen, Copy, Download, FileDown, XCircle, Receipt,
+  UserPlus, Square, Timer, Clock, Plus
 } from 'lucide-react';
 import { getDiariasDespesasEnabled, setDiariasDespesasEnabled } from '../../services/diariasSettingsService';
-import { DiariaEvento, User, Attachment, Sector, Job, Person } from '../../types';
+import { DiariaEvento, User, Attachment, Sector, Job, Person, Order } from '../../types';
 import { supabase } from '../../services/supabaseClient';
 import { 
   getDiariaEventosBySector, 
@@ -18,6 +19,7 @@ import {
 import { getGlobalSettings } from '../../services/settingsService';
 import { uploadFile } from '../../services/storageService';
 import { TwoFactorModal } from '../TwoFactorModal';
+import { DiariasReportModal } from './DiariasReportModal';
 
 
 const GESTORES_CARGOS = [
@@ -86,6 +88,92 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
   // Estados para o Modal de Rejeição
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
+
+  // Estado para Modal de Relatório de Diárias
+  const [showReportModal, setShowReportModal] = useState(false);
+
+  const handleUpdatePaymentStatus = async (orderOrId: string | Order, status: 'pending' | 'contabilidade' | 'paid') => {
+    const id = typeof orderOrId === 'string' ? orderOrId : orderOrId.id;
+    setEventos(prev => prev.map(evt => String(evt.id) === String(id) ? { ...evt, payment_status: status as any } : evt));
+    try {
+      await updateDiariaEvento(id, { payment_status: status } as any);
+    } catch (e) {
+      console.warn('Erro ao atualizar payment_status em Lancamentos:', e);
+    }
+  };
+
+  // Ticker para tempo real de viagem em andamento
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Permissão de Gestor/Admin para ações administrativas na lista
+  const isGestorOrAdmin = useMemo(() => {
+    if (!currentUser) return false;
+    if (currentUser.role === 'admin') return true;
+    if (currentUser.permissions?.includes('parent_diarias_gestores')) return true;
+    return Object.values(gestoresMap).includes(currentUser.id);
+  }, [currentUser, gestoresMap]);
+
+  // Estados dos modais de gestão na lista de lançamentos
+  const [finalizeEventoModal, setFinalizeEventoModal] = useState<DiariaEvento | null>(null);
+  const [addServerEventoModal, setAddServerEventoModal] = useState<DiariaEvento | null>(null);
+  const [addServerSearch, setAddServerSearch] = useState('');
+
+  const handleFinalizarViagemFromLancamentos = async (evento: DiariaEvento) => {
+    const fimIso = new Date().toISOString();
+    const updatedPessoas = (evento.pessoas || []).map(p => ({
+      ...p,
+      viagem_fim: (p as any).viagem_fim || fimIso
+    }));
+
+    const optimistic: DiariaEvento = {
+      ...evento,
+      pessoas: updatedPessoas,
+      data_retorno: fimIso,
+      status: 'aguardando_gestor'
+    };
+
+    setEventos(prev => prev.map(e => e.id === evento.id ? optimistic : e));
+    setFinalizeEventoModal(null);
+
+    try {
+      await updateDiariaEvento(evento.id, {
+        pessoas: updatedPessoas,
+        data_retorno: fimIso,
+        status: 'aguardando_gestor'
+      });
+    } catch (err) {
+      console.warn("Erro ao finalizar viagem via Lancamentos:", err);
+    }
+  };
+
+  const handleAddServerToEvento = async (evento: DiariaEvento, person: Person) => {
+    if (evento.pessoas?.some(p => p.id === person.id)) {
+      alert("Este servidor já está adicionado nesta viagem.");
+      return;
+    }
+
+    const updatedPessoas = [...(evento.pessoas || []), { id: person.id, name: person.name }];
+    const optimistic: DiariaEvento = {
+      ...evento,
+      pessoas: updatedPessoas
+    };
+
+    setEventos(prev => prev.map(e => e.id === evento.id ? optimistic : e));
+    setAddServerEventoModal(null);
+    setAddServerSearch('');
+
+    try {
+      await updateDiariaEvento(evento.id, {
+        pessoas: updatedPessoas
+      });
+    } catch (err) {
+      console.warn("Erro ao adicionar servidor via Lancamentos:", err);
+    }
+  };
 
 
   useEffect(() => {
@@ -250,6 +338,54 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
 
     return isOwner || isParticipant || isGestorOfAnyPerson || isTransferredGestor;
   });
+
+  const mappedOrdersForReport: Order[] = useMemo(() => {
+    return filteredEventos.map(evt => {
+      const requesterNames = evt.pessoas && Array.isArray(evt.pessoas) && evt.pessoas.length > 0
+        ? evt.pessoas.map((p: any) => p.name).join(', ')
+        : evt.user_name || 'Servidor não informado';
+
+      const mapStatus = (st: string) => {
+        if (st === 'concluido') return 'completed';
+        if (st === 'cancelado' || st === 'rejeitado' || st === 'rejeitado_gestor' || st === 'viagem_cancelada') return 'rejected';
+        if (st === 'em_viagem' || st === 'aguardando_administrador' || st === 'aguardando_gestor' || st === 'aguardando_aprovacao') return 'approved';
+        return 'awaiting_approval';
+      };
+
+      const mapPaymentStatus = (st: string) => {
+        if (st === 'concluido') return 'paid';
+        return (evt as any).payment_status || 'pending';
+      };
+
+      return {
+        id: String(evt.id),
+        protocol: `EVT-${String(evt.id).slice(0, 6).toUpperCase()}`,
+        title: `Viagem Oficial: ${evt.destino}`,
+        status: mapStatus(evt.status),
+        paymentStatus: mapPaymentStatus(evt.status),
+        createdAt: evt.created_at || new Date().toISOString(),
+        userId: evt.user_id,
+        userName: evt.user_name || requesterNames,
+        blockType: 'diarias',
+        documentSnapshot: {
+          branding: { logoUrl: null, primaryColor: '#4f46e5', secondaryColor: '#0f172a', fontFamily: 'font-sans' as any, logoWidth: 76, logoAlignment: 'left' as any, watermark: { enabled: false, imageUrl: null, opacity: 20, size: 55, grayscale: true } },
+          document: { headerText: '', footerText: '', city: '', showDate: true, showPageNumbers: true, showSignature: false, showLeftBlock: true, showRightBlock: true, titleStyle: { size: 12, color: '#000000', alignment: 'left' as any }, leftBlockStyle: { size: 10, color: '#000000' }, rightBlockStyle: { size: 10, color: '#000000' } },
+          ui: { loginLogoUrl: null, loginLogoHeight: 80, roundedCorners: true, compactMode: false, tableStriped: true },
+          content: {
+            requesterName: requesterNames,
+            destination: evt.destino,
+            departureDateTime: evt.data_saida,
+            returnDateTime: evt.data_retorno,
+            descriptionReason: evt.motivo,
+            subType: evt.veiculo,
+            requestedValue: evt.valor_diaria ? `R$ ${Number(evt.valor_diaria).toFixed(2)}` : ((evt as any).valor ? `R$ ${Number((evt as any).valor).toFixed(2)}` : 'R$ 0,00'),
+            distanceKm: evt.distancia || 0,
+            lodgingCount: evt.hospedagem_dias || 0
+          }
+        }
+      } as unknown as Order;
+    });
+  }, [filteredEventos]);
 
   const handleSelectModalTab = (tab: 'resumo' | 'justificativa' | 'comprovantes' | 'relatorio') => {
     setModalActiveTab(tab);
@@ -1087,6 +1223,14 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                 <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
                 Atualizar
               </button>
+              <button
+                onClick={() => setShowReportModal(true)}
+                className="p-2 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-2xl hover:bg-indigo-600 hover:text-white transition-all shadow-sm flex items-center gap-2 font-bold text-[10px] uppercase tracking-widest active:scale-95 shrink-0"
+                title="Exportar Relatório"
+              >
+                <FileDown className="w-3.5 h-3.5" />
+                <span className="hidden desktop:inline">Relatório</span>
+              </button>
             </div>
           </div>
         </div>
@@ -1165,6 +1309,20 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
 
                   const canAct = canApproveAguardandoAprovacao || gestorCanAct || adminCanAct;
 
+                  const isEmViagem = evento.status === 'em_viagem' || (evento.pessoas && evento.pessoas.some(p => (p as any).viagem_inicio && !(p as any).viagem_fim));
+                  let formattedTimer = '';
+                  if (isEmViagem) {
+                    const activePerson = evento.pessoas?.find(p => (p as any).viagem_inicio && !(p as any).viagem_fim);
+                    const inicioStr = activePerson ? (activePerson as any).viagem_inicio : evento.data_saida;
+                    if (inicioStr) {
+                      const diffSecs = Math.max(0, Math.floor((now.getTime() - new Date(inicioStr).getTime()) / 1000));
+                      const hrs = Math.floor(diffSecs / 3600);
+                      const mins = Math.floor((diffSecs % 3600) / 60);
+                      const secs = diffSecs % 60;
+                      formattedTimer = `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+                    }
+                  }
+
                   return (
                     <div key={evento.id} className="mx-4 my-3 p-5 rounded-3xl bg-white border border-slate-200/80 shadow-[0_4px_20px_rgba(0,0,0,0.02)] hover:border-indigo-100 desktop:mx-0 desktop:my-0 desktop:rounded-none desktop:bg-transparent desktop:border-0 desktop:border-b desktop:border-slate-100 desktop:shadow-none desktop:px-8 desktop:py-5 flex flex-col desktop:grid desktop:grid-cols-12 gap-4 hover:bg-slate-50/80 transition-all duration-200 items-stretch desktop:items-center">
                       <div className="desktop:col-span-2 flex items-center justify-between desktop:justify-center gap-3 pb-3 desktop:pb-0 border-b border-slate-100 desktop:border-b-0 shrink-0">
@@ -1189,10 +1347,17 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                             {createdDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                           </span>
                         </div>
-                        <div className="desktop:hidden">
-                          <div className={`inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest shadow-sm ${badge.style}`}>
-                            {badge.label}
-                          </div>
+                        <div className="desktop:hidden flex flex-col items-end gap-1">
+                          {isEmViagem ? (
+                            <div className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-full border border-emerald-300 text-[9px] font-black animate-pulse shadow-xs">
+                              <Timer className="w-3 h-3 text-emerald-600" />
+                              <span className="font-mono font-black">{formattedTimer}</span>
+                            </div>
+                          ) : (
+                            <div className={`inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest shadow-sm ${badge.style}`}>
+                              {badge.label}
+                            </div>
+                          )}
                         </div>
                       </div>
 
@@ -1207,7 +1372,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                           {evento.destino}
                         </h3>
                         <p className="text-[10px] text-slate-400 font-medium mt-1 flex items-center gap-1">
-                          <Users className="w-3 h-3 text-slate-400" /> {evento.pessoas[0]?.name || 'Servidor não informado'}
+                          <Users className="w-3 h-3 text-slate-400" /> {evento.pessoas && evento.pessoas.length > 0 ? evento.pessoas.map(p => p.name).join(', ') : 'Servidor não informado'}
                         </p>
                       </div>
 
@@ -1220,13 +1385,46 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                         </p>
                       </div>
 
-                      <div className="hidden desktop:flex desktop:col-span-2 items-center justify-center py-2 desktop:py-0">
-                         <div className={`inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest shadow-sm ${badge.style}`}>
-                            {badge.label}
-                         </div>
+                      <div className="hidden desktop:flex desktop:col-span-2 items-center justify-center py-2 desktop:py-0 flex-col gap-1">
+                         {isEmViagem ? (
+                           <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 rounded-full border border-emerald-300 text-[10px] font-black animate-pulse shadow-xs">
+                             <Timer className="w-3.5 h-3.5 text-emerald-600 animate-spin" style={{ animationDuration: '3s' }} />
+                             <span>EM PERCURSO</span>
+                             <span className="font-mono bg-emerald-600 text-white px-1.5 py-0.5 rounded text-[9px] font-bold">
+                               {formattedTimer}
+                             </span>
+                           </div>
+                         ) : (
+                           <div className={`inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest shadow-sm ${badge.style}`}>
+                              {badge.label}
+                           </div>
+                         )}
                       </div>
 
-                      <div className="desktop:col-span-1 flex items-center justify-end desktop:justify-center gap-2 pt-3 desktop:pt-0 border-t border-slate-100 desktop:border-t-0 mt-2 desktop:mt-0 w-full desktop:w-auto">
+                      <div className="desktop:col-span-1 flex items-center justify-end desktop:justify-center gap-2 pt-3 desktop:pt-0 border-t border-slate-100 desktop:border-t-0 mt-2 desktop:mt-0 w-full desktop:w-auto flex-wrap">
+                        {/* Botão de Finalizar Viagem para Gestor/Admin quando em percurso */}
+                        {isGestorOrAdmin && isEmViagem && (
+                          <button
+                            onClick={() => setFinalizeEventoModal(evento)}
+                            className="px-2.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 shadow-md shadow-rose-600/20 flex items-center gap-1 shrink-0"
+                            title="Finalizar Viagem em Andamento"
+                          >
+                            <Square className="w-3 h-3 fill-white text-white" />
+                            <span>Finalizar</span>
+                          </button>
+                        )}
+
+                        {/* Botão de Adicionar Servidor para Gestor/Admin */}
+                        {isGestorOrAdmin && (
+                          <button
+                            onClick={() => setAddServerEventoModal(evento)}
+                            className="p-1.5 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-lg transition-all border border-indigo-200/60 shrink-0"
+                            title="Adicionar + Servidor nesta Viagem"
+                          >
+                            <UserPlus className="w-4 h-4" />
+                          </button>
+                        )}
+
                         {canAct && evento.status !== 'concluido' ? (
                           <button 
                             onClick={() => handleOpenReview(evento)}
@@ -2328,6 +2526,145 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
         </div>
       )}
 
+      {/* Modal de Confirmação de Finalização de Viagem pelo Gestor/Admin */}
+      {finalizeEventoModal && (
+        <div 
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4 animate-fade-in"
+          onClick={() => setFinalizeEventoModal(null)}
+        >
+          <div 
+            className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100 animate-slide-up text-left"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="bg-gradient-to-br from-rose-600 to-red-700 p-6 text-white text-center relative flex flex-col items-center">
+              <div className="w-14 h-14 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center mb-3 border border-white/30 shadow-inner">
+                <AlertTriangle className="w-8 h-8 text-white" />
+              </div>
+              <h3 className="text-lg font-black tracking-tight uppercase">Finalizar Viagem em Andamento?</h3>
+              <p className="text-xs text-rose-100 font-semibold mt-1">Ação de Gestão / Administração</p>
+              <button 
+                onClick={() => setFinalizeEventoModal(null)} 
+                className="absolute top-4 right-4 p-2 text-white/80 hover:text-white bg-black/10 hover:bg-black/20 rounded-full transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-5">
+              <div className="bg-rose-50/80 border border-rose-150 rounded-2xl p-4 text-slate-800 space-y-2">
+                <p className="text-xs font-bold text-slate-900 leading-relaxed">
+                  Confirms a finalização da viagem para <span className="font-black text-rose-700">{finalizeEventoModal.destino}</span>?
+                </p>
+                <p className="text-[11px] font-medium text-slate-600">
+                  <strong>Servidor(es):</strong> {finalizeEventoModal.pessoas?.map(p => p.name).join(', ')}
+                </p>
+                <p className="text-[10px] text-slate-500">
+                  O horário de retorno será registrado imediatamente com a hora atual e a viagem seguirá para prestação de contas.
+                </p>
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setFinalizeEventoModal(null)}
+                  className="w-full py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs uppercase tracking-wider rounded-xl transition-all"
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleFinalizarViagemFromLancamentos(finalizeEventoModal)}
+                  className="w-full py-3.5 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-rose-600/30 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                >
+                  <Square className="w-4 h-4 fill-white" />
+                  <span>Sim, Finalizar Viagem</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal para Gestor/Admin Adicionar Servidor na Viagem */}
+      {addServerEventoModal && (
+        <div 
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4 animate-fade-in"
+          onClick={() => { setAddServerEventoModal(null); setAddServerSearch(''); }}
+        >
+          <div 
+            className="w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100 animate-slide-up flex flex-col max-h-[85vh] text-left"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="bg-slate-900 p-5 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-indigo-600/30 border border-indigo-400/30 rounded-xl flex items-center justify-center">
+                  <UserPlus className="w-5 h-5 text-indigo-400" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-white">Adicionar Servidor na Viagem</h3>
+                  <p className="text-[11px] text-slate-400 font-medium truncate max-w-xs">{addServerEventoModal.destino}</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => { setAddServerEventoModal(null); setAddServerSearch(''); }} 
+                className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-full transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 border-b border-slate-100 relative">
+              <Search className="absolute left-7 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+              <input
+                type="text"
+                value={addServerSearch}
+                onChange={(e) => setAddServerSearch(e.target.value)}
+                placeholder="Buscar por nome do servidor..."
+                autoFocus
+                className="w-full bg-slate-50 border border-slate-200 pl-10 pr-4 py-3 rounded-xl text-sm font-medium text-slate-900 outline-none focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all"
+              />
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-3 space-y-1">
+              {persons
+                .filter(p => {
+                  if (addServerEventoModal.pessoas?.some(existing => existing.id === p.id)) return false;
+                  if (!addServerSearch.trim()) return true;
+                  const norm = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+                  return norm(p.name).includes(norm(addServerSearch));
+                })
+                .map(person => {
+                  const personJob = jobs.find(j => j.id === person.jobId)?.name || 'Sem Cargo';
+                  return (
+                    <button
+                      key={person.id}
+                      onClick={() => handleAddServerToEvento(addServerEventoModal, person)}
+                      className="w-full flex items-center justify-between p-3.5 hover:bg-indigo-50/70 rounded-2xl text-left border border-transparent hover:border-indigo-100 transition-all group"
+                    >
+                      <div className="flex flex-col">
+                        <span className="text-sm font-extrabold text-slate-800 group-hover:text-indigo-700">{person.name}</span>
+                        <span className="text-[11px] text-slate-400 font-semibold">{personJob}</span>
+                      </div>
+                      <div className="flex items-center gap-1 text-xs font-black text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-xl border border-indigo-200/60 group-hover:bg-indigo-600 group-hover:text-white transition-all">
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Adicionar</span>
+                      </div>
+                    </button>
+                  );
+                })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Relatório de Diárias */}
+      <DiariasReportModal
+        isOpen={showReportModal}
+        onClose={() => setShowReportModal(false)}
+        orders={mappedOrdersForReport}
+        onUpdatePaymentStatus={handleUpdatePaymentStatus}
+      />
     </div>
   );
 };
