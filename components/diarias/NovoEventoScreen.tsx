@@ -30,7 +30,11 @@ const DateTimePickerModal = ({
   title: string,
   isAdmin?: boolean
 }) => {
-  const getMinAllowed = () => addMinutes(new Date(), 30);
+  const getMinAllowed = () => {
+    const d = new Date();
+    d.setSeconds(0, 0);
+    return addMinutes(d, 30);
+  };
 
   const [currentMonth, setCurrentMonth] = useState(() => initialValue ? parseISO(initialValue) : new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(() => {
@@ -606,6 +610,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
     // 2. Regras restritas para usuários comuns (Administradores têm permissão exclusiva para retroativos):
     if (!isAdmin) {
       const now = new Date();
+      now.setSeconds(0, 0);
       const minAllowed = addMinutes(now, 30);
       if (selectedDateTime.getTime() < minAllowed.getTime()) {
         setDateValidationError({
