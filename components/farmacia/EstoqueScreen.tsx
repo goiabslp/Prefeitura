@@ -63,6 +63,15 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
     const [isAddStockModalOpen, setIsAddStockModalOpen] = useState(false);
     const [stockToAdd, setStockToAdd] = useState({ lote: '', validade: '', quantidade: '' });
 
+    const [expandedMeds, setExpandedMeds] = useState<Record<string, boolean>>({});
+
+    const toggleExpand = (key: string) => {
+        setExpandedMeds(prev => ({
+            ...prev,
+            [key]: !prev[key]
+        }));
+    };
+
     // Custom select dropdown states
     const [isAddCatOpen, setIsAddCatOpen] = useState(false);
     const [isAddTipoOpen, setIsAddTipoOpen] = useState(false);
@@ -273,13 +282,52 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
         setCurrentPage(1);
     }, [searchTerm]);
 
+    // Agrupamento por nome + dosagem + tipo para evitar medicamentos duplicados na tela principal do estoque
+    const groupedMedicamentos = useMemo(() => {
+        const groups: Record<string, {
+            key: string;
+            nome: string;
+            dosagem?: string;
+            tipo?: string;
+            categoria: string;
+            principio_ativo?: string;
+            unidade: string;
+            quantidadeTotal: number;
+            limite_minimo: number;
+            lotes: FarmaciaMedicamento[];
+        }> = {};
+
+        filteredMedicamentos.forEach(med => {
+            const key = `${med.nome.toUpperCase()}_${(med.dosagem || '').toUpperCase()}_${(med.tipo || '').toUpperCase()}`;
+            if (!groups[key]) {
+                groups[key] = {
+                    key,
+                    nome: med.nome,
+                    dosagem: med.dosagem,
+                    tipo: med.tipo,
+                    categoria: med.categoria,
+                    principio_ativo: med.principio_ativo,
+                    unidade: med.unidade,
+                    quantidadeTotal: 0,
+                    limite_minimo: med.limite_minimo,
+                    lotes: []
+                };
+            }
+            groups[key].quantidadeTotal += med.quantidade;
+            groups[key].lotes.push(med);
+        });
+
+        // Ordena por nome do medicamento agrupado
+        return Object.values(groups).sort((a, b) => a.nome.localeCompare(b.nome));
+    }, [filteredMedicamentos]);
+
     // Paginated list
     const paginatedMedicamentos = useMemo(() => {
         const startIndex = (currentPage - 1) * itemsPerPage;
-        return filteredMedicamentos.slice(startIndex, startIndex + itemsPerPage);
-    }, [filteredMedicamentos, currentPage]);
+        return groupedMedicamentos.slice(startIndex, startIndex + itemsPerPage);
+    }, [groupedMedicamentos, currentPage]);
 
-    const totalPages = Math.ceil(filteredMedicamentos.length / itemsPerPage);
+    const totalPages = Math.ceil(groupedMedicamentos.length / itemsPerPage);
 
     // --- CRUD ACTIONS ---
 
@@ -404,6 +452,7 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
         setUnidade(med.unidade);
         setValidade(med.validade);
         setLote(med.lote);
+        setQuantidade(med.quantidade.toString());
         setLimiteMinimo(med.limite_minimo.toString());
         setFornecedor(med.fornecedor || '');
         setTipo(med.tipo || 'Comprimido');
@@ -435,18 +484,43 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
 
         setSaving(true);
         try {
+            const oldQty = selectedMed.quantidade;
+            const newQty = parseInt(quantidade, 10);
+
             await db.updateMedicamento(selectedMed.id, {
                 nome: nome.toUpperCase(),
                 categoria,
                 unidade,
                 validade,
                 lote: lote.toUpperCase(),
+                quantidade: newQty,
                 limite_minimo: parseInt(limiteMinimo, 10),
                 tipo,
                 dosagem: dosagemConcatenada || undefined,
                 fornecedor: fornecedor || undefined,
                 principio_ativo: principioAtivo.toUpperCase() || undefined
             });
+
+            // Se a quantidade foi alterada, registra a movimentação de ajuste correspondente no histórico
+            if (oldQty !== newQty) {
+                const diff = newQty - oldQty;
+                await db.registrarMovimentacao({
+                    medicamento_id: selectedMed.id,
+                    tipo: diff > 0 ? 'Entrada' : 'Saída',
+                    quantidade: Math.abs(diff),
+                    medicamento_nome: nome.toUpperCase(),
+                    medicamento_categoria: categoria,
+                    medicamento_tipo: tipo,
+                    medicamento_dosagem: dosagemConcatenada,
+                    lote: lote.toUpperCase(),
+                    validade: validade,
+                    responsavel_nome: currentUser.name,
+                    responsavel_id: currentUser.id,
+                    data: new Date().toISOString(),
+                    observacoes: `Ajuste de estoque via edição (de ${oldQty} para ${newQty})`
+                });
+            }
+
             showAlert('Medicamento atualizado com sucesso!', 'success');
             setIsEditModalOpen(false);
             loadData(true);
@@ -568,6 +642,12 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
         setIsAdjustModalOpen(true);
     };
 
+    const handleOpenAddStockForGroup = (medReference: FarmaciaMedicamento) => {
+        setSelectedMed(medReference);
+        setStockToAdd({ lote: '', validade: '', quantidade: '' });
+        setIsAddStockModalOpen(true);
+    };
+
     const getStockBadgeColor = (med: FarmaciaMedicamento) => {
         if (med.quantidade === 0 && med.lote === 'LOTE-INICIAL') return 'bg-slate-50 text-slate-500 border-slate-200'; // Inativo
         if (med.quantidade === 0) return 'bg-rose-50 text-rose-700 border-rose-100';
@@ -650,78 +730,159 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                                     </tr>
                                 ) : (
                                     paginatedMedicamentos.map(med => {
-                                        const isExpired = new Date(med.validade).getTime() <= Date.now();
-                                    const badgeClass = getStockBadgeColor(med);
-                                    return (
-                                        <tr key={med.id} className="hover:bg-slate-50/20 transition-colors">
-                                            <td className="p-3">
-                                                <div className="font-extrabold text-slate-800 uppercase">{med.nome}</div>
-                                                <div className="flex flex-wrap gap-1 mt-1">
-                                                    {(med.quantidade === 0 && med.lote === 'LOTE-INICIAL') && (
-                                                        <span className="inline-block px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider rounded bg-slate-200 text-slate-500">
-                                                            INATIVO
+                                        const isExpanded = !!expandedMeds[med.key];
+                                        const isAllInativo = med.lotes.every(l => l.quantidade === 0 && l.lote === 'LOTE-INICIAL');
+                                        const badgeClass = getStockBadgeColor({
+                                            quantidade: med.quantidadeTotal,
+                                            limite_minimo: med.limite_minimo,
+                                            lote: isAllInativo ? 'LOTE-INICIAL' : ''
+                                        } as any);
+
+                                        return (
+                                            <React.Fragment key={med.key}>
+                                                <tr 
+                                                    className="hover:bg-slate-50/20 transition-colors border-b border-slate-100 cursor-pointer"
+                                                    onClick={() => toggleExpand(med.key)}
+                                                >
+                                                    <td className="p-3">
+                                                        <div className="flex items-center gap-2.5">
+                                                            <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                                                            <div>
+                                                                <div className="font-extrabold text-slate-800 uppercase flex items-center gap-2">
+                                                                    {med.nome}
+                                                                </div>
+                                                                <div className="flex flex-wrap gap-1 mt-1" onClick={e => e.stopPropagation()}>
+                                                                    {isAllInativo && (
+                                                                        <span className="inline-block px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider rounded bg-slate-200 text-slate-500">
+                                                                            INATIVO
+                                                                        </span>
+                                                                    )}
+                                                                    <span className="inline-block px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider rounded bg-slate-800 text-white">
+                                                                        Cód: {medicamentCodes[`${med.nome.toUpperCase()} - ${med.dosagem?.toUpperCase() || ''} - ${med.tipo?.toUpperCase() || ''}`] || '00000'}
+                                                                    </span>
+                                                                    <span className="inline-block px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded bg-pink-50 text-pink-600">
+                                                                        {med.categoria}
+                                                                    </span>
+                                                                    {med.principio_ativo && (
+                                                                        <span className="inline-block px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded bg-emerald-50 text-emerald-700 border border-emerald-100">
+                                                                            P.Ativo: {med.principio_ativo}
+                                                                        </span>
+                                                                    )}
+                                                                    {med.dosagem && (
+                                                                        <span className="inline-block px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded bg-pink-50 text-pink-700 border border-pink-100">
+                                                                            {med.dosagem}
+                                                                        </span>
+                                                                    )}
+                                                                    {med.tipo && (
+                                                                        <span className="inline-block px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded bg-slate-100 text-slate-600">
+                                                                            {med.tipo}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="p-3 text-center">
+                                                        <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-black border ${badgeClass}`}>
+                                                            {med.quantidadeTotal} {med.unidade}
                                                         </span>
-                                                    )}
-                                                    <span className="inline-block px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider rounded bg-slate-800 text-white">
-                                                        Cód: {medicamentCodes[`${med.nome.toUpperCase()} - ${med.dosagem?.toUpperCase() || ''} - ${med.tipo?.toUpperCase() || ''}`] || '00000'}
-                                                    </span>
-                                                    <span className="inline-block px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded bg-pink-50 text-pink-600">
-                                                        {med.categoria}
-                                                    </span>
-                                                    {med.principio_ativo && (
-                                                        <span className="inline-block px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded bg-emerald-50 text-emerald-700 border border-emerald-100">
-                                                            P.Ativo: {med.principio_ativo}
-                                                        </span>
-                                                    )}
-                                                    {med.dosagem && (
-                                                        <span className="inline-block px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded bg-pink-50 text-pink-700 border border-pink-100">
-                                                            {med.dosagem}
-                                                        </span>
-                                                    )}
-                                                    {med.tipo && (
-                                                        <span className="inline-block px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded bg-slate-100 text-slate-600">
-                                                            {med.tipo}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </td>
-                                            <td className="p-3 text-center">
-                                                <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-black border ${badgeClass}`}>
-                                                    {med.quantidade} {med.unidade}
-                                                </span>
-                                            </td>
-                                            <td className="p-3 text-right">
-                                                <div className="flex items-center justify-end gap-2">
-                                                    <button
-                                                        onClick={() => handleOpenAdjustModal(med)}
-                                                        className="px-2 py-1 text-[9px] font-black uppercase bg-pink-50 text-pink-600 hover:bg-pink-100 border border-pink-200/50 rounded-lg"
-                                                        title="Visualizar detalhes do lote"
-                                                    >
-                                                        Estoque
-                                                    </button>
-                                                    {canEdit && (
-                                                        <button
-                                                            onClick={() => handleOpenEditModal(med)}
-                                                            className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-lg"
-                                                            title="Editar dados cadastrais"
-                                                        >
-                                                            <Edit className="w-3.5 h-3.5" />
-                                                        </button>
-                                                    )}
-                                                    {canDelete && (
-                                                        <button
-                                                            onClick={() => handleDelete(med.id, med.nome)}
-                                                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-slate-100 rounded-lg"
-                                                            title="Remover lote"
-                                                        >
-                                                            <Trash2 className="w-3.5 h-3.5" />
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    );
-                                })
+                                                    </td>
+                                                    <td className="p-3 text-right" onClick={e => e.stopPropagation()}>
+                                                        <div className="flex items-center justify-end gap-2">
+                                                            <button
+                                                                onClick={() => handleOpenAddStockForGroup(med.lotes[0])}
+                                                                className="px-2.5 py-1 text-[9px] font-black uppercase bg-pink-600 hover:bg-pink-700 text-white rounded-lg flex items-center gap-1 shadow-sm transition-all"
+                                                                title="Adicionar novo lote ou estoque para este medicamento"
+                                                            >
+                                                                <Plus className="w-3 h-3" />
+                                                                Adicionar Estoque
+                                                            </button>
+                                                            <button
+                                                                onClick={() => toggleExpand(med.key)}
+                                                                className="px-2.5 py-1 text-[9px] font-bold uppercase bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-350/20 rounded-lg"
+                                                            >
+                                                                {isExpanded ? 'Recolher' : `Lotes (${med.lotes.length})`}
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                                {isExpanded && (
+                                                    <tr className="bg-slate-50/20">
+                                                        <td colSpan={3} className="p-4 pl-12">
+                                                            <div className="bg-white border border-slate-200/60 rounded-2xl p-4 shadow-xs space-y-3">
+                                                                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                                                                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Detalhamento de Lotes e Validades</span>
+                                                                    <span className="text-[9px] font-bold text-slate-400 uppercase">Total de {med.lotes.length} lote(s)</span>
+                                                                </div>
+                                                                <table className="w-full text-left border-collapse">
+                                                                    <thead>
+                                                                        <tr className="border-b border-slate-100 text-[8px] font-black text-slate-450 uppercase tracking-wider">
+                                                                            <th className="py-2 pl-2">Identificação do Lote</th>
+                                                                            <th className="py-2">Data de Validade</th>
+                                                                            <th className="py-2 text-center">Quantidade</th>
+                                                                            <th className="py-2 text-right pr-2">Ações</th>
+                                                                        </tr>
+                                                                    </thead>
+                                                                    <tbody className="divide-y divide-slate-50 text-[11px] font-semibold text-slate-650">
+                                                                        {med.lotes.map(lote => {
+                                                                            const isLoteExpired = lote.lote !== 'LOTE-INICIAL' && new Date(lote.validade).getTime() <= Date.now();
+                                                                            const loteBadge = getStockBadgeColor(lote);
+                                                                            return (
+                                                                                <tr key={lote.id} className="hover:bg-slate-50/40">
+                                                                                    <td className="py-2.5 pl-2 font-mono uppercase text-slate-750">{lote.lote}</td>
+                                                                                    <td className="py-2.5">
+                                                                                        {lote.lote === 'LOTE-INICIAL' ? '-' : (
+                                                                                            <span className={isLoteExpired ? 'text-rose-500 font-bold bg-rose-50 px-1.5 py-0.5 rounded' : 'text-slate-650'}>
+                                                                                                {formatDateBr(lote.validade)}
+                                                                                            </span>
+                                                                                        )}
+                                                                                    </td>
+                                                                                    <td className="py-2.5 text-center">
+                                                                                        <span className={`inline-flex px-1.5 py-0.5 rounded-full text-[9px] font-black border ${loteBadge}`}>
+                                                                                            {lote.quantidade} {lote.unidade}
+                                                                                        </span>
+                                                                                    </td>
+                                                                                    <td className="py-2.5 text-right pr-2">
+                                                                                        <div className="flex items-center justify-end gap-1.5">
+                                                                                            <button
+                                                                                                onClick={() => handleOpenAdjustModal(lote)}
+                                                                                                className="px-2 py-0.5 text-[9px] font-black uppercase bg-pink-50 text-pink-600 hover:bg-pink-100 border border-pink-200/40 rounded transition-colors"
+                                                                                                title="Ajustar ou movimentar este lote específico"
+                                                                                            >
+                                                                                                Movimentar
+                                                                                            </button>
+                                                                                            {canEdit && (
+                                                                                                <button
+                                                                                                    onClick={() => handleOpenEditModal(lote)}
+                                                                                                    className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded transition-colors"
+                                                                                                    title="Editar dados do lote"
+                                                                                                >
+                                                                                                    <Edit className="w-3.5 h-3.5" />
+                                                                                                </button>
+                                                                                            )}
+                                                                                            {canDelete && (
+                                                                                                <button
+                                                                                                    onClick={() => handleDelete(lote.id, lote.nome)}
+                                                                                                    className="p-1 text-slate-400 hover:text-rose-600 hover:bg-slate-100 rounded transition-colors"
+                                                                                                    title="Excluir este lote"
+                                                                                                >
+                                                                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                                                                </button>
+                                                                                            )}
+                                                                                        </div>
+                                                                                    </td>
+                                                                                </tr>
+                                                                            );
+                                                                        })}
+                                                                    </tbody>
+                                                                </table>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                            </React.Fragment>
+                                        );
+                                    })
                                 )}
                             </tbody>
                         </table>
@@ -729,7 +890,7 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                     {totalPages > 1 && (
                         <div className="flex items-center justify-between p-4 border-t border-slate-100 bg-slate-50/50 rounded-b-3xl">
                             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                                Mostrando {(currentPage - 1) * itemsPerPage + 1} a {Math.min(currentPage * itemsPerPage, filteredMedicamentos.length)} de {filteredMedicamentos.length} registros
+                                Mostrando {(currentPage - 1) * itemsPerPage + 1} a {Math.min(currentPage * itemsPerPage, groupedMedicamentos.length)} de {groupedMedicamentos.length} registros
                             </span>
                             <div className="flex items-center gap-2">
                                 <button
@@ -1241,6 +1402,33 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                                     )}
                                 </div>
                             </div>
+
+                            {/* Quantidade e Limite Mínimo */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Quantidade em Estoque *</label>
+                                    <input 
+                                        type="number" 
+                                        min="0"
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold text-slate-900" 
+                                        value={quantidade} 
+                                        onChange={e => setQuantidade(e.target.value)} 
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Limite Mínimo (Alerta) *</label>
+                                    <input 
+                                        type="number" 
+                                        min="0"
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold text-slate-900" 
+                                        value={limiteMinimo} 
+                                        onChange={e => setLimiteMinimo(e.target.value)} 
+                                        required
+                                    />
+                                </div>
+                            </div>
+
                             <button type="submit" disabled={saving} className="w-full py-3.5 bg-pink-600 hover:bg-pink-700 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-md active:scale-98">
                                 {saving ? 'Salvando...' : 'Salvar Alterações'}
                             </button>

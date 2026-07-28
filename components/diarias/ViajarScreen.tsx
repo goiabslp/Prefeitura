@@ -6,7 +6,7 @@ import {
   DollarSign, ExternalLink, Image as ImageIcon, X, Loader2, Plus, Receipt, Lock, ChevronDown, Check, Hotel
 } from 'lucide-react';
 import { DiariaEvento, User, Attachment } from '../../types';
-import { getAllDiariaEventos, updateDiariaEvento } from '../../services/diariasEventosService';
+import { getAllDiariaEventos, updateDiariaEvento, getDiariasGestores } from '../../services/diariasEventosService';
 import { uploadFile } from '../../services/storageService';
 import { getDiariasDespesasEnabled } from '../../services/diariasSettingsService';
 
@@ -30,6 +30,32 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
     }
   });
 
+  const [isGestorOrAdmin, setIsGestorOrAdmin] = useState<boolean>(false);
+
+  useEffect(() => {
+    const checkGestorStatus = async () => {
+      if (!currentUser) return;
+      if (currentUser.role === 'admin') {
+        setIsGestorOrAdmin(true);
+        return;
+      }
+      if (currentUser.permissions?.includes('parent_diarias_gestores')) {
+        setIsGestorOrAdmin(true);
+        return;
+      }
+      try {
+        const gestores = await getDiariasGestores();
+        const isGestorMap = gestores.some(g => g.gestor_id === currentUser.id);
+        if (isGestorMap) {
+          setIsGestorOrAdmin(true);
+        }
+      } catch (err) {
+        console.warn('Erro ao verificar gestores em ViajarScreen:', err);
+      }
+    };
+    checkGestorStatus();
+  }, [currentUser]);
+
   // Normalizador de texto
   const normalizeText = (text: string) =>
     text ? text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim() : "";
@@ -43,6 +69,14 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
 
   // Verifica e inicia viagens programadas cujo horário programado de saída já passou
   const verificarEIniciarViagensAutomaticas = async (viagens: DiariaEvento[]) => {
+    // Se o usuário já tiver uma viagem ativa em andamento, não inicia outra de forma automática
+    const temViagemAtiva = viagens.some(evt => {
+      const p = evt.pessoas && evt.pessoas.find(x => isPersonMatch(x, currentUser)) as any;
+      return p && p.viagem_inicio && !p.viagem_fim && evt.status === 'em_viagem';
+    });
+
+    if (temViagemAtiva) return;
+
     const agora = new Date();
     let houveAlteracao = false;
 
@@ -380,7 +414,7 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
   };
 
   const handleHeaderBack = () => {
-    if (activeTrip) {
+    if (activeTrip && !isGestorOrAdmin) {
       alert('Você possui uma viagem em andamento. É necessário finalizar a viagem para acessar outras áreas do módulo de diárias.');
       return;
     }
@@ -394,6 +428,20 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
   // Regra para liberação de início de viagem
   const canIniciarViagem = (evento: DiariaEvento): { allowed: boolean; liberadoEm?: string; reason?: string; isPendingApproval?: boolean } => {
     if (!evento) return { allowed: false };
+
+    // Não permitir iniciar outra viagem se o usuário já tiver uma ativa em andamento
+    const outraViagemAtiva = eventos.find(evt => {
+      if (evt.id === evento.id) return false;
+      const { viagem_inicio, viagem_fim } = getPessoaViagemData(evt);
+      return viagem_inicio && !viagem_fim && evt.status === 'em_viagem';
+    });
+
+    if (outraViagemAtiva) {
+      return {
+        allowed: false,
+        reason: `Você já possui uma viagem em andamento para ${outraViagemAtiva.destino}. Finalize-a antes de iniciar outra.`
+      };
+    }
 
     if (evento.status === 'aguardando_aprovacao' || evento.status === 'aguardando_gestor') {
       return { 
@@ -485,11 +533,14 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
 
   // Trava de navegação: se houver viagem em andamento, obriga a abrir a página da viagem em andamento
   useEffect(() => {
+    // Administradores e gestores não ficam travados
+    if (isGestorOrAdmin) return;
+
     if (activeTrip && selectedEventoId !== activeTrip.id) {
       setSelectedEventoId(activeTrip.id);
       window.history.pushState({}, '', `/Diarias/Viajar/Detalhes?id=${activeTrip.id}`);
     }
-  }, [activeTrip, selectedEventoId]);
+  }, [activeTrip, selectedEventoId, isGestorOrAdmin]);
 
   const selectedEvento = eventos.find(e => e.id === selectedEventoId) || null;
 

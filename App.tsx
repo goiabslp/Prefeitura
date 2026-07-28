@@ -1177,6 +1177,28 @@ const App: React.FC = () => {
       const path = window.location.pathname.toLowerCase();
       if (!path.startsWith('/diarias')) return;
 
+      // Se for Administrador ou Gestor, a trava global não se aplica
+      const isQuickGestorOrAdmin = currentUser.role === 'admin' || 
+                                   currentUser.permissions?.includes('parent_diarias_gestores');
+      
+      let isGestor = false;
+      if (!isQuickGestorOrAdmin) {
+        try {
+          const { data } = await supabase
+            .from('diarias_gestores')
+            .select('gestor_id')
+            .eq('gestor_id', currentUser.id)
+            .limit(1);
+          if (data && data.length > 0) {
+            isGestor = true;
+          }
+        } catch (e) {
+          console.warn('Erro ao verificar gestores:', e);
+        }
+      }
+
+      if (isQuickGestorOrAdmin || isGestor) return;
+
       try {
         const { getAllDiariaEventos } = await import('./services/diariasEventosService');
         const allEvts = await getAllDiariaEventos();

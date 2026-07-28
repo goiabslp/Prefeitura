@@ -956,9 +956,16 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
   }, [sameSectorPersons, personSearch]);
 
   const filteredVehicles = useMemo(() => {
+    // Filtrar veículos do tipo "acessórios" e "pesados" para não aparecerem na seleção direta
+    const allowedVehicles = vehicles.filter(v => {
+      const isAcessorio = v.type === 'acessorio' || v.vehicleCategory === 'Acessórios';
+      const isPesado = v.type === 'pesado' || v.vehicleCategory === 'Máquina Pesada' || v.vehicleCategory === 'Caminhão';
+      return !isAcessorio && !isPesado;
+    });
+
     const term = normalizeText(vehicleSearch);
-    if (!term) return vehicles;
-    return vehicles.filter(v => 
+    if (!term) return allowedVehicles;
+    return allowedVehicles.filter(v => 
       normalizeText(`${v.brand} ${v.model} ${v.plate}`).includes(term)
     );
   }, [vehicles, vehicleSearch]);
@@ -1455,7 +1462,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
                       <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1">Veículo Selecionado</span>
                       <span className="block text-base font-bold text-slate-800 break-words">
                         {selectedVehicle === 'OUTRO' 
-                          ? 'OUTRO (Especificar...)' 
+                          ? 'OUTROS (Especificar...)' 
                           : (selectedVehicle || 'Selecionar Veículo...')}
                       </span>
                       <span className="block text-[10px] text-indigo-600 font-bold mt-3 text-right">Toque para selecionar →</span>
@@ -1469,7 +1476,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
                           exit={{ opacity: 0, height: 0 }}
                           className="w-full text-left space-y-2 overflow-hidden"
                         >
-                          <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Detalhes do Veículo (Outro)</label>
+                          <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Detalhes do Veículo (Pesados / Outros)</label>
                           <div className="relative flex items-center w-full bg-slate-50/90 border border-slate-200/80 rounded-xl px-4 py-3 focus-within:border-indigo-500 focus-within:ring-4 focus-within:ring-indigo-500/5 transition-all shadow-sm">
                             <Car className="w-4 h-4 text-slate-400 shrink-0 mr-3" />
                             <input
@@ -1846,9 +1853,9 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
                         className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-left text-sm font-medium transition-all group ${isSelected ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-slate-50 text-slate-700'}`}
                       >
                         <div className="flex flex-col">
-                          <span className={`${isSelected ? 'font-bold' : ''}`}>OUTRO</span>
+                          <span className={`${isSelected ? 'font-bold' : ''}`}>OUTROS</span>
                           <span className={`text-[10px] font-normal ${isSelected ? 'text-indigo-500' : 'text-slate-400'}`}>
-                            Especificar veículo personalizado
+                            Especificar veículo personalizado (pesados, etc.)
                           </span>
                         </div>
                         {isSelected && <Check className="w-5 h-5 text-indigo-600" />}
@@ -2410,7 +2417,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
                   <Car className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                   <span className={`w-full bg-transparent pl-11 pr-10 py-3 text-sm font-medium outline-none truncate ${selectedVehicle ? 'text-slate-900' : 'text-slate-500'}`}>
                     {selectedVehicle === 'OUTRO' 
-                      ? 'OUTRO (Especificar...)' 
+                      ? 'OUTROS (Especificar...)' 
                       : (selectedVehicle || 'Clique para selecionar o veículo...')}
                   </span>
                   <div className="absolute right-4 top-1/2 -translate-y-1/2">
@@ -2420,7 +2427,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
 
                 {selectedVehicle === 'OUTRO' && (
                   <div className="space-y-2 mt-2 animate-fade-in">
-                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400">Especificar Veículo</label>
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400">Especificar Veículo (Pesados / Outros)</label>
                     <div className={inputContainerClass}>
                       <Car className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                       <input
@@ -2674,9 +2681,9 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
                       className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-left text-sm font-medium transition-all group ${isSelected ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-slate-50 text-slate-700'}`}
                     >
                       <div className="flex flex-col">
-                        <span className={`${isSelected ? 'font-bold' : ''}`}>OUTRO</span>
+                        <span className={`${isSelected ? 'font-bold' : ''}`}>OUTROS</span>
                         <span className={`text-[10px] font-normal ${isSelected ? 'text-indigo-500' : 'text-slate-400'}`}>
-                          Especificar veículo personalizado
+                          Especificar veículo personalizado (pesados, etc.)
                         </span>
                       </div>
                       {isSelected && <Check className="w-5 h-5 text-indigo-600" />}
