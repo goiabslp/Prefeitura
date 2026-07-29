@@ -3759,13 +3759,8 @@ const App: React.FC = () => {
             onClose={() => setToast(prev => ({ ...prev, isVisible: false }))}
           />
 
-          {/* Chat Components - Only for authenticated users and not on 'Consultas', 'Farmacia', Admin Logs or any Diarias pages */}
-          {currentUser && 
-           currentView !== 'consultas' && 
-           currentView !== 'farmacia' && 
-           !currentView.includes('diarias') && 
-           !(currentView === 'home' && activeBlock === 'diarias') && 
-           !(currentView === 'admin' && adminTab === 'logs') && (
+          {/* Chat Components - Exibidos APENAS na Página Inicial (/PaginaInicial) para usuários autenticados */}
+          {currentUser && currentView === 'home' && !activeBlock && (
             <>
               <ChatWidget />
               <ChatWindow />
