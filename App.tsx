@@ -112,6 +112,7 @@ import { LicitacaoWizard } from './components/licitacao/LicitacaoWizard';
 import { LicitacaoList } from './components/licitacao/LicitacaoList';
 import { useLicitacaoProcesses, useUpdateLicitacaoProcess } from './hooks/useLicitacaoModule';
 import { remoteAccessService } from './services/remoteAccessService';
+import { startGlobalLocationTracking, stopGlobalLocationTracking } from './services/locationTrackingService';
 
 const VIEW_TO_PATH: Record<string, string> = {
   'login': '/Login',
@@ -1349,6 +1350,18 @@ const App: React.FC = () => {
       setCurrentView('login');
     }
   }, [currentUser, currentView, authLoading, isLoginTransitioning]);
+
+  // --- GLOBAL PERSISTENT LOCATION TRACKING FOR ACTIVE TRIPS (1 IN 1 MINUTE) ---
+  useEffect(() => {
+    if (currentUser?.id) {
+      startGlobalLocationTracking(currentUser.id);
+    } else {
+      stopGlobalLocationTracking();
+    }
+    return () => {
+      stopGlobalLocationTracking();
+    };
+  }, [currentUser?.id]);
 
   // --- TRACKING LOGS EFFECTS ---
   // 1. Navigation Tracking

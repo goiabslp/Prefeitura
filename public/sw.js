@@ -67,6 +67,14 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
+// Mensagens de Segundo Plano para Checkpoint de Localização
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'BACKGROUND_CHECKPOINT_UPDATED') {
+    // Mantém o Service Worker ativo em segundo plano durante a viagem
+    console.log('[SW] Checkpoint em segundo plano atualizado:', event.data.checkpoint?.cidade);
+  }
+});
+
 // Suporte a Notificações Push
 self.addEventListener('push', (event) => {
   let data = { title: 'Prefeitura Integrada', body: 'Você tem uma nova notificação.' };
