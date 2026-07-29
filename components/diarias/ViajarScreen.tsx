@@ -229,12 +229,12 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
   // Processa Posição de GPS e executa regras de Negócio de Diárias
   const processGpsUpdate = async (lat: number, lon: number, currentTrip: DiariaEvento) => {
     const cityName = await getCityFromCoords(lat, lon);
-    const originCity = (currentTrip as any).origem || 'São José do Goiabal';
+    const originCity = 'São José do Goiabal - MG';
 
     const normCity = normalizeText(cityName);
     const normOrigin = normalizeText(originCity);
 
-    const isAtOrigin = normCity.includes(normOrigin) || normOrigin.includes(normCity) || normCity === 'municipio detectado';
+    const isAtOrigin = normCity.includes('goiabal') || normCity.includes(normOrigin) || normOrigin.includes(normCity) || normCity === 'municipio detectado';
     const isOutside = !isAtOrigin;
 
     const storageKey = `gps_trip_state_${currentTrip.id}`;

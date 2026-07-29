@@ -1734,7 +1734,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                         {(() => {
                           const cp = evento.ultimo_checkpoint || (evento as any).checklist?.ultimo_checkpoint;
                           if (!cp && !isEmViagem) return null;
-                          const cidadeExibida = cp ? cp.cidade : ((evento as any).origem || 'São José do Goiabal');
+                          const cidadeExibida = cp ? cp.cidade : 'São José do Goiabal - MG';
                           return (
                             <div className="flex items-center gap-1.5 px-2.5 py-1 bg-cyan-50 border border-cyan-200/80 text-cyan-800 rounded-lg text-[9px] font-bold shadow-2xs shrink-0 whitespace-nowrap" title={`Último Checkpoint: ${cidadeExibida}`}>
                               <MapPin className="w-3 h-3 text-cyan-600 animate-bounce shrink-0" />
@@ -2051,7 +2051,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                           const cp = selectedEvento.ultimo_checkpoint || (selectedEvento as any).checklist?.ultimo_checkpoint;
                           const isEmViag = selectedEvento.status === 'em_viagem' || (selectedEvento.pessoas && selectedEvento.pessoas.some(p => (p as any).viagem_inicio && !(p as any).viagem_fim));
                           if (!cp && !isEmViag) return null;
-                          const cidadeStr = cp ? cp.cidade : ((selectedEvento as any).origem || 'São José do Goiabal');
+                          const cidadeStr = cp ? cp.cidade : 'São José do Goiabal - MG';
                           return (
                             <div className="bg-cyan-50/90 border border-cyan-200/80 p-3 rounded-xl flex items-start gap-2.5 shadow-sm sm:col-span-2 md:col-span-1 lg:col-span-2">
                               <div className="w-8 h-8 rounded-lg bg-cyan-100 border border-cyan-200 flex items-center justify-center text-cyan-700 shrink-0 mt-0.5 animate-pulse">

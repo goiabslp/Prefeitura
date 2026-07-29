@@ -100,12 +100,12 @@ export const performLocationCheckpointSync = async (userId?: string): Promise<Di
           const lon = position.coords.longitude;
 
           const cityName = await getCityFromCoords(lat, lon);
-          const originCity = (activeTrip as any).origem || 'São José do Goiabal';
+          const originCity = 'São José do Goiabal - MG';
 
           const normCity = normalizeText(cityName);
           const normOrigin = normalizeText(originCity);
 
-          const isAtOrigin = normCity.includes(normOrigin) || normOrigin.includes(normCity) || normCity === 'municipio detectado';
+          const isAtOrigin = normCity.includes('goiabal') || normCity.includes(normOrigin) || normOrigin.includes(normCity) || normCity === 'municipio detectado';
           const isOutside = !isAtOrigin;
 
           const nowIso = new Date().toISOString();
