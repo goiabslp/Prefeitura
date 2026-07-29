@@ -101,18 +101,20 @@ export default async function handler(req: Request) {
         Você é um assistente de IA especialista em redação administrativa para prefeituras e órgãos públicos.
         
         TAREFA:
-        Transforme a transcrição de voz fornecida pelo usuário em uma justificativa pública de viagem formal, clara, objetiva, profissional e perfeitamente redigida em Português do Brasil.
+        Transforme o texto ou transcrição de voz fornecido pelo usuário em uma justificativa pública de viagem formal, clara, objetiva, profissional e perfeitamente redigida em Português do Brasil.
         
-        TRANSCRIÇÃO DE VOZ DO USUÁRIO:
+        TEXTO/TRANSCRIÇÃO DO USUÁRIO:
         """
         ${dados.promptText}
         """
         
         REGRAS ESSENCIAIS:
-        1. Preserve a intenção e os detalhes citados (cidade, evento, reuniões, objetivo).
-        2. Corrija falhas de dicção, hesitações (ex: "é...", "tipo assim", "né") e informalidade.
-        3. O texto resultante DEVE ter pelo menos 50 caracteres (se a fala for muito curta, expanda suavemente com redação institucional formal).
-        4. NÃO use Markdown (sem negritos, asteriscos ou hashtags). Retorne exclusivamente o texto limpo da justificativa.
+        1. O tom da redação deve ser formal, polido e respeitoso, demonstrando interesse público e justificativa administrativa clara.
+        2. A justificativa deve ser detalhada, expondo os objetivos e a relevância administrativa do deslocamento para o município.
+        3. Preserve todos os fatos, nomes, destinos e objetivos fornecidos pelo usuário, organizando-os de maneira articulada, coerente e polida.
+        4. Corrija erros gramaticais, vícios de linguagem, hesitações da fala (como "tipo", "né", "hã") e termos muito informais.
+        5. O texto resultante deve possuir no mínimo 50 caracteres. Caso a entrada seja muito curta, enriqueça-a sutilmente com linguagem institucional formal padrão.
+        6. NÃO use marcações Markdown (como asteriscos para negrito ou hashtags). Retorne estritamente o texto puro da justificativa administrativa.
       `;
     } else if (tipo === 'documento') {
       promptText = `

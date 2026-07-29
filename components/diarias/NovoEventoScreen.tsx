@@ -305,6 +305,53 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
   const [isRecording, setIsRecording] = useState(false);
   const [isPolishingAI, setIsPolishingAI] = useState(false);
   const recognitionRef = useRef<any>(null);
+  
+  const isLastActionPolishRef = useRef(false);
+  const lastPolishedTextRef = useRef('');
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const polishWithAI = async (textToPolish: string) => {
+    if (!textToPolish || textToPolish.trim().length < 15) return;
+    if (textToPolish.trim() === lastPolishedTextRef.current.trim()) return;
+
+    setIsPolishingAI(true);
+    try {
+      const polishedText = await polishMotivoWithAI(textToPolish);
+      if (polishedText) {
+        lastPolishedTextRef.current = polishedText;
+        isLastActionPolishRef.current = true;
+        setReason(polishedText);
+      }
+    } catch (e) {
+      console.warn('Erro ao lapidar motivo automaticamente:', e);
+    } finally {
+      setIsPolishingAI(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isLastActionPolishRef.current) {
+      isLastActionPolishRef.current = false;
+      return;
+    }
+
+    if (isRecording || isPolishingAI) return;
+    if (reason.trim().length < 15) return;
+
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    typingTimeoutRef.current = setTimeout(() => {
+      polishWithAI(reason);
+    }, 2500);
+
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+    };
+  }, [reason, isRecording]);
 
   // Estados para status de alocação de veículos e modal dinâmico de situação
   const [diariaEvents, setDiariaEvents] = useState<DiariaEvento[]>([]);
@@ -463,6 +510,8 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
       try {
         const polishedText = await polishMotivoWithAI(reason);
         if (polishedText) {
+          lastPolishedTextRef.current = polishedText;
+          isLastActionPolishRef.current = true;
           setReason(polishedText);
         }
       } catch (e) {
@@ -487,6 +536,8 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
     try {
       const polishedText = await polishMotivoWithAI(reason);
       if (polishedText) {
+        lastPolishedTextRef.current = polishedText;
+        isLastActionPolishRef.current = true;
         setReason(polishedText);
       }
     } catch (e) {
