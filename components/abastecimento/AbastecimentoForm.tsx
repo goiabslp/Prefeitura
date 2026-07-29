@@ -308,8 +308,22 @@ export const AbastecimentoForm: React.FC<AbastecimentoFormProps> = ({
         const total = mobileStepsList.length;
         const cur = mobileStepsList[mobileStep - 1] || mobileStepsList[0];
 
-        const next = () => {
+        const next = async () => {
             if (!isMobileStepValid(mobileStep)) return;
+
+            const curStep = mobileStepsList[mobileStep - 1];
+            if ((curStep.key === 'nota' || curStep.key === 'posto') && invoiceNumber && station) {
+                try {
+                    const dup = await AbastecimentoService.checkInvoiceExists(invoiceNumber, station, initialData?.id);
+                    if (dup) {
+                        alert(`ERRO: Nota ${invoiceNumber} já existe para ${station}.`);
+                        return;
+                    }
+                } catch (error) {
+                    console.error("Erro ao validar nota fiscal:", error);
+                }
+            }
+
             if (mobileStep < total) { setDirection(1); setMobileStep(p => p + 1); }
             else handleSubmit();
         };
@@ -318,40 +332,7 @@ export const AbastecimentoForm: React.FC<AbastecimentoFormProps> = ({
             else onBack();
         };
 
-        const CardBox = ({ icon: Icon, title, subtitle }: { icon: any; title: string; subtitle: string }) => (
-            <div className="space-y-2">
-                <div className="w-14 h-14 bg-cyan-50 rounded-2xl flex items-center justify-center mx-auto text-cyan-600 shadow-inner"><Icon className="w-7 h-7" /></div>
-                <h3 className="text-xl font-black text-slate-900 tracking-tight">{title}</h3>
-                <p className="text-slate-500 text-xs font-medium max-w-xs mx-auto">{subtitle}</p>
-            </div>
-        );
 
-        const SelectCard = ({ label, value, onClick, placeholder, sub }: any) => (
-            <div onClick={onClick} className="w-full p-5 rounded-2xl border text-left bg-slate-50/90 border-slate-200/80 hover:border-cyan-500 hover:ring-4 hover:ring-cyan-500/5 cursor-pointer shadow-sm active:scale-[0.98]">
-                <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1">{label}</span>
-                <span className="block text-base font-bold text-slate-800 break-words">{value || placeholder}</span>
-                {sub && <span className="block text-[11px] text-slate-500 font-medium mt-1">{sub}</span>}
-                <span className="block text-[10px] text-cyan-600 font-bold mt-3 text-right">Toque para selecionar →</span>
-            </div>
-        );
-
-        const BottomSheet = ({ title, open, onClose, search, setSearch, placeholder, children }: any) => !open ? null : (
-            <div className="fixed inset-0 z-[100] flex items-start sm:items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 pt-12 sm:p-6 animate-fade-in" onClick={() => { onClose(); setSearch(''); }}>
-                <div className="w-full max-w-lg bg-white rounded-3xl shadow-2xl flex flex-col h-[65vh] sm:h-auto sm:max-h-[80vh] overflow-hidden animate-slide-up" onClick={e => e.stopPropagation()}>
-                    <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-                        <h3 className="font-black text-slate-900 text-sm uppercase tracking-wide">{title}</h3>
-                        <button onClick={() => { onClose(); setSearch(''); }} className="p-2 hover:bg-slate-200 rounded-full text-slate-500 transition-colors"><X className="w-5 h-5" /></button>
-                    </div>
-                    <div className="p-4 border-b border-slate-100 relative">
-                        <Search className="absolute left-7 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                        <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder={placeholder} className="w-full bg-slate-50 border border-slate-200 pl-10 pr-4 py-3 rounded-xl text-base font-medium text-slate-900 outline-none focus:bg-white focus:border-cyan-500 focus:ring-4 focus:ring-cyan-500/10 transition-all" />
-                    </div>
-                    <div className="flex-1 overflow-y-auto p-2" style={{ scrollbarWidth: 'none' }}>
-                        <div className="space-y-1">{children}</div>
-                    </div>
-                </div>
-            </div>
-        );
 
         return (
             <div className="flex flex-col h-full bg-slate-100 w-full relative overflow-hidden">
@@ -681,3 +662,38 @@ export const AbastecimentoForm: React.FC<AbastecimentoFormProps> = ({
         </div>
     );
 };
+
+const CardBox = ({ icon: Icon, title, subtitle }: { icon: any; title: string; subtitle: string }) => (
+    <div className="space-y-2">
+        <div className="w-14 h-14 bg-cyan-50 rounded-2xl flex items-center justify-center mx-auto text-cyan-600 shadow-inner"><Icon className="w-7 h-7" /></div>
+        <h3 className="text-xl font-black text-slate-900 tracking-tight">{title}</h3>
+        <p className="text-slate-500 text-xs font-medium max-w-xs mx-auto">{subtitle}</p>
+    </div>
+);
+
+const SelectCard = ({ label, value, onClick, placeholder, sub }: any) => (
+    <div onClick={onClick} className="w-full p-5 rounded-2xl border text-left bg-slate-50/90 border-slate-200/80 hover:border-cyan-500 hover:ring-4 hover:ring-cyan-500/5 cursor-pointer shadow-sm active:scale-[0.98]">
+        <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1">{label}</span>
+        <span className="block text-base font-bold text-slate-800 break-words">{value || placeholder}</span>
+        {sub && <span className="block text-[11px] text-slate-500 font-medium mt-1">{sub}</span>}
+        <span className="block text-[10px] text-cyan-600 font-bold mt-3 text-right">Toque para selecionar →</span>
+    </div>
+);
+
+const BottomSheet = ({ title, open, onClose, search, setSearch, placeholder, children }: any) => !open ? null : (
+    <div className="fixed inset-0 z-[100] flex items-start sm:items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 pt-12 sm:p-6 animate-fade-in" onClick={() => { onClose(); setSearch(''); }}>
+        <div className="w-full max-w-lg bg-white rounded-3xl shadow-2xl flex flex-col h-[65vh] sm:h-auto sm:max-h-[80vh] overflow-hidden animate-slide-up" onClick={e => e.stopPropagation()}>
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+                <h3 className="font-black text-slate-900 text-sm uppercase tracking-wide">{title}</h3>
+                <button onClick={() => { onClose(); setSearch(''); }} className="p-2 hover:bg-slate-200 rounded-full text-slate-500 transition-colors"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="p-4 border-b border-slate-100 relative">
+                <Search className="absolute left-7 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder={placeholder} className="w-full bg-slate-50 border border-slate-200 pl-10 pr-4 py-3 rounded-xl text-base font-medium text-slate-900 outline-none focus:bg-white focus:border-cyan-500 focus:ring-4 focus:ring-cyan-500/10 transition-all" />
+            </div>
+            <div className="flex-1 overflow-y-auto p-2" style={{ scrollbarWidth: 'none' }}>
+                <div className="space-y-1">{children}</div>
+            </div>
+        </div>
+    </div>
+);
