@@ -237,108 +237,9 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
     const isAtOrigin = normCity.includes('goiabal') || normCity.includes(normOrigin) || normOrigin.includes(normCity) || normCity === 'municipio detectado';
     const isOutside = !isAtOrigin;
 
-    const storageKey = `gps_trip_state_${currentTrip.id}`;
-    const stored = localStorage.getItem(storageKey);
-    let stateData = stored ? JSON.parse(stored) : {
-      hasLeftOrigin: false,
-      startTime: new Date(getPessoaViagemData(currentTrip).viagem_inicio || Date.now()).getTime(),
-      lastCity: cityName
-    };
-
     const nowMs = Date.now();
-    const elapsedMs = nowMs - stateData.startTime;
-    const limitMs = 130 * 60 * 1000; // 130 minutos
 
-    let systemMsg: string | null = null;
-
-    // REGRA 1: Se esteve na Origem por mais de 130 minutos sem ter saído da cidade -> REINICIAR CRONÔMETRO!
-    if (!stateData.hasLeftOrigin && isAtOrigin && elapsedMs >= limitMs) {
-      const newInicioIso = new Date().toISOString();
-      const updatedPessoas = (currentTrip.pessoas || []).map(p => ({
-        ...p,
-        viagem_inicio: newInicioIso
-      }));
-
-      await updateDiariaEvento(currentTrip.id, {
-        pessoas: updatedPessoas,
-        data_saida: newInicioIso
-      });
-
-      stateData.startTime = nowMs;
-      localStorage.setItem(storageKey, JSON.stringify(stateData));
-      systemMsg = '🕒 130 minutos no município de origem verificados. Horário de início e cronômetro reiniciados automaticamente.';
-      setGpsLocation({
-        cityName,
-        isAtOrigin: true,
-        hasLeftOrigin: false,
-        lat,
-        lon,
-        lastCheck: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-        message: systemMsg
-      });
-      loadViagens(false);
-      return;
-    }
-
-    // REGRA 2: Marcar que o motorista saiu do município de origem
-    if (isOutside && !stateData.hasLeftOrigin) {
-      stateData.hasLeftOrigin = true;
-      localStorage.setItem(storageKey, JSON.stringify(stateData));
-      systemMsg = `🚀 Checkpoint FORA da origem registrado em: ${cityName}`;
-    }
-
-    // Validação da saída em segundo plano (se iniciada automaticamente e o checkpoint for fora em até 130 minutos)
-    if (currentTrip.modo_inicio === 'automatico' && !currentTrip.saida_validada) {
-      if (isOutside) {
-        const scheduledTime = new Date(currentTrip.data_saida).getTime();
-        const diffMs = Date.now() - scheduledTime;
-        const limitMs = 130 * 60 * 1000;
-        
-        if (diffMs >= 0 && diffMs <= limitMs) {
-          try {
-            await updateDiariaEvento(currentTrip.id, {
-              saida_validada: true
-            } as any);
-            systemMsg = `✅ Saída da viagem automática VALIDADA! Checkpoint fora da origem (${cityName}) registrado em menos de 130 minutos.`;
-            currentTrip.saida_validada = true;
-            setTimeout(() => loadViagens(false), 500);
-          } catch (e) {
-            console.warn('Erro ao validar checkpoint de saída automática:', e);
-          }
-        }
-      }
-    }
-
-    // REGRA 3: Se já esteve fora da origem E AGORA RETORNOU À ORIGEM -> FINALIZAR VIAGEM IMEDIATAMENTE!
-    if (stateData.hasLeftOrigin && isAtOrigin) {
-      const fimIso = new Date().toISOString();
-      const updatedPessoas = (currentTrip.pessoas || []).map(p => ({
-        ...p,
-        viagem_fim: (p as any).viagem_fim || fimIso
-      }));
-
-      await updateDiariaEvento(currentTrip.id, {
-        pessoas: updatedPessoas,
-        data_retorno: fimIso,
-        status: 'aguardando_gestor'
-      });
-
-      localStorage.removeItem(storageKey);
-
-      setSummaryModal({
-        isOpen: true,
-        saidaReal: new Date(stateData.startTime).toLocaleString('pt-BR'),
-        retornoReal: new Date(fimIso).toLocaleString('pt-BR'),
-        duracaoText: 'Viagem Finalizada Automática via GPS ao Retornar à Origem'
-      });
-      loadViagens(false);
-      return;
-    }
-
-    stateData.lastCity = cityName;
-    localStorage.setItem(storageKey, JSON.stringify(stateData));
-
-    // Atualização em tempo real do último checkpoint na viagem
+    // REGRA DE CHECKPOINT: Apenas registra a localização no banco sem alterar o status da viagem
     const lastCp = (currentTrip as any).ultimo_checkpoint || (currentTrip as any).checklist?.ultimo_checkpoint;
     const isNewCity = !lastCp || lastCp.cidade !== cityName;
     const timeDiff = lastCp?.timestamp ? (nowMs - new Date(lastCp.timestamp).getTime()) : 999999;
@@ -354,7 +255,6 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
 
       const existingChecklist = (currentTrip as any).checklist || {};
       updateDiariaEvento(currentTrip.id, {
-        ultimo_checkpoint: checkpointObj,
         checklist: { ...existingChecklist, ultimo_checkpoint: checkpointObj }
       } as any).catch(err => console.warn('Erro em segundo plano ao salvar checkpoint:', err));
     }
@@ -362,11 +262,11 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
     setGpsLocation({
       cityName,
       isAtOrigin,
-      hasLeftOrigin: stateData.hasLeftOrigin,
+      hasLeftOrigin: isOutside,
       lat,
       lon,
       lastCheck: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-      message: systemMsg
+      message: `📍 Checkpoint ativo em: ${cityName}`
     });
   };
 

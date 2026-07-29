@@ -20,6 +20,7 @@ import { getGlobalSettings } from '../../services/settingsService';
 import { uploadFile } from '../../services/storageService';
 import { TwoFactorModal } from '../TwoFactorModal';
 import { DiariasReportModal } from './DiariasReportModal';
+import { performLocationCheckpointSync } from '../../services/locationTrackingService';
 
 
 const GESTORES_CARGOS = [
@@ -31,6 +32,24 @@ const GESTORES_CARGOS = [
   'Prefeito',
   'Secretário de Administração e Finanças'
 ];
+
+const getCheckpointFromEvento = (evento: any): { cidade: string; timestamp?: string; lat?: number; lon?: number; fora_origem?: boolean } | null => {
+  if (!evento) return null;
+  if (evento.ultimo_checkpoint) {
+    if (typeof evento.ultimo_checkpoint === 'object') return evento.ultimo_checkpoint;
+    if (typeof evento.ultimo_checkpoint === 'string') {
+      try { return JSON.parse(evento.ultimo_checkpoint); } catch (e) {}
+    }
+  }
+  let chk = evento.checklist;
+  if (typeof chk === 'string') {
+    try { chk = JSON.parse(chk); } catch (e) {}
+  }
+  if (chk && typeof chk === 'object' && chk.ultimo_checkpoint) {
+    return chk.ultimo_checkpoint;
+  }
+  return null;
+};
 
 interface LancamentosScreenProps {
   currentUser: User | null;
@@ -128,6 +147,86 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
   const [addServerSearch, setAddServerSearch] = useState('');
   const [transferServerEventoModal, setTransferServerEventoModal] = useState<DiariaEvento | null>(null);
   const [transferServerSearch, setTransferServerSearch] = useState('');
+
+  // Estado do Modal Administrativo de Forçar "Em Percurso" com tempo customizado
+  const [adminEmPercursoModal, setAdminEmPercursoModal] = useState<DiariaEvento | null>(null);
+  const [adminElapsedHours, setAdminElapsedHours] = useState<number>(1);
+  const [adminElapsedMinutes, setAdminElapsedMinutes] = useState<number>(46);
+  const [isAdminUpdating, setIsAdminUpdating] = useState<boolean>(false);
+
+  // Estado e Função para Forçar Sincronização Manual de GPS via Botão de Localização
+  const [syncingTripId, setSyncingTripId] = useState<string | null>(null);
+
+  const handleManualLocationSync = async (evento: DiariaEvento) => {
+    setSyncingTripId(evento.id);
+    try {
+      await performLocationCheckpointSync(currentUser?.id, evento.id);
+      window.dispatchEvent(new CustomEvent('diarias_checkpoint_updated', {
+        detail: { tripId: evento.id }
+      }));
+      await fetchEventos(false);
+    } catch (err) {
+      console.warn('Erro ao sincronizar localização manualmente:', err);
+    } finally {
+      setSyncingTripId(null);
+    }
+  };
+
+  const handleConfirmAdminEmPercurso = async () => {
+    if (!adminEmPercursoModal) return;
+    setIsAdminUpdating(true);
+    try {
+      const totalMinutes = (Number(adminElapsedHours) || 0) * 60 + (Number(adminElapsedMinutes) || 0);
+      const elapsedMs = totalMinutes * 60 * 1000;
+      const newInicioIso = new Date(Date.now() - elapsedMs).toISOString();
+
+      const updatedPessoas = (adminEmPercursoModal.pessoas || []).map(p => ({
+        ...p,
+        viagem_inicio: newInicioIso,
+        viagem_fim: null
+      }));
+
+      // Optimistic update local
+      setEventos(prev => prev.map(evt => evt.id === adminEmPercursoModal.id ? {
+        ...evt,
+        status: 'em_viagem',
+        data_saida: newInicioIso,
+        pessoas: updatedPessoas,
+        saida_validada: true
+      } : evt));
+
+      if (selectedEvento && selectedEvento.id === adminEmPercursoModal.id) {
+        setSelectedEvento(prev => prev ? {
+          ...prev,
+          status: 'em_viagem',
+          data_saida: newInicioIso,
+          pessoas: updatedPessoas,
+          saida_validada: true
+        } : null);
+      }
+
+      await updateDiariaEvento(adminEmPercursoModal.id, {
+        status: 'em_viagem',
+        data_saida: newInicioIso,
+        pessoas: updatedPessoas,
+        saida_validada: true
+      } as any);
+
+      // Disparar sincronização local e global em tempo real
+      window.dispatchEvent(new Event('diarias_eventos_updated'));
+      window.dispatchEvent(new CustomEvent('diarias_checkpoint_updated', {
+        detail: { tripId: adminEmPercursoModal.id }
+      }));
+
+      await fetchEventos(false);
+      setAdminEmPercursoModal(null);
+    } catch (error: any) {
+      console.error('Erro ao definir em percurso:', error);
+      alert('Erro ao atualizar status da viagem: ' + (error.message || 'Erro desconhecido'));
+    } finally {
+      setIsAdminUpdating(false);
+    }
+  };
 
   const handleFinalizarViagemFromLancamentos = async (evento: DiariaEvento) => {
     const fimIso = new Date().toISOString();
@@ -247,7 +346,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
     loadAuxiliaryData();
   }, []);
 
-  // Assinatura em tempo real para checkpoints de localização e viagens
+  // Assinatura em tempo real para checkpoints de localização e viagens com polling ativo de 15 segundos
   useEffect(() => {
     const channel = supabase
       .channel('realtime_diarias_checkpoints_channel')
@@ -264,8 +363,14 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
       )
       .subscribe();
 
+    // Polling a cada 15s para garantir sincronização no painel de lançamentos
+    const pollInterval = setInterval(() => {
+      fetchEventos(false);
+    }, 15000);
+
     return () => {
       supabase.removeChannel(channel);
+      clearInterval(pollInterval);
     };
   }, []);
 
@@ -298,13 +403,24 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
   }, [currentUser?.id]);
 
   useEffect(() => {
-    const handleRefresh = () => {
-      fetchEventos(false);
+    const handleRefresh = (e?: any) => {
+      if (e?.detail?.checkpoint && e?.detail?.tripId) {
+        const { tripId, checkpoint } = e.detail;
+        setEventos(prev => prev.map(evt => evt.id === tripId ? {
+          ...evt,
+          ultimo_checkpoint: checkpoint,
+          checklist: { ...((evt as any).checklist || {}), ultimo_checkpoint: checkpoint }
+        } : evt));
+      } else {
+        fetchEventos(false);
+      }
     };
     window.addEventListener('diarias_eventos_updated', handleRefresh);
+    window.addEventListener('diarias_checkpoint_updated', handleRefresh);
     window.addEventListener('popstate', handleRefresh);
     return () => {
       window.removeEventListener('diarias_eventos_updated', handleRefresh);
+      window.removeEventListener('diarias_checkpoint_updated', handleRefresh);
       window.removeEventListener('popstate', handleRefresh);
     };
   }, []);
@@ -1730,21 +1846,34 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                       </div>
 
                       <div className="desktop:col-span-4 flex items-center justify-end gap-1.5 pt-2 desktop:pt-0 border-t border-slate-100 desktop:border-t-0 mt-1 desktop:mt-0 w-full shrink-0 flex-nowrap">
-                        {/* Indicador de Localização em Tempo Real (Ao lado do botão Finalizar) */}
+                        {/* Botão Interativo de Localização (Clique para Forçar Sincronização GPS) */}
                         {(() => {
-                          const cp = evento.ultimo_checkpoint || (evento as any).checklist?.ultimo_checkpoint;
+                          const cp = getCheckpointFromEvento(evento);
                           if (!cp && !isEmViagem) return null;
                           const cidadeExibida = cp ? cp.cidade : 'São José do Goiabal - MG';
+                          const isSyncing = syncingTripId === evento.id;
+
                           return (
-                            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-cyan-50 border border-cyan-200/80 text-cyan-800 rounded-lg text-[9px] font-bold shadow-2xs shrink-0 whitespace-nowrap" title={`Último Checkpoint: ${cidadeExibida}`}>
-                              <MapPin className="w-3 h-3 text-cyan-600 animate-bounce shrink-0" />
-                              <span className="font-bold text-slate-800 whitespace-nowrap">{cidadeExibida}</span>
-                              {cp?.timestamp && (
-                                <span className="text-[8px] text-slate-400 font-mono whitespace-nowrap hidden xl:inline">
-                                  ({new Date(cp.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })})
-                                </span>
-                              )}
-                            </div>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleManualLocationSync(evento);
+                              }}
+                              disabled={isSyncing}
+                              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[9px] font-bold shadow-2xs shrink-0 transition-all cursor-pointer border active:scale-95 group ${
+                                isSyncing
+                                  ? 'bg-amber-50 border-amber-300 text-amber-900 animate-pulse'
+                                  : 'bg-cyan-50 hover:bg-cyan-100/90 border-cyan-200/80 hover:border-cyan-400 text-cyan-800'
+                              }`}
+                              title="Clique para forçar a busca e atualização da localização em tempo real"
+                            >
+                              <MapPin className={`w-3 h-3 text-cyan-600 shrink-0 ${isSyncing ? 'animate-spin text-amber-600' : 'animate-bounce'}`} />
+                              <span className="font-bold text-slate-800 truncate max-w-[130px]">
+                                {isSyncing ? 'Buscando GPS...' : cidadeExibida}
+                              </span>
+                              <RefreshCw className={`w-2.5 h-2.5 text-cyan-500 opacity-60 group-hover:opacity-100 shrink-0 ${isSyncing ? 'animate-spin text-amber-600' : ''}`} />
+                            </button>
                           );
                         })()}
 
@@ -1771,6 +1900,21 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                             title="Finalizar Viagem em Andamento"
                           >
                             <span>Finalizar</span>
+                          </button>
+                        )}
+
+                        {/* Botão EXCLUSIVO ADMIN: Ícone de Relógio para Definir Tempo em Percurso */}
+                        {isAdmin && (
+                          <button
+                            onClick={() => {
+                              setAdminEmPercursoModal(evento);
+                              setAdminElapsedHours(1);
+                              setAdminElapsedMinutes(46);
+                            }}
+                            className="p-1.5 text-indigo-600 hover:text-white hover:bg-indigo-600 bg-indigo-50/80 rounded-lg transition-all border border-indigo-200/80 shrink-0 shadow-2xs active:scale-95 flex items-center justify-center"
+                            title="Admin: Definir Tempo em Percurso"
+                          >
+                            <Clock className="w-3.5 h-3.5" />
                           </button>
                         )}
 
@@ -3358,6 +3502,169 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                 >
                   {isFinalizingSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />}
                   <span>Sim, Finalizar</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Controle Administrativo: Definir Em Percurso com Tempo Customizado */}
+      {adminEmPercursoModal && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-fade-in" onClick={() => setAdminEmPercursoModal(null)}>
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 max-w-md w-full overflow-hidden animate-scale-in" onClick={e => e.stopPropagation()}>
+            <div className="bg-gradient-to-r from-indigo-600 to-violet-700 p-5 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center text-white border border-white/20 shadow-sm">
+                  <ShieldCheck className="w-5 h-5 text-indigo-100" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold leading-tight flex items-center gap-1.5">
+                    <span>Definir "Em Percurso"</span>
+                    <span className="text-[9px] bg-white/20 text-white px-2 py-0.5 rounded-full uppercase tracking-wider font-extrabold">ADMIN</span>
+                  </h3>
+                  <p className="text-[10px] text-indigo-100 font-medium">Controle Manual de Tempo de Viagem</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setAdminEmPercursoModal(null)}
+                className="p-1.5 hover:bg-white/10 rounded-full text-white/80 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {/* Resumo do Evento */}
+              <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3.5 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-slate-400 uppercase text-[9px] tracking-wider">Destino</span>
+                  <span className="font-black text-slate-900">{adminEmPercursoModal.destino}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs border-t border-slate-200/60 pt-1.5">
+                  <span className="font-bold text-slate-400 uppercase text-[9px] tracking-wider">Servidor / Motorista</span>
+                  <span className="font-bold text-slate-800 text-right truncate max-w-[200px]">
+                    {adminEmPercursoModal.pessoas && adminEmPercursoModal.pessoas.length > 0
+                      ? adminEmPercursoModal.pessoas.map(p => p.name || (p as any).nome).join(', ')
+                      : '---'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Seleção de Tempo Decorrido */}
+              <div className="space-y-2.5">
+                <label className="text-[10px] font-black uppercase tracking-wider text-slate-600 block">
+                  A partir de qual tempo de viagem? (Horas e Minutos)
+                </label>
+
+                {/* Atalhos Rápidos */}
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setAdminElapsedHours(1); setAdminElapsedMinutes(46); }}
+                    className={`py-2 px-2.5 rounded-xl text-xs font-black transition-all border ${
+                      adminElapsedHours === 1 && adminElapsedMinutes === 46
+                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-600/30'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    ⚡ 01:46:00
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setAdminElapsedHours(1); setAdminElapsedMinutes(40); }}
+                    className={`py-2 px-2.5 rounded-xl text-xs font-black transition-all border ${
+                      adminElapsedHours === 1 && adminElapsedMinutes === 40
+                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-600/30'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    ⏱️ 01:40:00
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setAdminElapsedHours(0); setAdminElapsedMinutes(30); }}
+                    className={`py-2 px-2.5 rounded-xl text-xs font-black transition-all border ${
+                      adminElapsedHours === 0 && adminElapsedMinutes === 30
+                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-600/30'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    ⏱️ 00:30:00
+                  </button>
+                </div>
+
+                {/* Inputs Customizados */}
+                <div className="grid grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Horas Decorridas</span>
+                    <div className="relative flex items-center">
+                      <input
+                        type="number"
+                        min="0"
+                        max="72"
+                        value={adminElapsedHours}
+                        onChange={(e) => setAdminElapsedHours(Math.max(0, parseInt(e.target.value) || 0))}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-black text-slate-900 outline-none focus:border-indigo-500 focus:bg-white transition-all text-center"
+                      />
+                      <span className="absolute right-3 text-xs font-bold text-slate-400">h</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Minutos Decorridos</span>
+                    <div className="relative flex items-center">
+                      <input
+                        type="number"
+                        min="0"
+                        max="59"
+                        value={adminElapsedMinutes}
+                        onChange={(e) => setAdminElapsedMinutes(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-black text-slate-900 outline-none focus:border-indigo-500 focus:bg-white transition-all text-center"
+                      />
+                      <span className="absolute right-3 text-xs font-bold text-slate-400">m</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Caixa de Ajuste e Preview em Tempo Real */}
+              {(() => {
+                const totalMinutes = (Number(adminElapsedHours) || 0) * 60 + (Number(adminElapsedMinutes) || 0);
+                const calcSaida = new Date(Date.now() - totalMinutes * 60 * 1000);
+                const hrsStr = String(adminElapsedHours).padStart(2, '0');
+                const minStr = String(adminElapsedMinutes).padStart(2, '0');
+                return (
+                  <div className="bg-indigo-50/70 border border-indigo-100 rounded-2xl p-3 text-center space-y-1">
+                    <span className="text-[9px] font-extrabold uppercase tracking-widest text-indigo-600 block">Preview do Cronômetro em Tempo Real</span>
+                    <div className="text-xl font-black text-indigo-950 font-mono">
+                      {hrsStr}:{minStr}:00
+                    </div>
+                    <span className="text-[10px] font-medium text-slate-500 block">
+                      Horário de início calculado: <strong className="text-slate-800 font-mono">{calcSaida.toLocaleTimeString('pt-BR')}</strong>
+                    </span>
+                  </div>
+                );
+              })()}
+
+              {/* Botões de Ação */}
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setAdminEmPercursoModal(null)}
+                  disabled={isAdminUpdating}
+                  className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs uppercase tracking-wider rounded-xl transition-all disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmAdminEmPercurso}
+                  disabled={isAdminUpdating}
+                  className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-indigo-600/30 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isAdminUpdating && <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />}
+                  <span>Confirmar Admin</span>
                 </button>
               </div>
             </div>

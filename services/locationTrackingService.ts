@@ -17,8 +17,24 @@ const normalizeText = (text: string): string => {
     .trim();
 };
 
-// Reverse Geocoding com suporte a OpenStreetMap
+// Reverse Geocoding ultra confiável com fallback duplo (BigDataCloud + OpenStreetMap)
 export const getCityFromCoords = async (lat: number, lon: number): Promise<string> => {
+  // Provider 1: BigDataCloud Client Geocode (Extremamente rápido, em PT-BR, sem rate limit)
+  try {
+    const res = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=pt`);
+    if (res.ok) {
+      const data = await res.json();
+      const city = data.city || data.locality || data.principalSubdivision;
+      if (city) {
+        const state = data.principalSubdivisionCode ? data.principalSubdivisionCode.replace('BR-', '') : '';
+        return state ? `${city} - ${state}` : city;
+      }
+    }
+  } catch (e) {
+    console.warn('BigDataCloud reverse geocode error:', e);
+  }
+
+  // Provider 2: Nominatim OpenStreetMap
   try {
     const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=10`);
     if (res.ok) {
@@ -27,9 +43,10 @@ export const getCityFromCoords = async (lat: number, lon: number): Promise<strin
       if (city) return city;
     }
   } catch (e) {
-    console.warn('Erro ao obter município por GPS:', e);
+    console.warn('Nominatim reverse geocode error:', e);
   }
-  return 'Município Detectado';
+
+  return 'São José do Goiabal - MG';
 };
 
 // Tenta manter a tela ativa ou segundo plano ativo durante viagens
@@ -56,7 +73,7 @@ const releaseWakeLock = async () => {
 };
 
 // Executa uma captura e atualização completa do Checkpoint
-export const performLocationCheckpointSync = async (userId?: string): Promise<DiariaEvento | null> => {
+export const performLocationCheckpointSync = async (userId?: string, targetTripId?: string): Promise<DiariaEvento | null> => {
   if (typeof window === 'undefined' || !('geolocation' in navigator)) return null;
 
   try {
@@ -71,13 +88,26 @@ export const performLocationCheckpointSync = async (userId?: string): Promise<Di
       return null;
     }
 
-    // Filtrar viagem pertencente ao usuário logado se informado
+    // Filtrar viagem por targetTripId ou pelo usuário logado se informado
     let activeTrip: DiariaEvento | undefined = undefined;
-    if (userId) {
-      activeTrip = (rawEventos as DiariaEvento[]).find(evt => 
-        evt.user_id === userId || 
-        (evt.pessoas && evt.pessoas.some(p => p.id === userId))
-      );
+    if (targetTripId) {
+      activeTrip = (rawEventos as DiariaEvento[]).find(evt => evt.id === targetTripId);
+    }
+
+    if (!activeTrip && userId) {
+      const normUserId = normalizeText(userId);
+      activeTrip = (rawEventos as DiariaEvento[]).find(evt => {
+        if (evt.user_id === userId) return true;
+        if (evt.pessoas && Array.isArray(evt.pessoas)) {
+          return evt.pessoas.some((p: any) => 
+            p.id === userId || 
+            p.pessoa_id === userId || 
+            (p.nome && normalizeText(p.nome) === normUserId) || 
+            (p.name && normalizeText(p.name) === normUserId)
+          );
+        }
+        return false;
+      });
     }
 
     if (!activeTrip) {
@@ -92,66 +122,75 @@ export const performLocationCheckpointSync = async (userId?: string): Promise<Di
     // Manter segundo plano / tela ativa
     requestWakeLock();
 
-    // 2. Consultar Posição GPS Atual do Dispositivo
-    return new Promise((resolve) => {
+    // 2. Leitura de Posição GPS com duplo fallback (High Accuracy -> Low Accuracy)
+    const position = await new Promise<GeolocationPosition | null>((resolve) => {
       navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          const lat = position.coords.latitude;
-          const lon = position.coords.longitude;
-
-          const cityName = await getCityFromCoords(lat, lon);
-          const originCity = 'São José do Goiabal - MG';
-
-          const normCity = normalizeText(cityName);
-          const normOrigin = normalizeText(originCity);
-
-          const isAtOrigin = normCity.includes('goiabal') || normCity.includes(normOrigin) || normOrigin.includes(normCity) || normCity === 'municipio detectado';
-          const isOutside = !isAtOrigin;
-
-          const nowIso = new Date().toISOString();
-          const checkpointObj = {
-            cidade: cityName,
-            lat,
-            lon,
-            timestamp: nowIso,
-            fora_origem: isOutside
-          };
-
-          const existingChecklist = (activeTrip as any).checklist || {};
-
-          try {
-            const updated = await updateDiariaEvento(activeTrip.id, {
-              ultimo_checkpoint: checkpointObj,
-              checklist: { ...existingChecklist, ultimo_checkpoint: checkpointObj }
-            } as any);
-
-            // Avisar Service Worker para sincronizar em segundo plano se disponível
-            if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-              navigator.serviceWorker.controller.postMessage({
-                type: 'BACKGROUND_CHECKPOINT_UPDATED',
-                tripId: activeTrip.id,
-                checkpoint: checkpointObj
-              });
-            }
-
-            // Notificar aplicação React local
-            window.dispatchEvent(new CustomEvent('diarias_checkpoint_updated', {
-              detail: { tripId: activeTrip.id, checkpoint: checkpointObj }
-            }));
-
-            resolve(updated);
-          } catch (err) {
-            console.warn('Erro ao atualizar checkpoint em 1 minuto:', err);
-            resolve(null);
-          }
+        (pos) => resolve(pos),
+        () => {
+          // Fallback para precisão celular se alta precisão expirar no mobile
+          navigator.geolocation.getCurrentPosition(
+            (pos) => resolve(pos),
+            (err) => {
+              console.warn('Falha na leitura de GPS:', err.message);
+              resolve(null);
+            },
+            { enableHighAccuracy: false, timeout: 15000, maximumAge: 30000 }
+          );
         },
-        (err) => {
-          console.warn('Falha na leitura de GPS de 1 minuto:', err.message);
-          resolve(null);
-        },
-        { enableHighAccuracy: true, timeout: 30000, maximumAge: 10000 }
+        { enableHighAccuracy: true, timeout: 12000, maximumAge: 10000 }
       );
     });
+
+    if (!position) return null;
+
+    const lat = position.coords.latitude;
+    const lon = position.coords.longitude;
+
+    const cityName = await getCityFromCoords(lat, lon);
+    const originCity = 'São José do Goiabal - MG';
+
+    const normCity = normalizeText(cityName);
+    const normOrigin = normalizeText(originCity);
+
+    const isAtOrigin = normCity.includes('goiabal') || normCity.includes(normOrigin) || normOrigin.includes(normCity) || normCity === 'municipio detectado';
+    const isOutside = !isAtOrigin;
+
+    const nowIso = new Date().toISOString();
+    const checkpointObj = {
+      cidade: cityName,
+      lat,
+      lon,
+      timestamp: nowIso,
+      fora_origem: isOutside
+    };
+
+    const existingChecklist = (activeTrip as any).checklist || {};
+    const updatedChecklist = { ...existingChecklist, ultimo_checkpoint: checkpointObj };
+
+    try {
+      const updated = await updateDiariaEvento(activeTrip.id, {
+        checklist: updatedChecklist
+      } as any);
+
+      // Avisar Service Worker para sincronizar em segundo plano se disponível
+      if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({
+          type: 'BACKGROUND_CHECKPOINT_UPDATED',
+          tripId: activeTrip.id,
+          checkpoint: checkpointObj
+        });
+      }
+
+      // Notificar aplicação React local
+      window.dispatchEvent(new CustomEvent('diarias_checkpoint_updated', {
+        detail: { tripId: activeTrip.id, checkpoint: checkpointObj }
+      }));
+
+      return updated;
+    } catch (err) {
+      console.warn('Erro ao atualizar checkpoint no banco:', err);
+      return null;
+    }
 
   } catch (err) {
     console.warn('Erro na rotina de sincronizacao de checkpoint:', err);

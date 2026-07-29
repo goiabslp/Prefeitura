@@ -162,6 +162,15 @@ export const updateDiariaEvento = async (id: string, updates: Partial<DiariaEven
     }
   }
 
+  // Se houver ultimo_checkpoint nas atualizações, empacota também no checklist para persistência em JSON
+  if (cleanUpdates.ultimo_checkpoint) {
+    const currentChecklist = (cleanUpdates.checklist || {}) as any;
+    cleanUpdates.checklist = {
+      ...currentChecklist,
+      ultimo_checkpoint: cleanUpdates.ultimo_checkpoint
+    };
+  }
+
   let { data, error } = await supabase
     .from('diarias_eventos')
     .update(cleanUpdates)
@@ -169,12 +178,12 @@ export const updateDiariaEvento = async (id: string, updates: Partial<DiariaEven
     .select()
     .single();
 
-  if (error && error.code === 'PGRST204') {
+  if (error && (error.code === 'PGRST204' || error.code === '42703')) {
     console.warn('Coluna ausente em updateDiariaEvento (PGRST204). Tentando fallback...', error.message);
     const fallbackUpdates = { ...cleanUpdates };
     delete fallbackUpdates.gestor_transferido_cargo;
     delete fallbackUpdates.permitir_despesas_pos_finalizacao;
-    delete fallbackUpdates.checklist;
+    delete fallbackUpdates.ultimo_checkpoint;
 
     const fallbackRes = await supabase
       .from('diarias_eventos')
