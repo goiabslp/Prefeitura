@@ -455,7 +455,36 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
       setModalType('admin');
       setAdminStep('review');
       setValorDiaria(evento.valor_diaria ? String(evento.valor_diaria) : '');
-      setRelatorioViagem(evento.relatorio_viagem || '');
+
+      // Se já há um relatório salvo, usa ele; senão, pré-popula com texto-base das despesas
+      if (evento.relatorio_viagem) {
+        setRelatorioViagem(evento.relatorio_viagem);
+      } else {
+        const comprovantesList: Attachment[] = evento.comprovantes_gestor || [];
+        let textBase = '';
+        if (comprovantesList.length > 0) {
+          const itens = comprovantesList.map((c, i) => {
+            const tipo = c.expenseType || c.name || 'Despesa';
+            const valor = c.expenseValue ? `R$ ${c.expenseValue}` : 'valor não informado';
+            return `${i + 1}. ${tipo}: ${valor}`;
+          }).join('\n');
+
+          let total = 0;
+          let hasTotal = false;
+          comprovantesList.forEach(c => {
+            if (c.expenseValue) {
+              const num = parseFloat(c.expenseValue.toString().replace(/[^0-9,.-]/g, '').replace(',', '.'));
+              if (!isNaN(num)) { total += num; hasTotal = true; }
+            }
+          });
+          const totalStr = hasTotal
+            ? `\nTotal de despesas comprovadas: R$ ${total.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+            : '';
+
+          textBase = `Despesas registradas durante a viagem:\n${itens}${totalStr}\n\n`;
+        }
+        setRelatorioViagem(textBase);
+      }
     } else {
       setModalType('gestor');
       setJustificativaGestor(evento.justificativa_gestor || '');
@@ -647,7 +676,8 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
     autorizadoPorParam: string,
     distanciaKmParam: string,
     despesasTextoParam: string,
-    digitalSigParam?: any
+    digitalSigParam?: any,
+    comprovantesParam?: Attachment[]
   ) => {
     try {
       const printWindow = window.open('', '_blank');
@@ -850,6 +880,85 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
               background: #ffffff;
               z-index: 100;
             }
+            .comprovantes-grid {
+              display: grid;
+              grid-template-columns: repeat(2, 1fr);
+              gap: 12px;
+              margin-top: 4px;
+            }
+            .comprovante-card {
+              border: 1px solid #e2e8f0;
+              border-radius: 8px;
+              overflow: hidden;
+              background: #f8fafc;
+              page-break-inside: avoid;
+              break-inside: avoid;
+            }
+            .comp-header {
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              padding: 6px 10px;
+              background: #f1f5f9;
+              border-bottom: 1px solid #e2e8f0;
+            }
+            .comp-num {
+              font-size: 8pt;
+              font-weight: 900;
+              color: #94a3b8;
+              font-family: monospace;
+            }
+            .comp-tipo {
+              font-size: 8.5pt;
+              font-weight: 800;
+              color: #1e293b;
+              text-transform: uppercase;
+              letter-spacing: 0.02em;
+              flex: 1;
+              padding: 0 8px;
+            }
+            .comp-valor {
+              font-size: 9pt;
+              font-weight: 900;
+              color: #4f46e5;
+            }
+            .comp-img-wrap {
+              padding: 8px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              min-height: 80px;
+              background: #ffffff;
+            }
+            .comp-img {
+              max-width: 100%;
+              max-height: 180px;
+              object-fit: contain;
+              border-radius: 4px;
+            }
+            .comp-link {
+              display: flex;
+              align-items: center;
+              gap: 6px;
+              padding: 10px;
+              font-size: 8pt;
+              color: #4f46e5;
+              font-weight: 700;
+              text-decoration: none;
+              word-break: break-all;
+            }
+            .comp-filename {
+              font-size: 7.5pt;
+              color: #64748b;
+              font-weight: 500;
+              padding: 4px 10px 8px;
+              font-style: italic;
+            }
+            .despesas-texto-simples {
+              font-size: 9.5pt;
+              line-height: 1.5;
+              color: #334155;
+            }
             @media print {
               @page {
                 size: A4 portrait;
@@ -889,6 +998,10 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
               .page-last {
                 page-break-after: avoid;
                 break-after: avoid;
+              }
+              .comprovante-card {
+                page-break-inside: avoid;
+                break-inside: avoid;
               }
             }
           </style>
@@ -1062,9 +1175,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
               <div class="section-box">
                 <div class="section-header">07. COMPROVAÇÃO DE DESPESAS</div>
                 <div class="section-body">
-                  <div style="font-size: 9.5pt; line-height: 1.5; color: #334155;">
-                    ${despesasTextoParam}
-                  </div>
+                  ${despesasTextoParam}
                 </div>
               </div>
 
@@ -1140,8 +1251,28 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
 
     const comprovantesList: Attachment[] = evento.comprovantes_gestor || [];
     const despesasStr = (() => {
-      if (!comprovantesList || comprovantesList.length === 0) return "Em relação às despesas, não foram anexados comprovantes adicionais.";
-      return comprovantesList.map(c => `${c.expenseType || c.name || 'Despesa'}: R$ ${c.expenseValue || '0,00'}`).join('; ');
+      if (!comprovantesList || comprovantesList.length === 0) {
+        return `<div class="despesas-texto-simples">Em relação às despesas, não foram anexados comprovantes adicionais.</div>`;
+      }
+      const cardsHtml = comprovantesList.map((c, idx) => {
+        const isImage = c.type && c.type.startsWith('image/');
+        const tipo = c.expenseType || c.name || 'Despesa';
+        const valor = c.expenseValue ? `R$ ${c.expenseValue}` : '—';
+        const imgOrLink = isImage
+          ? `<div class="comp-img-wrap"><img class="comp-img" src="${c.url}" alt="Comprovante ${idx + 1}" crossorigin="anonymous" /></div>`
+          : `<div class="comp-img-wrap"><a class="comp-link" href="${c.url}" target="_blank">📎 Visualizar arquivo anexo</a></div>`;
+        const filename = c.name ? `<div class="comp-filename">${c.name}</div>` : '';
+        return `<div class="comprovante-card">
+          <div class="comp-header">
+            <span class="comp-num">#${idx + 1}</span>
+            <span class="comp-tipo">${tipo}</span>
+            <span class="comp-valor">${valor}</span>
+          </div>
+          ${imgOrLink}
+          ${filename}
+        </div>`;
+      }).join('');
+      return `<div class="comprovantes-grid">${cardsHtml}</div>`;
     })();
 
     const valorStr = evento.valor_diaria ? `R$ ${evento.valor_diaria.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : 'R$ 0,00';
@@ -1156,7 +1287,9 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
       stNome,
       autPor,
       distKm,
-      despesasStr
+      despesasStr,
+      undefined,
+      comprovantesList
     );
   };
 
@@ -1216,8 +1349,28 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
 
       const comprovantesList: Attachment[] = selectedEvento.comprovantes_gestor || [];
       const despesasStr = (() => {
-        if (!comprovantesList || comprovantesList.length === 0) return "Em relação às despesas, não foram anexados comprovantes adicionais.";
-        return comprovantesList.map(c => `${c.expenseType || c.name || 'Despesa'}: R$ ${c.expenseValue || '0,00'}`).join('; ');
+        if (!comprovantesList || comprovantesList.length === 0) {
+          return `<div class="despesas-texto-simples">Em relação às despesas, não foram anexados comprovantes adicionais.</div>`;
+        }
+        const cardsHtml = comprovantesList.map((c, idx) => {
+          const isImage = c.type && c.type.startsWith('image/');
+          const tipo = c.expenseType || c.name || 'Despesa';
+          const valor = c.expenseValue ? `R$ ${c.expenseValue}` : '—';
+          const imgOrLink = isImage
+            ? `<div class="comp-img-wrap"><img class="comp-img" src="${c.url}" alt="Comprovante ${idx + 1}" crossorigin="anonymous" /></div>`
+            : `<div class="comp-img-wrap"><a class="comp-link" href="${c.url}" target="_blank">📎 Visualizar arquivo anexo</a></div>`;
+          const filename = c.name ? `<div class="comp-filename">${c.name}</div>` : '';
+          return `<div class="comprovante-card">
+            <div class="comp-header">
+              <span class="comp-num">#${idx + 1}</span>
+              <span class="comp-tipo">${tipo}</span>
+              <span class="comp-valor">${valor}</span>
+            </div>
+            ${imgOrLink}
+            ${filename}
+          </div>`;
+        }).join('');
+        return `<div class="comprovantes-grid">${cardsHtml}</div>`;
       })();
 
       // 1. Gera e dispara o PDF oficial direto
@@ -1231,7 +1384,8 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
         autPor,
         distKm,
         despesasStr,
-        digitalSigData
+        digitalSigData,
+        comprovantesList
       );
 
       await fetchEventos();
@@ -1986,36 +2140,68 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                   )}
 
                   {comprovantes.length > 0 ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {comprovantes.map((c) => (
-                        <div key={c.id} className="flex items-center justify-between p-3.5 bg-slate-50 border border-slate-200 rounded-2xl hover:border-indigo-200 transition-all">
-                          <a 
-                            href={c.url} 
-                            target="_blank" 
-                            rel="noopener noreferrer" 
-                            className="flex items-center gap-3 text-xs font-semibold text-indigo-600 hover:underline truncate max-w-[85%]"
-                          >
-                            <Paperclip className="w-4 h-4 text-indigo-500 shrink-0" />
-                            <div className="flex flex-col truncate">
-                              <span className="truncate">{c.name}</span>
-                              {c.expenseType && (
-                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-wide">
-                                  {c.expenseType} • R$ {c.expenseValue}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {comprovantes.map((c, idx) => {
+                        const isImage = c.type && c.type.startsWith('image/');
+                        return (
+                          <div key={c.id} className="rounded-2xl border border-slate-200 overflow-hidden bg-slate-50 shadow-sm hover:shadow-md transition-shadow">
+                            {/* Header do card */}
+                            <div className="flex items-center justify-between px-3 py-2 bg-slate-100 border-b border-slate-200">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="text-[9px] font-black text-slate-400 font-mono">#{idx + 1}</span>
+                                <span className="text-[10px] font-black text-slate-800 uppercase tracking-wide truncate">
+                                  {c.expenseType || c.name || 'Despesa'}
                                 </span>
-                              )}
+                              </div>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                {c.expenseValue && (
+                                  <span className="text-xs font-black text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100">
+                                    R$ {c.expenseValue}
+                                  </span>
+                                )}
+                                {(selectedEvento.status === 'aguardando_gestor' || !selectedEvento.status) && (
+                                  <button
+                                    type="button"
+                                    onClick={() => removeComprovante(c.id)}
+                                    className="p-1 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded-lg transition-colors"
+                                    title="Remover comprovante"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
                             </div>
-                          </a>
-                          {(selectedEvento.status === 'aguardando_gestor' || !selectedEvento.status) && (
-                            <button 
-                              type="button"
-                              onClick={() => removeComprovante(c.id)}
-                              className="p-1.5 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded-xl transition-colors"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
-                          )}
-                        </div>
-                      ))}
+
+                            {/* Preview da imagem ou link */}
+                            {isImage ? (
+                              <a href={c.url} target="_blank" rel="noopener noreferrer" className="block">
+                                <img
+                                  src={c.url}
+                                  alt={c.name || `Comprovante ${idx + 1}`}
+                                  className="w-full object-contain max-h-48 bg-white"
+                                />
+                              </a>
+                            ) : (
+                              <a
+                                href={c.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-3 p-4 text-xs font-semibold text-indigo-600 hover:bg-indigo-50 transition-colors"
+                              >
+                                <Paperclip className="w-5 h-5 text-indigo-500 shrink-0" />
+                                <span className="truncate">{c.name || 'Visualizar arquivo'}</span>
+                              </a>
+                            )}
+
+                            {/* Rodapé com nome do arquivo */}
+                            {c.name && (
+                              <div className="px-3 py-1.5 border-t border-slate-200 bg-white">
+                                <span className="text-[9px] text-slate-400 font-medium italic truncate block">{c.name}</span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   ) : (
                     <div className="text-center py-10 text-slate-400 text-xs font-semibold bg-slate-50 rounded-2xl border border-dashed border-slate-200">
@@ -2292,30 +2478,62 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                           <Paperclip className="w-3.5 h-3.5 text-amber-600" /> Comprovantes de Despesas Anexados
                         </span>
+                        <span className="text-xs font-extrabold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
+                          {(selectedEvento.comprovantes_gestor || []).length} comprovante(s)
+                        </span>
                       </div>
 
                       {selectedEvento.comprovantes_gestor && selectedEvento.comprovantes_gestor.length > 0 ? (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          {selectedEvento.comprovantes_gestor.map((c: Attachment) => (
-                            <div key={c.id} className="flex items-center justify-between p-3.5 bg-slate-50 border border-slate-200 rounded-2xl">
-                              <a 
-                                href={c.url} 
-                                target="_blank" 
-                                rel="noopener noreferrer" 
-                                className="flex items-center gap-2.5 text-xs font-semibold text-indigo-600 hover:underline truncate max-w-[95%]"
-                              >
-                                <Paperclip className="w-4 h-4 text-indigo-500 shrink-0" />
-                                <div className="flex flex-col truncate">
-                                  <span className="truncate">{c.name}</span>
-                                  {c.expenseType && (
-                                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-wide">
-                                      {c.expenseType} • R$ {c.expenseValue}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          {selectedEvento.comprovantes_gestor.map((c: Attachment, idx: number) => {
+                            const isImage = c.type && c.type.startsWith('image/');
+                            return (
+                              <div key={c.id} className="rounded-2xl border border-slate-200 overflow-hidden bg-slate-50 shadow-sm hover:shadow-md transition-shadow">
+                                {/* Header do card */}
+                                <div className="flex items-center justify-between px-3 py-2 bg-slate-100 border-b border-slate-200">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="text-[9px] font-black text-slate-400 font-mono">#{idx + 1}</span>
+                                    <span className="text-[10px] font-black text-slate-800 uppercase tracking-wide truncate">
+                                      {c.expenseType || c.name || 'Despesa'}
+                                    </span>
+                                  </div>
+                                  {c.expenseValue && (
+                                    <span className="text-xs font-black text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100 shrink-0">
+                                      R$ {c.expenseValue}
                                     </span>
                                   )}
                                 </div>
-                              </a>
-                            </div>
-                          ))}
+
+                                {/* Preview da imagem ou link */}
+                                {isImage ? (
+                                  <a href={c.url} target="_blank" rel="noopener noreferrer" className="block">
+                                    <img
+                                      src={c.url}
+                                      alt={c.name || `Comprovante ${idx + 1}`}
+                                      className="w-full object-contain max-h-48 bg-white"
+                                    />
+                                  </a>
+                                ) : (
+                                  <a
+                                    href={c.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-3 p-4 text-xs font-semibold text-indigo-600 hover:bg-indigo-50 transition-colors"
+                                  >
+                                    <Paperclip className="w-5 h-5 text-indigo-500 shrink-0" />
+                                    <span className="truncate">{c.name || 'Visualizar arquivo'}</span>
+                                  </a>
+                                )}
+
+                                {/* Rodapé com nome do arquivo */}
+                                {c.name && (
+                                  <div className="px-3 py-1.5 border-t border-slate-200 bg-white">
+                                    <span className="text-[9px] text-slate-400 font-medium italic truncate block">{c.name}</span>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       ) : (
                         <div className="text-center py-10 text-slate-400 text-xs font-semibold bg-slate-50 rounded-2xl border border-dashed border-slate-200">
