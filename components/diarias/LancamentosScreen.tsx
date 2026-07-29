@@ -247,6 +247,28 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
     loadAuxiliaryData();
   }, []);
 
+  // Assinatura em tempo real para checkpoints de localização e viagens
+  useEffect(() => {
+    const channel = supabase
+      .channel('realtime_diarias_checkpoints_channel')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'diarias_eventos' },
+        (payload) => {
+          if (payload.new) {
+            const updated = payload.new as DiariaEvento;
+            setEventos(prev => prev.map(e => e.id === updated.id ? { ...e, ...updated } : e));
+            setSelectedEvento(prev => (prev && prev.id === updated.id) ? { ...prev, ...updated } : prev);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
   const fetchEventos = async (showFullLoading = false) => {
     if (showFullLoading) setIsLoading(true);
     try {
@@ -1572,7 +1594,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                 <div className="desktop:col-span-1 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-center gap-1.5 whitespace-nowrap">
                   <HashIcon className="w-3 h-3" /> ID
                 </div>
-                <div className="desktop:col-span-3 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5 whitespace-nowrap">
+                <div className="desktop:col-span-2 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5 whitespace-nowrap">
                   <MapPin className="w-3 h-3" /> Destino / Servidor
                 </div>
                 <div className="desktop:col-span-2 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5 whitespace-nowrap">
@@ -1581,7 +1603,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                 <div className="desktop:col-span-2 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-center gap-1.5 whitespace-nowrap">
                   Status
                 </div>
-                <div className="desktop:col-span-3 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-end gap-1.5 whitespace-nowrap pr-2">
+                <div className="desktop:col-span-4 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-end gap-1.5 whitespace-nowrap pr-2">
                   Ações
                 </div>
               </div>
@@ -1673,7 +1695,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                         </span>
                       </div>
 
-                      <div className="desktop:col-span-3 space-y-0.5 py-0.5 desktop:py-0 min-w-0">
+                      <div className="desktop:col-span-2 space-y-0.5 py-0.5 desktop:py-0 min-w-0">
                         <h3 className="text-xs font-bold text-slate-800 leading-tight truncate" title={evento.destino}>
                           {evento.destino}
                         </h3>
@@ -1707,7 +1729,25 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                          )}
                       </div>
 
-                      <div className="desktop:col-span-3 flex items-center justify-end gap-1.5 pt-2 desktop:pt-0 border-t border-slate-100 desktop:border-t-0 mt-1 desktop:mt-0 w-full shrink-0 flex-nowrap overflow-x-auto">
+                      <div className="desktop:col-span-4 flex items-center justify-end gap-1.5 pt-2 desktop:pt-0 border-t border-slate-100 desktop:border-t-0 mt-1 desktop:mt-0 w-full shrink-0 flex-nowrap">
+                        {/* Indicador de Localização em Tempo Real (Ao lado do botão Finalizar) */}
+                        {(() => {
+                          const cp = evento.ultimo_checkpoint || (evento as any).checklist?.ultimo_checkpoint;
+                          if (!cp && !isEmViagem) return null;
+                          const cidadeExibida = cp ? cp.cidade : ((evento as any).origem || 'São José do Goiabal');
+                          return (
+                            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-cyan-50 border border-cyan-200/80 text-cyan-800 rounded-lg text-[9px] font-bold shadow-2xs shrink-0 whitespace-nowrap" title={`Último Checkpoint: ${cidadeExibida}`}>
+                              <MapPin className="w-3 h-3 text-cyan-600 animate-bounce shrink-0" />
+                              <span className="font-bold text-slate-800 whitespace-nowrap">{cidadeExibida}</span>
+                              {cp?.timestamp && (
+                                <span className="text-[8px] text-slate-400 font-mono whitespace-nowrap hidden xl:inline">
+                                  ({new Date(cp.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })})
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()}
+
                         {/* Botão de Iniciar Viagem (Apenas para Viagens Programadas) */}
                         {evento.status === 'viagem_programada' && (isCurrentUserGestor || isAdmin || evento.user_id === currentUser?.id || (evento.pessoas && evento.pessoas.some(p => p.id === currentUser?.id))) && (
                           <button
@@ -2005,6 +2045,35 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                             </p>
                           </div>
                         </div>
+
+                        {/* Card de Último Checkpoint da Localização em Tempo Real */}
+                        {(() => {
+                          const cp = selectedEvento.ultimo_checkpoint || (selectedEvento as any).checklist?.ultimo_checkpoint;
+                          const isEmViag = selectedEvento.status === 'em_viagem' || (selectedEvento.pessoas && selectedEvento.pessoas.some(p => (p as any).viagem_inicio && !(p as any).viagem_fim));
+                          if (!cp && !isEmViag) return null;
+                          const cidadeStr = cp ? cp.cidade : ((selectedEvento as any).origem || 'São José do Goiabal');
+                          return (
+                            <div className="bg-cyan-50/90 border border-cyan-200/80 p-3 rounded-xl flex items-start gap-2.5 shadow-sm sm:col-span-2 md:col-span-1 lg:col-span-2">
+                              <div className="w-8 h-8 rounded-lg bg-cyan-100 border border-cyan-200 flex items-center justify-center text-cyan-700 shrink-0 mt-0.5 animate-pulse">
+                                <MapPin className="w-4 h-4 text-cyan-600 animate-bounce" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[9px] font-black uppercase tracking-wider text-cyan-700 block leading-tight">Último Checkpoint da Localização (Tempo Real)</span>
+                                  {cp?.timestamp && (
+                                    <span className="text-[9px] font-mono font-bold text-cyan-800">
+                                      {new Date(cp.timestamp).toLocaleTimeString('pt-BR')}
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-xs font-black text-slate-900 leading-snug break-words mt-0.5">
+                                  📍 {cidadeStr}
+                                  {cp ? (cp.fora_origem ? ' (Fora do Município de Origem)' : ' (No Município de Origem)') : ' (Aguardando atualização de GPS)'}
+                                </p>
+                              </div>
+                            </div>
+                          );
+                        })()}
 
                         {/* Status de Validação da Saída */}
                         {(selectedEvento.modo_inicio || selectedEvento.status === 'em_viagem' || selectedEvento.status === 'aguardando_gestor' || selectedEvento.status === 'concluido') && (

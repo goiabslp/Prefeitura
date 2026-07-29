@@ -542,6 +542,13 @@ export interface DiariaEvento {
   checklist?: any;
   modo_inicio?: 'manual' | 'automatico' | string;
   saida_validada?: boolean;
+  ultimo_checkpoint?: {
+    cidade: string;
+    lat?: number;
+    lon?: number;
+    timestamp: string;
+    fora_origem?: boolean;
+  };
 }
 
 export interface ConsultaPaciente {

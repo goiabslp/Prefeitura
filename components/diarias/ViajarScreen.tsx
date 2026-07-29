@@ -338,6 +338,27 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
     stateData.lastCity = cityName;
     localStorage.setItem(storageKey, JSON.stringify(stateData));
 
+    // Atualização em tempo real do último checkpoint na viagem
+    const lastCp = (currentTrip as any).ultimo_checkpoint || (currentTrip as any).checklist?.ultimo_checkpoint;
+    const isNewCity = !lastCp || lastCp.cidade !== cityName;
+    const timeDiff = lastCp?.timestamp ? (nowMs - new Date(lastCp.timestamp).getTime()) : 999999;
+
+    if (isNewCity || timeDiff >= 45000) {
+      const checkpointObj = {
+        cidade: cityName,
+        lat,
+        lon,
+        timestamp: new Date().toISOString(),
+        fora_origem: isOutside
+      };
+
+      const existingChecklist = (currentTrip as any).checklist || {};
+      updateDiariaEvento(currentTrip.id, {
+        ultimo_checkpoint: checkpointObj,
+        checklist: { ...existingChecklist, ultimo_checkpoint: checkpointObj }
+      } as any).catch(err => console.warn('Erro em segundo plano ao salvar checkpoint:', err));
+    }
+
     setGpsLocation({
       cityName,
       isAtOrigin,
