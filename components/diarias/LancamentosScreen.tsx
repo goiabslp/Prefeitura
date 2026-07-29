@@ -1283,82 +1283,9 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                   <div class="justificativa-box">${evento.motivo || 'Motivo não informado.'}</div>
                 </div>
               </div>
-            </div>
-
-            <!-- Rodapé Página Inicial -->
-            <div class="footer-bar">
-              <span>Código da Viagem: <strong style="color: #0f172a;">${protocol}</strong></span>
-              <span>Página 1 de 3</span>
-            </div>
-          </div>
-
-          <!-- PÁGINA 1 -->
-          <div class="page">
-            <div>
-              <div class="header">
-                <div style="display: flex; align-items: center; gap: 14px;">
-                  ${logoUrl ? `<img src="${logoUrl}" alt="Logo Prefeitura" style="max-height: 55px; width: auto; object-fit: contain;" />` : ''}
-                  <div>
-                    <div class="header-title">PREFEITURA MUNICIPAL DE SÃO JOSÉ DO GOIABAL</div>
-                    <div class="header-subtitle">CONCESSÃO DE DIÁRIA E AUTORIZAÇÃO DE VIAGEM OFICIAL</div>
-                  </div>
-                </div>
-                <div style="text-align: right;">
-                  <div class="protocol-badge">${protocol}</div>
-                  <div><span class="status-badge">CONCLUÍDO / GERADO</span></div>
-                </div>
-              </div>
-
-              <!-- 05. JUSTIFICATIVA DO GESTOR DE SETOR -->
-              <div class="section-box">
-                <div class="section-header">05. JUSTIFICATIVA DO GESTOR DE SETOR</div>
-                <div class="section-body">
-                  <div class="justificativa-box" style="min-height: 140px;">${evento.justificativa_gestor || 'Sem justificativa do gestor informada.'}</div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Rodapé Página 1 -->
-            <div class="footer-bar">
-              <span>Código da Viagem: <strong style="color: #0f172a;">${protocol}</strong></span>
-              <span>Página 2 de 3</span>
-            </div>
-          </div>
-
-          <!-- PÁGINA 2 E DEMAIS -->
-          <div class="page page-last">
-            <div>
-              <div class="header">
-                <div style="display: flex; align-items: center; gap: 14px;">
-                  ${logoUrl ? `<img src="${logoUrl}" alt="Logo Prefeitura" style="max-height: 55px; width: auto; object-fit: contain;" />` : ''}
-                  <div>
-                    <div class="header-title">PREFEITURA MUNICIPAL DE SÃO JOSÉ DO GOIABAL</div>
-                    <div class="header-subtitle">CONCESSÃO DE DIÁRIA E AUTORIZAÇÃO DE VIAGEM OFICIAL</div>
-                  </div>
-                </div>
-                <div style="text-align: right;">
-                  <div class="protocol-badge">${protocol}</div>
-                  <div><span class="status-badge">CONCLUÍDO / GERADO</span></div>
-                </div>
-              </div>
-
-              <!-- 06. RELATÓRIO E JUSTIFICATIVA DA VIAGEM -->
-              <div class="section-box">
-                <div class="section-header">06. RELATÓRIO E JUSTIFICATIVA DA VIAGEM</div>
-                <div class="section-body">
-                  <div class="justificativa-box">${relatorio}</div>
-                </div>
-              </div>
-
-              <!-- 07. COMPROVAÇÃO DE DESPESAS -->
-              <div class="section-box">
-                <div class="section-header">07. COMPROVAÇÃO DE DESPESAS</div>
-                <div class="section-body">
-                  ${despesasTextoParam}
-                </div>
-              </div>
 
               <!-- Assinaturas -->
+              <br/><br/><br/><br/><br/><br/><br/><br/><br/><br/>
               <div class="signatures">
                 <div class="signature-line">
                   <div class="signature-name">${servidorNomeParam}</div>
@@ -1381,10 +1308,51 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
               </div>
             </div>
 
+            <!-- Rodapé Página Inicial -->
+            <div class="footer-bar">
+              <span>Código da Viagem: <strong style="color: #0f172a;">${protocol}</strong></span>
+              <span>Página 1 de 2</span>
+            </div>
+          </div>
+
+          <!-- PÁGINA 2 E DEMAIS -->
+          <div class="page page-last">
+            <div>
+              <div class="header">
+                <div style="display: flex; align-items: center; gap: 14px;">
+                  ${logoUrl ? `<img src="${logoUrl}" alt="Logo Prefeitura" style="max-height: 55px; width: auto; object-fit: contain;" />` : ''}
+                  <div>
+                    <div class="header-title">PREFEITURA MUNICIPAL DE SÃO JOSÉ DO GOIABAL</div>
+                    <div class="header-subtitle">CONCESSÃO DE DIÁRIA E AUTORIZAÇÃO DE VIAGEM OFICIAL</div>
+                  </div>
+                </div>
+                <div style="text-align: right;">
+                  <div class="protocol-badge">${protocol}</div>
+                  <div><span class="status-badge">CONCLUÍDO / GERADO</span></div>
+                </div>
+              </div>
+
+              <!-- 05. RELATÓRIO E JUSTIFICATIVA DA VIAGEM -->
+              <div class="section-box">
+                <div class="section-header">05. RELATÓRIO E JUSTIFICATIVA DA VIAGEM</div>
+                <div class="section-body">
+                  <div class="justificativa-box">${relatorio}</div>
+                </div>
+              </div>
+
+              <!-- 06. COMPROVAÇÃO DE DESPESAS -->
+              <div class="section-box">
+                <div class="section-header">06. COMPROVAÇÃO DE DESPESAS</div>
+                <div class="section-body">
+                  ${despesasTextoParam}
+                </div>
+              </div>
+            </div>
+
             <!-- Rodapé Página 2 -->
             <div class="footer-bar">
               <span>Código da Viagem: <strong style="color: #0f172a;">${protocol}</strong></span>
-              <span>Página 3 de 3</span>
+              <span>Página 2 de 2</span>
             </div>
           </div>
         </body>
