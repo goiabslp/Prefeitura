@@ -294,7 +294,7 @@ export interface Order {
   id: string;
   protocol: string;
   title: string;
-  status: 'pending' | 'completed' | 'canceled' | 'approved' | 'rejected' | 'awaiting_approval' | 'in_progress' | 'finishing' | 'payment_account';
+  status: 'pending' | 'completed' | 'canceled' | 'approved' | 'rejected' | 'awaiting_approval' | 'in_progress' | 'finishing' | 'payment_account' | 'awaiting_ficha';
   purchaseStatus?: 'recebido' | 'coletando_orcamento' | 'aprovacao_orcamento' | 'coletando_dotacao' | 'realizado' | 'concluido' | 'cancelado';
   statusHistory?: StatusMovement[];
   createdAt: string;

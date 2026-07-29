@@ -107,7 +107,6 @@ export const ComprasStepWizard: React.FC<ComprasStepWizardProps> = ({
             content.title && content.title.length >= 100 && content.requesterName && content.priority && // Step 1
             content.purchaseItems && content.purchaseItems.length > 0 && // Step 2
             content.body && content.body.length >= 400 && // Step 3
-            content.fichaOrcamentaria && content.fichaOrcamentaria !== 'N/A' && content.fichaOrcamentaria.trim() !== '' && // Step 5
             content.resolucaoDescricao && (content.resolucaoDescricao === 'N/A' || content.resolucaoNumero) && // Step 6
             content.signatureName // Step 7
         );
@@ -146,13 +145,7 @@ export const ComprasStepWizard: React.FC<ComprasStepWizardProps> = ({
                 if (content.body.length < 400) { setValidationWarning('A Justificativa do Pedido deve ter no mínimo 400 caracteres.'); return false; }
             }
             if (step === 7) {
-                if (!content.fichaOrcamentaria || content.fichaOrcamentaria === 'N/A' || content.fichaOrcamentaria.trim() !== '') {
-                    // Se estiver em branco ou for nulo/indefinido (aqui mantemos a lógica antiga de obrigatória)
-                    if (!content.fichaOrcamentaria || content.fichaOrcamentaria === 'N/A' || content.fichaOrcamentaria.trim() === '') {
-                        setValidationWarning('A Ficha Orçamentária é obrigatória.');
-                        return false;
-                    }
-                }
+                // Ficha Orçamentária não é obrigatória para finalizar o pedido
             }
             if (step === 8) {
                 if (!content.resolucaoDescricao || (content.resolucaoDescricao !== 'N/A' && !content.resolucaoNumero)) {
@@ -177,10 +170,7 @@ export const ComprasStepWizard: React.FC<ComprasStepWizardProps> = ({
                 if (content.body.length < 400) { setValidationWarning('A Justificativa do Pedido deve ter no mínimo 400 caracteres.'); return false; }
             }
             if (step === 5) {
-                if (!content.fichaOrcamentaria || content.fichaOrcamentaria === 'N/A' || content.fichaOrcamentaria.trim() === '') {
-                    setValidationWarning('A Ficha Orçamentária é obrigatória.');
-                    return false;
-                }
+                // Ficha Orçamentária não é obrigatória para finalizar o pedido
             }
             if (step === 6) {
                 if (!content.resolucaoDescricao || (content.resolucaoDescricao !== 'N/A' && !content.resolucaoNumero)) {
@@ -331,7 +321,7 @@ export const ComprasStepWizard: React.FC<ComprasStepWizardProps> = ({
                                 Olá, {currentUser?.name?.split(' ')[0] || 'Usuário'}!
                             </h4>
                             <p className="text-slate-500 font-medium mt-4 text-sm leading-relaxed">
-                                A Ficha Orçamentária é <span className="font-bold text-slate-800">obrigatória</span> ao realizar um novo pedido de compras.
+                                A Ficha Orçamentária pode ser informada agora ou posteriormente por um administrador para iniciar o fluxo.
                             </p>
                             <div className="w-full bg-emerald-50/50 border border-emerald-100/50 rounded-2xl p-4 mt-4 text-emerald-800 text-xs font-bold leading-relaxed flex items-start gap-3 text-left">
                                 <Info className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
@@ -465,9 +455,8 @@ export const ComprasStepWizard: React.FC<ComprasStepWizardProps> = ({
                             Olá, {currentUser?.name?.split(' ')[0] || 'Usuário'}!
                         </h4>
                         
-                        {/* Descrição */}
                         <p className="text-slate-500 font-medium mt-4 text-sm leading-relaxed">
-                            A Ficha Orçamentária é <span className="font-bold text-slate-800">obrigatória</span> ao realizar um novo pedido de compras.
+                            A Ficha Orçamentária pode ser informada agora ou posteriormente por um administrador para iniciar o fluxo.
                         </p>
                         
                         <div className="w-full bg-emerald-50/50 border border-emerald-100/50 rounded-2xl p-4 mt-4 text-emerald-800 text-xs font-bold leading-relaxed flex items-start gap-3 text-left">

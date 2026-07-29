@@ -6,7 +6,7 @@ import {
     FileSearch, ShoppingCart, Clock, MessageCircle, User as UserIcon,
     CheckCircle, AlertTriangle, Eye, ShieldCheck, MapPin,
     Building2, Briefcase, FileSignature, DollarSign, Fingerprint,
-    Plus, Search, ChevronRight, Loader2
+    Plus, Search, ChevronRight, Loader2, CreditCard
 } from 'lucide-react';
 import { Order, AppState, BlockType, Attachment, InventoryCategory, PurchaseAccount, User } from '../types';
 import { addToInventory, savePurchaseOrder, updateOrderStatus } from '../services/comprasService';
@@ -45,6 +45,66 @@ export const OrderDetailsScreen: React.FC<OrderDetailsScreenProps> = ({
     const [targetItemIndex, setTargetItemIndex] = useState<number | null>(null);
     const [selectedCategory, setSelectedCategory] = useState<InventoryCategory | ''>('');
     const [isProcessing, setIsProcessing] = useState(false);
+
+    // Ficha edit states
+    const [isEditingFicha, setIsEditingFicha] = useState(false);
+    const [tempFicha, setTempFicha] = useState(order.documentSnapshot?.content?.fichaOrcamentaria || '');
+
+    React.useEffect(() => {
+        setTempFicha(order.documentSnapshot?.content?.fichaOrcamentaria || '');
+    }, [order.documentSnapshot?.content?.fichaOrcamentaria]);
+
+    const handleSaveFicha = async () => {
+        if (!tempFicha.trim() || isProcessing) return;
+        setIsProcessing(true);
+        try {
+            const trimmedFicha = tempFicha.trim();
+            const originalStatus = order.status;
+            
+            // Se o status era awaiting_ficha, passa a ser pending para iniciar o fluxo
+            let newStatus = originalStatus;
+            if (originalStatus === 'awaiting_ficha' && trimmedFicha !== '' && trimmedFicha !== 'N/A') {
+                newStatus = 'pending';
+            }
+
+            // 1. Atualiza dados do pedido
+            const updatedOrder: Order = {
+                ...order,
+                status: newStatus,
+                documentSnapshot: {
+                    ...order.documentSnapshot!,
+                    content: {
+                        ...order.documentSnapshot!.content,
+                        fichaOrcamentaria: trimmedFicha
+                    }
+                }
+            };
+
+            // 2. Registra no histórico do pedido
+            const historyLabel = newStatus !== originalStatus 
+                ? `Ficha Informada (${trimmedFicha})` 
+                : `Ficha Atualizada para ${trimmedFicha}`;
+                
+            const newMovement = {
+                statusLabel: historyLabel,
+                date: new Date().toISOString(),
+                userName: currentUser.name || 'Sistema',
+                justification: `A Ficha Orçamentária foi inserida/atualizada por ${currentUser.name}.`
+            };
+            updatedOrder.statusHistory = [...(order.statusHistory || []), newMovement];
+
+            // 3. Salva no banco de dados
+            await savePurchaseOrder(updatedOrder);
+
+            setOrder(updatedOrder);
+            setIsEditingFicha(false);
+        } catch (error) {
+            console.error("Error saving ficha:", error);
+            alert("Erro ao salvar Ficha Orçamentária.");
+        } finally {
+            setIsProcessing(false);
+        }
+    };
 
     // Account Modal States
     const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
@@ -582,6 +642,7 @@ export const OrderDetailsScreen: React.FC<OrderDetailsScreenProps> = ({
                             <span className="text-[9px] uppercase font-black tracking-widest text-slate-400 block mb-1">Situação do Processo</span>
                             {order.status === 'approved' && <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100 uppercase tracking-wide flex items-center gap-1.5 w-fit"><CheckCircle2 className="w-3 h-3" /> Aprovado</span>}
                             {order.status === 'pending' && <span className="text-[9px] font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full border border-slate-200 uppercase tracking-wide flex items-center gap-1.5 w-fit"><Clock className="w-3 h-3" /> Pendente</span>}
+                            {order.status === 'awaiting_ficha' && <span className="text-[9px] font-bold text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-100 uppercase tracking-wide flex items-center gap-1.5 w-fit"><Clock className="w-3 h-3 animate-pulse" /> Aguardando Ficha</span>}
                             {order.status === 'rejected' && <span className="text-[9px] font-bold text-rose-600 bg-rose-50 px-2.5 py-1 rounded-full border border-rose-100 uppercase tracking-wide flex items-center gap-1.5 w-fit"><XCircle className="w-3 h-3" /> Rejeitado</span>}
                             {order.status === 'payment_account' && (
                                 <button
@@ -647,6 +708,62 @@ export const OrderDetailsScreen: React.FC<OrderDetailsScreenProps> = ({
                         </div>
                     </div>
                 </div>
+
+                {/* Ficha Orçamentária */}
+                {order.blockType === 'compras' && (
+                    <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 group hover:border-indigo-200 transition-all">
+                        <div className="flex items-start gap-3 flex-1">
+                            <div className="p-2.5 bg-indigo-50 text-indigo-500 rounded-xl shrink-0">
+                                <CreditCard className="w-5 h-5" />
+                            </div>
+                            <div className="flex-1">
+                                <span className="text-[9px] uppercase font-black tracking-widest text-slate-400 block mb-0.5">Ficha Orçamentária</span>
+                                {isEditingFicha ? (
+                                    <div className="flex items-center gap-2 mt-1">
+                                        <input
+                                            type="text"
+                                            value={tempFicha}
+                                            onChange={(e) => setTempFicha(e.target.value)}
+                                            className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-sm font-medium text-slate-800 outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all max-w-[200px]"
+                                            placeholder="Ex: 12345-6"
+                                        />
+                                        <button
+                                            onClick={handleSaveFicha}
+                                            disabled={isProcessing}
+                                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs uppercase tracking-wider transition-all disabled:opacity-50"
+                                        >
+                                            {isProcessing ? '...' : 'Salvar'}
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                setIsEditingFicha(false);
+                                                setTempFicha(order.documentSnapshot?.content?.fichaOrcamentaria || '');
+                                            }}
+                                            className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-lg text-xs uppercase tracking-wider transition-all"
+                                        >
+                                            Cancelar
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="text-base font-black text-slate-800">
+                                        {order.documentSnapshot?.content?.fichaOrcamentaria || 'Não informada'}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                        {!isEditingFicha && ['admin', 'compras'].includes(currentUser.role) && (
+                            <button
+                                onClick={() => {
+                                    setTempFicha(order.documentSnapshot?.content?.fichaOrcamentaria || '');
+                                    setIsEditingFicha(true);
+                                }}
+                                className="px-4 py-2 bg-indigo-600 text-white font-bold rounded-xl text-xs uppercase tracking-wider hover:bg-indigo-700 active:scale-95 transition-all shadow-md shadow-indigo-600/10 shrink-0"
+                            >
+                                {order.documentSnapshot?.content?.fichaOrcamentaria ? 'Editar Ficha' : 'Inserir Ficha'}
+                            </button>
+                        )}
+                    </div>
+                )}
 
                 {/* Discreet Validation Footer */}
                 <div className="flex items-center justify-between px-4 opacity-40 grayscale hover:opacity-100 hover:grayscale-0 transition-all duration-500">

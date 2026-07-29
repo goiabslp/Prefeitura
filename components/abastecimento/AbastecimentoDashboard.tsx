@@ -1484,6 +1484,46 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
             sectorFuelBreakdown[sectorName].totalValue += r.cost;
         });
 
+        // Calcular Km Rodado Total e Eficiência Média para os registros filtrados
+        let totalKmFiltered = 0;
+        let totalEfficiencySumFiltered = 0;
+        let efficiencyCountFiltered = 0;
+        const filteredIds = new Set(filtered.map(r => r.id));
+        
+        // Agrupar todos os registros de abastecimento por veículo
+        const allByVehicle: Record<string, AbastecimentoRecord[]> = {};
+        allRecords.forEach(r => {
+            if (!allByVehicle[r.vehicle]) allByVehicle[r.vehicle] = [];
+            allByVehicle[r.vehicle].push(r);
+        });
+
+        Object.values(allByVehicle).forEach(vehicleRecords => {
+            const sorted = vehicleRecords
+                .map(r => ({ ...r, dateObj: new Date(r.date) }))
+                .sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
+
+            for (let i = 1; i < sorted.length; i++) {
+                const record = sorted[i];
+                if (filteredIds.has(record.id)) {
+                    const prevRecord = sorted[i - 1];
+                    const isArla = record.fuelType.toLowerCase().includes('arla') || prevRecord.fuelType.toLowerCase().includes('arla');
+                    if (!isArla) {
+                        const dist = Number(record.odometer) - Number(prevRecord.odometer);
+                        const liters = Number(record.liters);
+                        if (dist > 0) {
+                            totalKmFiltered += dist;
+                            if (liters > 0) {
+                                totalEfficiencySumFiltered += (dist / liters);
+                                efficiencyCountFiltered++;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        const avgKmLFiltered = efficiencyCountFiltered > 0 ? (totalEfficiencySumFiltered / efficiencyCountFiltered) : 0;
+
         return {
             records: filtered,
             totalLitersByFuel,
@@ -1492,7 +1532,9 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
             sectorFuelBreakdown,
             plateFuelSummary,
             grandTotalLiters,
-            grandTotalValue
+            grandTotalValue,
+            grandTotalKm: totalKmFiltered,
+            avgKmLFiltered: avgKmLFiltered
         };
     }, [allRecords, appliedFilters, vehicles, sectors]);
 
@@ -2670,6 +2712,14 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
                                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Valor Total</p>
                                     <p className="text-2xl sm:text-4xl font-black tracking-tighter text-emerald-400">{formatCurrency(reportData.grandTotalValue)}</p>
                                 </div>
+                                <div>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Total de KM Rodado</p>
+                                    <p className="text-2xl sm:text-4xl font-black tracking-tighter text-amber-400">{formatNumber(reportData.grandTotalKm || 0)} <span className="text-sm sm:text-xl text-slate-500">Km</span></p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Consumo Médio</p>
+                                    <p className="text-2xl sm:text-4xl font-black tracking-tighter text-violet-400">{formatNumber(reportData.avgKmLFiltered || 0, 1)} <span className="text-sm sm:text-xl text-slate-500">Km/L</span></p>
+                                </div>
                             </div>
                         </div>
                         <div className="pt-8 border-t border-white/5 mt-8 space-y-4">
@@ -3357,6 +3407,16 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
                                 <div>
                                     <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Valor Total</p>
                                     <p className="text-2xl font-black tracking-tighter text-emerald-400">{formatCurrency(reportData.grandTotalValue)}</p>
+                                </div>
+                                <div className="w-[1px] h-10 bg-white/10"></div>
+                                <div>
+                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">KM Rodado</p>
+                                    <p className="text-2xl font-black tracking-tighter text-amber-400">{formatNumber(reportData.grandTotalKm || 0)} Km</p>
+                                </div>
+                                <div className="w-[1px] h-10 bg-white/10"></div>
+                                <div>
+                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Média KM/L</p>
+                                    <p className="text-2xl font-black tracking-tighter text-violet-400">{formatNumber(reportData.avgKmLFiltered || 0, 1)} Km/L</p>
                                 </div>
                             </div>
                         </div>

@@ -1930,18 +1930,26 @@ const App: React.FC = () => {
         }));
       }
 
+      let initialStatus: Order['status'] = 'pending';
+      if (activeBlock === 'compras') {
+        const hasFicha = appState.content.fichaOrcamentaria && appState.content.fichaOrcamentaria !== 'N/A' && appState.content.fichaOrcamentaria.trim() !== '';
+        initialStatus = hasFicha ? 'pending' : 'awaiting_ficha';
+      }
+
       finalOrder = {
         id: Date.now().toString(),
         protocol: protocolString,
         title: appState.content.title,
-        status: 'pending',
+        status: initialStatus as Order['status'],
         createdAt: new Date().toISOString(),
         userId: currentUser.id,
         userName: currentUser.name,
         blockType: activeBlock,
         documentSnapshot: finalSnapshot,
         paymentStatus: activeBlock === 'diarias' ? 'pending' : undefined,
-        statusHistory: activeBlock === 'compras' ? [{ statusLabel: 'Criação do Pedido', date: new Date().toISOString(), userName: currentUser.name }] : [],
+        statusHistory: activeBlock === 'compras' 
+          ? [{ statusLabel: initialStatus === 'awaiting_ficha' ? 'Pedido Criado (Aguardando Ficha)' : 'Criação do Pedido', date: new Date().toISOString(), userName: currentUser.name }] 
+          : [],
         attachments: appState.content.attachments || [],
         description: customDescription || appState.content.description || '',
         requestingSector: (activeBlock === 'oficio' || activeBlock === 'compras') ? currentUser.sector : undefined

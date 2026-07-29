@@ -109,7 +109,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
 
     const checkIsSemMovimentacao = (order: Order): boolean => {
         const status = order.status;
-        const isEmAprovacao = !status || status === 'pending' || status === 'awaiting_approval' || status === 'payment_account';
+        const isEmAprovacao = !status || status === 'pending' || status === 'awaiting_approval' || status === 'payment_account' || status === 'awaiting_ficha';
         const isRecebido = status === 'approved' && (!order.purchaseStatus || order.purchaseStatus === 'recebido');
         
         if (!isEmAprovacao && !isRecebido) return false;
@@ -185,7 +185,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                 pStatus = 'sem_movimentacao';
             }
 
-            if (status === 'pending' || status === 'awaiting_approval' || status === 'payment_account') {
+            if (status === 'pending' || status === 'awaiting_approval' || status === 'payment_account' || status === 'awaiting_ficha') {
                 if (pStatus === 'sem_movimentacao') {
                     counts['sem_movimentacao'] = (counts['sem_movimentacao'] || 0) + 1;
                 } else {
@@ -336,6 +336,8 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
             case 'pending':
             case 'awaiting_approval':
                 return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-100 text-[9px] font-black uppercase tracking-wider"><Clock className="w-3 h-3 animate-pulse" /> Em Aprovação</span>;
+            case 'awaiting_ficha':
+                return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-100 text-[9px] font-black uppercase tracking-wider"><Clock className="w-3 h-3 animate-pulse" /> Aguardando Ficha</span>;
             default:
                 return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-50 text-slate-700 border border-slate-100 text-[9px] font-black uppercase tracking-wider"><AlertCircle className="w-3 h-3" /> Recebido</span>;
         }
@@ -503,7 +505,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
 
     const PurchaseStatusSelector = ({ order }: { order: Order }) => {
         const isApproved = order.status === 'approved';
-        const isEmAprovacao = !order.status || order.status === 'pending' || order.status === 'awaiting_approval' || order.status === 'payment_account';
+        const isEmAprovacao = !order.status || order.status === 'pending' || order.status === 'awaiting_approval' || order.status === 'payment_account' || order.status === 'awaiting_ficha';
         const isFinalized = order.status === 'rejected' || order.purchaseStatus === 'concluido' || order.purchaseStatus === 'cancelado';
         const isRecebido = isApproved && (!order.purchaseStatus || order.purchaseStatus === 'recebido');
 

@@ -107,6 +107,24 @@ function geminiDevPlugin() {
                 - NÃO use formatação Markdown complexa (como **negrito** ou # headers). Use apenas quebras de linha para separar parágrafos.
                 - Crie um Título Profissional e conciso para este documento baseado no contexto.
               `;
+            } else if (tipo === 'lapidar_motivo') {
+              promptText = `
+                Você é um assistente de IA especialista em redação administrativa para prefeituras e órgãos públicos.
+                
+                TAREFA:
+                Transforme a transcrição de voz fornecida pelo usuário em uma justificativa pública de viagem formal, clara, objetiva, profissional e perfeitamente redigida em Português do Brasil.
+                
+                TRANSCRIÇÃO DE VOZ DO USUÁRIO:
+                """
+                ${dados.promptText}
+                """
+                
+                REGRAS ESSENCIAIS:
+                1. Preserve a intenção e os detalhes citados (cidade, evento, reuniões, objetivo).
+                2. Corrija falhas de dicção, hesitações (ex: "é...", "tipo assim", "né") e informalidade.
+                3. O texto resultante DEVE ter pelo menos 50 caracteres (se a fala for muito curta, expanda suavemente com redação institucional formal).
+                4. NÃO use Markdown (sem negritos, asteriscos ou hashtags). Retorne exclusivamente o texto limpo da justificativa.
+              `;
             } else {
               res.statusCode = 400;
               res.end(JSON.stringify({ error: 'Tipo de requisição inválido.' }));
