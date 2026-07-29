@@ -247,12 +247,12 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
 
     const nowMs = Date.now();
     const elapsedMs = nowMs - stateData.startTime;
-    const oneHourMs = 60 * 60 * 1000;
+    const limitMs = 130 * 60 * 1000; // 130 minutos
 
     let systemMsg: string | null = null;
 
-    // REGRA 1: Se esteve na Origem por mais de 1 hora sem ter saído da cidade -> REINICIAR CRONÔMETRO!
-    if (!stateData.hasLeftOrigin && isAtOrigin && elapsedMs >= oneHourMs) {
+    // REGRA 1: Se esteve na Origem por mais de 130 minutos sem ter saído da cidade -> REINICIAR CRONÔMETRO!
+    if (!stateData.hasLeftOrigin && isAtOrigin && elapsedMs >= limitMs) {
       const newInicioIso = new Date().toISOString();
       const updatedPessoas = (currentTrip.pessoas || []).map(p => ({
         ...p,
@@ -266,7 +266,7 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
 
       stateData.startTime = nowMs;
       localStorage.setItem(storageKey, JSON.stringify(stateData));
-      systemMsg = '🕒 1 hora no município de origem verificada. Horário de início e cronômetro reiniciados automaticamente.';
+      systemMsg = '🕒 130 minutos no município de origem verificados. Horário de início e cronômetro reiniciados automaticamente.';
       setGpsLocation({
         cityName,
         isAtOrigin: true,
@@ -287,19 +287,19 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
       systemMsg = `🚀 Checkpoint FORA da origem registrado em: ${cityName}`;
     }
 
-    // Validação da saída em segundo plano (se iniciada automaticamente e o checkpoint for fora em até 60 minutos)
+    // Validação da saída em segundo plano (se iniciada automaticamente e o checkpoint for fora em até 130 minutos)
     if (currentTrip.modo_inicio === 'automatico' && !currentTrip.saida_validada) {
       if (isOutside) {
         const scheduledTime = new Date(currentTrip.data_saida).getTime();
         const diffMs = Date.now() - scheduledTime;
-        const oneHourMs = 60 * 60 * 1000;
+        const limitMs = 130 * 60 * 1000;
         
-        if (diffMs >= 0 && diffMs <= oneHourMs) {
+        if (diffMs >= 0 && diffMs <= limitMs) {
           try {
             await updateDiariaEvento(currentTrip.id, {
               saida_validada: true
             } as any);
-            systemMsg = `✅ Saída da viagem automática VALIDADA! Checkpoint fora da origem (${cityName}) registrado em menos de 60 minutos.`;
+            systemMsg = `✅ Saída da viagem automática VALIDADA! Checkpoint fora da origem (${cityName}) registrado em menos de 130 minutos.`;
             currentTrip.saida_validada = true;
             setTimeout(() => loadViagens(false), 500);
           } catch (e) {
@@ -1348,7 +1348,7 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
                               ) : (() => {
                                 const scheduledTime = new Date(selectedEvento.data_saida).getTime();
                                 const elapsedMin = Math.floor((Date.now() - scheduledTime) / (60 * 1000));
-                                const remainingMin = 60 - elapsedMin;
+                                const remainingMin = 130 - elapsedMin;
                                 
                                 if (remainingMin > 0) {
                                   return (
@@ -1366,7 +1366,7 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
                                   return (
                                     <div className="text-rose-700 flex items-center gap-1.5 font-bold">
                                       <AlertTriangle className="w-4 h-4 text-rose-500" />
-                                      <span>Saída Não Validada (Tempo limite de 60 min expirado)</span>
+                                      <span>Saída Não Validada (Tempo limite de 130 min expirado)</span>
                                     </div>
                                   );
                                 }
