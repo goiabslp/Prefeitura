@@ -76,6 +76,8 @@ export const AbastecimentoForm: React.FC<AbastecimentoFormProps> = ({
     const [isOdometerOverridden, setIsOdometerOverridden] = useState(false);
     const [pendingData, setPendingData] = useState<any | null>(null);
     const [isSaving, setIsSaving] = useState(false);
+    const [dupInvoiceModalOpen, setDupInvoiceModalOpen] = useState(false);
+    const [dupInvoiceData, setDupInvoiceData] = useState<{ number: string, station: string } | null>(null);
 
     const normalizeText = (t: string) =>
         t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
@@ -243,7 +245,11 @@ export const AbastecimentoForm: React.FC<AbastecimentoFormProps> = ({
         }
         if (invoiceNumber && station) {
             const dup = await AbastecimentoService.checkInvoiceExists(invoiceNumber, station, initialData?.id);
-            if (dup) { alert(`ERRO: Nota ${invoiceNumber} já existe para ${station}.`); return; }
+            if (dup) {
+                setDupInvoiceData({ number: invoiceNumber, station });
+                setDupInvoiceModalOpen(true);
+                return;
+            }
         }
         setPendingData(buildRecord());
         setConfirmModalOpen(true);
@@ -298,6 +304,36 @@ export const AbastecimentoForm: React.FC<AbastecimentoFormProps> = ({
                     </div>
                 </div>
             )}
+            {dupInvoiceModalOpen && dupInvoiceData && (
+                <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-fade-in">
+                    <div className="bg-white rounded-[2rem] shadow-2xl border border-slate-100 w-full max-w-md overflow-hidden animate-scale-in">
+                        <div className="bg-gradient-to-br from-rose-500 to-amber-500 p-6 text-white text-center relative">
+                            <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-3 backdrop-blur-sm border border-white/30 animate-bounce">
+                                <Receipt className="w-8 h-8 text-white" />
+                            </div>
+                            <h3 className="text-xl font-black tracking-tight leading-tight">Opa! Essa nota já rodou por aqui! 🚗💨</h3>
+                            <p className="text-white/80 text-[10px] font-bold uppercase tracking-wider mt-2">Detecção de Duplicidade</p>
+                        </div>
+                        <div className="p-8 text-center space-y-6">
+                            <p className="text-slate-600 text-sm leading-relaxed">
+                                A nota fiscal de número <strong className="text-rose-600 font-extrabold text-base bg-rose-50 px-2 py-0.5 rounded-lg border border-rose-100 font-mono">{dupInvoiceData.number}</strong> já está cadastrada para o posto <strong className="text-slate-800 font-black">{dupInvoiceData.station}</strong>.
+                                <br /><br />
+                                Por favor, revise o número digitado ou informe outra nota fiscal para prosseguir com o abastecimento.
+                            </p>
+                            <button
+                                onClick={() => {
+                                    setDupInvoiceModalOpen(false);
+                                    setDupInvoiceData(null);
+                                }}
+                                className="w-full py-4 bg-slate-900 hover:bg-slate-800 active:scale-95 text-white rounded-2xl font-black uppercase tracking-wider text-xs shadow-lg shadow-slate-900/20 transition-all flex items-center justify-center gap-2"
+                            >
+                                <X className="w-4 h-4 text-cyan-400" />
+                                Entendido, vou corrigir! 👍
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </>
     );
 
@@ -316,7 +352,8 @@ export const AbastecimentoForm: React.FC<AbastecimentoFormProps> = ({
                 try {
                     const dup = await AbastecimentoService.checkInvoiceExists(invoiceNumber, station, initialData?.id);
                     if (dup) {
-                        alert(`ERRO: Nota ${invoiceNumber} já existe para ${station}.`);
+                        setDupInvoiceData({ number: invoiceNumber, station });
+                        setDupInvoiceModalOpen(true);
                         return;
                     }
                 } catch (error) {
