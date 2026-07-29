@@ -507,6 +507,39 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
     } catch (e) {}
   };
 
+  const syncRelatorioWithComprovantesList = (list: Attachment[]) => {
+    let despesasBlock = '';
+    if (list.length > 0) {
+      const itens = list.map((c, i) => {
+        const tipo = c.expenseType || c.name || 'Despesa';
+        const valor = c.expenseValue ? `R$ ${c.expenseValue}` : 'valor não informado';
+        return `${i + 1}. ${tipo}: ${valor}`;
+      }).join('\n');
+
+      let total = 0;
+      let hasTotal = false;
+      list.forEach(c => {
+        if (c.expenseValue) {
+          const num = parseFloat(c.expenseValue.toString().replace(/[^0-9,.-]/g, '').replace(',', '.'));
+          if (!isNaN(num)) { total += num; hasTotal = true; }
+        }
+      });
+      const totalStr = hasTotal
+        ? `\nTotal de despesas comprovadas: R$ ${total.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+        : '';
+
+      despesasBlock = `Despesas registradas durante a viagem:\n${itens}${totalStr}`;
+    }
+
+    setRelatorioViagem(prev => {
+      if (!prev || prev.includes('Despesas registradas durante a viagem:')) {
+        const base = prev ? prev.split(/Despesas registradas durante a viagem:/)[0].trim() : '';
+        return despesasBlock ? (base ? `${base}\n\n${despesasBlock}` : despesasBlock) : base;
+      }
+      return despesasBlock ? `${prev.trim()}\n\n${despesasBlock}` : prev;
+    });
+  };
+
   const handleComprovanteUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && selectedEvento) {
@@ -520,10 +553,14 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
             url: publicUrl,
             type: file.type,
             date: new Date().toISOString(),
-            expenseType: newExpenseType,
-            expenseValue: newExpenseValue
+            expenseType: newExpenseType || 'Despesa',
+            expenseValue: newExpenseValue.trim() ? newExpenseValue.trim() : undefined
           };
-          setComprovantes(prev => [...prev, newAttachment]);
+          setComprovantes(prev => {
+            const updated = [...prev, newAttachment];
+            syncRelatorioWithComprovantesList(updated);
+            return updated;
+          });
           setNewExpenseValue('');
         }
       } catch (err) {
@@ -536,7 +573,11 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
   };
 
   const removeComprovante = (id: string) => {
-    setComprovantes(prev => prev.filter(c => c.id !== id));
+    setComprovantes(prev => {
+      const updated = prev.filter(c => c.id !== id);
+      syncRelatorioWithComprovantesList(updated);
+      return updated;
+    });
   };
 
   const handleOpenFinalizeModal = (evento: DiariaEvento) => {
@@ -1255,7 +1296,9 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
         return `<div class="despesas-texto-simples">Em relação às despesas, não foram anexados comprovantes adicionais.</div>`;
       }
       const cardsHtml = comprovantesList.map((c, idx) => {
-        const isImage = c.type && c.type.startsWith('image/');
+        const isImage = (c.type && c.type.startsWith('image/')) ||
+          /\.(jpg|jpeg|png|webp|gif|bmp|svg)(\?.*)?$/i.test(c.url || '') ||
+          /\.(jpg|jpeg|png|webp|gif|bmp|svg)/i.test(c.name || '');
         const tipo = c.expenseType || c.name || 'Despesa';
         const valor = c.expenseValue ? `R$ ${c.expenseValue}` : '—';
         const imgOrLink = isImage
@@ -1353,7 +1396,9 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
           return `<div class="despesas-texto-simples">Em relação às despesas, não foram anexados comprovantes adicionais.</div>`;
         }
         const cardsHtml = comprovantesList.map((c, idx) => {
-          const isImage = c.type && c.type.startsWith('image/');
+          const isImage = (c.type && c.type.startsWith('image/')) ||
+          /\.(jpg|jpeg|png|webp|gif|bmp|svg)(\?.*)?$/i.test(c.url || '') ||
+          /\.(jpg|jpeg|png|webp|gif|bmp|svg)/i.test(c.name || '');
           const tipo = c.expenseType || c.name || 'Despesa';
           const valor = c.expenseValue ? `R$ ${c.expenseValue}` : '—';
           const imgOrLink = isImage

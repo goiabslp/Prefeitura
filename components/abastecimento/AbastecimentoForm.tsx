@@ -1,46 +1,50 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Fuel, User, Truck, DollarSign, Save, X, MapPin, FileText, Clock } from 'lucide-react';
+import { 
+  Fuel, User, Truck, DollarSign, Save, X, MapPin, FileText, Clock,
+  ChevronLeft, ChevronRight, CheckCircle2, Search, Check, Gauge, Receipt
+} from 'lucide-react';
 import { AbastecimentoService, AbastecimentoRecord } from '../../services/abastecimentoService';
 import { useAuth } from '../../contexts/AuthContext';
 import { Vehicle, Person } from '../../types';
 import { CustomSelect, Option } from '../common/CustomSelect';
 import { parseFormattedNumber, formatNumberInput } from '../../utils/numberUtils';
-
 import { CustomDateTimeInput } from '../common/CustomDateTimeInput';
 import { AbastecimentoConfirmationModal } from '../modals/AbastecimentoConfirmationModal';
 import { getLocalISOData } from '../../utils/dateUtils';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useCachedVehicles } from '../../hooks/useCachedVehicles';
+import { useCachedPersons } from '../../hooks/useCachedPersons';
+import { useCachedFuelTypes } from '../../hooks/useCachedFuelTypes';
 
 interface AbastecimentoFormProps {
     onBack: () => void;
     onSave: (data: any) => void;
     vehicles: Vehicle[];
     persons: Person[];
-    gasStations: { id: string, name: string, city: string, fuel_prices?: any }[]; // Updated type
+    gasStations: { id: string, name: string, city: string, fuel_prices?: any }[];
     fuelTypes: { key: string; label: string; price: number }[];
     initialData?: AbastecimentoRecord;
 }
 
-import { useCachedVehicles } from '../../hooks/useCachedVehicles';
-import { useCachedPersons } from '../../hooks/useCachedPersons';
-import { useCachedFuelTypes } from '../../hooks/useCachedFuelTypes';
-
-export const AbastecimentoForm: React.FC<AbastecimentoFormProps> = ({ onBack, onSave, vehicles: initialVehicles, persons: initialPersons, gasStations, fuelTypes: initialFuelTypes, initialData }) => {
+export const AbastecimentoForm: React.FC<AbastecimentoFormProps> = ({
+    onBack, onSave,
+    vehicles: initialVehicles,
+    persons: initialPersons,
+    gasStations,
+    fuelTypes: initialFuelTypes,
+    initialData
+}) => {
     const { user: authUser } = useAuth();
-    // Use cached data for optimized loading
-    // Use query objects for robust loading and sync
-    const { data: vehiclesData, isLoading: isLoadingVehicles, refetch: refetchVehicles } = useCachedVehicles(initialVehicles);
-    const { data: personsData, isLoading: isLoadingPersons, refetch: refetchPersons } = useCachedPersons(initialPersons);
-    const { data: fuelTypesData, isLoading: isLoadingFuelTypes, refetch: refetchFuelTypes } = useCachedFuelTypes(initialFuelTypes);
+    const { data: vehiclesData } = useCachedVehicles(initialVehicles);
+    const { data: personsData } = useCachedPersons(initialPersons);
+    const { data: fuelTypesData } = useCachedFuelTypes(initialFuelTypes);
 
     const vehicles = vehiclesData || [];
     const persons = personsData || [];
     const fuelTypes = fuelTypesData || [];
 
-    // Derived prices from props (now from cached fuelTypes by default)
     const [fuelPrices, setFuelPrices] = useState<{ [key: string]: number }>({});
-    // Store global prices for fallback
     const [globalPrices, setGlobalPrices] = useState<{ [key: string]: number }>({});
-
     const [date, setDate] = useState(() => getLocalISOData(new Date()).date);
     const [time, setTime] = useState(() => getLocalISOData(new Date()).time);
     const [vehicle, setVehicle] = useState('');
@@ -56,364 +60,553 @@ export const AbastecimentoForm: React.FC<AbastecimentoFormProps> = ({ onBack, on
     const [unitPrice, setUnitPrice] = useState<number>(0);
     const [isInitialLoad, setIsInitialLoad] = useState(true);
 
+    // Mobile wizard state
+    const [isMobile, setIsMobile] = useState(false);
+    const [mobileStep, setMobileStep] = useState(1);
+    const [direction, setDirection] = useState(0);
+    const [isDriverOpen, setIsDriverOpen] = useState(false);
+    const [isVehicleOpen, setIsVehicleOpen] = useState(false);
+    const [isStationOpen, setIsStationOpen] = useState(false);
+    const [driverSearch, setDriverSearch] = useState('');
+    const [vehicleSearch, setVehicleSearch] = useState('');
+    const [stationSearch, setStationSearch] = useState('');
 
-    // Formatting Helpers
-    // Formatting Helpers removed: now using numberUtils
-
-    const handleOdometerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        // Odometer: 1 decimal place
-        const formatted = formatNumberInput(e.target.value, 2);
-        setOdometer(formatted);
-    };
-
-    const handleLitersChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        // Liters: 3 decimal places
-        const formatted = formatNumberInput(e.target.value, 3);
-        setLiters(formatted);
-    };
-
-    const handleCostChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        // Cost: 2 decimal places
-        const formatted = formatNumberInput(e.target.value, 2);
-        setFormattedCost(`R$ ${formatted}`);
-        setCost(parseFormattedNumber(formatted));
-    };
-
-
-    // Confirmation Modal State
     const [confirmModalOpen, setConfirmModalOpen] = useState(false);
     const [adminOverrideModalOpen, setAdminOverrideModalOpen] = useState(false);
     const [isOdometerOverridden, setIsOdometerOverridden] = useState(false);
     const [pendingData, setPendingData] = useState<any | null>(null);
     const [isSaving, setIsSaving] = useState(false);
 
-    // Initialize state from props
+    const normalizeText = (t: string) =>
+        t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+
+    const mobileStepsList = useMemo(() => [
+        { key: 'nota',        title: 'Nota Fiscal' },
+        { key: 'veiculo',     title: 'Veículo' },
+        { key: 'motorista',   title: 'Motorista' },
+        { key: 'posto',       title: 'Posto' },
+        { key: 'combustivel', title: 'Combustível' },
+        { key: 'litros',      title: 'Litros' },
+        { key: 'odometro',    title: 'Odômetro' },
+        { key: 'revisao',     title: 'Revisão' },
+    ], []);
+
+    const isMobileStepValid = (step: number): boolean => {
+        const s = mobileStepsList[step - 1];
+        if (!s) return false;
+        switch (s.key) {
+            case 'motorista':   return !!driver;
+            case 'veiculo':     return !!vehicle;
+            case 'posto':       return !!station;
+            case 'combustivel': return !!fuelType;
+            case 'litros':      return parseFormattedNumber(liters) > 0;
+            case 'odometro':    return !initialData ? parseFormattedNumber(odometer) > 0 : true;
+            case 'nota':        return true;
+            case 'revisao':     return true;
+            default:            return false;
+        }
+    };
+
+    const slideVariants = {
+        enter: (d: number) => ({ x: d > 0 ? '100%' : '-100%', opacity: 0 }),
+        center: { x: 0, opacity: 1,
+            transition: { x: { type: 'spring' as const, stiffness: 300, damping: 30 }, opacity: { duration: 0.2 } }
+        },
+        exit: (d: number) => ({ x: d < 0 ? '100%' : '-100%', opacity: 0,
+            transition: { x: { type: 'spring' as const, stiffness: 300, damping: 30 }, opacity: { duration: 0.2 } }
+        }),
+    };
+
     useEffect(() => {
-        const prices = fuelTypes.reduce((acc: any, type: any) => {
-            acc[type.key] = type.price;
-            return acc;
-        }, {});
+        const check = () => setIsMobile(window.innerWidth < 768);
+        check();
+        window.addEventListener('resize', check);
+        return () => window.removeEventListener('resize', check);
+    }, []);
+
+    const handleOdometerChange = (e: React.ChangeEvent<HTMLInputElement>) => setOdometer(formatNumberInput(e.target.value, 2));
+    const handleLitersChange   = (e: React.ChangeEvent<HTMLInputElement>) => setLiters(formatNumberInput(e.target.value, 3));
+    const handleCostChange     = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const f = formatNumberInput(e.target.value, 2);
+        setFormattedCost(`R$ ${f}`);
+        setCost(parseFormattedNumber(f));
+    };
+
+    useEffect(() => {
+        const prices = fuelTypes.reduce((acc: any, t: any) => { acc[t.key] = t.price; return acc; }, {});
         setFuelPrices(prices);
         setGlobalPrices(prices);
-
-        if (fuelTypes.length > 0 && !fuelType) {
-            setFuelType(fuelTypes[0].key);
-        }
-
+        if (fuelTypes.length > 0 && !fuelType) setFuelType(fuelTypes[0].key);
         if (gasStations.length > 0 && !station) {
-            // Prioritize "Posto Xavier & Xavier Ltda" or fallback to first station
-            const defaultStation = gasStations.find(s => s.name === "Posto Xavier & Xavier Ltda") || gasStations[0];
-            if (defaultStation) setStation(defaultStation.name);
+            const def = gasStations.find(s => s.name === "Posto Xavier & Xavier Ltda") || gasStations[0];
+            if (def) setStation(def.name);
         }
-    }, [fuelTypes, gasStations]); // Run when props change/load
+    }, [fuelTypes, gasStations]);
 
-    // Update prices based on selected station
     useEffect(() => {
-        if (!station) {
-            setFuelPrices(globalPrices);
-            return;
-        }
-
-        const selectedStation = gasStations.find(s => s.name === station);
-        if (selectedStation && selectedStation.fuel_prices) {
-            // Merge station prices with global prices (fallback for missing keys) or just override
-            // Requirement implies station prices are specific.
-            // Let's iterate keys of global to ensure structure, but take from station if > 0
-            const newPrices = { ...globalPrices };
-
-            // Assuming fuel_prices keys match fuelTypes keys
-            Object.keys(selectedStation.fuel_prices).forEach(key => {
-                // @ts-ignore
-                const val = selectedStation.fuel_prices[key];
-                if (val && val > 0) {
-                    newPrices[key] = val;
-                }
-            });
-            setFuelPrices(newPrices);
-            
-            // If it's a new record, update unitPrice when station/prices change
-            if (!initialData && fuelType) {
-                setUnitPrice(newPrices[fuelType] || 0);
-            }
+        if (!station) { setFuelPrices(globalPrices); return; }
+        const sel = gasStations.find(s => s.name === station);
+        if (sel?.fuel_prices) {
+            const np = { ...globalPrices };
+            Object.keys(sel.fuel_prices).forEach(k => { const v = (sel.fuel_prices as any)[k]; if (v && v > 0) np[k] = v; });
+            setFuelPrices(np);
+            if (!initialData && fuelType) setUnitPrice(np[fuelType] || 0);
         } else {
-            // Revert to global if station has no specific prices
             setFuelPrices(globalPrices);
-            if (!initialData && fuelType) {
-                setUnitPrice(globalPrices[fuelType] || 0);
-            }
+            if (!initialData && fuelType) setUnitPrice(globalPrices[fuelType] || 0);
         }
     }, [station, gasStations, globalPrices, fuelType, initialData]);
 
-    // Fetch latest odometer when vehicle changes
     useEffect(() => {
-        const fetchLastOdometer = async () => {
-            if (vehicle) {
-                const latest = await AbastecimentoService.getLatestOdometerByVehicle(vehicle);
-                setLastOdometer(latest);
-            } else {
-                setLastOdometer(null);
-            }
+        const fetch_ = async () => {
+            if (vehicle) setLastOdometer(await AbastecimentoService.getLatestOdometerByVehicle(vehicle));
+            else setLastOdometer(null);
         };
-        fetchLastOdometer();
+        fetch_();
     }, [vehicle]);
 
-    // Load initial data for editing
     useEffect(() => {
         if (initialData) {
-            const isoData = getLocalISOData(initialData.date);
-            setDate(isoData.date);
-            setTime(isoData.time);
-            // Handle legacy data (Model - Brand) vs new data (Plate)
-            const savedVehicle = initialData.vehicle;
-            const matchedVehicle = vehicles.find(v =>
-                v.plate === savedVehicle ||
-                `${v.model} - ${v.brand}` === savedVehicle
-            );
-            setVehicle(matchedVehicle ? matchedVehicle.plate : savedVehicle);
+            const d = getLocalISOData(initialData.date);
+            setDate(d.date); setTime(d.time);
+            const mv = vehicles.find(v => v.plate === initialData.vehicle || `${v.model} - ${v.brand}` === initialData.vehicle);
+            setVehicle(mv ? mv.plate : initialData.vehicle);
             setDriver(initialData.driver);
             setLiters(initialData.liters.toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 }));
             setOdometer(initialData.odometer.toLocaleString('pt-BR', { minimumFractionDigits: 2 }));
-            // Extract fuel key from "type - price" string "gasolina - R$ 5.00" -> "gasolina" or just use full string if needed?
-            // The record stores "gasolina - R$ 5.89". We need to find the key.
-            // Actually record.fuelType stores "gasolina - R$ 5.89".
-            // We need to set 'fuelType' state which is the KEY (e.g. 'gasolina').
-            // Let's try to split by ' - ' or match with fuelTypes.
-            const typePart = initialData.fuelType.split(' - ')[0];
-            const foundType = fuelTypes.find(t => t.key === typePart || t.label === typePart || initialData.fuelType.includes(t.key));
-            if (foundType) setFuelType(foundType.key);
-
+            const tp = initialData.fuelType.split(' - ')[0];
+            const ft = fuelTypes.find(t => t.key === tp || t.label === tp || initialData.fuelType.includes(t.key));
+            if (ft) setFuelType(ft.key);
             setStation(initialData.station || '');
             setInvoiceNumber(initialData.invoiceNumber || '');
-            const initialCost = initialData.cost;
-            setCost(initialCost);
+            setCost(initialData.cost);
             setUnitPrice(initialData.unit_price || 0);
-            setFormattedCost(`R$ ${initialCost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
-            
-            // Set initial load to false after a short delay to allow effects to settle
+            setFormattedCost(`R$ ${initialData.cost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
             setTimeout(() => setIsInitialLoad(false), 100);
-        } else {
-            setIsInitialLoad(false);
-        }
-
+        } else setIsInitialLoad(false);
     }, [initialData, fuelTypes, vehicles]);
 
     useEffect(() => {
-        const calculateCost = () => {
-            // DO NOT recalculate if it's the initial load of an edit
-            if (isInitialLoad && initialData) return;
-
-            if (!liters || !fuelType) {
-                setCost(0);
-                setFormattedCost('R$ 0,00');
-                return;
-            }
-            
-            const litersFloat = parseFormattedNumber(liters);
-            const total = litersFloat * unitPrice;
-            // Round to 2 decimals for precision requirement
-            const roundedTotal = Number(total.toFixed(2));
-            setCost(roundedTotal);
-            setFormattedCost(`R$ ${roundedTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
-        };
-        calculateCost();
+        if (isInitialLoad && initialData) return;
+        if (!liters || !fuelType) { setCost(0); setFormattedCost('R$ 0,00'); return; }
+        const r = Number((parseFormattedNumber(liters) * unitPrice).toFixed(2));
+        setCost(r);
+        setFormattedCost(`R$ ${r.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
     }, [liters, fuelType, unitPrice, isInitialLoad, initialData]);
 
-    // Split effect to update unitPrice when fuelType changes explicitly
-    useEffect(() => {
-        if (!isInitialLoad && fuelType) {
-            const newPrice = fuelPrices[fuelType] || 0;
-            setUnitPrice(newPrice);
-        }
-    }, [fuelType]);
+    useEffect(() => { if (!isInitialLoad && fuelType) setUnitPrice(fuelPrices[fuelType] || 0); }, [fuelType]);
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const buildRecord = () => {
+        // Data e hora capturadas automaticamente no momento do salvamento para novos registros
+        const nowLocal = getLocalISOData(new Date());
+        const currentDateStr = initialData ? date : nowLocal.date;
+        const currentTimeStr = initialData ? time : nowLocal.time;
 
-        // Parse local date components into a Date object correctly
-        const [year, month, day] = date.split('-').map(Number);
-        const [hours, minutes] = time.split(':').map(Number);
-        const combinedDate = new Date(year, month - 1, day, hours, minutes);
-        // If editing, use existing ID and Protocol. Else generate new.
-        const recordId = initialData?.id || crypto.randomUUID();
-        const protocolId = initialData?.protocol || `ABA-${Math.floor(Math.random() * 100000000).toString().padStart(8, '0')}`;
+        const [yr, mo, dy] = currentDateStr.split('-').map(Number);
+        const [hr, mi] = currentTimeStr.split(':').map(Number);
+        const mv = vehicles.find(v => v.plate === vehicle);
+        return {
+            id: initialData?.id || crypto.randomUUID(),
+            protocol: initialData?.protocol || `ABA-${Math.floor(Math.random() * 100000000).toString().padStart(8, '0')}`,
+            fiscal: initialData?.fiscal || authUser?.name || authUser?.username || 'Sistema',
+            date: new Date(yr, mo - 1, dy, hr, mi).toISOString(),
+            vehicle, driver,
+            fuelType: `${fuelType} - R$ ${fuelPrices[fuelType]?.toFixed(2)}`,
+            liters: parseFormattedNumber(liters),
+            odometer: parseFormattedNumber(odometer),
+            cost: Number(cost.toFixed(2)),
+            station, invoiceNumber,
+            userId: initialData?.userId || authUser?.id,
+            userName: initialData?.userName || authUser?.name,
+            sectorId: mv?.sectorId || initialData?.sectorId,
+            unit_price: unitPrice,
+            created_at: initialData?.created_at,
+            lastOdometer,
+        };
+    };
 
-        // Strict Validation
-        if (!vehicle || !driver || !fuelType) {
-            alert('Por favor, preencha todos os campos obrigatórios (Veículo, Motorista, Combustível).');
-            return;
-        }
-
-        const litersVal = parseFormattedNumber(liters);
-        const odometerVal = parseFormattedNumber(odometer);
-
-        if (litersVal <= 0) {
-            alert('A quantidade de litros deve ser maior que zero.');
-            return;
-        }
-
-        // Only validate odometer for NEW records
+    const handleSubmit = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault();
+        if (!vehicle || !driver || !fuelType) { alert('Por favor, preencha Veículo, Motorista e Combustível.'); return; }
+        const lv = parseFormattedNumber(liters);
+        const ov = parseFormattedNumber(odometer);
+        if (lv <= 0) { alert('A quantidade de litros deve ser maior que zero.'); return; }
         if (!initialData) {
-            if (odometerVal <= 0) {
-                alert('O odômetro deve ser maior que zero.');
-                return;
-            }
-            if (lastOdometer !== null && odometerVal <= lastOdometer) {
+            if (ov <= 0) { alert('O odômetro deve ser maior que zero.'); return; }
+            if (lastOdometer !== null && ov <= lastOdometer) {
                 if (authUser?.role === 'admin' || authUser?.permissions?.includes('parent_admin')) {
-                    const matchedVehicle = vehicles.find(v => v.plate === vehicle);
-                    const newRecord = {
-                        id: recordId,
-                        protocol: protocolId,
-                        fiscal: authUser?.name || authUser?.username || 'Sistema',
-                        date: combinedDate.toISOString(),
-                        vehicle,
-                        driver,
-                        fuelType: `${fuelType} - R$ ${fuelPrices[fuelType]?.toFixed(2)}`,
-                        liters: litersVal,
-                        odometer: odometerVal,
-                        cost: Number(cost.toFixed(2)),
-                        station,
-                        invoiceNumber,
-                        userId: authUser?.id,
-                        userName: authUser?.name,
-                        sectorId: matchedVehicle?.sectorId,
-                        unit_price: unitPrice,
-                        lastOdometer: lastOdometer
-                    };
-                    setPendingData(newRecord);
-                    setAdminOverrideModalOpen(true);
-                    return; // Pause submit here, wait for admin modal
+                    setPendingData(buildRecord()); setAdminOverrideModalOpen(true); return;
                 } else {
-                    alert(`BLOQUEIO: O Horímetro/Odômetro informado (${odometerVal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}) é menor ou igual ao último registro (${lastOdometer.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}). O cadastro não pode ser realizado.`);
-                    return;
+                    alert(`BLOQUEIO: Odômetro ${ov.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} <= último (${lastOdometer.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})`); return;
                 }
             }
         }
-
-        // Check for duplicate invoice number (Combination: Station + Invoice)
         if (invoiceNumber && station) {
-            const isDuplicate = await AbastecimentoService.checkInvoiceExists(invoiceNumber, station, initialData?.id);
-            if (isDuplicate) {
-                alert(`ERRO: Já existe um registro com a Nota ${invoiceNumber} para o posto ${station}. Por favor, verifique.`);
-                return;
-            }
+            const dup = await AbastecimentoService.checkInvoiceExists(invoiceNumber, station, initialData?.id);
+            if (dup) { alert(`ERRO: Nota ${invoiceNumber} já existe para ${station}.`); return; }
         }
-
-        const matchedVehicle = vehicles.find(v => v.plate === vehicle);
-
-        const newRecord = {
-            id: recordId,
-            protocol: protocolId,
-            fiscal: initialData?.fiscal || authUser?.name || authUser?.username || 'Sistema',
-            date: combinedDate.toISOString(),
-            vehicle,
-            driver,
-            fuelType: `${fuelType} - R$ ${fuelPrices[fuelType]?.toFixed(2)}`,
-            liters: litersVal,
-            odometer: odometerVal,
-            cost: Number(cost.toFixed(2)),
-            station,
-            invoiceNumber,
-            userId: initialData?.userId || authUser?.id,
-            userName: initialData?.userName || authUser?.name,
-            sectorId: matchedVehicle?.sectorId || initialData?.sectorId,
-            unit_price: unitPrice,
-            created_at: initialData?.created_at,
-            lastOdometer: lastOdometer
-        };
-
-        // Open Confirmation Modal instead of saving directly
-        setPendingData(newRecord);
+        setPendingData(buildRecord());
         setConfirmModalOpen(true);
     };
 
-    const handleFinalSave = async (overrideValidation: boolean | React.MouseEvent = false) => {
+    const handleFinalSave = async (override: boolean | React.MouseEvent = false) => {
         if (!pendingData) return;
-
         try {
             setIsSaving(true);
-
-            // Audit Log (Console for now, can be extended to DB)
-            console.log(`[AUDIT] Saving Supply Record: 
-                Protocol: ${pendingData.protocol}, 
-                User: ${pendingData.userName} (${pendingData.userId}), 
-                Vehicle: ${pendingData.vehicle}, 
-                Timestamp: ${new Date().toISOString()}`
-            );
-
-            const shouldOverride = overrideValidation === true || isOdometerOverridden;
-            await AbastecimentoService.saveAbastecimento(pendingData, !!initialData, shouldOverride);
-
+            await AbastecimentoService.saveAbastecimento(pendingData, !!initialData, override === true || isOdometerOverridden);
             onSave(pendingData);
-            setConfirmModalOpen(false);
-            setAdminOverrideModalOpen(false);
-            setIsOdometerOverridden(false);
-        } catch (error) {
-            console.error("[AUDIT] Error saving supply:", error);
-            alert("Erro ao salvar abastecimento. Verifique sua conexão e tente novamente.");
-        } finally {
-            setIsSaving(false);
-        }
+            setConfirmModalOpen(false); setAdminOverrideModalOpen(false); setIsOdometerOverridden(false);
+        } catch { alert("Erro ao salvar. Verifique sua conexão."); }
+        finally { setIsSaving(false); }
     };
 
-    const handleCancel = () => {
-        onBack();
-    };
+    const vehicleOptions: Option[] = useMemo(() => vehicles.map(v => ({ value: v.plate, label: v.plate, key: v.id })).sort((a, b) => a.label.localeCompare(b.label)), [vehicles]);
+    const driverOptions: Option[] = useMemo(() => persons.map(p => ({ value: p.name, label: p.name, subtext: (p as any).role || p.jobId, key: p.id, _sortKey: p.name.trim().toLowerCase() })).sort((a, b) => a._sortKey.localeCompare(b._sortKey)), [persons]);
+    const fuelOptions: Option[] = useMemo(() => fuelTypes.map(t => ({ value: t.key, label: t.label, subtext: `R$ ${(fuelPrices[t.key] || t.price).toFixed(2)}/L` })).sort((a, b) => a.label.localeCompare(b.label)), [fuelTypes, fuelPrices]);
+    const stationOptions: Option[] = useMemo(() => gasStations.map(s => ({ value: s.name, label: s.name, subtext: s.city, key: s.id })).sort((a, b) => a.label.localeCompare(b.label)), [gasStations]);
+
+    const filteredDrivers = useMemo(() => { const t = normalizeText(driverSearch); return persons.filter(p => !t || normalizeText(p.name).includes(t)).sort((a, b) => a.name.localeCompare(b.name)); }, [persons, driverSearch]);
+    const filteredVehiclesList = useMemo(() => { const t = normalizeText(vehicleSearch); return vehicles.filter(v => !t || normalizeText(`${v.plate} ${v.brand} ${v.model}`).includes(t)).sort((a, b) => a.plate.localeCompare(b.plate)); }, [vehicles, vehicleSearch]);
+    const filteredStations = useMemo(() => { const t = normalizeText(stationSearch); return gasStations.filter(s => !t || normalizeText(s.name).includes(t)).sort((a, b) => a.name.localeCompare(b.name)); }, [gasStations, stationSearch]);
+
+    const selectedFuelLabel = useMemo(() => fuelTypes.find(t => t.key === fuelType)?.label || fuelType, [fuelTypes, fuelType]);
+    const selectedVehicleObj = useMemo(() => vehicles.find(v => v.plate === vehicle), [vehicles, vehicle]);
 
     const inputClass = "w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-slate-900 focus:bg-white focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 outline-none transition-all";
     const labelClass = "block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5 ml-1";
 
-    // Prepare Options - Memoized for performance
-    const vehicleOptions: Option[] = useMemo(() => vehicles
-        .map(v => ({
-            value: v.plate, // Store PLATE as the unique identifier
-            label: v.plate, // Display ONLY Plate
-            subtext: undefined, // Remove any extra info
-            key: v.id
-        }))
-        .sort((a, b) => a.label.localeCompare(b.label)), [vehicles]);
+    // Shared modals component
+    const SharedModals = () => (
+        <>
+            <AbastecimentoConfirmationModal isOpen={confirmModalOpen} onClose={() => setConfirmModalOpen(false)} onConfirm={handleFinalSave} data={pendingData!} isEdit={!!initialData} isAdmin={authUser?.role === 'admin' || authUser?.permissions?.includes('parent_admin')} />
+            {adminOverrideModalOpen && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 w-full max-w-md overflow-hidden animate-scale-in">
+                        <div className="p-6 text-center">
+                            <div className="w-16 h-16 bg-amber-50 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-amber-100"><Clock className="w-8 h-8 text-amber-500" /></div>
+                            <h3 className="text-xl font-bold text-slate-900 mb-2">Bloqueio de Odômetro</h3>
+                            <p className="text-slate-500 text-sm leading-relaxed mb-6">
+                                O odômetro informado ({pendingData?.odometer.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}) é menor ou igual ao último registro ({lastOdometer?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}).
+                                <br /><br />
+                                <span className="font-bold text-slate-700">Como você possui privilégios de Admin, deseja sobrescrever?</span>
+                            </p>
+                            <div className="flex gap-3">
+                                <button onClick={() => setAdminOverrideModalOpen(false)} className="flex-1 px-4 py-3 rounded-xl border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 transition-all">Não, Corrigir</button>
+                                <button onClick={() => handleFinalSave(true)} className="flex-1 px-4 py-3 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition-all flex items-center justify-center gap-2"><Save className="w-4 h-4 text-cyan-400" />Sim, Sobrescrever</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </>
+    );
 
-    const driverOptions: Option[] = useMemo(() => {
-        return persons
-            .map(p => ({
-                value: p.name,
-                label: p.name,
-                subtext: (p as any).role || p.jobId,
-                key: p.id,
-                // Pre-calculating sort key to avoid expensive operations during comparison
-                _sortKey: (p.name || '').trim().toLowerCase()
-            }))
-            .sort((a, b) => a._sortKey.localeCompare(b._sortKey));
-    }, [persons]);
+    // ────────────────────────────────────────────────
+    // MOBILE WIZARD
+    // ────────────────────────────────────────────────
+    if (isMobile) {
+        const total = mobileStepsList.length;
+        const cur = mobileStepsList[mobileStep - 1] || mobileStepsList[0];
 
-    const fuelOptions: Option[] = useMemo(() => fuelTypes
-        .map(t => ({
-            value: t.key,
-            label: t.label,
-            subtext: `R$ ${(fuelPrices[t.key] || t.price).toFixed(2)}/L`
-        }))
-        .sort((a, b) => a.label.localeCompare(b.label)), [fuelTypes, fuelPrices]);
+        const next = () => {
+            if (!isMobileStepValid(mobileStep)) return;
+            if (mobileStep < total) { setDirection(1); setMobileStep(p => p + 1); }
+            else handleSubmit();
+        };
+        const back = () => {
+            if (mobileStep > 1) { setDirection(-1); setMobileStep(p => p - 1); }
+            else onBack();
+        };
 
-    const stationOptions: Option[] = useMemo(() => gasStations
-        .map(s => ({
-            value: s.name,
-            label: s.name,
-            subtext: s.city,
-            key: s.id
-        }))
-        .sort((a, b) => a.label.localeCompare(b.label)), [gasStations]);
+        const CardBox = ({ icon: Icon, title, subtitle }: { icon: any; title: string; subtitle: string }) => (
+            <div className="space-y-2">
+                <div className="w-14 h-14 bg-cyan-50 rounded-2xl flex items-center justify-center mx-auto text-cyan-600 shadow-inner"><Icon className="w-7 h-7" /></div>
+                <h3 className="text-xl font-black text-slate-900 tracking-tight">{title}</h3>
+                <p className="text-slate-500 text-xs font-medium max-w-xs mx-auto">{subtitle}</p>
+            </div>
+        );
 
-    // Removed isLoading check as data is passed via props
+        const SelectCard = ({ label, value, onClick, placeholder, sub }: any) => (
+            <div onClick={onClick} className="w-full p-5 rounded-2xl border text-left bg-slate-50/90 border-slate-200/80 hover:border-cyan-500 hover:ring-4 hover:ring-cyan-500/5 cursor-pointer shadow-sm active:scale-[0.98]">
+                <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1">{label}</span>
+                <span className="block text-base font-bold text-slate-800 break-words">{value || placeholder}</span>
+                {sub && <span className="block text-[11px] text-slate-500 font-medium mt-1">{sub}</span>}
+                <span className="block text-[10px] text-cyan-600 font-bold mt-3 text-right">Toque para selecionar →</span>
+            </div>
+        );
 
+        const BottomSheet = ({ title, open, onClose, search, setSearch, placeholder, children }: any) => !open ? null : (
+            <div className="fixed inset-0 z-[100] flex items-start sm:items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 pt-12 sm:p-6 animate-fade-in" onClick={() => { onClose(); setSearch(''); }}>
+                <div className="w-full max-w-lg bg-white rounded-3xl shadow-2xl flex flex-col h-[65vh] sm:h-auto sm:max-h-[80vh] overflow-hidden animate-slide-up" onClick={e => e.stopPropagation()}>
+                    <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+                        <h3 className="font-black text-slate-900 text-sm uppercase tracking-wide">{title}</h3>
+                        <button onClick={() => { onClose(); setSearch(''); }} className="p-2 hover:bg-slate-200 rounded-full text-slate-500 transition-colors"><X className="w-5 h-5" /></button>
+                    </div>
+                    <div className="p-4 border-b border-slate-100 relative">
+                        <Search className="absolute left-7 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                        <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder={placeholder} className="w-full bg-slate-50 border border-slate-200 pl-10 pr-4 py-3 rounded-xl text-base font-medium text-slate-900 outline-none focus:bg-white focus:border-cyan-500 focus:ring-4 focus:ring-cyan-500/10 transition-all" />
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-2" style={{ scrollbarWidth: 'none' }}>
+                        <div className="space-y-1">{children}</div>
+                    </div>
+                </div>
+            </div>
+        );
+
+        return (
+            <div className="flex flex-col h-full bg-slate-100 w-full relative overflow-hidden">
+                {/* Header */}
+                <div className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-sm shrink-0">
+                    <div className="w-full h-1.5 bg-slate-100">
+                        <div className="h-full bg-cyan-500 transition-all duration-300 ease-out" style={{ width: `${(mobileStep / total) * 100}%` }} />
+                    </div>
+                    <div className="px-4 py-3 flex items-center justify-between">
+                        <button onClick={back} disabled={isSaving} className="p-2 -ml-2 text-slate-500 hover:text-slate-900 active:scale-95 transition-all"><ChevronLeft className="w-6 h-6" /></button>
+                        <div className="text-center">
+                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Passo {mobileStep} de {total}</span>
+                            <h2 className="text-xs font-bold text-slate-800">{cur.title}</h2>
+                        </div>
+                        <div className="w-10" />
+                    </div>
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 overflow-y-auto p-4 flex flex-col items-center justify-start min-h-0">
+                    <div className="w-full max-w-sm flex-1 flex flex-col justify-start items-center pt-2 pb-4 relative min-h-[350px]">
+                        <AnimatePresence initial={false} custom={direction} mode="wait">
+                            <motion.div key={mobileStep} custom={direction} variants={slideVariants} initial="enter" animate="center" exit="exit"
+                                className={`w-full max-w-sm bg-white border border-slate-200/80 rounded-3xl shadow-xl flex flex-col items-center justify-start text-center absolute top-0 ${cur.key === 'revisao' ? 'p-4 space-y-3' : 'p-6 space-y-5'}`}>
+
+                                {cur.key === 'motorista' && (
+                                    <div className="w-full space-y-5">
+                                        <CardBox icon={User} title="Quem é o motorista?" subtitle="Selecione o motorista responsável pelo abastecimento." />
+                                        <SelectCard label="Motorista Selecionado" value={driver} onClick={() => setIsDriverOpen(true)} placeholder="Selecionar Motorista..." />
+                                    </div>
+                                )}
+
+                                {cur.key === 'veiculo' && (
+                                    <div className="w-full space-y-5">
+                                        <CardBox icon={Truck} title="Qual o veículo?" subtitle="Selecione o veículo que foi abastecido." />
+                                        <SelectCard label="Placa do Veículo" value={vehicle} onClick={() => setIsVehicleOpen(true)} placeholder="Selecionar Veículo..." sub={selectedVehicleObj ? `${selectedVehicleObj.brand} ${selectedVehicleObj.model}` : undefined} />
+                                        {lastOdometer !== null && vehicle && (
+                                            <div className="w-full p-3 rounded-xl bg-slate-50 border border-slate-200 text-left">
+                                                <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">Último Odômetro</span>
+                                                <p className="text-sm font-black text-slate-800 mt-0.5">{lastOdometer.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {cur.key === 'posto' && (
+                                    <div className="w-full space-y-5">
+                                        <CardBox icon={MapPin} title="Em qual posto?" subtitle="Selecione o posto de combustível utilizado." />
+                                        <SelectCard label="Posto Selecionado" value={station} onClick={() => setIsStationOpen(true)} placeholder="Selecionar Posto..."
+                                            sub={station ? gasStations.find(s => s.name === station)?.city : undefined} />
+                                    </div>
+                                )}
+
+                                {cur.key === 'combustivel' && (
+                                    <div className="w-full space-y-5">
+                                        <CardBox icon={Fuel} title="Qual o combustível?" subtitle="Selecione o tipo de combustível abastecido." />
+                                        <div className="w-full space-y-2">
+                                            {fuelTypes.map(ft => {
+                                                const sel = fuelType === ft.key;
+                                                const price = fuelPrices[ft.key] || ft.price;
+                                                return (
+                                                    <button key={ft.key} type="button" onClick={() => { setFuelType(ft.key); setUnitPrice(price); }}
+                                                        className={`w-full p-4 rounded-2xl border text-left flex items-center justify-between transition-all active:scale-[0.98] shadow-sm ${sel ? 'bg-cyan-600 text-white border-cyan-600 shadow-lg shadow-cyan-600/15' : 'bg-slate-50/90 text-slate-700 border-slate-200/80 hover:border-cyan-400'}`}>
+                                                        <div>
+                                                            <span className="block font-black text-sm">{ft.label}</span>
+                                                            <span className={`block text-[11px] font-bold mt-0.5 ${sel ? 'text-cyan-100' : 'text-slate-400'}`}>R$ {price.toFixed(2)}/litro</span>
+                                                        </div>
+                                                        {sel && <Check className="w-5 h-5 text-white shrink-0" />}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {cur.key === 'litros' && (
+                                    <div className="w-full space-y-5">
+                                        <CardBox icon={Fuel} title="Quantos litros?" subtitle="Informe a quantidade de litros abastecida." />
+                                        <div className="w-full relative flex items-center bg-slate-50/90 border-2 border-slate-200/80 rounded-2xl p-4 focus-within:border-cyan-500 focus-within:ring-4 focus-within:ring-cyan-500/5 transition-all shadow-sm">
+                                            <Fuel className="w-5 h-5 text-slate-400 shrink-0 mr-3" />
+                                            <input type="text" inputMode="numeric" value={liters} onChange={handleLitersChange} placeholder="0,000" autoFocus className="w-full bg-transparent text-2xl font-black text-slate-900 outline-none font-mono" />
+                                            <span className="text-slate-400 font-bold text-sm shrink-0">L</span>
+                                        </div>
+                                        {parseFormattedNumber(liters) > 0 && unitPrice > 0 && (
+                                            <div className="w-full p-4 rounded-2xl bg-emerald-50 border border-emerald-100 text-center">
+                                                <span className="block text-[9px] font-black uppercase tracking-wider text-emerald-600">Valor Total Estimado</span>
+                                                <span className="block text-2xl font-black text-emerald-700 mt-1">{formattedCost}</span>
+                                                <span className="block text-[10px] text-emerald-500 font-bold mt-0.5">{parseFormattedNumber(liters).toFixed(3)}L × R$ {unitPrice.toFixed(2)}/L</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {cur.key === 'odometro' && (
+                                    <div className="w-full space-y-5">
+                                        <CardBox icon={Gauge} title="Leitura do Odômetro?" subtitle="Informe o valor atual do odômetro / horímetro do veículo." />
+                                        <div className="w-full relative flex items-center bg-slate-50/90 border-2 border-slate-200/80 rounded-2xl p-4 focus-within:border-cyan-500 focus-within:ring-4 focus-within:ring-cyan-500/5 transition-all shadow-sm">
+                                            <Gauge className="w-5 h-5 text-slate-400 shrink-0 mr-3" />
+                                            <input type="text" inputMode="numeric" value={odometer} onChange={handleOdometerChange} placeholder="0,00" autoFocus className="w-full bg-transparent text-2xl font-black text-slate-900 outline-none font-mono" />
+                                            <span className="text-slate-400 font-bold text-sm shrink-0">km</span>
+                                        </div>
+                                        {lastOdometer !== null && (
+                                            <div className="w-full p-3 rounded-xl bg-slate-50 border border-slate-200 text-center">
+                                                <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400">Último Odômetro Registrado</span>
+                                                <span className="block text-lg font-black text-slate-700 mt-0.5">{lastOdometer.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                                            </div>
+                                        )}
+                                        {initialData && <p className="text-[11px] text-slate-400 font-medium text-center">✏️ Editando — odômetro pode ser mantido.</p>}
+                                    </div>
+                                )}
+
+                                {cur.key === 'nota' && (
+                                    <div className="w-full space-y-5">
+                                        <CardBox icon={Receipt} title="Nota Fiscal" subtitle="Campo opcional. Informe o número da nota se disponível." />
+                                        <div className="w-full relative flex items-center bg-slate-50/90 border-2 border-slate-200/80 rounded-2xl p-4 focus-within:border-cyan-500 focus-within:ring-4 focus-within:ring-cyan-500/5 transition-all shadow-sm">
+                                            <FileText className="w-5 h-5 text-slate-400 shrink-0 mr-3" />
+                                            <input type="text" inputMode="numeric" value={invoiceNumber} onChange={e => setInvoiceNumber(e.target.value.replace(/[^0-9.]/g, ''))} placeholder="Ex: 000.123 (opcional)" autoFocus className="w-full bg-transparent text-xl font-black text-slate-900 outline-none font-mono" />
+                                        </div>
+                                        <p className="text-[11px] text-slate-400 font-medium">Deixe em branco caso não tenha. Toque em <strong>Avançar</strong> para pular.</p>
+                                    </div>
+                                )}
+
+                                {cur.key === 'revisao' && (
+                                    <div className="w-full space-y-4">
+                                        <div className="space-y-1">
+                                            <div className="w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto text-emerald-600 shadow-inner mb-1"><CheckCircle2 className="w-6 h-6" /></div>
+                                            <h3 className="text-xl font-black text-slate-900 tracking-tight">Revisar Registro</h3>
+                                            <p className="text-slate-500 text-[11px] font-medium max-w-xs mx-auto">Confirme os dados antes de registrar o abastecimento.</p>
+                                        </div>
+                                        <div className="w-full bg-slate-50 border border-slate-200 rounded-2xl shadow-sm text-left overflow-hidden divide-y divide-slate-100">
+                                            <div className="py-2 px-3">
+                                                <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-0.5">Motorista</span>
+                                                <p className="text-sm font-bold text-slate-800">{driver || '—'}</p>
+                                            </div>
+                                            <div className="py-2 px-3 flex justify-between gap-4">
+                                                <div className="flex-1 min-w-0">
+                                                    <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-0.5">Veículo</span>
+                                                    <p className="text-sm font-bold text-slate-800 font-mono truncate">{vehicle || '—'}</p>
+                                                    {selectedVehicleObj && <p className="text-[10px] text-slate-500">{selectedVehicleObj.brand} {selectedVehicleObj.model}</p>}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-0.5">Combustível</span>
+                                                    <p className="text-sm font-bold text-slate-800">{selectedFuelLabel || '—'}</p>
+                                                    {fuelType && <p className="text-[10px] text-slate-500">R$ {(fuelPrices[fuelType] || 0).toFixed(2)}/L</p>}
+                                                </div>
+                                            </div>
+                                            <div className="py-2 px-3">
+                                                <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-0.5">Posto</span>
+                                                <p className="text-sm font-bold text-slate-800">{station || '—'}</p>
+                                            </div>
+                                            <div className="py-2 px-3 flex justify-between gap-3">
+                                                <div>
+                                                    <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-0.5">Litros</span>
+                                                    <p className="text-sm font-bold text-slate-800 font-mono">{liters || '—'}L</p>
+                                                </div>
+                                                <div>
+                                                    <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-0.5">Odômetro</span>
+                                                    <p className="text-sm font-bold text-slate-800 font-mono">{odometer || '—'}</p>
+                                                </div>
+                                                <div>
+                                                    <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-0.5">Nota</span>
+                                                    <p className="text-sm font-bold text-slate-800 font-mono">{invoiceNumber || '—'}</p>
+                                                </div>
+                                            </div>
+                                            <div className="py-3 px-3 bg-emerald-50">
+                                                <span className="block text-[9px] font-black uppercase tracking-wider text-emerald-600 mb-0.5">Valor Total</span>
+                                                <p className="text-xl font-black text-emerald-700">{formattedCost}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                            </motion.div>
+                        </AnimatePresence>
+                    </div>
+                </div>
+
+                {/* Bottom Bar */}
+                <div className="p-3.5 px-4 border-t border-slate-200/80 flex items-center gap-3 w-full bg-white shrink-0 shadow-lg z-30 pb-[max(1rem,env(safe-area-inset-bottom))]">
+                    <button type="button" onClick={back} disabled={isSaving} className="flex items-center justify-center gap-1.5 py-3 px-5 bg-white border border-slate-200 text-slate-700 font-bold uppercase tracking-widest text-[10px] rounded-xl active:bg-slate-50 disabled:opacity-50 transition-all shadow-sm shrink-0">
+                        <ChevronLeft className="w-4 h-4" /><span>Voltar</span>
+                    </button>
+                    {mobileStep < total ? (
+                        <button type="button" onClick={next} disabled={!isMobileStepValid(mobileStep) || isSaving} className="flex-1 flex items-center justify-center gap-1.5 py-3 px-6 bg-slate-900 text-white font-bold uppercase tracking-widest text-[10px] rounded-xl active:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-md shadow-slate-950/15">
+                            <span>Avançar</span><ChevronRight className="w-4 h-4" />
+                        </button>
+                    ) : (
+                        <button type="button" onClick={() => handleSubmit()} disabled={isSaving} className="flex-1 flex items-center justify-center gap-1.5 py-3 px-6 bg-emerald-600 text-white font-bold uppercase tracking-widest text-[10px] rounded-xl active:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-emerald-600/20">
+                            {isSaving ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                            <span>{isSaving ? 'Salvando...' : 'Confirmar Registro'}</span>
+                        </button>
+                    )}
+                </div>
+
+                {/* Bottom sheets */}
+                <BottomSheet title="Selecionar Motorista" open={isDriverOpen} onClose={() => setIsDriverOpen(false)} search={driverSearch} setSearch={setDriverSearch} placeholder="Buscar por nome...">
+                    {filteredDrivers.map(p => {
+                        const sel = driver === p.name;
+                        return (
+                            <button key={p.id} onClick={() => { setDriver(p.name); setIsDriverOpen(false); setDriverSearch(''); }}
+                                className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-left text-sm font-medium transition-all ${sel ? 'bg-cyan-50 text-cyan-700' : 'hover:bg-slate-50 text-slate-700'}`}>
+                                <span className={sel ? 'font-bold' : ''}>{p.name}</span>
+                                {sel && <Check className="w-5 h-5 text-cyan-600" />}
+                            </button>
+                        );
+                    })}
+                </BottomSheet>
+
+                <BottomSheet title="Selecionar Veículo" open={isVehicleOpen} onClose={() => setIsVehicleOpen(false)} search={vehicleSearch} setSearch={setVehicleSearch} placeholder="Buscar por placa, marca ou modelo...">
+                    {filteredVehiclesList.map(v => {
+                        const sel = vehicle === v.plate;
+                        return (
+                            <button key={v.id} onClick={() => { setVehicle(v.plate); setIsVehicleOpen(false); setVehicleSearch(''); }}
+                                className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-left text-sm font-medium transition-all ${sel ? 'bg-cyan-50 text-cyan-700' : 'hover:bg-slate-50 text-slate-700'}`}>
+                                <div className="flex flex-col">
+                                    <span className={`font-mono text-base ${sel ? 'font-black' : 'font-bold'}`}>{v.plate}</span>
+                                    <span className={`text-[11px] font-normal mt-0.5 ${sel ? 'text-cyan-500' : 'text-slate-400'}`}>{v.brand} {v.model}</span>
+                                </div>
+                                {sel && <Check className="w-5 h-5 text-cyan-600" />}
+                            </button>
+                        );
+                    })}
+                </BottomSheet>
+
+                <BottomSheet title="Selecionar Posto" open={isStationOpen} onClose={() => setIsStationOpen(false)} search={stationSearch} setSearch={setStationSearch} placeholder="Buscar posto...">
+                    {filteredStations.map(s => {
+                        const sel = station === s.name;
+                        return (
+                            <button key={s.id} onClick={() => { setStation(s.name); setIsStationOpen(false); setStationSearch(''); }}
+                                className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-left text-sm font-medium transition-all ${sel ? 'bg-cyan-50 text-cyan-700' : 'hover:bg-slate-50 text-slate-700'}`}>
+                                <div className="flex flex-col">
+                                    <span className={sel ? 'font-bold' : ''}>{s.name}</span>
+                                    {s.city && <span className={`text-[11px] font-normal mt-0.5 ${sel ? 'text-cyan-500' : 'text-slate-400'}`}>{s.city}</span>}
+                                </div>
+                                {sel && <Check className="w-5 h-5 text-cyan-600" />}
+                            </button>
+                        );
+                    })}
+                </BottomSheet>
+
+                <SharedModals />
+            </div>
+        );
+    }
+
+    // ────────────────────────────────────────────────
+    // DESKTOP FORM (original)
+    // ────────────────────────────────────────────────
     return (
         <div className="flex-1 h-full bg-slate-50 p-4 wide:p-6 overflow-auto custom-scrollbar">
             <div className="w-full max-w-6xl mx-auto bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden animate-fade-in">
-                {/* Compact Header */}
                 <div className="bg-slate-900 px-4 sm:px-6 py-3 sm:py-5 flex items-center justify-between relative overflow-hidden">
                     <div className="absolute top-0 left-0 w-full h-full opacity-10 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-cyan-400 via-blue-500 to-slate-900"></div>
                     <div className="relative z-10 flex items-center gap-4">
-                        <div className="w-10 h-10 bg-white/10 backdrop-blur-md rounded-xl flex items-center justify-center border border-white/20 shadow-lg">
-                            <Fuel className="w-5 h-5 text-cyan-400" />
-                        </div>
+                        <div className="w-10 h-10 bg-white/10 backdrop-blur-md rounded-xl flex items-center justify-center border border-white/20 shadow-lg"><Fuel className="w-5 h-5 text-cyan-400" /></div>
                         <div>
                             <h2 className="text-lg font-bold text-white tracking-tight leading-tight">{initialData ? 'Editar Abastecimento' : 'Novo Abastecimento'}</h2>
                             <p className="text-cyan-100/70 text-xs font-medium">{initialData ? 'Atualize os dados do registro' : 'Preencha os dados do registro'}</p>
@@ -423,234 +616,68 @@ export const AbastecimentoForm: React.FC<AbastecimentoFormProps> = ({ onBack, on
 
                 <form onSubmit={handleSubmit} className="p-4 sm:p-6">
                     <div className="grid grid-cols-12 gap-x-4 gap-y-5">
-                        {/* Row 1: Data, Hora, Nota (Compact) - Mobile: Date/Time hidden */}
-                        <div className="hidden wide:block wide:col-span-3">
-                            <CustomDateTimeInput
-                                label="Data"
-                                value={date}
-                                onChange={setDate}
-                                type="date"
-                                required
-                            />
-                        </div>
-                        <div className="hidden wide:block wide:col-span-3">
-                            <CustomDateTimeInput
-                                label="Hora"
-                                value={time}
-                                onChange={setTime}
-                                type="time"
-                                required
-                            />
-                        </div>
+                        <div className="hidden wide:block wide:col-span-3"><CustomDateTimeInput label="Data" value={date} onChange={setDate} type="date" required /></div>
+                        <div className="hidden wide:block wide:col-span-3"><CustomDateTimeInput label="Hora" value={time} onChange={setTime} type="time" required /></div>
                         <div className="col-span-12 wide:col-span-6 space-y-1">
                             <label className={labelClass}>Número da Nota</label>
                             <div className="relative group">
-                                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-cyan-500 transition-colors">
-                                    <FileText className="w-5 h-5" />
-                                </div>
-                                <input
-                                    type="text"
-                                    inputMode="numeric"
-                                    value={invoiceNumber}
-                                    onChange={(e) => {
-                                        const val = e.target.value.replace(/[^0-9.]/g, '');
-                                        setInvoiceNumber(val);
-                                    }}
-                                    placeholder="Ex: 000.123"
-                                    className={`${inputClass} pl-12`}
-                                />
+                                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-cyan-500 transition-colors"><FileText className="w-5 h-5" /></div>
+                                <input type="text" inputMode="numeric" value={invoiceNumber} onChange={e => setInvoiceNumber(e.target.value.replace(/[^0-9.]/g, ''))} placeholder="Ex: 000.123" className={`${inputClass} pl-12`} />
                             </div>
                         </div>
-
-                        {/* Row 2: Veículo e Motorista */}
                         <div className="col-span-12 sm:col-span-6 space-y-1">
                             <label className={labelClass}>Veículo</label>
-                            <CustomSelect
-                                options={vehicleOptions}
-                                value={vehicle}
-                                onChange={setVehicle}
-                                placeholder="Selecione o veículo..."
-                                icon={Truck}
-                            />
+                            <CustomSelect options={vehicleOptions} value={vehicle} onChange={setVehicle} placeholder="Selecione o veículo..." icon={Truck} />
                         </div>
-
                         <div className="col-span-12 sm:col-span-6 space-y-1">
                             <label className={labelClass}>Motorista</label>
-                            <CustomSelect
-                                options={driverOptions}
-                                value={driver}
-                                onChange={setDriver}
-                                placeholder="Selecione o motorista..."
-                                icon={User}
-                            />
+                            <CustomSelect options={driverOptions} value={driver} onChange={setDriver} placeholder="Selecione o motorista..." icon={User} />
                         </div>
-
-                        {/* Row 3: Posto e Combustível */}
                         <div className="col-span-12 sm:col-span-6 space-y-1">
                             <label className={labelClass}>Posto</label>
-                            <CustomSelect
-                                options={stationOptions}
-                                value={station}
-                                onChange={setStation}
-                                placeholder="Selecione o posto..."
-                                icon={MapPin}
-                            />
+                            <CustomSelect options={stationOptions} value={station} onChange={setStation} placeholder="Selecione o posto..." icon={MapPin} />
                         </div>
-
                         <div className="col-span-12 sm:col-span-6 space-y-1">
                             <label className={labelClass}>Combustível</label>
-                            <CustomSelect
-                                options={fuelOptions}
-                                value={fuelType}
-                                onChange={setFuelType}
-                                placeholder="Selecione o combustível..."
-                                icon={Fuel}
-                                showSearch={false}
-                            />
+                            <CustomSelect options={fuelOptions} value={fuelType} onChange={setFuelType} placeholder="Selecione o combustível..." icon={Fuel} showSearch={false} />
                         </div>
-
-                        {/* Row 4: Litros, Odômetro, Valor Total */}
                         <div className="col-span-12 sm:col-span-4 space-y-1">
                             <label className={labelClass}>Litros</label>
                             <div className="relative group">
-                                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-cyan-500 transition-colors">
-                                    <Fuel className="w-5 h-5" />
-                                </div>
-                                <input
-                                    type="text"
-                                    inputMode="numeric"
-                                    value={liters}
-                                    onChange={handleLitersChange}
-                                    placeholder="0,000"
-                                    className={`${inputClass} pl-12 font-mono`}
-                                    required
-                                />
+                                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-cyan-500 transition-colors"><Fuel className="w-5 h-5" /></div>
+                                <input type="text" inputMode="numeric" value={liters} onChange={handleLitersChange} placeholder="0,000" className={`${inputClass} pl-12 font-mono`} required />
                             </div>
                         </div>
-
                         <div className="col-span-12 sm:col-span-4 space-y-1">
                             <label className={labelClass}>Odômetro / Horímetro</label>
                             <div className="relative group">
-                                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-cyan-500 transition-colors">
-                                    <Clock className="w-5 h-5" />
-                                </div>
-                                <input
-                                    type="text"
-                                    inputMode="numeric"
-                                    value={odometer}
-                                    onChange={handleOdometerChange}
-                                    placeholder="0,00"
-                                    className={`${inputClass} pl-12 font-mono`}
-                                    required
-                                />
-                                {lastOdometer !== null && (
-                                    <div className="absolute right-3 top-1/2 -translate-y-1/2 px-2 py-0.5 bg-slate-100 rounded text-[10px] font-bold text-slate-500">
-                                        Ult: {lastOdometer.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                                    </div>
-                                )}
+                                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-cyan-500 transition-colors"><Clock className="w-5 h-5" /></div>
+                                <input type="text" inputMode="numeric" value={odometer} onChange={handleOdometerChange} placeholder="0,00" className={`${inputClass} pl-12 font-mono`} required />
+                                {lastOdometer !== null && <div className="absolute right-3 top-1/2 -translate-y-1/2 px-2 py-0.5 bg-slate-100 rounded text-[10px] font-bold text-slate-500">Ult: {lastOdometer.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>}
                             </div>
                         </div>
-
                         <div className="col-span-12 sm:col-span-4 space-y-1">
                             <label className={labelClass}>Valor Total (Calculado)</label>
                             <div className="relative group">
-                                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-emerald-500 transition-colors">
-                                    <DollarSign className="w-5 h-5" />
-                                </div>
-                                <input
-                                    type="text"
-                                    value={formattedCost}
-                                    onChange={handleCostChange}
-                                    className={`${inputClass} pl-12 text-emerald-600 font-bold border-emerald-100 bg-emerald-50/30 focus:border-emerald-500 focus:ring-emerald-500/20`}
-                                />
+                                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-emerald-500 transition-colors"><DollarSign className="w-5 h-5" /></div>
+                                <input type="text" value={formattedCost} onChange={handleCostChange} className={`${inputClass} pl-12 text-emerald-600 font-bold border-emerald-100 bg-emerald-50/30 focus:border-emerald-500 focus:ring-emerald-500/20`} />
                             </div>
                         </div>
                     </div>
-
-                    {/* Action Buttons */}
                     <div className="flex flex-col-reverse sm:flex-row items-center justify-end gap-3 mt-10 pt-6 border-t border-slate-100">
-                        <button
-                            type="button"
-                            onClick={handleCancel}
-                            className="w-full sm:w-auto px-6 py-3 rounded-xl text-slate-600 font-bold hover:bg-slate-100 transition-all flex items-center justify-center gap-2"
-                        >
-                            <X className="w-5 h-5" />
-                            Cancelar
-                        </button>
-                        <button
-                            type="submit"
-                            disabled={isSaving}
-                            className="w-full sm:w-auto px-8 py-3 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 shadow-lg shadow-slate-900/10 hover:shadow-slate-900/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 group disabled:opacity-70"
-                        >
-                            {isSaving ? (
-                                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                            ) : (
-                                <Save className="w-5 h-5 text-cyan-400 group-hover:scale-110 transition-transform" />
-                            )}
+                        <button type="button" onClick={onBack} className="w-full sm:w-auto px-6 py-3 rounded-xl text-slate-600 font-bold hover:bg-slate-100 transition-all flex items-center justify-center gap-2"><X className="w-5 h-5" />Cancelar</button>
+                        <button type="submit" disabled={isSaving} className="w-full sm:w-auto px-8 py-3 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 shadow-lg shadow-slate-900/10 hover:shadow-slate-900/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2 group disabled:opacity-70">
+                            {isSaving ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : <Save className="w-5 h-5 text-cyan-400 group-hover:scale-110 transition-transform" />}
                             {initialData ? 'Salvar Alterações' : 'Concluir Registro'}
                         </button>
                     </div>
                 </form>
-
-                {/* Info Bar at Bottom */}
                 <div className="bg-slate-50 px-6 py-3 flex items-center gap-6 border-t border-slate-100">
-                    <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                        <User className="w-3.5 h-3.5" />
-                        Fiscal: <span className="text-slate-600 ml-1">{authUser?.name || authUser?.username || 'Sistema'}</span>
-                    </div>
-                    {initialData?.protocol && (
-                        <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                            <FileText className="w-3.5 h-3.5" />
-                            Protocolo: <span className="text-slate-600 ml-1">{initialData.protocol}</span>
-                        </div>
-                    )}
+                    <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest"><User className="w-3.5 h-3.5" />Fiscal: <span className="text-slate-600 ml-1">{authUser?.name || authUser?.username || 'Sistema'}</span></div>
+                    {initialData?.protocol && <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest"><FileText className="w-3.5 h-3.5" />Protocolo: <span className="text-slate-600 ml-1">{initialData.protocol}</span></div>}
                 </div>
             </div>
-
-            {/* Confirmation Modal */}
-            <AbastecimentoConfirmationModal
-                isOpen={confirmModalOpen}
-                onClose={() => setConfirmModalOpen(false)}
-                onConfirm={handleFinalSave}
-                data={pendingData!}
-                isEdit={!!initialData}
-                isAdmin={authUser?.role === 'admin' || authUser?.permissions?.includes('parent_admin')}
-            />
-
-            {/* Admin Override Modal */}
-            {adminOverrideModalOpen && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-                    <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 w-full max-w-md overflow-hidden animate-scale-in">
-                        <div className="p-6 text-center">
-                            <div className="w-16 h-16 bg-amber-50 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-amber-100">
-                                <Clock className="w-8 h-8 text-amber-500" />
-                            </div>
-                            <h3 className="text-xl font-bold text-slate-900 mb-2">Bloqueio de Odômetro</h3>
-                            <p className="text-slate-500 text-sm leading-relaxed mb-6">
-                                O odômetro informado ({pendingData?.odometer.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}) é menor ou igual ao último registro ({lastOdometer?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}).
-                                <br/><br/>
-                                <span className="font-bold text-slate-700 underline decoration-amber-500/30">Como você possui privilégios de Admin, deseja sobrescrever esta validação?</span>
-                            </p>
-
-                            <div className="flex gap-3">
-                                <button
-                                    onClick={() => setAdminOverrideModalOpen(false)}
-                                    className="flex-1 px-4 py-3 rounded-xl border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 transition-all"
-                                >
-                                    Não, Corrigir
-                                </button>
-                                <button
-                                    onClick={() => handleFinalSave(true)}
-                                    className="flex-1 px-4 py-3 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition-all flex items-center justify-center gap-2"
-                                >
-                                    <Save className="w-4 h-4 text-cyan-400" />
-                                    Sim, Sobrescrever
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <SharedModals />
         </div>
     );
 };

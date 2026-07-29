@@ -813,8 +813,39 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
         const existingList: Attachment[] = selectedEvento.comprovantes_gestor || [];
         const updatedList = [...existingList, newAttachment];
 
+        // Formatação organizada em formato de texto para o relatório de viagem
+        const itensText = updatedList.map((c, i) => {
+          const t = c.expenseType || c.name || 'Despesa';
+          const v = c.expenseValue ? `R$ ${c.expenseValue}` : 'valor não informado';
+          return `${i + 1}. ${t}: ${v}`;
+        }).join('\n');
+
+        let total = 0;
+        let hasTotal = false;
+        updatedList.forEach(c => {
+          if (c.expenseValue) {
+            const num = parseFloat(c.expenseValue.toString().replace(/[^0-9,.-]/g, '').replace(',', '.'));
+            if (!isNaN(num)) { total += num; hasTotal = true; }
+          }
+        });
+        const totalStr = hasTotal
+          ? `\nTotal de despesas comprovadas: R$ ${total.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+          : '';
+
+        const despesasBlock = `Despesas registradas durante a viagem:\n${itensText}${totalStr}`;
+
+        let currentRelatorio = selectedEvento.relatorio_viagem || '';
+        let updatedRelatorio = '';
+        if (!currentRelatorio || currentRelatorio.includes('Despesas registradas durante a viagem:')) {
+          const base = currentRelatorio ? currentRelatorio.split(/Despesas registradas durante a viagem:/)[0].trim() : '';
+          updatedRelatorio = base ? `${base}\n\n${despesasBlock}` : despesasBlock;
+        } else {
+          updatedRelatorio = `${currentRelatorio}\n\n${despesasBlock}`;
+        }
+
         const updated = await updateDiariaEvento(selectedEvento.id, {
-          comprovantes_gestor: updatedList
+          comprovantes_gestor: updatedList,
+          relatorio_viagem: updatedRelatorio
         });
 
         setEventos(prev => prev.map(evt => evt.id === selectedEvento.id ? updated : evt));
@@ -838,8 +869,38 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
       const existingList: Attachment[] = selectedEvento.comprovantes_gestor || [];
       const updatedList = existingList.filter(c => c.id !== comprovanteId);
 
+      let updatedRelatorio = selectedEvento.relatorio_viagem || '';
+      if (updatedRelatorio.includes('Despesas registradas durante a viagem:')) {
+        const base = updatedRelatorio.split(/Despesas registradas durante a viagem:/)[0].trim();
+        if (updatedList.length > 0) {
+          const itensText = updatedList.map((c, i) => {
+            const t = c.expenseType || c.name || 'Despesa';
+            const v = c.expenseValue ? `R$ ${c.expenseValue}` : 'valor não informado';
+            return `${i + 1}. ${t}: ${v}`;
+          }).join('\n');
+
+          let total = 0;
+          let hasTotal = false;
+          updatedList.forEach(c => {
+            if (c.expenseValue) {
+              const num = parseFloat(c.expenseValue.toString().replace(/[^0-9,.-]/g, '').replace(',', '.'));
+              if (!isNaN(num)) { total += num; hasTotal = true; }
+            }
+          });
+          const totalStr = hasTotal
+            ? `\nTotal de despesas comprovadas: R$ ${total.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+            : '';
+
+          const despesasBlock = `Despesas registradas durante a viagem:\n${itensText}${totalStr}`;
+          updatedRelatorio = base ? `${base}\n\n${despesasBlock}` : despesasBlock;
+        } else {
+          updatedRelatorio = base;
+        }
+      }
+
       const updated = await updateDiariaEvento(selectedEvento.id, {
-        comprovantes_gestor: updatedList
+        comprovantes_gestor: updatedList,
+        relatorio_viagem: updatedRelatorio
       });
 
       setEventos(prev => prev.map(evt => evt.id === selectedEvento.id ? updated : evt));

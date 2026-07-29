@@ -1,6 +1,6 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { CheckCircle2, X, AlertTriangle, Fuel, Truck, FileText, Droplets, DollarSign, Clock } from 'lucide-react';
+import { CheckCircle2, X, AlertTriangle, Fuel, Truck, FileText, Droplets, DollarSign, Clock, ChevronLeft, User } from 'lucide-react';
 import { parseFormattedNumber } from '../../utils/numberUtils';
 
 interface AbastecimentoConfirmationModalProps {
@@ -10,6 +10,7 @@ interface AbastecimentoConfirmationModalProps {
     data: {
         invoiceNumber?: string;
         vehicle: string;
+        driver?: string;
         fuelType: string;
         liters: number;
         cost: number;
@@ -40,8 +41,8 @@ export const AbastecimentoConfirmationModal: React.FC<AbastecimentoConfirmationM
     const canConfirm = !isInvalidOdometer || isAdmin;
 
     return createPortal(
-        <div className="fixed inset-0 z-[100] flex items-end wide:items-center justify-center p-0 wide:p-6 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-            <div className="w-full max-w-md wide:max-w-2xl bg-white rounded-t-[2.5rem] wide:rounded-[2rem] shadow-2xl border border-white/20 overflow-hidden flex flex-col wide:animate-scale-in animate-slide-up-mobile max-h-[95vh] wide:max-h-[90vh]">
+        <div className="fixed inset-0 z-[100] flex items-start sm:items-center justify-center p-4 pt-10 sm:p-6 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+            <div className="w-full max-w-md wide:max-w-2xl bg-white rounded-[2rem] shadow-2xl border border-white/20 overflow-hidden flex flex-col animate-scale-in max-h-[90vh]">
 
                 {/* Header */}
                 <div className={`${isInvalidOdometer ? 'bg-red-50' : 'bg-slate-50'} p-4 wide:p-6 border-b ${isInvalidOdometer ? 'border-red-100' : 'border-slate-100'} flex items-center justify-between flex-shrink-0`}>
@@ -99,74 +100,75 @@ export const AbastecimentoConfirmationModal: React.FC<AbastecimentoConfirmationM
                             </div>
 
                             {/* Vehicle */}
-                            <div className="flex items-start gap-3 wide:gap-4 px-1 wide:px-2">
-                                <div className="w-8 h-8 wide:w-10 wide:h-10 mt-1 bg-cyan-50 rounded-full flex items-center justify-center text-cyan-600 border border-cyan-100 flex-shrink-0">
-                                    <Truck className="w-4 h-4 wide:w-5 wide:h-5" />
+                            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 flex items-center gap-4 relative overflow-hidden group">
+                                <div className="absolute top-0 right-0 p-3 opacity-5 group-hover:opacity-10 transition-opacity">
+                                    <Truck className="w-16 h-16" />
                                 </div>
-                                <div className="flex flex-col flex-1 border-b border-slate-100 pb-3 wide:pb-4">
-                                    <span className="text-[9px] wide:text-xs uppercase font-bold text-slate-400 tracking-wider mb-0.5">Veículo</span>
-                                    <span className="text-base wide:text-lg font-bold text-slate-800 leading-tight">{data.vehicle}</span>
+                                <div className="w-10 h-10 wide:w-12 wide:h-12 bg-cyan-500/10 rounded-xl flex items-center justify-center text-cyan-600 border border-cyan-500/20 shadow-sm z-10">
+                                    <Truck className="w-5 h-5 wide:w-6 wide:h-6" />
+                                </div>
+                                <div className="flex flex-col z-10">
+                                    <span className="text-[9px] wide:text-xs uppercase font-bold text-slate-400 tracking-wider">Veículo</span>
+                                    <span className="text-lg wide:text-xl font-black text-slate-900 font-mono">{data.vehicle}</span>
                                 </div>
                             </div>
 
-                            {/* Fuel & Liters Row */}
-                            <div className="grid grid-cols-2 gap-4 px-1 wide:px-2">
-                                <div className="flex flex-col">
-                                    <span className="text-[9px] wide:text-xs uppercase font-bold text-slate-400 tracking-wider mb-1 flex items-center gap-1">
-                                        <Fuel className="w-3 h-3" /> Combustível
-                                    </span>
-                                    <span className="text-base wide:text-lg font-bold text-slate-800 uppercase">{data.fuelType.split(' - ')[0]}</span>
+                            {/* Driver */}
+                            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 flex items-center gap-4 relative overflow-hidden group">
+                                <div className="absolute top-0 right-0 p-3 opacity-5 group-hover:opacity-10 transition-opacity">
+                                    <User className="w-16 h-16" />
                                 </div>
-                                <div className="flex flex-col">
-                                    <span className="text-[9px] wide:text-xs uppercase font-bold text-slate-400 tracking-wider mb-1 flex items-center gap-1">
-                                        <Droplets className="w-3 h-3" /> Volume
+                                <div className="w-10 h-10 wide:w-12 wide:h-12 bg-indigo-500/10 rounded-xl flex items-center justify-center text-indigo-600 border border-indigo-500/20 shadow-sm z-10">
+                                    <User className="w-5 h-5 wide:w-6 wide:h-6" />
+                                </div>
+                                <div className="flex flex-col z-10 min-w-0">
+                                    <span className="text-[9px] wide:text-xs uppercase font-bold text-slate-400 tracking-wider">Motorista</span>
+                                    <span className="text-base wide:text-lg font-black text-slate-900 truncate">{data.driver || '---'}</span>
+                                </div>
+                            </div>
+
+                            {/* Fuel & Liters */}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="bg-slate-50 rounded-2xl p-3 wide:p-4 border border-slate-100 flex flex-col">
+                                    <span className="text-[9px] wide:text-xs uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1.5 mb-1">
+                                        <Fuel className="w-3.5 h-3.5 text-slate-400" /> Combustível
                                     </span>
-                                    <span className="text-base wide:text-lg font-bold text-slate-800">{data.liters.toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} L</span>
+                                    <span className="text-sm wide:text-base font-black text-slate-800 uppercase truncate">{data.fuelType.split(' - ')[0]}</span>
+                                </div>
+                                <div className="bg-slate-50 rounded-2xl p-3 wide:p-4 border border-slate-100 flex flex-col">
+                                    <span className="text-[9px] wide:text-xs uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1.5 mb-1">
+                                        <Droplets className="w-3.5 h-3.5 text-slate-400" /> Volume
+                                    </span>
+                                    <span className="text-sm wide:text-base font-black text-slate-800">{data.liters.toLocaleString('pt-BR', { minimumFractionDigits: 3 })} L</span>
                                 </div>
                             </div>
                         </div>
 
-                        {/* Right Column: Odometer & Visual Summary */}
-                        <div className="space-y-4 wide:space-y-6">
-                            {/* Odometer Comparison - Refined Structure */}
-                            <div className="bg-slate-50/50 rounded-2xl p-4 wide:p-6 space-y-4 border border-slate-100">
-                                <div className="space-y-3">
-                                    {/* Odometer ANTERIOR */}
-                                    {!isEdit && (
-                                        <div className="flex items-center justify-between py-1 border-b border-slate-100/50">
-                                            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Horímetro Anterior</span>
-                                            <span className="text-sm font-bold text-slate-600">
-                                                {data.lastOdometer?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'} <span className="text-[10px] text-slate-400">KM/H</span>
-                                            </span>
-                                        </div>
-                                    )}
+                        {/* Right Column: Odometer & Cost */}
+                        <div className="space-y-4 wide:space-y-6 flex flex-col justify-between">
+                            {/* Odometer Section */}
+                            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-[9px] wide:text-xs uppercase font-bold text-slate-400 tracking-wider">Horímetro Anterior</span>
+                                    <span className="text-sm font-bold text-slate-600 font-mono">{data.lastOdometer !== null && data.lastOdometer !== undefined ? `${data.lastOdometer.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} KM/H` : '---'}</span>
+                                </div>
 
-                                    {/* Odometer DIFERENÇA */}
-                                    {!isEdit && data.lastOdometer !== null && data.lastOdometer !== undefined && (
-                                        <div className="flex items-center justify-between py-1 border-b border-slate-100/50">
-                                            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Horímetro Diferença</span>
-                                            <div className="flex items-center gap-2">
-                                                <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${currentOdometer >= data.lastOdometer ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-                                                    {currentOdometer > data.lastOdometer ? '+' : ''}{(currentOdometer - data.lastOdometer).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} KM/H
-                                                </span>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Odometer NOVO */}
-                                    <div className="flex flex-col pt-1">
-                                        <span className="text-[10px] uppercase font-bold text-indigo-400 tracking-widest mb-1">Horímetro Novo</span>
-                                        <div className="flex items-baseline gap-2">
-                                            <span className={`text-2xl wide:text-3xl font-black ${isInvalidOdometer ? 'text-red-600' : 'text-indigo-600'}`}>
-                                                {currentOdometer.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                                            </span>
-                                            <span className="text-sm font-bold text-slate-400 font-mono">KM/H</span>
-                                        </div>
+                                {data.lastOdometer !== null && data.lastOdometer !== undefined && (
+                                    <div className="flex items-center justify-between pt-2 border-t border-slate-200/60">
+                                        <span className="text-[9px] wide:text-xs uppercase font-bold text-slate-400 tracking-wider">Horímetro Diferença</span>
+                                        <span className={`text-xs font-black font-mono px-2 py-0.5 rounded-md ${currentOdometer - data.lastOdometer > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                                            {currentOdometer - data.lastOdometer > 0 ? `+${(currentOdometer - data.lastOdometer).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} KM/H` : `${(currentOdometer - data.lastOdometer).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} KM/H`}
+                                        </span>
                                     </div>
+                                )}
+
+                                <div className="flex items-center justify-between pt-2 border-t border-slate-200/60">
+                                    <span className="text-[9px] wide:text-xs uppercase font-bold text-indigo-500 tracking-wider">Horímetro Novo</span>
+                                    <span className="text-xl wide:text-2xl font-black text-indigo-600 font-mono">{currentOdometer.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} <span className="text-xs font-normal text-indigo-400">KM/H</span></span>
                                 </div>
                             </div>
 
-                            {/* Total Cost - Integrated for Desktop / Highlighted for Mobile */}
+                            {/* Total Cost */}
                             <div className="bg-emerald-600 text-white rounded-2xl p-4 wide:p-6 flex flex-col wide:flex-row items-center justify-between gap-2 wide:gap-4 shadow-lg shadow-emerald-500/20 relative overflow-hidden group">
                                 <div className="absolute top-0 left-0 w-full h-full opacity-10 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-white via-emerald-400 to-transparent"></div>
                                 <div className="relative z-10 flex flex-col items-center wide:items-start">
@@ -187,29 +189,36 @@ export const AbastecimentoConfirmationModal: React.FC<AbastecimentoConfirmationM
                 </div>
 
                 {/* Actions */}
-                <div className="p-4 wide:p-6 bg-slate-50 border-t border-slate-100 flex gap-3 wide:gap-4">
+                <div className="p-3.5 px-4 bg-slate-50 border-t border-slate-100 flex items-center gap-3 w-full">
                     <button
                         type="button"
                         onClick={onClose}
                         disabled={isSaving}
-                        className="flex-1 py-3 wide:py-4 bg-white border border-slate-200 text-slate-500 font-bold rounded-xl wide:rounded-2xl hover:bg-slate-50 hover:border-slate-300 transition-all active:scale-95 disabled:opacity-50 text-sm wide:text-base uppercase tracking-widest"
+                        className="flex items-center justify-center gap-1.5 py-3 px-5 bg-white border border-slate-200 text-slate-700 font-bold uppercase tracking-widest text-[10px] rounded-xl active:bg-slate-50 disabled:opacity-50 transition-all shadow-sm shrink-0"
                     >
-                        Revisar
+                        <ChevronLeft className="w-4 h-4" />
+                        <span>Revisar</span>
                     </button>
                     <button
                         type="button"
                         onClick={onConfirm}
                         disabled={isSaving || !canConfirm}
-                        className={`flex-[2] py-3 wide:py-4 ${!canConfirm ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : isInvalidOdometer && isAdmin ? 'bg-amber-600 text-white shadow-xl shadow-amber-900/20 hover:bg-amber-700' : 'bg-slate-900 text-white shadow-xl shadow-slate-900/20 hover:bg-black'} font-black rounded-xl wide:rounded-2xl transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-70 text-sm wide:text-base uppercase tracking-widest`}
+                        className={`flex-1 flex items-center justify-center gap-1.5 py-3 px-6 ${
+                            !canConfirm 
+                                ? 'bg-slate-200 text-slate-400 cursor-not-allowed' 
+                                : isInvalidOdometer && isAdmin 
+                                ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20 active:bg-amber-700' 
+                                : 'bg-slate-900 text-white shadow-md shadow-slate-950/15 active:bg-slate-800'
+                        } font-bold uppercase tracking-widest text-[10px] rounded-xl disabled:opacity-30 disabled:cursor-not-allowed transition-all`}
                     >
                         {isSaving ? (
                             <>
-                                <div className="w-4 h-4 wide:w-5 wide:h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                                 <span>Processando...</span>
                             </>
                         ) : (
                             <>
-                                <CheckCircle2 className="w-5 h-5 wide:w-6 wide:h-6" />
+                                <CheckCircle2 className="w-4 h-4" />
                                 <span>{isInvalidOdometer && isAdmin ? 'Sobrescrever' : isInvalidOdometer ? 'Bloqueado' : 'Confirmar'}</span>
                             </>
                         )}
