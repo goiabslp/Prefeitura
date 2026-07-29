@@ -986,28 +986,33 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
         // We need to calculate efficiency for each fill-up interval across all vehicles
         let totalEfficiencySum = 0;
         let efficiencyCount = 0;
+        let prevEfficiencySum = 0;
+        let prevEfficiencyCount = 0;
         const vehicleEfficiencySums: Record<string, { sum: number, count: number }> = {};
 
+        let totalDistanceSum = 0;
+        let prevDistanceSum = 0;
+
         // Group ALL records (not just filtered) by vehicle to calculate full history context
-        // We need history to calculate efficiency for the CURRENT month records
+        // We need history to calculate efficiency for the CURRENT and PREVIOUS month records
         const allByVehicle: Record<string, AbastecimentoRecord[]> = {};
         allRecords.forEach(r => {
             if (!allByVehicle[r.vehicle]) allByVehicle[r.vehicle] = [];
             allByVehicle[r.vehicle].push(r);
         });
 
-        // For each vehicle, calculate efficiencies
+        // For each vehicle, calculate efficiencies and distances
         Object.values(allByVehicle).forEach(vehicleRecords => {
             // Sort by date
             const sorted = vehicleRecords.map(r => ({ ...r, dateObj: new Date(r.date) }))
                 .sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
 
             sorted.forEach((record, index) => {
-                // Check if this record belongs to the CURRENT selected month/year
                 const rDate = record.dateObj;
                 const isCurrentPeriod = rDate.getMonth() === selectedMonth && rDate.getFullYear() === selectedYear;
+                const isPrevPeriod = rDate.getMonth() === prevMonth && rDate.getFullYear() === prevYear;
 
-                if (isCurrentPeriod) {
+                if (isCurrentPeriod || isPrevPeriod) {
                     // Check exclusion for Arla
                     const isArla = record.fuelType.toLowerCase().includes('arla');
 
@@ -1025,17 +1030,28 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
                             const distanceToNext = Number(nextRecord.odometer) - Number(record.odometer);
                             const nextLiters = Number(nextRecord.liters);
 
-                            if (distanceToNext > 0 && nextLiters > 0) {
-                                const efficiency = distanceToNext / nextLiters;
-                                totalEfficiencySum += efficiency;
-                                efficiencyCount++;
+                            if (distanceToNext > 0) {
+                                if (isCurrentPeriod) totalDistanceSum += distanceToNext;
+                                if (isPrevPeriod) prevDistanceSum += distanceToNext;
 
-                                // Per Vehicle Accumulation
-                                if (!vehicleEfficiencySums[record.vehicle]) {
-                                    vehicleEfficiencySums[record.vehicle] = { sum: 0, count: 0 };
+                                if (nextLiters > 0) {
+                                    const efficiency = distanceToNext / nextLiters;
+                                    if (isCurrentPeriod) {
+                                        totalEfficiencySum += efficiency;
+                                        efficiencyCount++;
+
+                                        // Per Vehicle Accumulation
+                                        if (!vehicleEfficiencySums[record.vehicle]) {
+                                            vehicleEfficiencySums[record.vehicle] = { sum: 0, count: 0 };
+                                        }
+                                        vehicleEfficiencySums[record.vehicle].sum += efficiency;
+                                        vehicleEfficiencySums[record.vehicle].count++;
+                                    }
+                                    if (isPrevPeriod) {
+                                        prevEfficiencySum += efficiency;
+                                        prevEfficiencyCount++;
+                                    }
                                 }
-                                vehicleEfficiencySums[record.vehicle].sum += efficiency;
-                                vehicleEfficiencySums[record.vehicle].count++;
                             }
                         }
                     }
@@ -1044,6 +1060,9 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
         });
 
         const avgKmL = efficiencyCount > 0 ? (totalEfficiencySum / efficiencyCount) : 0;
+        const prevAvgKmL = prevEfficiencyCount > 0 ? (prevEfficiencySum / prevEfficiencyCount) : 0;
+        const avgKmLDiff = prevAvgKmL === 0 ? 0 : ((avgKmL - prevAvgKmL) / prevAvgKmL) * 100;
+        const kmDiffPeriod = prevDistanceSum === 0 ? 0 : ((totalDistanceSum - prevDistanceSum) / prevDistanceSum) * 100;
 
         // Finalize Vehicle Stats with Efficiency
         const vehicleStats = Object.values(vehicleGroups)
@@ -1158,30 +1177,7 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
         // For simplicity, let's create a 'totalDistance' accumulator in the GLOBAL loop we added step 162.
         // (Wait, I can just modify that loop to export totalDistanceSum)
         // Re-writing that loop slightly to capture 'totalDistanceSum'
-        let totalDistanceSum = 0;
-        Object.values(allByVehicle).forEach(vehicleRecords => {
-            const sorted = vehicleRecords.map(r => ({ ...r, dateObj: new Date(r.date) })).sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
-            sorted.forEach((record, index) => {
-                const rDate = record.dateObj;
-                if (rDate.getMonth() === selectedMonth && rDate.getFullYear() === selectedYear) {
-                    const isArla = record.fuelType.toLowerCase().includes('arla');
-                    if (!isArla) {
-                        // Look ahead logic again
-                        let nextRecord = null;
-                        for (let i = index + 1; i < sorted.length; i++) {
-                            if (!sorted[i].fuelType.toLowerCase().includes('arla')) {
-                                nextRecord = sorted[i];
-                                break;
-                            }
-                        }
-                        if (nextRecord) {
-                            const dist = Number(nextRecord.odometer) - Number(record.odometer);
-                            if (dist > 0) totalDistanceSum += dist;
-                        }
-                    }
-                }
-            });
-        });
+
 
 
         return {
@@ -1191,7 +1187,9 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
             litersDiff,
             activeVehicles,
             avgKmL,
+            avgKmLDiff,
             totalKmPeriod: totalDistanceSum,
+            kmDiffPeriod,
             allVehiclesCount: vehicles.length,
             filteredCount: filtered.length,
             vehicleStats,
@@ -1731,7 +1729,9 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
                     <p className="text-xl sm:text-2xl font-black text-slate-900">{formatCurrency(sectorStats.current.totalCost)}</p>
                     <div className={`text-xs font-bold mt-2 flex items-center gap-1 ${sectorStats.costDiff > 0 ? 'text-rose-500' : 'text-emerald-500'}`}>
                         {sectorStats.costDiff > 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingUp className="w-3 h-3 rotate-180" />}
-                        {Math.abs(sectorStats.costDiff).toFixed(1)}% vs anterior
+                        {sectorStats.costDiff === 0 
+                            ? 'Sem variação vs mês anterior' 
+                            : `${Math.abs(sectorStats.costDiff).toFixed(1)}% ${sectorStats.costDiff > 0 ? 'maior' : 'menor'} que o mês anterior`}
                     </div>
                 </div>
 
@@ -1744,7 +1744,9 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
                     <p className="text-xl sm:text-2xl font-black text-slate-900">{formatCurrency(sectorStats.avgCostPerVehicle)}</p>
                     <div className={`text-xs font-bold mt-2 flex items-center gap-1 ${sectorStats.avgCostDiff > 0 ? 'text-rose-500' : 'text-emerald-500'}`}>
                         {sectorStats.avgCostDiff > 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingUp className="w-3 h-3 rotate-180" />}
-                        {Math.abs(sectorStats.avgCostDiff).toFixed(1)}% vs anterior
+                        {sectorStats.avgCostDiff === 0 
+                            ? 'Sem variação vs mês anterior' 
+                            : `${Math.abs(sectorStats.avgCostDiff).toFixed(1)}% ${sectorStats.avgCostDiff > 0 ? 'maior' : 'menor'} que o mês anterior`}
                     </div>
                 </div>
 
@@ -1757,7 +1759,9 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
                     <p className="text-xl sm:text-2xl font-black text-slate-900">{sectorStats.totalKmSector.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} km</p>
                     <div className={`text-xs font-bold mt-2 flex items-center gap-1 ${sectorStats.kmDiff > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
                         {sectorStats.kmDiff > 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingUp className="w-3 h-3 rotate-180" />}
-                        {Math.abs(sectorStats.kmDiff).toFixed(1)}% vs anterior
+                        {sectorStats.kmDiff === 0 
+                            ? 'Sem variação vs mês anterior' 
+                            : `${Math.abs(sectorStats.kmDiff).toFixed(1)}% ${sectorStats.kmDiff > 0 ? 'maior' : 'menor'} que o mês anterior`}
                     </div>
                 </div>
 
@@ -1900,7 +1904,11 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
                         </h3>
                         <div className={`flex items-center gap-1 mt-1 text-xs font-bold ${stats.costDiff > 0 ? 'text-red-500' : 'text-emerald-500'}`}>
                             {stats.costDiff > 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingUp className="w-3 h-3 rotate-180" />}
-                            <span>{Math.abs(stats.costDiff).toFixed(1)}% vs anterior</span>
+                            <span>
+                                {stats.costDiff === 0 
+                                    ? 'Sem variação vs mês anterior' 
+                                    : `${Math.abs(stats.costDiff).toFixed(1)}% ${stats.costDiff > 0 ? 'maior' : 'menor'} que o mês anterior`}
+                            </span>
                         </div>
                     </div>
                 </div>
@@ -1920,8 +1928,15 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
                         <h3 className="text-2xl sm:text-3xl font-black text-cyan-900 tracking-tight">
                             {formatNumber(stats.totalLiters)} L
                         </h3>
-                        <div className={`flex items-center gap-1 mt-1 text-xs font-bold ${stats.litersDiff > 0 ? 'text-cyan-500' : 'text-slate-400'}`}>
-                            <span>{stats.filteredCount} abastecimentos</span>
+                        <div className={`flex items-center gap-1 mt-1 text-xs font-bold ${stats.litersDiff > 0 ? 'text-red-500' : 'text-emerald-500'}`}>
+                            {stats.litersDiff > 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingUp className="w-3 h-3 rotate-180" />}
+                            <span>
+                                {stats.litersDiff === 0 
+                                    ? 'Sem variação vs mês anterior' 
+                                    : `${Math.abs(stats.litersDiff).toFixed(1)}% ${stats.litersDiff > 0 ? 'maior' : 'menor'} que o mês anterior`}
+                            </span>
+                            <span className="text-slate-300 mx-1">|</span>
+                            <span className="text-slate-400 font-medium">{stats.filteredCount} abastecimentos</span>
                         </div>
                     </div>
                 </div>
@@ -1941,7 +1956,15 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
                         <h3 className="text-2xl sm:text-3xl font-black text-violet-900 tracking-tight">
                             {formatNumber(stats.avgKmL, 1)} <span className="text-sm sm:text-lg text-slate-400 font-bold">Km/L</span>
                         </h3>
-                        <p className="text-xs font-medium text-slate-400 mt-1">Eficiência da frota (S/ Arla)</p>
+                        <div className={`flex items-center gap-1 mt-1 text-xs font-bold ${stats.avgKmLDiff > 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                            {stats.avgKmLDiff > 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingUp className="w-3 h-3 rotate-180" />}
+                            <span>
+                                {stats.avgKmLDiff === 0 
+                                    ? 'Sem variação vs mês anterior' 
+                                    : `${Math.abs(stats.avgKmLDiff).toFixed(1)}% ${stats.avgKmLDiff > 0 ? 'maior' : 'menor'} que o mês anterior`}
+                            </span>
+                        </div>
+                        <p className="text-[10px] font-medium text-slate-400 mt-1.5">Eficiência da frota (S/ Arla)</p>
                     </div>
                 </div>
 
@@ -1960,7 +1983,15 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
                         <h3 className="text-2xl sm:text-3xl font-black text-amber-900 tracking-tight">
                             {formatNumber(stats.totalKmPeriod, 2)} <span className="text-sm sm:text-lg text-slate-400 font-bold">Km</span>
                         </h3>
-                        <p className="text-xs font-medium text-slate-400 mt-1">Estimado no período</p>
+                        <div className={`flex items-center gap-1 mt-1 text-xs font-bold ${stats.kmDiffPeriod > 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                            {stats.kmDiffPeriod > 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingUp className="w-3 h-3 rotate-180" />}
+                            <span>
+                                {stats.kmDiffPeriod === 0 
+                                    ? 'Sem variação vs mês anterior' 
+                                    : `${Math.abs(stats.kmDiffPeriod).toFixed(1)}% ${stats.kmDiffPeriod > 0 ? 'maior' : 'menor'} que o mês anterior`}
+                            </span>
+                        </div>
+                        <p className="text-[10px] font-medium text-slate-400 mt-1.5">Estimado no período</p>
                     </div>
                 </div>
             </div>
