@@ -1199,93 +1199,31 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
                     </div>
                   )}
 
-                  {/* ESTADO 2: EM PERCURSO (Exibe o indicador "EM PERCURSO", GPS e botão de FINALIZAR) */}
+                  {/* ESTADO 2: EM PERCURSO (Exibe indicação de viagem em andamento, mensagem amigável de validação e botão de FINALIZAR) */}
                   {isStarted && !isFinished && (
-                    <div className="flex flex-col items-center gap-6 w-full py-2">
-                      <div className="w-full max-w-sm flex flex-col items-center bg-slate-50 border border-slate-200 p-5 rounded-2xl shadow-inner space-y-3">
-                        <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1 flex items-center gap-1.5 animate-pulse">
-                          <Timer className="w-4 h-4" />
-                          <span>EM PERCURSO</span>
+                    <div className="flex flex-col items-center gap-6 w-full py-2 animate-fade-in">
+                      <div className="w-full max-w-sm flex flex-col items-center bg-gradient-to-b from-slate-50 to-emerald-50/40 border border-emerald-100 p-5 rounded-2xl shadow-sm space-y-3 relative overflow-hidden">
+                        {/* Brilho decorativo em segundo plano */}
+                        <div className="absolute -top-10 -right-10 w-24 h-24 bg-emerald-400/15 rounded-full blur-xl animate-pulse"></div>
+
+                        <span className="text-[11px] font-black text-emerald-700 uppercase tracking-widest flex items-center gap-1.5 bg-emerald-100/90 border border-emerald-200 px-3.5 py-1 rounded-full shadow-2xs animate-pulse">
+                          <Timer className="w-4 h-4 text-emerald-600" />
+                          <span>VIAGEM EM ANDAMENTO</span>
                         </span>
-                        <div className="font-mono text-4xl font-black text-slate-800 select-none tracking-wider my-1">
-                          {elapsedTime}
-                        </div>
-                        <span className="text-[10px] text-slate-400 font-semibold">
+                        
+                        <span className="text-[11px] text-slate-500 font-semibold">
                           Saída registrada em: {formatDate(data.viagem_inicio)}
                         </span>
 
-                        {/* RASTREAMENTO GPS EM TEMPO REAL */}
-                        <div className="w-full bg-white p-3 rounded-xl border border-slate-200/80 shadow-2xs space-y-2 mt-2">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-ping"></span>
-                              <div className="text-left">
-                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Localização GPS</span>
-                                <span className="text-xs font-bold text-slate-800">{gpsLocation.cityName}</span>
-                              </div>
-                            </div>
-                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border ${
-                              gpsLocation.hasLeftOrigin 
-                                ? 'bg-purple-50 text-purple-700 border-purple-200' 
-                                : 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                            }`}>
-                              {gpsLocation.hasLeftOrigin ? 'Fora da Origem' : 'Na Origem'}
-                            </span>
+                        {/* Saudação de Boa Viagem animada e amigável */}
+                        <div className="w-full bg-white/95 backdrop-blur-xs p-3 rounded-xl border border-emerald-200/80 shadow-xs flex items-center justify-center gap-2.5 text-center transition-all duration-300 hover:border-emerald-300 hover:shadow-md group mt-1">
+                          <div className="p-1.5 bg-emerald-50 rounded-lg text-emerald-600 shrink-0 group-hover:scale-110 transition-transform duration-300">
+                            <Sparkles className="w-4 h-4 animate-bounce" />
                           </div>
-
-                          {gpsLocation.message && (
-                            <div className="p-2 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-[10px] font-semibold text-center">
-                              {gpsLocation.message}
-                            </div>
-                          )}
+                          <span className="text-xs font-black text-emerald-800 tracking-wider uppercase">
+                            Desejamos uma Boa Viagem!
+                          </span>
                         </div>
-
-                        {/* Status de Validação da Saída */}
-                        {selectedEvento && (
-                          <div className="w-full bg-white p-3 rounded-xl border border-slate-200/80 shadow-2xs text-left text-xs font-semibold space-y-1.5 mt-2">
-                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Validação da Saída</span>
-                            {selectedEvento.modo_inicio === 'manual' ? (
-                              <div className="text-emerald-700 flex items-center gap-1.5 font-bold">
-                                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                                <span>Saída Validada (Iniciada Manualmente)</span>
-                              </div>
-                            ) : selectedEvento.modo_inicio === 'automatico' ? (
-                              selectedEvento.saida_validada ? (
-                                <div className="text-emerald-700 flex items-center gap-1.5 font-bold">
-                                  <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                                  <span>Saída Validada via GPS (Início Automático)</span>
-                                </div>
-                              ) : (() => {
-                                const scheduledTime = new Date(selectedEvento.data_saida).getTime();
-                                const elapsedMin = Math.floor((Date.now() - scheduledTime) / (60 * 1000));
-                                const remainingMin = 130 - elapsedMin;
-                                
-                                if (remainingMin > 0) {
-                                  return (
-                                    <div className="text-amber-700 flex flex-col gap-0.5 font-bold">
-                                      <div className="flex items-center gap-1.5">
-                                        <div className="w-2.5 h-2.5 bg-amber-500 rounded-full animate-pulse shrink-0"></div>
-                                        <span>Aguardando checkpoint fora do município de origem</span>
-                                      </div>
-                                      <span className="text-[10px] text-slate-500 font-bold block pl-4">
-                                        Tempo restante para validar: {remainingMin} min
-                                      </span>
-                                    </div>
-                                  );
-                                } else {
-                                  return (
-                                    <div className="text-rose-700 flex items-center gap-1.5 font-bold">
-                                      <AlertTriangle className="w-4 h-4 text-rose-500" />
-                                      <span>Saída Não Validada (Tempo limite de 130 min expirado)</span>
-                                    </div>
-                                  );
-                                }
-                              })()
-                            ) : (
-                              <span className="text-slate-500">Aguardando início</span>
-                            )}
-                          </div>
-                        )}
                       </div>
 
                       {/* Botão de Finalizar */}
