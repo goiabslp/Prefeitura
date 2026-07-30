@@ -4,7 +4,7 @@ import {
   FileText, Search, Hash as HashIcon, CheckCircle2, 
   X, AlertTriangle, Upload, Paperclip, Check, Trash2,
   Car, Navigation, Hotel, BookOpen, Copy, Download, FileDown, XCircle, Receipt,
-  UserPlus, Square, Timer, Clock, Plus, ArrowRightLeft, UserCheck, Play, ShieldCheck
+  UserPlus, Square, Timer, Clock, Plus, ArrowRightLeft, UserCheck, Play, ShieldCheck, Camera
 } from 'lucide-react';
 import { getDiariasDespesasEnabled, setDiariasDespesasEnabled } from '../../services/diariasSettingsService';
 import { DiariaEvento, User, Attachment, Sector, Job, Person, Order } from '../../types';
@@ -639,11 +639,19 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
 
   const handleOpenReview = (evento: DiariaEvento) => {
     setSelectedEvento(evento);
-    setModalActiveTab('resumo');
     setTransferGestorCargo(evento.gestor_transferido_cargo || '');
+    
+    // Ler o parametro modalTab da URL se fornecido, senao default 'resumo'
+    const urlParams = new URLSearchParams(window.location.search);
+    const tabParam = urlParams.get('modalTab');
+    const validTab = (tabParam && ['resumo', 'justificativa', 'comprovantes', 'relatorio'].includes(tabParam))
+      ? (tabParam as 'resumo' | 'justificativa' | 'comprovantes' | 'relatorio')
+      : 'resumo';
+      
+    setModalActiveTab(validTab);
     try {
       const currentUrl = new URL(window.location.href);
-      currentUrl.searchParams.set('modalTab', 'resumo');
+      currentUrl.searchParams.set('modalTab', validTab);
       window.history.replaceState({}, '', currentUrl.toString());
     } catch (e) {}
 
@@ -741,7 +749,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
     if (file && selectedEvento) {
       setIsUploading(true);
       try {
-        const publicUrl = await uploadFile(file, 'attachments', `comprovante_evento_${selectedEvento.id}_${Date.now()}_${file.name}`);
+        const publicUrl = await uploadFile(file, 'attachments', `comprovante_evento_${selectedEvento.id}_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`);
         if (publicUrl) {
           const newAttachment: Attachment = {
             id: Date.now().toString(),
@@ -752,28 +760,49 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
             expenseType: newExpenseType || 'Despesa',
             expenseValue: newExpenseValue.trim() ? newExpenseValue.trim() : undefined
           };
-          setComprovantes(prev => {
-            const updated = [...prev, newAttachment];
-            syncRelatorioWithComprovantesList(updated);
-            return updated;
-          });
+
+          const updatedList = [...comprovantes, newAttachment];
+          setComprovantes(updatedList);
+          syncRelatorioWithComprovantesList(updatedList);
           setNewExpenseValue('');
+
+          // SALVAR IMEDIATAMENTE NO BANCO DE DADOS (SUPABASE)
+          const updated = await updateDiariaEvento(selectedEvento.id, {
+            comprovantes_gestor: updatedList
+          } as any);
+
+          setSelectedEvento(prev => prev ? { ...prev, comprovantes_gestor: updatedList } : null);
+          setEventos(prev => prev.map(evt => evt.id === selectedEvento.id ? { ...evt, comprovantes_gestor: updatedList } : evt));
+          window.dispatchEvent(new Event('diarias_eventos_updated'));
         }
       } catch (err) {
         console.error(err);
         alert("Erro ao enviar o comprovante.");
       } finally {
         setIsUploading(false);
+        if (e.target) e.target.value = '';
       }
     }
   };
 
-  const removeComprovante = (id: string) => {
-    setComprovantes(prev => {
-      const updated = prev.filter(c => c.id !== id);
-      syncRelatorioWithComprovantesList(updated);
-      return updated;
-    });
+  const removeComprovante = async (id: string) => {
+    if (!selectedEvento) return;
+    const updatedList = comprovantes.filter(c => c.id !== id);
+    setComprovantes(updatedList);
+    syncRelatorioWithComprovantesList(updatedList);
+
+    try {
+      await updateDiariaEvento(selectedEvento.id, {
+        comprovantes_gestor: updatedList
+      } as any);
+
+      setSelectedEvento(prev => prev ? { ...prev, comprovantes_gestor: updatedList } : null);
+      setEventos(prev => prev.map(evt => evt.id === selectedEvento.id ? { ...evt, comprovantes_gestor: updatedList } : evt));
+      window.dispatchEvent(new Event('diarias_eventos_updated'));
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao remover o comprovante.");
+    }
   };
 
   const handleOpenFinalizeModal = (evento: DiariaEvento) => {
@@ -2370,7 +2399,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                     </span>
                   </div>
 
-                  {(selectedEvento.status === 'aguardando_gestor' || !selectedEvento.status) && (
+                  {selectedEvento.status !== 'concluido' && selectedEvento.status !== 'cancelado' && (
                     <div className="space-y-4 bg-slate-50 p-5 rounded-2xl border border-slate-200/80">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-1">
@@ -2399,7 +2428,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                         </div>
                       </div>
                       
-                      <div className="relative pt-1">
+                      <div className="space-y-2 pt-1">
                         <input 
                           type="file" 
                           id="comprovante-file"
@@ -2407,19 +2436,44 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                           disabled={isUploading || !newExpenseValue}
                           className="hidden"
                         />
-                        <label 
-                          htmlFor="comprovante-file"
-                          className={`flex items-center justify-center gap-2 border-2 border-dashed border-slate-300 hover:border-indigo-500 rounded-2xl py-3.5 cursor-pointer text-xs font-bold text-slate-600 hover:text-indigo-600 bg-white hover:bg-indigo-50/20 transition-all active:scale-[0.99] ${!newExpenseValue ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        >
-                          {isUploading ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Upload className="w-4 h-4" />
-                          )}
-                          {isUploading ? 'Enviando arquivo...' : 'Selecionar Comprovante'}
-                        </label>
+                        <input 
+                          type="file" 
+                          id="comprovante-camera"
+                          accept="image/*"
+                          capture="environment"
+                          onChange={handleComprovanteUpload}
+                          disabled={isUploading || !newExpenseValue}
+                          className="hidden"
+                        />
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <label 
+                            htmlFor="comprovante-camera"
+                            className={`flex items-center justify-center gap-2 border-2 border-dashed border-indigo-300 hover:border-indigo-500 rounded-2xl py-3 cursor-pointer text-xs font-bold text-indigo-700 hover:text-indigo-800 bg-indigo-50/60 hover:bg-indigo-100/80 transition-all active:scale-[0.99] ${!newExpenseValue ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          >
+                            {isUploading ? (
+                              <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
+                            ) : (
+                              <Camera className="w-4 h-4 text-indigo-600 shrink-0" />
+                            )}
+                            <span>{isUploading ? 'Enviando foto...' : 'Tirar Foto na Hora'}</span>
+                          </label>
+
+                          <label 
+                            htmlFor="comprovante-file"
+                            className={`flex items-center justify-center gap-2 border-2 border-dashed border-slate-300 hover:border-slate-400 rounded-2xl py-3 cursor-pointer text-xs font-bold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-50 transition-all active:scale-[0.99] ${!newExpenseValue ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          >
+                            {isUploading ? (
+                              <Loader2 className="w-4 h-4 animate-spin text-slate-600" />
+                            ) : (
+                              <Upload className="w-4 h-4 text-slate-600 shrink-0" />
+                            )}
+                            <span>{isUploading ? 'Enviando arquivo...' : 'Escolher Arquivo'}</span>
+                          </label>
+                        </div>
+
                         {!newExpenseValue && (
-                          <p className="text-[9px] text-amber-600 font-bold mt-1 text-center">Preencha o valor da despesa antes de carregar o arquivo.</p>
+                          <p className="text-[9px] text-amber-600 font-bold text-center">Preencha o valor da despesa antes de tirar foto ou carregar o arquivo.</p>
                         )}
                       </div>
                     </div>
@@ -2445,7 +2499,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                                     R$ {c.expenseValue}
                                   </span>
                                 )}
-                                {(selectedEvento.status === 'aguardando_gestor' || !selectedEvento.status) && (
+                                {selectedEvento.status !== 'concluido' && selectedEvento.status !== 'cancelado' && (
                                   <button
                                     type="button"
                                     onClick={() => removeComprovante(c.id)}
