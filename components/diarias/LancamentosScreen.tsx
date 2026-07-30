@@ -507,16 +507,22 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
   };
 
   const handleToggleEventoDespesas = async (evento: DiariaEvento) => {
+    const nextVal = !evento.permitir_despesas_pos_finalizacao;
+
+    // Atualização otimista imediata na interface (0ms de latência ao clique)
+    setEventos(prev => prev.map(e => e.id === evento.id ? { ...e, permitir_despesas_pos_finalizacao: nextVal } : e));
+    window.dispatchEvent(new Event('diarias_settings_changed'));
+
     try {
-      const nextVal = !evento.permitir_despesas_pos_finalizacao;
-      const updated = await updateDiariaEvento(evento.id, {
+      await updateDiariaEvento(evento.id, {
         permitir_despesas_pos_finalizacao: nextVal
       });
-      setEventos(prev => prev.map(e => e.id === evento.id ? updated : e));
-      window.dispatchEvent(new Event('diarias_settings_changed'));
     } catch (err) {
       console.error('Erro ao alternar permissao de despesas do registro:', err);
       alert('Falha ao atualizar permissão de despesas deste registro.');
+      // Reverter em caso de falha de conexão
+      setEventos(prev => prev.map(e => e.id === evento.id ? { ...e, permitir_despesas_pos_finalizacao: !nextVal } : e));
+      window.dispatchEvent(new Event('diarias_settings_changed'));
     }
   };
 
@@ -2029,36 +2035,6 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                       </div>
 
                       <div className="desktop:col-span-4 flex items-center justify-end gap-1.5 pt-2 desktop:pt-0 border-t border-slate-100 desktop:border-t-0 mt-1 desktop:mt-0 w-full shrink-0 flex-nowrap">
-                        {/* Botão Interativo de Localização (Clique para Forçar Sincronização GPS) */}
-                        {(() => {
-                          const cp = getCheckpointFromEvento(evento);
-                          if (!cp && !isEmViagem) return null;
-                          const cidadeExibida = cp ? cp.cidade : 'São José do Goiabal - MG';
-                          const isSyncing = syncingTripId === evento.id;
-
-                          return (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleManualLocationSync(evento);
-                              }}
-                              disabled={isSyncing}
-                              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[9px] font-bold shadow-2xs shrink-0 transition-all cursor-pointer border active:scale-95 group ${
-                                isSyncing
-                                  ? 'bg-amber-50 border-amber-300 text-amber-900 animate-pulse'
-                                  : 'bg-cyan-50 hover:bg-cyan-100/90 border-cyan-200/80 hover:border-cyan-400 text-cyan-800'
-                              }`}
-                              title="Clique para forçar a busca e atualização da localização em tempo real"
-                            >
-                              <MapPin className={`w-3 h-3 text-cyan-600 shrink-0 ${isSyncing ? 'animate-spin text-amber-600' : 'animate-bounce'}`} />
-                              <span className="font-bold text-slate-800 truncate max-w-[130px]">
-                                {isSyncing ? 'Buscando GPS...' : cidadeExibida}
-                              </span>
-                              <RefreshCw className={`w-2.5 h-2.5 text-cyan-500 opacity-60 group-hover:opacity-100 shrink-0 ${isSyncing ? 'animate-spin text-amber-600' : ''}`} />
-                            </button>
-                          );
-                        })()}
 
                         {/* Botão de Iniciar Viagem (Apenas para Viagens Programadas) */}
                         {evento.status === 'viagem_programada' && (isCurrentUserGestor || isAdmin || evento.user_id === currentUser?.id || (evento.pessoas && evento.pessoas.some(p => p.id === currentUser?.id))) && (
@@ -2093,8 +2069,8 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                           <button
                             onClick={() => {
                               setAdminEmPercursoModal(evento);
-                              setAdminElapsedHours(1);
-                              setAdminElapsedMinutes(46);
+                              setAdminElapsedHours(0);
+                              setAdminElapsedMinutes(0);
                             }}
                             className="p-1.5 text-indigo-600 hover:text-white hover:bg-indigo-600 bg-indigo-50/80 rounded-lg transition-all border border-indigo-200/80 shrink-0 shadow-2xs active:scale-95 flex items-center justify-center"
                             title="Admin: Definir Tempo em Percurso"
@@ -3823,45 +3799,8 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
               {/* Seleção de Tempo Decorrido */}
               <div className="space-y-2.5">
                 <label className="text-[10px] font-black uppercase tracking-wider text-slate-600 block">
-                  A partir de qual tempo de viagem? (Horas e Minutos)
+                  Informe o tempo decorrido de viagem (Horas e Minutos)
                 </label>
-
-                {/* Atalhos Rápidos */}
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => { setAdminElapsedHours(1); setAdminElapsedMinutes(46); }}
-                    className={`py-2 px-2.5 rounded-xl text-xs font-black transition-all border ${
-                      adminElapsedHours === 1 && adminElapsedMinutes === 46
-                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-600/30'
-                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                    }`}
-                  >
-                    ⚡ 01:46:00
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setAdminElapsedHours(1); setAdminElapsedMinutes(40); }}
-                    className={`py-2 px-2.5 rounded-xl text-xs font-black transition-all border ${
-                      adminElapsedHours === 1 && adminElapsedMinutes === 40
-                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-600/30'
-                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                    }`}
-                  >
-                    ⏱️ 01:40:00
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setAdminElapsedHours(0); setAdminElapsedMinutes(30); }}
-                    className={`py-2 px-2.5 rounded-xl text-xs font-black transition-all border ${
-                      adminElapsedHours === 0 && adminElapsedMinutes === 30
-                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-600/30'
-                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                    }`}
-                  >
-                    ⏱️ 00:30:00
-                  </button>
-                </div>
 
                 {/* Inputs Customizados */}
                 <div className="grid grid-cols-2 gap-3 pt-1">
