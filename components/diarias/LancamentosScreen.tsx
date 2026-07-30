@@ -1251,14 +1251,13 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
               white-space: pre-wrap;
               word-break: break-word;
               background: #fafafa;
-              padding: 12px;
+              padding: 10px 12px;
               border-radius: 6px;
               border: 1px solid #e2e8f0;
               font-style: italic;
-              min-height: 140mm;
             }
             .signatures {
-              margin-top: 60px;
+              margin-top: 100px;
               margin-bottom: 10px;
               display: grid;
               grid-template-columns: 1fr 1fr;
@@ -1535,7 +1534,6 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
               </div>
 
               <!-- Assinaturas -->
-              <br/><br/><br/><br/><br/><br/><br/><br/><br/><br/>
               <div class="signatures">
                 <div class="signature-line">
                   <div class="signature-name">${servidorNomeParam}</div>
