@@ -1617,12 +1617,25 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
                           type="button"
                           onClick={handleManualPolishing}
                           disabled={isRecording || isPolishingAI || !reason.trim()}
-                          className="py-2.5 px-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all disabled:opacity-40 flex items-center justify-center gap-1.5 shadow-xs"
+                          className="py-2.5 px-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all disabled:opacity-40 flex items-center justify-center gap-1.5 shadow-xs shrink-0"
                           title="Formatar texto com IA Gemini"
                         >
                           <Sparkles className="w-4 h-4 text-amber-300" />
                           <span>Lapidar IA</span>
                         </button>
+
+                        {reason.trim().length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setReason('')}
+                            disabled={isRecording || isPolishingAI}
+                            className="py-2.5 px-3 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200/80 rounded-xl text-xs font-black uppercase tracking-wider transition-all disabled:opacity-40 flex items-center justify-center gap-1.5 shadow-xs shrink-0 active:scale-95"
+                            title="Apagar todo o texto inserido de uma vez"
+                          >
+                            <Trash2 className="w-4 h-4 text-rose-600" />
+                            <span>Apagar</span>
+                          </button>
+                        )}
                       </div>
 
                       {isRecording && (
@@ -2562,12 +2575,25 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
                     type="button"
                     onClick={handleManualPolishing}
                     disabled={isRecording || isPolishingAI || !reason.trim()}
-                    className="py-2.5 px-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all disabled:opacity-40 flex items-center justify-center gap-1.5 shadow-xs"
+                    className="py-2.5 px-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all disabled:opacity-40 flex items-center justify-center gap-1.5 shadow-xs shrink-0"
                     title="Formatar texto com IA Gemini"
                   >
                     <Sparkles className="w-4 h-4 text-amber-300" />
                     <span>Lapidar IA</span>
                   </button>
+
+                  {reason.trim().length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setReason('')}
+                      disabled={isRecording || isPolishingAI}
+                      className="py-2.5 px-3 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200/80 rounded-xl text-xs font-black uppercase tracking-wider transition-all disabled:opacity-40 flex items-center justify-center gap-1.5 shadow-xs shrink-0 active:scale-95"
+                      title="Apagar todo o texto inserido de uma vez"
+                    >
+                      <Trash2 className="w-4 h-4 text-rose-600" />
+                      <span>Apagar</span>
+                    </button>
+                  )}
                 </div>
 
                 {isRecording && (
