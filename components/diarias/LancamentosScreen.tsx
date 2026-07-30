@@ -3,7 +3,7 @@ import {
   ArrowLeft, Loader2, Calendar, MapPin, Users, RefreshCw, 
   FileText, Search, Hash as HashIcon, CheckCircle2, 
   X, AlertTriangle, Upload, Paperclip, Check, Trash2,
-  Car, Navigation, Hotel, BookOpen, Copy, Download, FileDown, XCircle, Receipt,
+  Car, Navigation, Hotel, BookOpen, Copy, Download, FileDown, XCircle, Receipt, Pencil,
   UserPlus, Square, Timer, Clock, Plus, ArrowRightLeft, UserCheck, Play, ShieldCheck, Camera
 } from 'lucide-react';
 import { getDiariasDespesasEnabled, setDiariasDespesasEnabled } from '../../services/diariasSettingsService';
@@ -657,7 +657,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
       window.history.replaceState({}, '', currentUrl.toString());
     } catch (e) {}
 
-    if (evento.status === 'aguardando_administrador' && currentUser?.role === 'admin') {
+    if ((evento.status === 'aguardando_administrador' || (evento.status === 'concluido' && currentUser?.role === 'admin')) && currentUser?.role === 'admin') {
       setModalType('admin');
       setAdminStep('review');
       setValorDiaria(evento.valor_diaria ? String(evento.valor_diaria) : '');
@@ -972,6 +972,167 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
 
       const valorFormatado = valor.startsWith('R$') ? valor : `R$ ${valor}`;
 
+      const listComprovantes: Attachment[] = comprovantesParam || evento.comprovantes_gestor || [];
+      const totalComprovantes = listComprovantes.length;
+
+      // Função auxiliar para dividir o texto do relatório em blocos apenas se ultrapassar uma folha inteira
+      const splitTextIntoBlocks = (text: string, maxCharsPerBlock = 4500): string[] => {
+        const cleanText = (text || '').trim() || 'Relatório de viagem não informado.';
+        if (cleanText.length <= maxCharsPerBlock) return [cleanText];
+        
+        const paragraphs = cleanText.split('\n');
+        const blocks: string[] = [];
+        let currentBlock = '';
+
+        for (const p of paragraphs) {
+          if ((currentBlock + '\n' + p).length > maxCharsPerBlock && currentBlock.length > 0) {
+            blocks.push(currentBlock.trim());
+            currentBlock = p;
+          } else {
+            currentBlock = currentBlock ? `${currentBlock}\n${p}` : p;
+          }
+        }
+        if (currentBlock.trim().length > 0) {
+          blocks.push(currentBlock.trim());
+        }
+
+        return blocks.length > 0 ? blocks : [cleanText];
+      };
+
+      const relatorioText = (relatorio || '').trim() || 'Relatório de viagem não informado.';
+      const relatorioBlocks = splitTextIntoBlocks(relatorioText, 4500);
+      const numRelatorioPages = relatorioBlocks.length;
+
+      // Páginas dedicadas aos comprovantes (exatamente 4 por folha em tamanho padronizado)
+      const numComprovantesPages = totalComprovantes > 0 ? Math.ceil(totalComprovantes / 4) : 0;
+
+      const totalPages = 1 + numRelatorioPages + (totalComprovantes > 0 ? numComprovantesPages : 0);
+
+      const renderCard = (c: Attachment, idx: number) => {
+        const isImage = (c.type && c.type.startsWith('image/')) ||
+          /\.(jpg|jpeg|png|webp|gif|bmp|svg)(\?.*)?$/i.test(c.url || '') ||
+          /\.(jpg|jpeg|png|webp|gif|bmp|svg)/i.test(c.name || '');
+        const tipo = c.expenseType || c.name || 'Despesa';
+        const valor = c.expenseValue ? `R$ ${c.expenseValue}` : '—';
+        const imgOrLink = isImage
+          ? `<div class="comp-img-wrap"><img class="comp-img" src="${c.url}" alt="Comprovante ${idx + 1}" crossorigin="anonymous" /></div>`
+          : `<div class="comp-img-wrap"><a class="comp-link" href="${c.url}" target="_blank">📎 Visualizar arquivo anexo</a></div>`;
+        const filename = c.name ? `<div class="comp-filename">${c.name}</div>` : '';
+        return `<div class="comprovante-card">
+          <div class="comp-header">
+            <span class="comp-num">#${idx + 1}</span>
+            <span class="comp-tipo">${tipo}</span>
+            <span class="comp-valor">${valor}</span>
+          </div>
+          ${imgOrLink}
+          ${filename}
+        </div>`;
+      };
+
+      // Gerar páginas do Relatório
+      let relatorioPagesHtml = '';
+      for (let rIndex = 0; rIndex < relatorioBlocks.length; rIndex++) {
+        const pageNum = 2 + rIndex;
+        const isLastRelatorioPage = rIndex === relatorioBlocks.length - 1;
+        const blockText = relatorioBlocks[rIndex];
+
+        let section06Html = '';
+        if (isLastRelatorioPage && totalComprovantes === 0) {
+          section06Html = `
+            <div class="section-box">
+              <div class="section-header">06. COMPROVAÇÃO DE DESPESAS</div>
+              <div class="section-body">
+                <div class="despesas-texto-simples">Em relação às despesas, não foram anexados comprovantes adicionais.</div>
+              </div>
+            </div>
+          `;
+        }
+
+        const isOverallLastPage = pageNum === totalPages;
+
+        relatorioPagesHtml += `
+          <div class="page ${isOverallLastPage ? 'page-last' : ''}">
+            <div>
+              <div class="header">
+                <div style="display: flex; align-items: center; gap: 14px;">
+                  ${logoUrl ? `<img src="${logoUrl}" alt="Logo Prefeitura" style="max-height: 55px; width: auto; object-fit: contain;" />` : ''}
+                  <div>
+                    <div class="header-title">PREFEITURA MUNICIPAL DE SÃO JOSÉ DO GOIABAL</div>
+                    <div class="header-subtitle">CONCESSÃO DE DIÁRIA E AUTORIZAÇÃO DE VIAGEM OFICIAL</div>
+                  </div>
+                </div>
+                <div style="text-align: right;">
+                  <div class="protocol-badge">${protocol}</div>
+                  <div><span class="status-badge">CONCLUÍDO / GERADO</span></div>
+                </div>
+              </div>
+
+              <!-- 05. RELATÓRIO E JUSTIFICATIVA DA VIAGEM -->
+              <div class="section-box">
+                <div class="section-header">05. RELATÓRIO E JUSTIFICATIVA DA VIAGEM ${numRelatorioPages > 1 ? `(PARTE ${rIndex + 1}/${numRelatorioPages})` : ''}</div>
+                <div class="section-body">
+                  <div class="justificativa-box">${blockText}</div>
+                </div>
+              </div>
+
+              ${section06Html}
+            </div>
+
+            <!-- Rodapé Página ${pageNum} -->
+            <div class="footer-bar">
+              <span>Código da Viagem: <strong style="color: #0f172a;">${protocol}</strong></span>
+              <span>Página ${pageNum} de ${totalPages}</span>
+            </div>
+          </div>
+        `;
+      }
+
+      // Gerar páginas exclusivas de comprovantes (exatamente 04 por folha em grade 2x2 padronizada)
+      let extraComprovantesPagesHtml = '';
+      if (totalComprovantes > 0) {
+        for (let ep = 0; ep < numComprovantesPages; ep++) {
+          const currentPageNum = 1 + numRelatorioPages + 1 + ep;
+          const isOverallLastPage = currentPageNum === totalPages;
+          const startIndex = ep * 4;
+          const pageCards = listComprovantes.slice(startIndex, startIndex + 4);
+          const cardsHtml = pageCards.map((c, i) => renderCard(c, startIndex + i)).join('');
+
+          extraComprovantesPagesHtml += `
+            <div class="page ${isOverallLastPage ? 'page-last' : ''}">
+              <div>
+                <div class="header">
+                  <div style="display: flex; align-items: center; gap: 14px;">
+                    ${logoUrl ? `<img src="${logoUrl}" alt="Logo Prefeitura" style="max-height: 55px; width: auto; object-fit: contain;" />` : ''}
+                    <div>
+                      <div class="header-title">PREFEITURA MUNICIPAL DE SÃO JOSÉ DO GOIABAL</div>
+                      <div class="header-subtitle">CONCESSÃO DE DIÁRIA E AUTORIZAÇÃO DE VIAGEM OFICIAL</div>
+                    </div>
+                  </div>
+                  <div style="text-align: right;">
+                    <div class="protocol-badge">${protocol}</div>
+                    <div><span class="status-badge">CONCLUÍDO / GERADO</span></div>
+                  </div>
+                </div>
+
+                <!-- 06. COMPROVAÇÃO DE DESPESAS -->
+                <div class="section-box">
+                  <div class="section-header">06. COMPROVAÇÃO DE DESPESAS ${numComprovantesPages > 1 ? `(FOLHA ${ep + 1}/${numComprovantesPages})` : ''}</div>
+                  <div class="section-body">
+                    <div class="comprovantes-grid">${cardsHtml}</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Rodapé Página ${currentPageNum} -->
+              <div class="footer-bar">
+                <span>Código da Viagem: <strong style="color: #0f172a;">${protocol}</strong></span>
+                <span>Página ${currentPageNum} de ${totalPages}</span>
+              </div>
+            </div>
+          `;
+        }
+      }
+
       const htmlContent = `
         <!DOCTYPE html>
         <html lang="pt-BR">
@@ -1105,17 +1266,17 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
               color: #4f46e5;
             }
             .justificativa-box {
-              font-size: 9.5pt;
+              font-size: 9pt;
               line-height: 1.45;
               color: #1e293b;
               white-space: pre-wrap;
+              word-break: break-word;
               background: #fafafa;
-              padding: 10px;
+              padding: 12px;
               border-radius: 6px;
               border: 1px solid #e2e8f0;
               font-style: italic;
-              max-height: 155mm;
-              overflow: hidden;
+              min-height: 140mm;
             }
             .signatures {
               margin-top: 60px;
@@ -1160,14 +1321,18 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
             .comprovantes-grid {
               display: grid;
               grid-template-columns: repeat(2, 1fr);
-              gap: 12px;
-              margin-top: 4px;
+              gap: 14px;
+              margin-top: 2px;
             }
             .comprovante-card {
-              border: 1px solid #e2e8f0;
+              border: 1px solid #cbd5e1;
               border-radius: 8px;
               overflow: hidden;
-              background: #f8fafc;
+              background: #ffffff;
+              height: 350px;
+              display: flex;
+              flex-direction: column;
+              justify-content: space-between;
               page-break-inside: avoid;
               break-inside: avoid;
             }
@@ -1177,41 +1342,49 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
               justify-content: space-between;
               padding: 6px 10px;
               background: #f1f5f9;
-              border-bottom: 1px solid #e2e8f0;
+              border-bottom: 1px solid #cbd5e1;
             }
             .comp-num {
-              font-size: 8pt;
+              font-size: 8.5pt;
               font-weight: 900;
-              color: #94a3b8;
+              color: #64748b;
               font-family: monospace;
             }
             .comp-tipo {
-              font-size: 8.5pt;
-              font-weight: 800;
-              color: #1e293b;
+              font-size: 9pt;
+              font-weight: 900;
+              color: #0f172a;
               text-transform: uppercase;
               letter-spacing: 0.02em;
               flex: 1;
               padding: 0 8px;
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
             }
             .comp-valor {
-              font-size: 9pt;
+              font-size: 9.5pt;
               font-weight: 900;
               color: #4f46e5;
             }
             .comp-img-wrap {
-              padding: 8px;
+              padding: 6px;
               display: flex;
               align-items: center;
               justify-content: center;
-              min-height: 80px;
+              height: 280px;
+              min-height: 280px;
               background: #ffffff;
+              overflow: hidden;
+              position: relative;
             }
             .comp-img {
-              max-width: 100%;
-              max-height: 180px;
+              max-width: 95%;
+              max-height: 250px;
               object-fit: contain;
               border-radius: 4px;
+              transform: rotate(90deg) scale(1.35);
+              -webkit-transform: rotate(90deg) scale(1.35);
             }
             .comp-link {
               display: flex;
@@ -1284,7 +1457,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
           </style>
         </head>
         <body>
-          <!-- PÁGINA INICIAL -->
+          <!-- PÁGINA INICIAL (PÁGINA 1) -->
           <div class="page">
             <div>
               <div class="header">
@@ -1406,53 +1579,18 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
               </div>
             </div>
 
-            <!-- Rodapé Página Inicial -->
+            <!-- Rodapé Página 1 -->
             <div class="footer-bar">
               <span>Código da Viagem: <strong style="color: #0f172a;">${protocol}</strong></span>
-              <span>Página 1 de 2</span>
+              <span>Página 1 de ${totalPages}</span>
             </div>
           </div>
 
-          <!-- PÁGINA 2 E DEMAIS -->
-          <div class="page page-last">
-            <div>
-              <div class="header">
-                <div style="display: flex; align-items: center; gap: 14px;">
-                  ${logoUrl ? `<img src="${logoUrl}" alt="Logo Prefeitura" style="max-height: 55px; width: auto; object-fit: contain;" />` : ''}
-                  <div>
-                    <div class="header-title">PREFEITURA MUNICIPAL DE SÃO JOSÉ DO GOIABAL</div>
-                    <div class="header-subtitle">CONCESSÃO DE DIÁRIA E AUTORIZAÇÃO DE VIAGEM OFICIAL</div>
-                  </div>
-                </div>
-                <div style="text-align: right;">
-                  <div class="protocol-badge">${protocol}</div>
-                  <div><span class="status-badge">CONCLUÍDO / GERADO</span></div>
-                </div>
-              </div>
+          <!-- PÁGINAS DO RELATÓRIO DA VIAGEM (PÁGINA 2 E SEGUINTES) -->
+          ${relatorioPagesHtml}
 
-              <!-- 05. RELATÓRIO E JUSTIFICATIVA DA VIAGEM -->
-              <div class="section-box">
-                <div class="section-header">05. RELATÓRIO E JUSTIFICATIVA DA VIAGEM</div>
-                <div class="section-body">
-                  <div class="justificativa-box">${relatorio}</div>
-                </div>
-              </div>
-
-              <!-- 06. COMPROVAÇÃO DE DESPESAS -->
-              <div class="section-box">
-                <div class="section-header">06. COMPROVAÇÃO DE DESPESAS</div>
-                <div class="section-body">
-                  ${despesasTextoParam}
-                </div>
-              </div>
-            </div>
-
-            <!-- Rodapé Página 2 -->
-            <div class="footer-bar">
-              <span>Código da Viagem: <strong style="color: #0f172a;">${protocol}</strong></span>
-              <span>Página 2 de 2</span>
-            </div>
-          </div>
+          <!-- PÁGINAS EXTRAS DE COMPROVANTES (SE HOUVER) -->
+          ${extraComprovantesPagesHtml}
         </body>
         </html>
       `;
@@ -1541,7 +1679,13 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
   };
 
   const handleAdminGenerate = async (bypass2FA = false) => {
-    if (!selectedEvento || !valorDiaria || !relatorioViagem.trim()) return;
+    if (!selectedEvento || !valorDiaria) return;
+
+    if (!relatorioViagem.trim()) {
+      handleSelectModalTab('relatorio');
+      alert("O preenchimento da aba RELATÓRIO DA VIAGEM é OBRIGATÓRIO!");
+      return;
+    }
 
     if (!bypass2FA && currentUser && (currentUser.twoFactorEnabled || currentUser.twoFactorEnabled2)) {
       setIs2FAModalOpen(true);
@@ -2038,6 +2182,17 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                             title="Baixar / Imprimir PDF da Diária Concluída"
                           >
                             <Download className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+
+                        {currentUser?.role === 'admin' && evento.status === 'concluido' && (
+                          <button
+                            onClick={() => handleOpenReview(evento)}
+                            className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 shadow-xs shrink-0 flex items-center gap-1"
+                            title="Editar Viagem Concluída (Administrador)"
+                          >
+                            <Pencil className="w-3 h-3" />
+                            <span>Editar</span>
                           </button>
                         )}
 
@@ -3026,6 +3181,34 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
 
                         return (
                           <div className="space-y-6">
+                            <div className="bg-amber-50/60 p-5 rounded-2xl border border-amber-200/80 shadow-xs space-y-2">
+                              <div className="flex items-center justify-between">
+                                <label className="text-xs font-black uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
+                                  <BookOpen className="w-4 h-4 text-amber-600" />
+                                  Texto do Relatório Oficial da Viagem * <span className="text-rose-600 font-bold">(Preenchimento Obrigatório)</span>
+                                </label>
+                                {!relatorioViagem.trim() && (
+                                  <span className="text-[10px] font-black text-rose-600 bg-rose-100 px-2 py-0.5 rounded border border-rose-200 uppercase">
+                                    Obrigatório
+                                  </span>
+                                )}
+                              </div>
+                              <textarea
+                                value={relatorioViagem}
+                                onChange={(e) => setRelatorioViagem(e.target.value)}
+                                placeholder="Digite aqui o relatório final das atividades e compromissos cumpridos durante a viagem..."
+                                className={`w-full bg-white border rounded-xl p-4 text-xs font-medium text-slate-900 outline-none focus:ring-4 transition-all min-h-[120px] resize-none leading-relaxed shadow-sm ${
+                                  !relatorioViagem.trim() ? 'border-rose-300 focus:border-rose-500 focus:ring-rose-500/10' : 'border-amber-200 focus:border-amber-500 focus:ring-amber-500/10'
+                                }`}
+                              />
+                              {!relatorioViagem.trim() && (
+                                <p className="text-[11px] font-bold text-rose-600 flex items-center gap-1">
+                                  <AlertTriangle className="w-3.5 h-3.5 text-rose-500" />
+                                  É obrigatório preencher este campo para poder avançar ou salvar o relatório.
+                                </p>
+                              )}
+                            </div>
+
                             <div className="bg-gradient-to-br from-indigo-50/50 via-slate-50 to-white p-6 rounded-2xl border border-indigo-100/70 shadow-inner space-y-3">
                               <div className="flex items-center justify-between border-b border-indigo-100/50 pb-2">
                                 <span className="text-[10px] font-black text-indigo-700 uppercase tracking-widest block">Resumo Executivo Narrativo</span>
@@ -3150,13 +3333,26 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
 
                     {/* Relatório Viagem */}
                     <div className="space-y-2">
-                      <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500">Relatório da Viagem *</label>
+                      <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 flex items-center justify-between">
+                        <span>Relatório da Viagem <span className="text-rose-500 font-bold">* (OBRIGATÓRIO)</span></span>
+                        {!relatorioViagem.trim() && (
+                          <span className="text-[10px] font-bold text-rose-500 lowercase font-mono">preenchimento obrigatório</span>
+                        )}
+                      </label>
                       <textarea
                         value={relatorioViagem}
                         onChange={(e) => setRelatorioViagem(e.target.value)}
                         placeholder="Descreva as atividades e os compromissos cumpridos no evento de viagem..."
-                        className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 text-xs font-medium text-slate-900 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 transition-all min-h-[160px] resize-none leading-relaxed shadow-sm"
+                        className={`w-full bg-white border rounded-2xl px-5 py-4 text-xs font-medium text-slate-900 outline-none focus:ring-4 transition-all min-h-[160px] resize-none leading-relaxed shadow-sm ${
+                          !relatorioViagem.trim() ? 'border-rose-300 focus:border-rose-500 focus:ring-rose-500/10' : 'border-slate-200 focus:border-indigo-500 focus:ring-indigo-500/5'
+                        }`}
                       />
+                      {!relatorioViagem.trim() && (
+                        <p className="text-[11px] font-bold text-rose-500 flex items-center gap-1 mt-1">
+                          <AlertTriangle className="w-3.5 h-3.5" />
+                          O preenchimento do relatório da viagem é obrigatório.
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -3173,12 +3369,19 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                   >
                     Fechar
                   </button>
-                  {selectedEvento.status === 'aguardando_administrador' && (
+                  {(selectedEvento.status === 'aguardando_administrador' || (selectedEvento.status === 'concluido' && currentUser?.role === 'admin')) && (
                     <button 
-                      onClick={() => setAdminStep('approve')}
+                      onClick={() => {
+                        if (!relatorioViagem.trim()) {
+                          handleSelectModalTab('relatorio');
+                          alert("O preenchimento do Relatório da Viagem é OBRIGATÓRIO! Por favor, preencha o relatório na aba Relatório antes de avançar.");
+                          return;
+                        }
+                        setAdminStep('approve');
+                      }}
                       className="px-4 sm:px-7 py-2.5 sm:py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase tracking-widest rounded-xl sm:rounded-2xl transition-all shadow-lg shadow-indigo-600/20 active:scale-95 w-full sm:w-auto text-center whitespace-nowrap"
                     >
-                      Aprovar Viagem
+                      {selectedEvento.status === 'concluido' ? 'Editar Parâmetros / Salvar' : 'Aprovar Viagem'}
                     </button>
                   )}
                 </>
@@ -3196,7 +3399,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                     className="px-4 sm:px-7 py-2.5 sm:py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white font-black text-xs uppercase tracking-widest rounded-xl sm:rounded-2xl transition-all shadow-lg shadow-emerald-600/20 active:scale-95 flex items-center justify-center gap-2 w-full sm:w-auto text-center whitespace-nowrap"
                   >
                     {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
-                    <span>Gerar Viagem</span>
+                    <span>{selectedEvento.status === 'concluido' ? 'Salvar Alterações' : 'Gerar Viagem'}</span>
                   </button>
                 </>
               )}
