@@ -21,6 +21,7 @@ import { getGlobalSettings } from '../../services/settingsService';
 import { uploadFile } from '../../services/storageService';
 import { TwoFactorModal } from '../TwoFactorModal';
 import { DiariasReportModal } from './DiariasReportModal';
+import { ImageCropModal } from '../common/ImageCropModal';
 import { performLocationCheckpointSync } from '../../services/locationTrackingService';
 
 
@@ -97,6 +98,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
   // Novos campos de despesa do comprovante
   const [newExpenseType, setNewExpenseType] = useState('Alimentação');
   const [newExpenseValue, setNewExpenseValue] = useState('');
+  const [pendingCropFile, setPendingCropFile] = useState<File | null>(null);
 
   // Estados para o Modal do Administrador (Aprovação Final) e Abas
   const [adminStep, setAdminStep] = useState<'review' | 'approve'>('review');
@@ -744,44 +746,53 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
     });
   };
 
+  const processComprovanteUpload = async (file: File) => {
+    if (!selectedEvento) return;
+    setIsUploading(true);
+    try {
+      const publicUrl = await uploadFile(file, 'attachments', `comprovante_evento_${selectedEvento.id}_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`);
+      if (publicUrl) {
+        const newAttachment: Attachment = {
+          id: Date.now().toString(),
+          name: file.name,
+          url: publicUrl,
+          type: file.type,
+          date: new Date().toISOString(),
+          expenseType: newExpenseType || 'Despesa',
+          expenseValue: newExpenseValue.trim() ? newExpenseValue.trim() : undefined
+        };
+
+        const updatedList = [...comprovantes, newAttachment];
+        setComprovantes(updatedList);
+        syncRelatorioWithComprovantesList(updatedList);
+        setNewExpenseValue('');
+
+        // SALVAR IMEDIATAMENTE NO BANCO DE DADOS (SUPABASE)
+        const updated = await updateDiariaEvento(selectedEvento.id, {
+          comprovantes_gestor: updatedList
+        } as any);
+
+        setSelectedEvento(prev => prev ? { ...prev, comprovantes_gestor: updatedList } : null);
+        setEventos(prev => prev.map(evt => evt.id === selectedEvento.id ? { ...evt, comprovantes_gestor: updatedList } : evt));
+        window.dispatchEvent(new Event('diarias_eventos_updated'));
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao enviar o comprovante.");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   const handleComprovanteUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && selectedEvento) {
-      setIsUploading(true);
-      try {
-        const publicUrl = await uploadFile(file, 'attachments', `comprovante_evento_${selectedEvento.id}_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`);
-        if (publicUrl) {
-          const newAttachment: Attachment = {
-            id: Date.now().toString(),
-            name: file.name,
-            url: publicUrl,
-            type: file.type,
-            date: new Date().toISOString(),
-            expenseType: newExpenseType || 'Despesa',
-            expenseValue: newExpenseValue.trim() ? newExpenseValue.trim() : undefined
-          };
-
-          const updatedList = [...comprovantes, newAttachment];
-          setComprovantes(updatedList);
-          syncRelatorioWithComprovantesList(updatedList);
-          setNewExpenseValue('');
-
-          // SALVAR IMEDIATAMENTE NO BANCO DE DADOS (SUPABASE)
-          const updated = await updateDiariaEvento(selectedEvento.id, {
-            comprovantes_gestor: updatedList
-          } as any);
-
-          setSelectedEvento(prev => prev ? { ...prev, comprovantes_gestor: updatedList } : null);
-          setEventos(prev => prev.map(evt => evt.id === selectedEvento.id ? { ...evt, comprovantes_gestor: updatedList } : evt));
-          window.dispatchEvent(new Event('diarias_eventos_updated'));
-        }
-      } catch (err) {
-        console.error(err);
-        alert("Erro ao enviar o comprovante.");
-      } finally {
-        setIsUploading(false);
-        if (e.target) e.target.value = '';
+      if (file.type && file.type.startsWith('image/')) {
+        setPendingCropFile(file);
+      } else {
+        processComprovanteUpload(file);
       }
+      if (e.target) e.target.value = '';
     }
   };
 
@@ -3752,6 +3763,20 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal de Corte e Edição de Imagem */}
+      {pendingCropFile && (
+        <ImageCropModal
+          imageFile={pendingCropFile}
+          onConfirm={(croppedFile) => {
+            setPendingCropFile(null);
+            processComprovanteUpload(croppedFile);
+          }}
+          onCancel={() => {
+            setPendingCropFile(null);
+          }}
+        />
       )}
     </div>
   );

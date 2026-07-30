@@ -9,6 +9,7 @@ import { DiariaEvento, User, Attachment } from '../../types';
 import { getAllDiariaEventos, updateDiariaEvento, getDiariasGestores } from '../../services/diariasEventosService';
 import { uploadFile } from '../../services/storageService';
 import { getDiariasDespesasEnabled } from '../../services/diariasSettingsService';
+import { ImageCropModal } from '../common/ImageCropModal';
 
 interface ViajarScreenProps {
   currentUser: User;
@@ -180,9 +181,9 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
 
   // Estados para Upload de Comprovante de Despesa
   const [isUploading, setIsUploading] = useState<boolean>(false);
-  const [expenseType, setExpenseType] = useState<string>('Combustível');
+  const [expenseType, setExpenseType] = useState<string>('Alimentação');
   const [expenseValue, setExpenseValue] = useState<string>('');
-
+  const [pendingCropFile, setPendingCropFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
@@ -707,10 +708,8 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
     }
   };
 
-  // Upload de Comprovante de Despesa (Foto ou Arquivo)
-  const handleComprovanteUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !selectedEvento) return;
+  const processComprovanteUpload = async (file: File) => {
+    if (!selectedEvento) return;
     setIsUploading(true);
 
     try {
@@ -779,6 +778,17 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
       if (cameraInputRef.current) cameraInputRef.current.value = '';
+    }
+  };
+
+  const handleComprovanteUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedEvento) return;
+
+    if (file.type && file.type.startsWith('image/')) {
+      setPendingCropFile(file);
+    } else {
+      processComprovanteUpload(file);
     }
   };
 
@@ -1871,6 +1881,20 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal de Corte e Edição de Imagem */}
+      {pendingCropFile && (
+        <ImageCropModal
+          imageFile={pendingCropFile}
+          onConfirm={(croppedFile) => {
+            setPendingCropFile(null);
+            processComprovanteUpload(croppedFile);
+          }}
+          onCancel={() => {
+            setPendingCropFile(null);
+          }}
+        />
       )}
     </div>
   );
