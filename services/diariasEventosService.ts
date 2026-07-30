@@ -184,6 +184,7 @@ export const updateDiariaEvento = async (id: string, updates: Partial<DiariaEven
     delete fallbackUpdates.gestor_transferido_cargo;
     delete fallbackUpdates.permitir_despesas_pos_finalizacao;
     delete fallbackUpdates.ultimo_checkpoint;
+    delete fallbackUpdates.checklist;
 
     const fallbackRes = await supabase
       .from('diarias_eventos')
