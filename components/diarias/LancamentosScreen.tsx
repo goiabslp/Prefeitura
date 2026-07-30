@@ -299,7 +299,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
           veiculo_outro: evento.veiculo_outro,
           distancia: evento.distancia ?? 0,
           justificativa_gestor: evento.justificativa_gestor,
-          comprovantes_gestor: evento.comprovantes_gestor,
+          comprovantes_gestor: [],
           valor_diaria: evento.valor_diaria,
           relatorio_viagem: evento.relatorio_viagem,
           gestor_transferido_cargo: evento.gestor_transferido_cargo,
