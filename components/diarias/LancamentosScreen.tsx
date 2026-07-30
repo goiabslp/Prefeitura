@@ -662,35 +662,8 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
       setAdminStep('review');
       setValorDiaria(evento.valor_diaria ? String(evento.valor_diaria) : '');
 
-      // Se já há um relatório salvo, usa ele; senão, pré-popula com texto-base das despesas
-      if (evento.relatorio_viagem) {
-        setRelatorioViagem(evento.relatorio_viagem);
-      } else {
-        const comprovantesList: Attachment[] = evento.comprovantes_gestor || [];
-        let textBase = '';
-        if (comprovantesList.length > 0) {
-          const itens = comprovantesList.map((c, i) => {
-            const tipo = c.expenseType || c.name || 'Despesa';
-            const valor = c.expenseValue ? `R$ ${c.expenseValue}` : 'valor não informado';
-            return `${i + 1}. ${tipo}: ${valor}`;
-          }).join('\n');
-
-          let total = 0;
-          let hasTotal = false;
-          comprovantesList.forEach(c => {
-            if (c.expenseValue) {
-              const num = parseFloat(c.expenseValue.toString().replace(/[^0-9,.-]/g, '').replace(',', '.'));
-              if (!isNaN(num)) { total += num; hasTotal = true; }
-            }
-          });
-          const totalStr = hasTotal
-            ? `\nTotal de despesas comprovadas: R$ ${total.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-            : '';
-
-          textBase = `Despesas registradas durante a viagem:\n${itens}${totalStr}\n\n`;
-        }
-        setRelatorioViagem(textBase);
-      }
+      // Se já há um relatório salvo, usa ele; senão, vem em branco por padrão
+      setRelatorioViagem(evento.relatorio_viagem || '');
     } else {
       setModalType('gestor');
       setJustificativaGestor(evento.justificativa_gestor || '');
