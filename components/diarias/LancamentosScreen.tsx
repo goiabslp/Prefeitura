@@ -74,6 +74,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
 }) => {
   const [eventos, setEventos] = useState<DiariaEvento[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [startingTripId, setStartingTripId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [gestoresMap, setGestoresMap] = useState<Record<string, string>>({});
 
@@ -460,26 +461,48 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
     };
   }, []);
 
-  useEffect(() => {
-    const checkActiveTrip = async () => {
-      if (!currentUser) return;
-      try {
-        const { getAllDiariaEventos } = await import('../../services/diariasEventosService');
-        const allEvts = await getAllDiariaEventos();
-        const normalizeText = (t: string) => t ? t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim() : "";
-        const active = allEvts.find(evt => {
-          if (!evt.pessoas || !Array.isArray(evt.pessoas)) return false;
-          const p = evt.pessoas.find(x => x.id === currentUser.id || (x.name && normalizeText(x.name) === normalizeText(currentUser.name)));
-          return p && (p as any).viagem_inicio && !(p as any).viagem_fim;
-        });
-        if (active) {
-          window.history.pushState({}, '', `/Diarias/Viajar/Detalhes?id=${active.id}`);
-          window.dispatchEvent(new Event('popstate'));
-        }
-      } catch (e) {}
+  const handleIniciarViagem = async (evento: DiariaEvento) => {
+    if (!currentUser) return;
+    setStartingTripId(evento.id);
+    const inicioIso = new Date().toISOString();
+    const updatedPessoas = (evento.pessoas && evento.pessoas.length > 0)
+      ? evento.pessoas.map(p => ({
+          ...p,
+          viagem_inicio: (p as any).viagem_inicio || inicioIso
+        }))
+      : [{ id: currentUser.id, name: currentUser.name, viagem_inicio: inicioIso }] as any;
+
+    const optimisticEvento: DiariaEvento = {
+      ...evento,
+      pessoas: updatedPessoas,
+      data_saida: inicioIso,
+      status: 'em_viagem',
+      modo_inicio: 'manual',
+      saida_validada: true
     };
-    checkActiveTrip();
-  }, [currentUser]);
+
+    // 1. Atualização otimista na tela sem sair da página
+    setEventos(prev => prev.map(e => e.id === evento.id ? optimisticEvento : e));
+
+    // 2. Envio em segundo plano para o banco de dados
+    try {
+      const updated = await updateDiariaEvento(evento.id, {
+        pessoas: updatedPessoas,
+        data_saida: inicioIso,
+        status: 'em_viagem',
+        modo_inicio: 'manual',
+        saida_validada: true
+      } as any);
+      setEventos(prev => prev.map(e => e.id === evento.id ? updated : e));
+      window.dispatchEvent(new Event('diarias_eventos_updated'));
+    } catch (err) {
+      console.error('Erro ao iniciar viagem:', err);
+      alert('Falha ao iniciar a viagem. Tente novamente.');
+      fetchEventos(false);
+    } finally {
+      setStartingTripId(null);
+    }
+  };
 
   const handleToggleEventoDespesas = async (evento: DiariaEvento) => {
     try {
@@ -1883,15 +1906,17 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                         {/* Botão de Iniciar Viagem (Apenas para Viagens Programadas) */}
                         {evento.status === 'viagem_programada' && (isCurrentUserGestor || isAdmin || evento.user_id === currentUser?.id || (evento.pessoas && evento.pessoas.some(p => p.id === currentUser?.id))) && (
                           <button
-                            onClick={() => {
-                              window.history.pushState({}, '', `/Diarias/Viajar/Detalhes?id=${evento.id}`);
-                              window.dispatchEvent(new Event('popstate'));
-                            }}
-                            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 shadow-xs flex items-center gap-1 shrink-0"
-                            title="Iniciar esta Viagem"
+                            onClick={() => handleIniciarViagem(evento)}
+                            disabled={startingTripId === evento.id}
+                            className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 shadow-xs flex items-center gap-1 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Iniciar esta Viagem sem sair da página"
                           >
-                            <Play className="w-3 h-3 fill-white text-white shrink-0" />
-                            <span>Iniciar</span>
+                            {startingTripId === evento.id ? (
+                              <Loader2 className="w-3 h-3 text-white animate-spin shrink-0" />
+                            ) : (
+                              <Play className="w-3 h-3 fill-white text-white shrink-0" />
+                            )}
+                            <span>{startingTripId === evento.id ? 'Iniciando...' : 'Iniciar'}</span>
                           </button>
                         )}
 
@@ -1921,8 +1946,8 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                           </button>
                         )}
 
-                        {/* Botão de Transferir Viagem (não iniciada) */}
-                        {!isEmViagem && evento.status !== 'concluido' && (isGestorOrAdmin || evento.user_id === currentUser?.id || currentUser?.permissions?.includes('parent_diarias_lancamentos')) && (
+                        {/* Botão de Transferir Viagem (não iniciada - apenas para o próprio criador, gestor ou admin) */}
+                        {!isEmViagem && evento.status !== 'concluido' && (isGestorOrAdmin || evento.user_id === currentUser?.id) && (
                           <button
                             onClick={() => {
                               setTransferServerEventoModal(evento);
@@ -1935,8 +1960,8 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                           </button>
                         )}
 
-                        {/* Botão de Adicionar Servidor para Gestor/Admin */}
-                        {isGestorOrAdmin && (
+                        {/* Botão de Adicionar Servidor apenas para Administradores */}
+                        {currentUser?.role === 'admin' && (
                           <button
                             onClick={() => {
                               setAddServerEventoModal(evento);
@@ -1994,10 +2019,10 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                           </button>
                         )}
                         
+                        {/* Botão de Excluir Viagem (apenas para Admin, Gestor da Viagem ou o criador da própria viagem pendente) */}
                         {(currentUser?.role === 'admin' || 
-                          evento.user_id === currentUser?.id || 
-                          currentUser?.permissions?.includes('parent_diarias_lancamentos') || 
-                          currentUser?.permissions?.includes('parent_diarias')) && (
+                          isGestorOrAdmin || 
+                          (evento.user_id === currentUser?.id && evento.status !== 'concluido' && !isEmViagem)) && (
                           <button 
                             onClick={() => handleDelete(evento.id)}
                             className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all shrink-0"

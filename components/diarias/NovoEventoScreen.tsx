@@ -634,10 +634,8 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
 
   const canAddExtraServer = useMemo(() => {
     if (!currentUser) return false;
-    if (currentUser.role === 'admin') return true;
-    if (currentUser.permissions?.includes('parent_diarias_gestores')) return true;
-    return Object.values(gestoresMap).includes(currentUser.id);
-  }, [currentUser, gestoresMap]);
+    return currentUser.role === 'admin';
+  }, [currentUser]);
 
   const isDateExpired = (returnDateStr: string): boolean => {
     if (!returnDateStr) return false;
@@ -664,7 +662,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
       return;
     }
 
-    const isAdmin = currentUser && (currentUser.role === 'admin' || currentUser.permissions?.includes('parent_diarias_gestores'));
+    const isAdmin = currentUser && currentUser.role === 'admin';
     const selectedDateTime = parseISO(val);
 
     // 1. Regra absoluta: Validar se a data de saída é posterior à data de retorno (se o retorno já estiver definido)
@@ -705,7 +703,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
       return;
     }
 
-    const isAdmin = currentUser && (currentUser.role === 'admin' || currentUser.permissions?.includes('parent_diarias_gestores'));
+    const isAdmin = currentUser && currentUser.role === 'admin';
     const selectedReturnDateTime = parseISO(val);
 
     // 1. Regra absoluta: Validar se o retorno é anterior à saída (se a saída já estiver definida)
@@ -2021,7 +2019,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
           onSelect={handleDepartureSelect}
           initialValue={departureDateTime}
           title="Data e Hora de Saída"
-          isAdmin={currentUser?.role === 'admin' || currentUser?.permissions?.includes('parent_diarias_gestores')}
+          isAdmin={currentUser?.role === 'admin'}
         />
         
         <DateTimePickerModal
@@ -2030,7 +2028,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
           onSelect={handleReturnSelect}
           initialValue={returnDateTime}
           title="Data e Hora de Retorno"
-          isAdmin={currentUser?.role === 'admin' || currentUser?.permissions?.includes('parent_diarias_gestores')}
+          isAdmin={currentUser?.role === 'admin'}
         />
 
         {isExpiredModalOpen && (
@@ -2851,7 +2849,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
         onSelect={handleDepartureSelect}
         initialValue={departureDateTime}
         title="Data e Hora de Saída"
-        isAdmin={currentUser?.role === 'admin' || currentUser?.permissions?.includes('parent_diarias_gestores')}
+        isAdmin={currentUser?.role === 'admin'}
       />
       
       <DateTimePickerModal
@@ -2860,7 +2858,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
         onSelect={handleReturnSelect}
         initialValue={returnDateTime}
         title="Data e Hora de Retorno"
-        isAdmin={currentUser?.role === 'admin' || currentUser?.permissions?.includes('parent_diarias_gestores')}
+        isAdmin={currentUser?.role === 'admin'}
       />
 
       {/* Modal - Data da Diária Expirada (Regra dos 10 Dias) */}
