@@ -298,6 +298,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
     return [];
   });
   const [editingPersonIndex, setEditingPersonIndex] = useState<number | null>(null);
+  const [overrideVehicleConflict, setOverrideVehicleConflict] = useState<string | null>(null);
   const [destination, setDestination] = useState('');
   const [departureDateTime, setDepartureDateTime] = useState('');
   const [returnDateTime, setReturnDateTime] = useState('');
@@ -657,6 +658,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
   };
 
   const handleDepartureSelect = (val: string) => {
+    setOverrideVehicleConflict(null);
     if (!val) {
       setDepartureDateTime('');
       return;
@@ -697,6 +699,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
   };
 
   const handleReturnSelect = (val: string) => {
+    setOverrideVehicleConflict(null);
     if (!val) {
       setReturnDateTime('');
       return;
@@ -813,7 +816,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
     (selectedVehicle !== '' && (selectedVehicle !== 'OUTRO' || customVehicle.trim() !== '')) &&
     (selectedVehicle === '' || selectedVehicle === 'OUTRO' || (() => {
       const v = vehicles.find(veh => `${veh.brand} ${veh.model} - ${veh.plate}` === selectedVehicle);
-      return v ? getVehicleStatusInfo(v).isAvailable : true;
+      return v ? (getVehicleStatusInfo(v).isAvailable || overrideVehicleConflict === v.id) : true;
     })()) &&
     (!hospedagem || (hospedagem && hospedagemDias > 0)) &&
     distancia !== '';
@@ -1067,23 +1070,26 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
       : 'aguardando_aprovacao';
 
     try {
-      await createDiariaEvento({
-        pessoas: selectedPersons,
-        destino: destination,
-        data_saida: departureDateTime,
-        // Se o campo RETORNO for preenchido por gestor/admin, salva a data; caso contrário, salva sentinela para o fluxo Viajar
-        data_retorno: hasReturn ? returnDateTime : '2099-12-31T00:00:00.000Z',
-        motivo: reason.trim(),
-        setor_id: currentUser.sectorId,
-        user_id: currentUser.id,
-        user_name: currentUser.name,
-        status: initialStatus,
-        hospedagem,
-        hospedagem_dias: hospedagem ? hospedagemDias : 0,
-        veiculo: selectedVehicle,
-        veiculo_outro: selectedVehicle === 'OUTRO' ? customVehicle : '',
-        distancia: Number(distancia) || 0
-      });
+      // Cria uma viagem individualizada para cada servidor selecionado
+      for (const p of selectedPersons) {
+        await createDiariaEvento({
+          pessoas: [p],
+          destino: destination,
+          data_saida: departureDateTime,
+          // Se o campo RETORNO for preenchido por gestor/admin, salva a data; caso contrário, salva sentinela para o fluxo Viajar
+          data_retorno: hasReturn ? returnDateTime : '2099-12-31T00:00:00.000Z',
+          motivo: reason.trim(),
+          setor_id: currentUser.sectorId,
+          user_id: currentUser.id,
+          user_name: currentUser.name,
+          status: initialStatus,
+          hospedagem,
+          hospedagem_dias: hospedagem ? hospedagemDias : 0,
+          veiculo: selectedVehicle,
+          veiculo_outro: selectedVehicle === 'OUTRO' ? customVehicle : '',
+          distancia: Number(distancia) || 0
+        });
+      }
       
       setIsSuccess(true);
       setTimeout(() => {
@@ -2696,6 +2702,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
                       <button
                         key={idx}
                         onClick={() => {
+                          setOverrideVehicleConflict(null);
                           setDestination(city);
                           saveRecentDestination(city);
                           setIsCityOpen(false);
@@ -2976,7 +2983,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
                 <Car className="w-8 h-8 text-white" />
               </div>
               <span className="px-3 py-1 bg-white/20 backdrop-blur-md rounded-full text-[10px] font-black uppercase tracking-widest text-white mb-1 border border-white/30">
-                Veículo Indisponível
+                Veículo com Conflito de Horário
               </span>
               <h3 className="text-lg font-black tracking-tight uppercase">{vehicleStatusModal.vehicleName}</h3>
               <p className="text-xs text-white/90 font-medium mt-0.5">Placa: {vehicleStatusModal.plate}</p>
@@ -3001,7 +3008,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
                 {vehicleStatusModal.evento && (
                   <div className="space-y-2 pt-2 border-t border-slate-200/60 text-xs">
                     <div>
-                      <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400">Destino</span>
+                      <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400">Destino da Viagem Ativa</span>
                       <span className="font-bold text-slate-800">{vehicleStatusModal.evento.destino}</span>
                     </div>
 
@@ -3024,17 +3031,49 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
                 )}
               </div>
 
-              <p className="text-xs text-slate-500 font-medium text-center leading-relaxed">
-                Este veículo não pode ser selecionado para uma nova viagem no momento pois possui alocação ativa.
-              </p>
+              {vehicleStatusModal.evento && (
+                <div className="text-xs text-slate-700 font-bold bg-indigo-50/50 p-4 border border-indigo-100 rounded-2xl leading-relaxed text-center">
+                  O veículo {vehicleStatusModal.vehicleName} está {vehicleStatusModal.statusKey === 'em_viagem' ? 'em viagem' : 'programado'} com o servidor{" "}
+                  <span className="text-indigo-700 font-black">
+                    {vehicleStatusModal.evento.pessoas?.map(p => p.name).join(', ') || vehicleStatusModal.evento.user_name}
+                  </span>
+                  , para a localidade <span className="text-indigo-700 font-black">{vehicleStatusModal.evento.destino}</span> na data{" "}
+                  <span className="text-indigo-700 font-black">
+                    {new Date(vehicleStatusModal.evento.data_saida).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                  . Você vai na mesma viagem?
+                </div>
+              )}
 
-              <button
-                type="button"
-                onClick={() => setVehicleStatusModal(null)}
-                className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-md active:scale-95"
-              >
-                Entendi, Escolher Outro Veículo
-              </button>
+              <div className="flex flex-col gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const vehicleValue = `${vehicleStatusModal.vehicleName} - ${vehicleStatusModal.plate}`;
+                    const vObj = vehicles.find(veh => veh.plate === vehicleStatusModal.plate);
+                    if (vObj) {
+                      setOverrideVehicleConflict(vObj.id);
+                    }
+                    setSelectedVehicle(vehicleValue);
+                    setCustomVehicle('');
+                    setIsVehiclesOpen(false);
+                    setVehicleSearch('');
+                    setVehicleStatusModal(null);
+                  }}
+                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center gap-1.5"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>Sim, vou na mesma viagem</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setVehicleStatusModal(null)}
+                  className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-xs uppercase tracking-wider rounded-xl transition-all border border-slate-200"
+                >
+                  Não, escolher outro veículo
+                </button>
+              </div>
             </div>
           </div>
         </div>

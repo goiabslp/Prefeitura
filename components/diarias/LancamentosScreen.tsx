@@ -14,7 +14,8 @@ import {
   getAllDiariaEventos, 
   updateDiariaEvento,
   getDiariasGestores,
-  deleteDiariaEvento
+  deleteDiariaEvento,
+  createDiariaEvento
 } from '../../services/diariasEventosService';
 import { getGlobalSettings } from '../../services/settingsService';
 import { uploadFile } from '../../services/storageService';
@@ -262,22 +263,56 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
       return;
     }
 
-    const updatedPessoas = [...(evento.pessoas || []), { id: person.id, name: person.name }];
-    const optimistic: DiariaEvento = {
-      ...evento,
-      pessoas: updatedPessoas
-    };
-
-    setEventos(prev => prev.map(e => e.id === evento.id ? optimistic : e));
     setAddServerEventoModal(null);
     setAddServerSearch('');
 
+    const newPersonObj = { id: person.id, name: person.name };
+    const allPersons = [...(evento.pessoas || []), newPersonObj];
+
+    const originalPerson = allPersons[0];
+    const otherPersons = allPersons.slice(1);
+
     try {
+      // 1. Atualizar a viagem original para ter apenas o primeiro servidor
       await updateDiariaEvento(evento.id, {
-        pessoas: updatedPessoas
+        pessoas: [originalPerson]
       });
+
+      // 2. Criar uma nova viagem para cada um dos outros servidores
+      for (const p of otherPersons) {
+        await createDiariaEvento({
+          pessoas: [p],
+          destino: evento.destino,
+          data_saida: evento.data_saida,
+          data_retorno: evento.data_retorno,
+          motivo: evento.motivo,
+          setor_id: evento.setor_id,
+          user_id: evento.user_id,
+          user_name: evento.user_name,
+          status: evento.status || 'aguardando_gestor',
+          hospedagem: evento.hospedagem ?? false,
+          hospedagem_dias: evento.hospedagem_dias ?? 0,
+          veiculo: evento.veiculo,
+          veiculo_outro: evento.veiculo_outro,
+          distancia: evento.distancia ?? 0,
+          justificativa_gestor: evento.justificativa_gestor,
+          comprovantes_gestor: evento.comprovantes_gestor,
+          valor_diaria: evento.valor_diaria,
+          relatorio_viagem: evento.relatorio_viagem,
+          gestor_transferido_cargo: evento.gestor_transferido_cargo,
+          modo_inicio: evento.modo_inicio,
+          saida_validada: evento.saida_validada,
+          checklist: evento.checklist,
+          digital_signature: evento.digital_signature
+        });
+      }
+
+      await fetchEventos(true);
+      alert("Viagem individualizada com sucesso para cada servidor!");
     } catch (err) {
-      console.warn("Erro ao adicionar servidor via Lancamentos:", err);
+      console.warn("Erro ao individualizar viagem via Lancamentos:", err);
+      alert("Erro ao individualizar a viagem. Algumas alterações podem não ter sido salvas.");
+      await fetchEventos(false);
     }
   };
 
