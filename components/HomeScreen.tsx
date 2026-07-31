@@ -434,12 +434,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                                 <h2 className="text-3xl desktop:text-5xl font-black text-slate-800 tracking-tight text-center drop-shadow-sm">{config.name}</h2>
                             </div>
 
-                            <div className="w-full grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 desktop:gap-4 max-w-7xl justify-center justify-items-center items-stretch animate-in zoom-in duration-500 fill-mode-backwards p-2">
+                            <div className="w-full flex flex-wrap justify-center items-stretch gap-3 desktop:gap-4 max-w-7xl animate-in zoom-in duration-500 fill-mode-backwards p-2">
                                 {actionButtons.map((btn, idx) => (
                                     <button
                                         key={idx}
                                         onClick={btn.onClick}
-                                        className={`group relative w-full max-w-[280px] min-h-[120px] desktop:min-h-[130px] h-auto py-6 rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-${btn.color}-500/30 hover:border-${btn.color}-200 hover:from-white hover:to-${btn.color}-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden shrink-0 ${btn.hideOnMobile ? 'hidden desktop:flex' : 'flex'}`}
+                                        className={`group relative w-full sm:w-[240px] desktop:w-[260px] max-w-[280px] min-h-[120px] desktop:min-h-[130px] h-auto py-6 rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-${btn.color}-500/30 hover:border-${btn.color}-200 hover:from-white hover:to-${btn.color}-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden shrink-0 ${btn.hideOnMobile ? 'hidden desktop:flex' : 'flex'}`}
                                         style={{ animationDelay: `${idx * 100}ms` }}
                                     >
                                         <div className={`absolute top-0 right-0 w-32 h-32 bg-${btn.color}-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150`}></div>
