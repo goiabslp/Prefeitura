@@ -49,11 +49,31 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     const [retornoDate, setRetornoDate] = useState('');
     const [isRetornoModalOpen, setIsRetornoModalOpen] = useState(false);
 
-    // Permissions check
+    // Cancel modal states
+    const [gestorUserIds, setGestorUserIds] = useState<string[]>([]);
+    const [cancelTarget, setCancelTarget] = useState<ConsultaAgendamento | null>(null);
+    const [cancelReason, setCancelReason] = useState('');
+    const [cancelError, setCancelError] = useState('');
+    const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+
+    useEffect(() => {
+        const fetchGestores = async () => {
+            try {
+                const gestores = await db.getConsultasGestores();
+                setGestorUserIds(gestores);
+            } catch (err) {
+                console.error('Error fetching gestores in AcompanharScreen:', err);
+            }
+        };
+        fetchGestores();
+    }, []);
+
+    // Permissions check: apenas gestores e administradores conseguem excluir!
     const isAdmin = currentUser.role === 'admin';
-    const canCancel = currentUser.permissions?.includes('parent_consultas_novo_agendamento') || isAdmin;
-    const canComplete = currentUser.permissions?.includes('parent_consultas_novo_agendamento') || isAdmin;
-    const canDelete = isAdmin; // Delete strictly admin
+    const isGestor = gestorUserIds.includes(currentUser.id);
+    const canCancel = currentUser.permissions?.includes('parent_consultas_novo_agendamento') || isAdmin || isGestor;
+    const canComplete = currentUser.permissions?.includes('parent_consultas_novo_agendamento') || isAdmin || isGestor;
+    const canDelete = isAdmin || isGestor;
 
     const formatDateBr = (d: string) => {
         if (!d) return '';
@@ -242,6 +262,36 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
         } catch (error: any) {
             alert(error.message || 'Erro ao alterar o status do agendamento.');
             loadData(true);
+        } finally {
+            setOperatingId(null);
+        }
+    };
+
+    const handleOpenCancelModal = (booking: ConsultaAgendamento) => {
+        setCancelTarget(booking);
+        setCancelReason('');
+        setCancelError('');
+        setIsCancelModalOpen(true);
+    };
+
+    const handleConfirmCancelWithReason = async () => {
+        if (!cancelTarget) return;
+        if (!cancelReason.trim()) {
+            setCancelError('Por favor, informe a justificativa do cancelamento.');
+            return;
+        }
+        setOperatingId(cancelTarget.id);
+        try {
+            await db.cancelAgendamentoWithReason(cancelTarget.id, cancelReason.trim(), {
+                id: currentUser.id,
+                name: currentUser.name
+            });
+            setIsCancelModalOpen(false);
+            setCancelTarget(null);
+            setCancelReason('');
+            loadData(true);
+        } catch (err: any) {
+            setCancelError(err.message || 'Erro ao cancelar o agendamento.');
         } finally {
             setOperatingId(null);
         }
@@ -583,6 +633,11 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                                                 {queuePositions[booking.id]}º na fila
                                                             </span>
                                                         )}
+                                                        {booking.status === 'Cancelado' && (booking.cancellation_reason || booking.canceled_by_name) && (
+                                                            <div className="text-[9px] text-rose-600 font-bold mt-1 text-center max-w-[140px] truncate" title={`Cancelado por: ${booking.canceled_by_name || 'Usuário'} | Motivo: ${booking.cancellation_reason || 'Sem justificativa'}`}>
+                                                                Motivo: {booking.cancellation_reason || 'Não informado'}
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 </td>
                                                 <td className="p-4 text-slate-500">
@@ -637,7 +692,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                                                         )}
                                                                         {canCancel && (
                                                                             <button
-                                                                                onClick={() => handleStatusUpdate(booking.id, 'Cancelado')}
+                                                                                onClick={() => handleOpenCancelModal(booking)}
                                                                                 className="p-1.5 text-rose-400 hover:text-white hover:bg-rose-500 rounded-lg border border-rose-100 hover:border-rose-500 transition-all flex items-center justify-center"
                                                                                 title="Rejeitar/Cancelar Agendamento"
                                                                             >
@@ -668,7 +723,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                                                         )}
                                                                         {canCancel && (
                                                                             <button
-                                                                                onClick={() => handleStatusUpdate(booking.id, 'Cancelado')}
+                                                                                onClick={() => handleOpenCancelModal(booking)}
                                                                                 className="p-1.5 text-rose-400 hover:text-white hover:bg-rose-500 rounded-lg border border-rose-100 hover:border-rose-500 transition-all flex items-center justify-center"
                                                                                 title="Cancelar Agendamento"
                                                                             >
@@ -681,7 +736,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                                                     <>
                                                                         {canCancel && (
                                                                             <button
-                                                                                onClick={() => handleStatusUpdate(booking.id, 'Cancelado')}
+                                                                                onClick={() => handleOpenCancelModal(booking)}
                                                                                 className="p-1.5 text-rose-400 hover:text-white hover:bg-rose-500 rounded-lg border border-rose-100 hover:border-rose-500 transition-all flex items-center justify-center"
                                                                                 title="Cancelar Agendamento"
                                                                             >
@@ -1081,6 +1136,108 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                     currentUser={currentUser}
                     onClose={() => setIsPrintingReport(false)}
                 />
+            )}
+
+            {/* MODAL DE CANCELAMENTO COM JUSTIFICATIVA */}
+            {isCancelModalOpen && cancelTarget && typeof document !== 'undefined' && createPortal(
+                <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg overflow-hidden border border-slate-100 flex flex-col transform transition-all animate-in zoom-in-95 duration-200">
+                        {/* Header */}
+                        <div className="p-5 border-b border-rose-100 bg-rose-50/60 flex justify-between items-center shrink-0">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-2xl bg-rose-100 flex items-center justify-center text-rose-600 shadow-inner">
+                                    <XCircle className="w-6 h-6" />
+                                </div>
+                                <div>
+                                    <h3 className="text-sm font-black text-rose-950 uppercase tracking-wider">Cancelar Agendamento</h3>
+                                    <p className="text-[10px] text-rose-700/80 font-bold uppercase tracking-wider mt-0.5">Informe o motivo do cancelamento</p>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setIsCancelModalOpen(false);
+                                    setCancelTarget(null);
+                                }}
+                                className="p-2 hover:bg-rose-100 rounded-xl text-rose-400 hover:text-rose-700 transition-colors"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        {/* Form Content */}
+                        <div className="p-6 space-y-4">
+                            {/* Summary Card */}
+                            <div className="p-4 bg-slate-50 border border-slate-200/70 rounded-2xl space-y-2 text-xs font-semibold text-slate-700">
+                                <div className="flex justify-between">
+                                    <span className="text-slate-400">Paciente:</span>
+                                    <span className="font-black text-slate-900 uppercase">{formatPatientName(cancelTarget.paciente)}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-slate-400">Procedimento:</span>
+                                    <span className="font-extrabold text-sky-600 uppercase">{cancelTarget.procedimento?.name}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-slate-400">Data Atual:</span>
+                                    <span className="font-bold text-slate-800">
+                                        {cancelTarget.appointment_date ? new Date(cancelTarget.appointment_date + 'T12:00:00').toLocaleDateString('pt-BR') : 'Fila de Espera'}
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* Justificativa Field */}
+                            <div className="space-y-1.5">
+                                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-700">
+                                    Justificativa do Cancelamento <span className="text-rose-500">*</span>
+                                </label>
+                                <textarea
+                                    value={cancelReason}
+                                    onChange={(e) => {
+                                        setCancelReason(e.target.value);
+                                        if (cancelError) setCancelError('');
+                                    }}
+                                    placeholder="Descreva detalhadamente a justificativa para o cancelamento deste agendamento..."
+                                    rows={4}
+                                    className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium text-slate-800 outline-none focus:bg-white focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 transition-all resize-none"
+                                />
+                                {cancelError && (
+                                    <p className="text-[11px] font-extrabold text-rose-600 mt-1 flex items-center gap-1">
+                                        ⚠️ {cancelError}
+                                    </p>
+                                )}
+                            </div>
+
+                            {/* Operator Registration Notice */}
+                            <div className="p-3 bg-rose-50/50 border border-rose-100 rounded-xl text-[10px] text-rose-700 font-bold flex items-center gap-2">
+                                <span>🔒 Cancelamento será registrado por: <strong className="uppercase font-black text-rose-900">{currentUser.name}</strong></span>
+                            </div>
+                        </div>
+
+                        {/* Modal Footer */}
+                        <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-end gap-3 shrink-0">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setIsCancelModalOpen(false);
+                                    setCancelTarget(null);
+                                }}
+                                className="px-4 py-2.5 bg-white hover:bg-slate-100 text-slate-600 font-extrabold rounded-xl border border-slate-200 text-xs uppercase tracking-wider transition-all"
+                            >
+                                Manter Agendamento
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleConfirmCancelWithReason}
+                                disabled={operatingId === cancelTarget.id}
+                                className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-extrabold rounded-xl shadow-lg shadow-rose-600/20 text-xs uppercase tracking-wider transition-all flex items-center gap-2 active:scale-95 cursor-pointer disabled:opacity-50"
+                            >
+                                {operatingId === cancelTarget.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
+                                Confirmar Cancelamento
+                            </button>
+                        </div>
+                    </div>
+                </div>,
+                document.body
             )}
         </div>
     );

@@ -246,6 +246,9 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
         setReservedBookings(data);
         
         if (data.length > 0) {
+            if (window.location.pathname !== '/Consultas/DefinirAgenda') {
+                window.history.replaceState({}, '', '/Consultas/DefinirAgenda');
+            }
             const procIds = Array.from(new Set(data.map(b => b.procedimento_id)));
             const vagasMap: Record<string, ConsultaVaga[]> = {};
             const bookingsMap: Record<string, ConsultaAgendamento[]> = {};
@@ -281,7 +284,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
 
         const bookingsByDate: Record<string, ConsultaAgendamento[]> = {};
         bookingsList.forEach(b => {
-            if (b.status === 'Cancelado' || b.status === 'Não Realizado' || !b.appointment_date) return;
+            if (b.status === 'Cancelado' || b.status === 'Não Realizado' || b.status === 'Fila de espera' || b.status === 'Aguardando Data' || !b.appointment_date) return;
             if (!bookingsByDate[b.appointment_date]) {
                 bookingsByDate[b.appointment_date] = [];
             }
@@ -369,6 +372,9 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
         setConfirmedReservedBookings({});
         setReservedDates({});
         setReservedTimes({});
+        if (typeof window !== 'undefined' && window.location.pathname === '/Consultas/DefinirAgenda') {
+            window.history.replaceState({}, '', '/Consultas/NovoAgendamento');
+        }
         fetchReservedBookings();
     };
 
@@ -967,6 +973,219 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
     }
 
     // Move hooks to top to avoid React Hook mismatch during early return
+
+    if (reservedBookings.length > 0) {
+        return (
+            <div className="w-full max-w-[96%] 2xl:max-w-[1440px] mx-auto flex flex-col h-full max-h-full min-h-0 bg-white/95 backdrop-blur-md rounded-[2.5rem] border border-slate-200/80 shadow-[0_20px_60px_rgba(0,0,0,0.06)] overflow-y-auto animate-in fade-in duration-300 p-6 space-y-6">
+                {/* Header Banner */}
+                <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                        <div className="w-14 h-14 rounded-2xl bg-amber-50 border border-amber-200/80 flex items-center justify-center text-amber-600 shadow-sm animate-pulse">
+                            <Activity className="w-7 h-7" />
+                        </div>
+                        <div>
+                            <span className="text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                                Fila de Espera Promovida
+                            </span>
+                            <h2 className="text-xl sm:text-2xl font-black text-slate-900 uppercase tracking-tight mt-1">
+                                Vagas Reservadas Pendentes
+                            </h2>
+                        </div>
+                    </div>
+                </div>
+                
+                {/* Alert Box Explicativo Sem Asteriscos */}
+                <div className="p-5 bg-amber-50/80 border border-amber-200 rounded-2xl text-xs sm:text-sm font-bold text-amber-900 leading-relaxed shadow-sm">
+                    Os pacientes listados abaixo foram promovidos da fila de espera. Você deve preencher a <strong className="font-black text-amber-950 underline decoration-amber-400">Data</strong> e a <strong className="font-black text-amber-950 underline decoration-amber-400">Hora</strong> para cada um deles antes de prosseguir com o uso da tela.
+                </div>
+                
+                {/* Cards de Pacientes Promovidos */}
+                <div className="space-y-4 flex-1">
+                    {reservedBookings.map((b) => {
+                        const isConfirmed = !!confirmedReservedBookings[b.id];
+                        const confirmedBooking = confirmedReservedBookings[b.id];
+                        const dateVal = reservedDates[b.id] || '';
+                        const timeVal = reservedTimes[b.id] || '';
+                        
+                        const procVagas = reservedProceduresVagas[b.procedimento_id] || [];
+                        const procBookings = reservedProceduresBookings[b.procedimento_id] || [];
+                        const assignments = getSlotAssignmentsForProcedure(procVagas, procBookings);
+                        
+                        // Filter available slots considering accent & status variations
+                        const availableSlotsForProc = procVagas.filter(v => {
+                            const statusNorm = (v.status || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                            const isAvail = statusNorm === 'disponivel' || statusNorm === 'livre' || !v.status || (statusNorm !== 'ocupada' && statusNorm !== 'ocupado');
+                            return isAvail && !assignments.has(v.id);
+                        });
+                        
+                        let uniqueDates: string[] = [];
+                        let timesForSelectedDate: string[] = [];
+
+                        if (availableSlotsForProc.length > 0) {
+                            uniqueDates = Array.from(new Set(availableSlotsForProc.map(v => v.data))).sort();
+                            timesForSelectedDate = availableSlotsForProc
+                                .filter(v => v.data === dateVal)
+                                .map(v => v.hora.substring(0, 5))
+                                .sort();
+                        } else {
+                            // Fallback: Generate upcoming 30 days starting from today when no specific individual slots are registered
+                            const generatedDates: string[] = [];
+                            const today = new Date();
+                            for (let i = 0; i < 30; i++) {
+                                const d = new Date(today);
+                                d.setDate(d.getDate() + i);
+                                const dateStr = d.toISOString().split('T')[0];
+                                generatedDates.push(dateStr);
+                            }
+                            uniqueDates = generatedDates;
+
+                            // Standard available time slots
+                            timesForSelectedDate = [
+                                '07:00', '07:30', '08:00', '08:30', '09:00', '09:30',
+                                '10:00', '10:30', '11:00', '11:30', '13:00', '13:30',
+                                '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00'
+                            ];
+                        }
+                        
+                        return (
+                            <div 
+                                key={b.id} 
+                                className={`p-6 rounded-3xl border transition-all ${
+                                    isConfirmed 
+                                    ? 'bg-emerald-50/40 border-emerald-200' 
+                                    : 'bg-white border-slate-200 shadow-sm'
+                                }`}
+                            >
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-4 mb-4">
+                                    <div>
+                                        <h3 className="font-black text-slate-900 uppercase text-base tracking-tight">
+                                            {formatPatientName(b.paciente)}
+                                        </h3>
+                                        <div className="flex items-center gap-3 mt-1 text-xs text-slate-500 font-bold">
+                                            <span>CPF: {b.paciente?.cpf || 'Não informado'}</span>
+                                            <span className="w-1.5 h-1.5 rounded-full bg-slate-300"></span>
+                                            <span className="text-sky-600 font-extrabold uppercase">{b.procedimento?.name}</span>
+                                        </div>
+                                    </div>
+                                    {isConfirmed && (
+                                        <span className="px-3 py-1 bg-emerald-100 text-emerald-800 font-black text-[10px] uppercase tracking-wider rounded-full self-start sm:self-auto border border-emerald-200">
+                                            ✓ Confirmado
+                                        </span>
+                                    )}
+                                </div>
+
+                                {isConfirmed && confirmedBooking ? (
+                                    <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                                        <div>
+                                            <span className="text-xs text-emerald-800 font-bold">Agendado para: </span>
+                                            <strong className="text-sm text-emerald-950 font-black">
+                                                {confirmedBooking.appointment_date ? new Date(confirmedBooking.appointment_date + 'T12:00:00').toLocaleDateString('pt-BR') : ''} às {confirmedBooking.appointment_time}
+                                            </strong>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setPrintingBooking(confirmedBooking)}
+                                            className="px-4 py-2 bg-white border border-emerald-300 hover:bg-emerald-100 text-emerald-800 font-extrabold rounded-xl text-xs uppercase tracking-wider transition-all flex items-center gap-2 shadow-sm cursor-pointer"
+                                        >
+                                            <FileDown className="w-4 h-4 text-emerald-600" />
+                                            Baixar Recibo
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+                                        <div>
+                                            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">
+                                                Data da Consulta
+                                            </label>
+                                            <select
+                                                value={dateVal}
+                                                onChange={(e) => {
+                                                    const d = e.target.value;
+                                                    setReservedDates(prev => ({ ...prev, [b.id]: d }));
+                                                    setReservedTimes(prev => ({ ...prev, [b.id]: '' }));
+                                                }}
+                                                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-bold text-slate-800 focus:bg-white focus:border-sky-500 focus:outline-none"
+                                            >
+                                                <option value="">Selecione a Data...</option>
+                                                {uniqueDates.map(d => (
+                                                    <option key={d} value={d}>
+                                                        {new Date(d + 'T12:00:00').toLocaleDateString('pt-BR')}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">
+                                                Hora da Consulta
+                                            </label>
+                                            <select
+                                                disabled={!dateVal}
+                                                value={timeVal}
+                                                onChange={(e) => {
+                                                    setReservedTimes(prev => ({ ...prev, [b.id]: e.target.value }));
+                                                }}
+                                                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-bold text-slate-800 focus:bg-white focus:border-sky-500 focus:outline-none disabled:opacity-50"
+                                            >
+                                                <option value="">Selecione o Horário...</option>
+                                                {timesForSelectedDate.map(t => (
+                                                    <option key={t} value={t}>{t}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <button
+                                            type="button"
+                                            disabled={!dateVal || !timeVal || loading}
+                                            onClick={() => handleConfirmReservedBooking(b.id, dateVal, timeVal)}
+                                            className="w-full py-3 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 disabled:opacity-40 text-white font-black rounded-xl text-xs uppercase tracking-wider shadow-md shadow-sky-500/20 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                                        >
+                                            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                                            Confirmar
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+                
+                {/* Footer Bar */}
+                <div className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4 mt-auto">
+                    <button
+                        type="button"
+                        onClick={() => {
+                            if (typeof window !== 'undefined' && window.location.pathname === '/Consultas/DefinirAgenda') {
+                                window.history.replaceState({}, '', '/Consultas');
+                            }
+                            onBack();
+                        }}
+                        className="w-full sm:w-auto px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold rounded-2xl text-xs uppercase tracking-wider active:scale-95 transition-all cursor-pointer"
+                    >
+                        Voltar ao Menu
+                    </button>
+                    
+                    {reservedBookings.every(b => !!confirmedReservedBookings[b.id]) ? (
+                        <button
+                            type="button"
+                            onClick={handleCloseReservedModal}
+                            className="w-full sm:w-auto px-8 py-3.5 bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-extrabold rounded-2xl text-xs uppercase tracking-wider active:scale-95 transition-all shadow-lg shadow-emerald-500/20 hover:scale-[1.01] cursor-pointer"
+                        >
+                            Acessar Tela de Agendamento
+                        </button>
+                    ) : (
+                        <button
+                            type="button"
+                            disabled={true}
+                            className="w-full sm:w-auto px-8 py-3.5 bg-slate-200 text-slate-400 font-extrabold rounded-2xl text-xs uppercase tracking-wider cursor-not-allowed opacity-70"
+                        >
+                            Defina todas as vagas para prosseguir
+                        </button>
+                    )}
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="w-full max-w-[96%] 2xl:max-w-[1440px] mx-auto flex flex-col h-full max-h-full min-h-0 bg-white/95 backdrop-blur-md rounded-[2.5rem] border border-slate-200/80 shadow-[0_20px_60px_rgba(0,0,0,0.06)] overflow-hidden animate-in fade-in zoom-in-95 duration-300">
@@ -1789,243 +2008,6 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                 )}
 
             </div>
-            {/* MODAL: VAGAS RESERVADAS PENDENTES (FILA DE ESPERA PROMOVIDA) */}
-            {reservedBookings.length > 0 && typeof document !== 'undefined' && createPortal(
-                <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-md transition-all animate-in fade-in duration-300">
-                    <div className="bg-white rounded-[2.5rem] shadow-[0_25px_70px_rgba(0,0,0,0.15)] w-full max-w-2xl overflow-hidden border border-slate-100 flex flex-col max-h-[85vh] transform transition-all animate-in zoom-in-95 slide-in-from-bottom-8 duration-300">
-                        {/* Header */}
-                        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 shrink-0">
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-2xl bg-amber-500/10 flex items-center justify-center border border-amber-500/20 shadow-sm animate-pulse">
-                                    <Activity className="w-5 h-5 text-amber-600" />
-                                </div>
-                                <div>
-                                    <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider">Vagas Reservadas Pendentes</h3>
-                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">Fila de espera promovida</p>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        {/* Body */}
-                        <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar min-h-0">
-                            <div className="p-4 bg-amber-50/50 border border-amber-200/50 rounded-2xl text-[11px] font-bold text-amber-800 leading-relaxed shrink-0">
-                                Os pacientes listados abaixo foram promovidos da fila de espera. Você deve preencher a **Data** e a **Hora** para cada um deles antes de prosseguir com o uso da tela.
-                            </div>
-                            
-                            <div className="space-y-3">
-                                {reservedBookings.map((b) => {
-                                    const isConfirmed = !!confirmedReservedBookings[b.id];
-                                    const confirmedBooking = confirmedReservedBookings[b.id];
-                                    const dateVal = reservedDates[b.id] || '';
-                                    const timeVal = reservedTimes[b.id] || '';
-                                    
-                                    const procVagas = reservedProceduresVagas[b.procedimento_id] || [];
-                                    const procBookings = reservedProceduresBookings[b.procedimento_id] || [];
-                                    const assignments = getSlotAssignmentsForProcedure(procVagas, procBookings);
-                                    const availableSlotsForProc = procVagas.filter(v => 
-                                        v.status === 'Disponível' && 
-                                        !assignments.has(v.id)
-                                    );
-                                    
-                                    const uniqueDates = Array.from(new Set(availableSlotsForProc.map(v => v.data))).sort();
-                                    const timesForSelectedDate = availableSlotsForProc
-                                        .filter(v => v.data === dateVal)
-                                        .map(v => v.hora.substring(0, 5))
-                                        .sort();
-                                    
-                                    return (
-                                        <div 
-                                            key={b.id} 
-                                            className={`p-5 rounded-2xl border transition-all ${
-                                                isConfirmed 
-                                                ? 'bg-emerald-50/30 border-emerald-200 shadow-sm' 
-                                                : 'bg-slate-50/40 border-slate-200 hover:border-slate-300'
-                                            }`}
-                                        >
-                                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
-                                                <div>
-                                                    <div className="font-extrabold text-slate-800 text-xs uppercase">
-                                                        {formatPatientName(b.paciente)}
-                                                    </div>
-                                                    <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-1 font-bold">
-                                                        <span>CPF: {b.paciente?.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}</span>
-                                                        <span className="h-1 w-1 rounded-full bg-slate-300" />
-                                                        <span className="text-sky-600 uppercase font-black">{b.procedimento?.name}</span>
-                                                    </div>
-                                                </div>
-                                                {isConfirmed && (
-                                                    <span className="inline-flex px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-100">
-                                                        Confirmado
-                                                    </span>
-                                                )}
-                                            </div>
-                                            
-                                            <div className="pt-3">
-                                                {isConfirmed ? (
-                                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                                                        <div className="text-[11px] font-black text-slate-700">
-                                                            Agendado para: <span className="text-emerald-600">{new Date(confirmedBooking.appointment_date + 'T12:00:00').toLocaleDateString('pt-BR')}</span> às <span className="text-emerald-600">{confirmedBooking.appointment_time?.substring(0, 5)}</span>
-                                                        </div>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleDownloadPdf(confirmedBooking)}
-                                                            disabled={isGenerating}
-                                                            className="px-4 py-2 bg-sky-50 border border-sky-200 hover:bg-sky-500 hover:border-sky-500 hover:text-white text-sky-700 font-black rounded-xl text-[9px] uppercase tracking-wider shadow-sm transition-all flex items-center gap-1.5"
-                                                        >
-                                                            {isGenerating && printingBooking?.id === confirmedBooking.id ? (
-                                                                <Loader2 className="w-3 h-3 animate-spin" />
-                                                            ) : (
-                                                                <FileDown className="w-3 h-3" />
-                                                            )}
-                                                            Baixar Recibo
-                                                        </button>
-                                                    </div>
-                                                ) : (
-                                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
-                                                        {/* CUSTOM DATE DROPDOWN */}
-                                                        <div className="dropdown-container relative">
-                                                            <label className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1.5 ml-1">Data da Consulta</label>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => {
-                                                                    setActiveDateDropdownId(activeDateDropdownId === b.id ? null : b.id);
-                                                                    setActiveTimeDropdownId(null);
-                                                                }}
-                                                                className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-slate-900 focus:border-sky-500 focus:ring-4 focus:ring-sky-500/5 outline-none transition-all text-xs font-bold flex items-center justify-between cursor-pointer shadow-sm hover:border-slate-300"
-                                                            >
-                                                                <span className={dateVal ? "text-slate-800" : "text-slate-400"}>
-                                                                    {dateVal ? new Date(dateVal + 'T12:00:00').toLocaleDateString('pt-BR') : 'Selecione a Data...'}
-                                                                </span>
-                                                                <Calendar className="w-4 h-4 text-slate-400" />
-                                                            </button>
-                                                            
-                                                            {activeDateDropdownId === b.id && (
-                                                                <div className="absolute z-[100] mt-1 w-full bg-white border border-slate-200/80 rounded-xl shadow-lg py-1 max-h-48 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200 custom-scrollbar">
-                                                                    {uniqueDates.length === 0 ? (
-                                                                        <div className="px-4 py-2.5 text-xs font-bold text-slate-400 uppercase tracking-wider text-center">
-                                                                            Sem datas disponíveis
-                                                                        </div>
-                                                                    ) : (
-                                                                        uniqueDates.map(d => (
-                                                                            <button
-                                                                                key={d}
-                                                                                type="button"
-                                                                                onClick={() => {
-                                                                                    setReservedDates(prev => ({ ...prev, [b.id]: d }));
-                                                                                    setReservedTimes(prev => ({ ...prev, [b.id]: '' }));
-                                                                                    setActiveDateDropdownId(null);
-                                                                                }}
-                                                                                className={`w-full text-left px-4 py-2.5 text-xs font-bold transition-colors ${
-                                                                                    dateVal === d 
-                                                                                    ? 'bg-sky-500 text-white' 
-                                                                                    : 'text-slate-700 hover:bg-slate-50'
-                                                                                }`}
-                                                                            >
-                                                                                {new Date(d + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric', month: 'short' })}
-                                                                            </button>
-                                                                        ))
-                                                                    )}
-                                                                </div>
-                                                            )}
-                                                        </div>
-
-                                                        {/* CUSTOM TIME DROPDOWN */}
-                                                        <div className="dropdown-container relative">
-                                                            <label className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-1.5 ml-1">Hora da Consulta</label>
-                                                            <button
-                                                                type="button"
-                                                                disabled={!dateVal}
-                                                                onClick={() => {
-                                                                    setActiveTimeDropdownId(activeTimeDropdownId === b.id ? null : b.id);
-                                                                    setActiveDateDropdownId(null);
-                                                                }}
-                                                                className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-slate-900 focus:border-sky-500 focus:ring-4 focus:ring-sky-500/5 outline-none transition-all text-xs font-bold flex items-center justify-between cursor-pointer shadow-sm hover:border-slate-300 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
-                                                            >
-                                                                <span className={timeVal ? "text-slate-800" : "text-slate-400"}>
-                                                                    {timeVal ? timeVal : 'Selecione o Horário...'}
-                                                                </span>
-                                                                <Clock className="w-4 h-4 text-slate-400" />
-                                                            </button>
-                                                            
-                                                            {activeTimeDropdownId === b.id && dateVal && (
-                                                                <div className="absolute z-[100] mt-1 w-full bg-white border border-slate-200/80 rounded-xl shadow-lg py-1 max-h-48 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200 custom-scrollbar">
-                                                                    {timesForSelectedDate.length === 0 ? (
-                                                                        <div className="px-4 py-2.5 text-xs font-bold text-slate-400 uppercase tracking-wider text-center">
-                                                                            Sem horários disponíveis
-                                                                        </div>
-                                                                    ) : (
-                                                                        timesForSelectedDate.map(t => (
-                                                                            <button
-                                                                                key={t}
-                                                                                type="button"
-                                                                                onClick={() => {
-                                                                                    setReservedTimes(prev => ({ ...prev, [b.id]: t }));
-                                                                                    setActiveTimeDropdownId(null);
-                                                                                }}
-                                                                                className={`w-full text-left px-4 py-2.5 text-xs font-bold transition-colors ${
-                                                                                    timeVal === t 
-                                                                                    ? 'bg-sky-500 text-white' 
-                                                                                    : 'text-slate-700 hover:bg-slate-50'
-                                                                                }`}
-                                                                            >
-                                                                                {t}
-                                                                            </button>
-                                                                        ))
-                                                                    )}
-                                                                </div>
-                                                            )}
-                                                        </div>
-
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleConfirmReservedDateAndTime(b.id)}
-                                                            disabled={loading || !dateVal || !timeVal}
-                                                            className="w-full py-2.5 bg-gradient-to-r from-sky-500 to-indigo-600 text-white font-black rounded-xl text-[9px] uppercase tracking-wider shadow-md hover:from-sky-600 hover:to-indigo-700 active:scale-95 disabled:opacity-40 transition-all flex items-center justify-center gap-1.5 h-[38px]"
-                                                        >
-                                                            {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                                                            Confirmar
-                                                        </button>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                        
-                        {/* Footer */}
-                        <div className="p-5 bg-slate-50 border-t border-slate-100 flex justify-between gap-3 shrink-0">
-                            <button
-                                type="button"
-                                onClick={onBack}
-                                className="px-5 py-3 bg-white border border-slate-200 hover:bg-slate-100 text-slate-600 font-extrabold rounded-2xl text-xs uppercase tracking-wider active:scale-95 transition-all"
-                            >
-                                Voltar ao Menu
-                            </button>
-                            
-                            {reservedBookings.every(b => !!confirmedReservedBookings[b.id]) ? (
-                                <button
-                                    type="button"
-                                    onClick={handleCloseReservedModal}
-                                    className="px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-extrabold rounded-2xl text-xs uppercase tracking-wider active:scale-95 transition-all shadow-md shadow-emerald-500/20 hover:scale-[1.01]"
-                                >
-                                    Acessar Tela de Agendamento
-                                </button>
-                            ) : (
-                                <button
-                                    type="button"
-                                    disabled={true}
-                                    className="px-6 py-3 bg-slate-200 text-slate-400 font-extrabold rounded-2xl text-xs uppercase tracking-wider cursor-not-allowed opacity-60"
-                                >
-                                    Defina todas as vagas para prosseguir
-                                </button>
-                            )}
-                        </div>
-                    </div>
-                </div>,
-                document.body
-            )}
             {/* MODAL: CPF NÃO CADASTRADO */}
             {showCpfNotFoundModal && typeof document !== 'undefined' && createPortal(
                 <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/50 backdrop-blur-md animate-in fade-in duration-300">

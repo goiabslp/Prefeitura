@@ -179,12 +179,16 @@ const VIEW_TO_PATH: Record<string, string> = {
   'consultas:novo-agendamento-paciente': '/Consultas/NovoAgendamento/Paciente',
   'consultas:novo-agendamento-procedimento': '/Consultas/NovoAgendamento/Procedimento',
   'consultas:novo-agendamento-revisao': '/Consultas/NovoAgendamento/Revisao',
+  'consultas:definir-agenda': '/Consultas/DefinirAgenda',
+  'consultas:vagas-reservadas': '/Consultas/VagasReservadas',
+  'consultas:novo-agendamento-definir-agenda': '/Consultas/NovoAgendamento/DefinirAgenda',
   'consultas:acompanhar': '/Consultas/Acompanhar',
   'consultas:dados': '/Consultas/DADOS',
   'consultas:dados-dashboard': '/Consultas/DADOS/Dashboard',
   'consultas:dados-pacientes': '/Consultas/DADOS/Pacientes',
   'consultas:dados-procedimentos': '/Consultas/DADOS/Exames',
   'consultas:dados-historico': '/Consultas/DADOS/Historico',
+  'consultas:dados-gestor': '/Consultas/DADOS/Gestor',
   'farmacia': '/FarmaciaPopular',
   'farmacia:consultar': '/FarmaciaPopular/Consultar',
   'farmacia:retirar': '/FarmaciaPopular/Retirar',
@@ -3677,9 +3681,9 @@ const App: React.FC = () => {
       whatsapp: u.whatsapp,
       allowed_signature_ids: u.allowedSignatureIds,
       permissions: u.permissions,
-      temp_password: u.tempPassword,
-      temp_password_expires_at: u.tempPasswordExpiresAt,
-      must_change_password: u.mustChangePassword,
+      temp_password: u.tempPassword || null,
+      temp_password_expires_at: u.tempPasswordExpiresAt || null,
+      must_change_password: u.mustChangePassword ?? false,
       two_factor_enabled: u.twoFactorEnabled,
       two_factor_secret: u.twoFactorSecret,
       two_factor_enabled_2: u.twoFactorEnabled2,
@@ -3733,7 +3737,7 @@ const App: React.FC = () => {
 
   if (currentView === 'login') return <LoginScreen onLogin={handleLogin} uiConfig={appState.ui} onLoginSuccess={() => { setIsLoginTransitioning(false); setCurrentView('home'); }} />;
 
-  if (currentUser && (currentUser.tempPassword || currentUser.mustChangePassword)) {
+  if (currentUser && (currentUser.mustChangePassword || (currentUser.tempPassword && currentUser.tempPassword.trim() !== ''))) {
     return (
       <ForcePasswordChangeModal
         currentUser={currentUser}
@@ -4677,6 +4681,12 @@ const App: React.FC = () => {
                   } else if (view === 'consultas:novo-agendamento-revisao') {
                     setAppState(prev => ({ ...prev, view: 'novo-agendamento-revisao' }));
                     window.history.pushState({}, '', '/Consultas/NovoAgendamento/Revisao');
+                  } else if (view === 'consultas:definir-agenda' || view === 'consultas:novo-agendamento-definir-agenda') {
+                    setAppState(prev => ({ ...prev, view: 'novo-agendamento-definir-agenda' }));
+                    window.history.pushState({}, '', '/Consultas/DefinirAgenda');
+                  } else if (view === 'consultas:vagas-reservadas') {
+                    setAppState(prev => ({ ...prev, view: 'novo-agendamento-definir-agenda' }));
+                    window.history.pushState({}, '', '/Consultas/VagasReservadas');
                   } else if (view === 'consultas:acompanhar') {
                     setAppState(prev => ({ ...prev, view: 'acompanhar' }));
                     window.history.pushState({}, '', '/Consultas/Acompanhar');
@@ -4695,6 +4705,9 @@ const App: React.FC = () => {
                   } else if (view === 'consultas:dados-historico') {
                     setAppState(prev => ({ ...prev, view: 'dados-historico' }));
                     window.history.pushState({}, '', '/Consultas/DADOS/Historico');
+                  } else if (view === 'consultas:dados-gestor') {
+                    setAppState(prev => ({ ...prev, view: 'dados-gestor' }));
+                    window.history.pushState({}, '', '/Consultas/DADOS/Gestor');
                   } else if (view === 'consultas') {
                     setAppState(prev => ({ ...prev, view: undefined }));
                     window.history.pushState({}, '', '/Consultas');

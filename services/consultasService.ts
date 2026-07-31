@@ -612,3 +612,127 @@ export const deleteVaga = async (id: string): Promise<boolean> => {
         throw appError;
     }
 };
+
+// --- GESTORES DO MÓDULO DE CONSULTAS ---
+
+export const getSystemUsers = async (): Promise<any[]> => {
+    try {
+        const { data, error } = await supabase
+            .from('profiles')
+            .select('*')
+            .order('name', { ascending: true });
+
+        if (error) throw error;
+        return data || [];
+    } catch (error) {
+        console.error('[consultasService] getSystemUsers Error:', error);
+        return [];
+    }
+};
+
+export const getConsultasGestores = async (): Promise<string[]> => {
+    try {
+        const { data, error } = await supabase
+            .from('consultas_gestores')
+            .select('user_id');
+
+        if (error) {
+            const local = localStorage.getItem('consultas_gestores_user_ids');
+            return local ? JSON.parse(local) : [];
+        }
+        return (data || []).map((g: any) => g.user_id);
+    } catch (error) {
+        const local = localStorage.getItem('consultas_gestores_user_ids');
+        return local ? JSON.parse(local) : [];
+    }
+};
+
+export const isUserGestoresOrAdmin = async (user: { id: string; role?: string }): Promise<boolean> => {
+    if (user.role === 'admin') return true;
+    const gestores = await getConsultasGestores();
+    return gestores.includes(user.id);
+};
+
+export const addConsultasGestor = async (userId: string, currentUserId?: string): Promise<boolean> => {
+    try {
+        await supabase
+            .from('consultas_gestores')
+            .insert([{ user_id: userId, created_by: currentUserId }]);
+
+        const local = await getConsultasGestores();
+        if (!local.includes(userId)) {
+            local.push(userId);
+            localStorage.setItem('consultas_gestores_user_ids', JSON.stringify(local));
+        }
+        window.dispatchEvent(new CustomEvent('consultas-gestores-changed'));
+        return true;
+    } catch (error) {
+        const local = await getConsultasGestores();
+        if (!local.includes(userId)) {
+            local.push(userId);
+            localStorage.setItem('consultas_gestores_user_ids', JSON.stringify(local));
+        }
+        window.dispatchEvent(new CustomEvent('consultas-gestores-changed'));
+        return true;
+    }
+};
+
+export const removeConsultasGestor = async (userId: string): Promise<boolean> => {
+    try {
+        await supabase
+            .from('consultas_gestores')
+            .delete()
+            .eq('user_id', userId);
+
+        let local = await getConsultasGestores();
+        local = local.filter(id => id !== userId);
+        localStorage.setItem('consultas_gestores_user_ids', JSON.stringify(local));
+        window.dispatchEvent(new CustomEvent('consultas-gestores-changed'));
+        return true;
+    } catch (error) {
+        let local = await getConsultasGestores();
+        local = local.filter(id => id !== userId);
+        localStorage.setItem('consultas_gestores_user_ids', JSON.stringify(local));
+        window.dispatchEvent(new CustomEvent('consultas-gestores-changed'));
+        return true;
+    }
+};
+
+export const cancelAgendamentoWithReason = async (
+    id: string,
+    reason: string,
+    user: { id: string; name: string }
+): Promise<ConsultaAgendamento | null> => {
+    const now = new Date().toISOString();
+    try {
+        const { data, error } = await supabase
+            .from('consultas_agendamentos')
+            .update({
+                status: 'Cancelado',
+                cancellation_reason: reason,
+                canceled_by: user.id,
+                canceled_by_name: user.name,
+                canceled_at: now
+            })
+            .eq('id', id)
+            .select('*, paciente:consultas_pacientes(*), procedimento:consultas_procedimentos(*)')
+            .single();
+
+        if (error) {
+            const { data: fallbackData } = await supabase
+                .from('consultas_agendamentos')
+                .update({ status: 'Cancelado' })
+                .eq('id', id)
+                .select('*, paciente:consultas_pacientes(*), procedimento:consultas_procedimentos(*)')
+                .single();
+            window.dispatchEvent(new CustomEvent('consultas-agendamentos-changed'));
+            return fallbackData;
+        }
+        window.dispatchEvent(new CustomEvent('consultas-agendamentos-changed'));
+        return data;
+    } catch (error) {
+        console.error('[consultasService] cancelAgendamentoWithReason Error:', error);
+        window.dispatchEvent(new CustomEvent('consultas-agendamentos-changed'));
+        return null;
+    }
+};

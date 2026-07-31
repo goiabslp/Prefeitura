@@ -45,11 +45,21 @@ export const ForcePasswordChangeModal: React.FC<ForcePasswordChangeModalProps> =
         setError(null);
 
         try {
-            // 1. Update Password in Supabase Auth
-            const { error: authError } = await supabase.auth.updateUser({ password: newPassword });
+            // 1. Update Password & Metadata in Supabase Auth
+            const { error: authError } = await supabase.auth.updateUser({
+                password: newPassword,
+                data: {
+                    temp_password: null,
+                    tempPassword: null,
+                    temp_password_expires_at: null,
+                    tempPasswordExpiresAt: null,
+                    must_change_password: false,
+                    mustChangePassword: false
+                }
+            });
             if (authError) throw authError;
 
-            // 2. Clear temp_password in profiles table to unlock access
+            // 2. Clear temp_password and must_change_password in profiles table to permanently unlock access
             const { error: dbError } = await supabase
                 .from('profiles')
                 .update({

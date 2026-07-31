@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { User, ConsultaPaciente, ConsultaProcedimento, ConsultaAgendamento, ConsultaVaga } from '../../types';
-import { ArrowLeft, Users, Calendar, Settings, BarChart3, Plus, Edit2, Search, Check, AlertTriangle, Loader2, History, X, ChevronLeft, ChevronRight, Activity, Stethoscope, Sparkles, Trash2 } from 'lucide-react';
+import { ArrowLeft, Users, Calendar, Settings, BarChart3, Plus, Edit2, Search, Check, AlertTriangle, Loader2, History, X, ChevronLeft, ChevronRight, Activity, Stethoscope, Sparkles, Trash2, ShieldCheck, UserCheck, FileSpreadsheet, TrendingUp, UserCog } from 'lucide-react';
 import * as db from '../../services/consultasService';
 import { ResponsiveContainer, AreaChart, XAxis, YAxis, Tooltip, Area, CartesianGrid } from 'recharts';
 import { PacientesTab, formatPatientName } from '../common/PacientesTab';
@@ -12,7 +12,7 @@ interface DadosScreenProps {
     onNavigate?: (view: string) => void;
 }
 
-type TabType = 'dashboard' | 'pacientes' | 'historico' | 'procedimentos';
+type TabType = 'dashboard' | 'pacientes' | 'historico' | 'procedimentos' | 'gestor';
 
 export const DadosScreen: React.FC<DadosScreenProps> = ({
     currentUser,
@@ -20,11 +20,13 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
     subView,
     onNavigate
 }) => {
+    const isAdmin = currentUser.role === 'admin';
     // Current Active Tab derived from URL sub-view state
     const activeTab = (() => {
         if (subView === 'dados-pacientes') return 'pacientes';
         if (subView === 'dados-procedimentos') return 'procedimentos';
         if (subView === 'dados-historico') return 'historico';
+        if (subView === 'dados-gestor' && isAdmin) return 'gestor';
         return 'dashboard';
     })();
     const [loading, setLoading] = useState(false);
@@ -275,6 +277,30 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
     const [procRecurso, setProcRecurso] = useState<'Não Se Aplica' | 'FM' | 'PPI'>('Não Se Aplica');
     const [procError, setProcError] = useState('');
 
+    // Gestores Management State
+    const [systemUsers, setSystemUsers] = useState<any[]>([]);
+    const [gestorUserIds, setGestorUserIds] = useState<string[]>([]);
+    const [gestorSearch, setGestorSearch] = useState('');
+    const [gestorFilter, setGestorFilter] = useState<'all' | 'gestores' | 'non_gestores'>('all');
+
+    const handleToggleGestor = async (userId: string) => {
+        if (!isAdmin) return;
+        setLoading(true);
+        try {
+            if (gestorUserIds.includes(userId)) {
+                await db.removeConsultasGestor(userId);
+                setGestorUserIds(prev => prev.filter(id => id !== userId));
+            } else {
+                await db.addConsultasGestor(userId, currentUser.id);
+                setGestorUserIds(prev => [...prev, userId]);
+            }
+        } catch (err) {
+            console.error('Error toggling gestor:', err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     // History Log
     const [historyLogs, setHistoryLogs] = useState<ConsultaAgendamento[]>([]);
     const [historySearch, setHistorySearch] = useState('');
@@ -301,6 +327,15 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
             } else if (activeTab === 'procedimentos') {
                 const data = await db.getProcedimentos();
                 setProcedures(data);
+            } else if (activeTab === 'gestor') {
+                if (isAdmin) {
+                    const [usersData, gestoresData] = await Promise.all([
+                        db.getSystemUsers(),
+                        db.getConsultasGestores()
+                    ]);
+                    setSystemUsers(usersData);
+                    setGestorUserIds(gestoresData);
+                }
             }
         } catch (error) {
             console.error('Error fetching tab data:', error);
@@ -326,11 +361,13 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
         window.addEventListener('consultas-agendamentos-changed', handleRealtimeChange);
         window.addEventListener('consultas-procedimentos-changed', handleRealtimeChange);
         window.addEventListener('consultas-vagas-changed', handleRealtimeChange);
+        window.addEventListener('consultas-gestores-changed', handleRealtimeChange);
 
         return () => {
             window.removeEventListener('consultas-agendamentos-changed', handleRealtimeChange);
             window.removeEventListener('consultas-procedimentos-changed', handleRealtimeChange);
             window.removeEventListener('consultas-vagas-changed', handleRealtimeChange);
+            window.removeEventListener('consultas-gestores-changed', handleRealtimeChange);
         };
     }, [activeTab, selectedProc]);
 
@@ -479,7 +516,13 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                         label: 'Histórico Completo', 
                         icon: History,
                         activeClass: 'bg-emerald-50/80 text-emerald-700 border-emerald-200/60 shadow-sm shadow-emerald-500/5'
-                    }
+                    },
+                    ...(isAdmin ? [{ 
+                        id: 'gestor', 
+                        label: 'Gestor', 
+                        icon: ShieldCheck,
+                        activeClass: 'bg-amber-50/80 text-amber-700 border-amber-200/60 shadow-sm shadow-amber-500/5'
+                    }] : [])
                 ].map(t => {
                     const Icon = t.icon;
                     const isActive = activeTab === t.id;
@@ -1035,6 +1078,229 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                         ) : (
                             <div className="text-center text-xs font-bold text-slate-400 py-12">Nenhum histórico disponível.</div>
                         )}
+                    </div>
+                )}
+
+                {/* 5. GESTOR TAB (APENAS ADMINISTRADORES) */}
+                {activeTab === 'gestor' && isAdmin && (
+                    <div className="space-y-6 animate-in fade-in duration-300">
+                        {/* Header Banner do Gestor */}
+                        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-amber-950 text-white p-6 rounded-3xl shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border border-amber-500/20 relative overflow-hidden">
+                            <div className="absolute right-0 top-0 bottom-0 w-72 bg-amber-500/10 blur-3xl pointer-events-none transform rotate-12"></div>
+                            
+                            <div className="flex items-center gap-4 relative z-10">
+                                <div className="w-14 h-14 rounded-2xl bg-amber-500/20 backdrop-blur-md border border-amber-400/30 flex items-center justify-center text-amber-400 shadow-inner">
+                                    <ShieldCheck className="w-8 h-8" />
+                                </div>
+                                <div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/30">
+                                            Acesso Exclusivo: Administradores
+                                        </span>
+                                    </div>
+                                    <h3 className="text-xl font-black uppercase tracking-tight mt-1 text-white">Definição de Gestores do Módulo</h3>
+                                    <p className="text-xs text-amber-200/80 font-medium">Selecione usuários cadastrados no sistema para autorizá-los como gestores no módulo de consultas.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Metric Summary Cards */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div className="p-5 bg-white border border-slate-200/80 rounded-2xl shadow-sm space-y-1">
+                                <div className="flex items-center justify-between text-slate-400">
+                                    <span className="text-[10px] font-black uppercase tracking-wider">Gestores Autorizados</span>
+                                    <ShieldCheck className="w-5 h-5 text-amber-600" />
+                                </div>
+                                <div className="font-black text-slate-900 text-3xl">{gestorUserIds.length}</div>
+                                <div className="text-[10px] text-amber-600 font-extrabold">Usuários com função de gestor</div>
+                            </div>
+
+                            <div className="p-5 bg-white border border-slate-200/80 rounded-2xl shadow-sm space-y-1">
+                                <div className="flex items-center justify-between text-slate-400">
+                                    <span className="text-[10px] font-black uppercase tracking-wider">Usuários no Sistema</span>
+                                    <Users className="w-5 h-5 text-sky-600" />
+                                </div>
+                                <div className="font-black text-slate-900 text-3xl">{systemUsers.length}</div>
+                                <div className="text-[10px] text-slate-400 font-bold">Total de perfis cadastrados</div>
+                            </div>
+
+                            <div className="p-5 bg-white border border-slate-200/80 rounded-2xl shadow-sm space-y-1">
+                                <div className="flex items-center justify-between text-slate-400">
+                                    <span className="text-[10px] font-black uppercase tracking-wider">Perfil Atual</span>
+                                    <UserCheck className="w-5 h-5 text-emerald-600" />
+                                </div>
+                                <div className="font-black text-slate-900 text-base truncate">{currentUser.name}</div>
+                                <div className="text-[10px] text-emerald-600 font-extrabold uppercase bg-emerald-50 px-2 py-0.5 rounded-md inline-block">
+                                    Administrador do Sistema
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Definição de Gestores Table Container */}
+                        <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm space-y-4">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                                <div>
+                                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
+                                        <UserCog className="w-4 h-4 text-amber-600" />
+                                        Usuários Cadastrados no Sistema
+                                    </h4>
+                                    <p className="text-[11px] text-slate-400 font-medium mt-0.5">Clique em "+ Definir como Gestor" ou "Remover Gestor" para alterar o acesso.</p>
+                                </div>
+
+                                <div className="flex flex-col sm:flex-row items-center gap-2">
+                                    {/* Filter buttons */}
+                                    <div className="flex bg-slate-100 p-1 rounded-xl gap-1 text-[10px] font-black uppercase tracking-wider">
+                                        <button
+                                            type="button"
+                                            onClick={() => setGestorFilter('all')}
+                                            className={`px-3 py-1.5 rounded-lg transition-all ${gestorFilter === 'all' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                                        >
+                                            Todos ({systemUsers.length})
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setGestorFilter('gestores')}
+                                            className={`px-3 py-1.5 rounded-lg transition-all ${gestorFilter === 'gestores' ? 'bg-white text-amber-700 shadow-sm font-extrabold' : 'text-slate-500 hover:text-amber-700'}`}
+                                        >
+                                            Gestores ({gestorUserIds.length})
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setGestorFilter('non_gestores')}
+                                            className={`px-3 py-1.5 rounded-lg transition-all ${gestorFilter === 'non_gestores' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                                        >
+                                            Não Gestores ({systemUsers.length - gestorUserIds.length})
+                                        </button>
+                                    </div>
+
+                                    {/* Search input */}
+                                    <div className="relative w-full sm:w-64">
+                                        <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
+                                        <input
+                                            type="text"
+                                            value={gestorSearch}
+                                            onChange={(e) => setGestorSearch(e.target.value)}
+                                            placeholder="Buscar por nome ou email..."
+                                            className="w-full pl-9 pr-3 py-1.5 text-xs font-semibold bg-slate-50 border border-slate-200 rounded-xl outline-none focus:bg-white focus:border-amber-500 text-slate-800"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Users Table */}
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left border-collapse">
+                                    <thead>
+                                        <tr className="bg-slate-50 border-b border-slate-100 text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                                            <th className="p-3">Usuário</th>
+                                            <th className="p-3">E-mail</th>
+                                            <th className="p-3">Cargo / Departamento</th>
+                                            <th className="p-3 text-center">Status de Gestor</th>
+                                            <th className="p-3 text-right">Ação</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-700">
+                                        {(() => {
+                                            const filtered = systemUsers.filter(u => {
+                                                const matchesSearch = !gestorSearch || 
+                                                    (u.name && u.name.toLowerCase().includes(gestorSearch.toLowerCase())) ||
+                                                    (u.email && u.email.toLowerCase().includes(gestorSearch.toLowerCase())) ||
+                                                    (u.job_title && u.job_title.toLowerCase().includes(gestorSearch.toLowerCase()));
+
+                                                const isGestor = gestorUserIds.includes(u.id);
+
+                                                if (gestorFilter === 'gestores' && !isGestor) return false;
+                                                if (gestorFilter === 'non_gestores' && isGestor) return false;
+
+                                                return matchesSearch;
+                                            });
+
+                                            if (filtered.length === 0) {
+                                                return (
+                                                    <tr>
+                                                        <td colSpan={5} className="p-8 text-center text-slate-400 font-bold">
+                                                            Nenhum usuário corresponde aos filtros selecionados.
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            }
+
+                                            return filtered.map(u => {
+                                                const isUserAdmin = u.role === 'admin';
+                                                const isGestor = gestorUserIds.includes(u.id);
+
+                                                return (
+                                                    <tr key={u.id} className="hover:bg-slate-50/50 transition-colors">
+                                                        <td className="p-3">
+                                                            <div className="flex items-center gap-3">
+                                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-xs ${isUserAdmin ? 'bg-indigo-100 text-indigo-700 border border-indigo-200' : isGestor ? 'bg-amber-100 text-amber-700 border border-amber-200' : 'bg-slate-100 text-slate-600'}`}>
+                                                                    {u.name ? u.name.substring(0, 2).toUpperCase() : 'U'}
+                                                                </div>
+                                                                <div>
+                                                                    <div className="font-extrabold text-slate-900">{u.name || 'Sem Nome'}</div>
+                                                                    <div className="text-[10px] text-slate-400 font-bold uppercase">{u.role || 'Usuário'}</div>
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                        <td className="p-3 text-slate-500 font-medium">
+                                                            {u.email || '-'}
+                                                        </td>
+                                                        <td className="p-3 text-slate-600 font-bold">
+                                                            <div>{u.job_title || u.jobTitle || 'Servidor Municipal'}</div>
+                                                            <div className="text-[10px] text-slate-400 font-normal">{u.department || 'Saúde'}</div>
+                                                        </td>
+                                                        <td className="p-3 text-center">
+                                                            {isUserAdmin ? (
+                                                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-200 shadow-sm">
+                                                                    <ShieldCheck className="w-3 h-3 text-indigo-600" />
+                                                                    Admin (Poder Total)
+                                                                </span>
+                                                            ) : isGestor ? (
+                                                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200 shadow-sm">
+                                                                    <Check className="w-3 h-3 text-amber-600" />
+                                                                    Gestor Autorizado
+                                                                </span>
+                                                            ) : (
+                                                                <span className="inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-500 border border-slate-200">
+                                                                    Usuário Padrão
+                                                                </span>
+                                                            )}
+                                                        </td>
+                                                        <td className="p-3 text-right">
+                                                            {isUserAdmin ? (
+                                                                <span className="text-[10px] font-extrabold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-xl border border-indigo-100 inline-block">
+                                                                    Poder Total Nativo
+                                                                </span>
+                                                            ) : isGestor ? (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleToggleGestor(u.id)}
+                                                                    disabled={loading}
+                                                                    className="px-3 py-1.5 bg-rose-50 hover:bg-rose-500 text-rose-600 hover:text-white rounded-xl border border-rose-200 font-extrabold text-[10px] uppercase tracking-wider transition-all active:scale-95 cursor-pointer inline-flex items-center gap-1"
+                                                                >
+                                                                    <X className="w-3 h-3" />
+                                                                    Remover Gestor
+                                                                </button>
+                                                            ) : (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleToggleGestor(u.id)}
+                                                                    disabled={loading}
+                                                                    className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-extrabold text-[10px] uppercase tracking-wider shadow-sm shadow-amber-500/20 transition-all active:scale-95 cursor-pointer inline-flex items-center gap-1"
+                                                                >
+                                                                    <Plus className="w-3 h-3" />
+                                                                    Definir como Gestor
+                                                                </button>
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            });
+                                        })()}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
                 )}
 

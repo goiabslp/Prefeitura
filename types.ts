@@ -594,6 +594,10 @@ export interface ConsultaAgendamento {
   paciente?: ConsultaPaciente;
   procedimento?: ConsultaProcedimento;
   responsavel?: { name: string };
+  cancellation_reason?: string;
+  canceled_by?: string;
+  canceled_by_name?: string;
+  canceled_at?: string;
 }
 
 export interface ConsultaVaga {

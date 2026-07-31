@@ -100,15 +100,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     jobId: data.job_id,
                     allowedSignatureIds: data.allowed_signature_ids || [],
                     permissions: data.permissions || [],
-                    tempPassword: data.temp_password,
-                    tempPasswordExpiresAt: data.temp_password_expires_at,
+                    tempPassword: data.temp_password || undefined,
+                    tempPasswordExpiresAt: data.temp_password_expires_at || undefined,
                     email: data.email || email,
                     whatsapp: data.whatsapp,
                     twoFactorEnabled: data.two_factor_enabled,
                     twoFactorSecret: data.two_factor_secret,
                     twoFactorEnabled2: data.two_factor_enabled_2,
                     twoFactorSecret2: data.two_factor_secret_2,
-                    mustChangePassword: data.must_change_password,
+                    mustChangePassword: !!data.must_change_password,
                     status: data.status || 'active',
                     avatar: data.avatar
                 };
