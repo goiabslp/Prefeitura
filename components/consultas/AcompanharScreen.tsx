@@ -534,8 +534,17 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                                         {booking.procedimento?.type}
                                                      </span>
                                                 </td>
-                                                <td className="p-4 text-slate-500">
-                                                    {new Date(booking.appointment_date + 'T00:00:00').toLocaleDateString('pt-BR')}
+                                                <td className="p-4 text-slate-500 font-extrabold">
+                                                    {booking.status !== 'Fila de espera' && booking.status !== 'Aguardando Data' && (booking.appointment_time || booking.status === 'Agendado' || booking.status === 'Realizado') ? (
+                                                        <span>
+                                                            {new Date(booking.appointment_date + 'T12:00:00').toLocaleDateString('pt-BR')}
+                                                            {booking.appointment_time ? ` ${booking.appointment_time.substring(0, 5)}` : ''}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-black uppercase text-amber-700 bg-amber-50 border border-amber-200/80">
+                                                            Aguardando Vaga
+                                                        </span>
+                                                    )}
                                                 </td>
                                                 <td className="p-4 text-center">
                                                      <span className={`inline-flex px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${

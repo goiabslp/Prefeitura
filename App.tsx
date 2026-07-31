@@ -176,6 +176,9 @@ const VIEW_TO_PATH: Record<string, string> = {
   'licitacao:details': '/Licitação/MeusProcessos',
   'consultas': '/Consultas',
   'consultas:novo-agendamento': '/Consultas/NovoAgendamento',
+  'consultas:novo-agendamento-paciente': '/Consultas/NovoAgendamento/Paciente',
+  'consultas:novo-agendamento-procedimento': '/Consultas/NovoAgendamento/Procedimento',
+  'consultas:novo-agendamento-revisao': '/Consultas/NovoAgendamento/Revisao',
   'consultas:acompanhar': '/Consultas/Acompanhar',
   'consultas:dados': '/Consultas/DADOS',
   'consultas:dados-dashboard': '/Consultas/DADOS/Dashboard',
@@ -4665,6 +4668,15 @@ const App: React.FC = () => {
                   } else if (view === 'consultas:novo-agendamento') {
                     setAppState(prev => ({ ...prev, view: 'novo-agendamento' }));
                     window.history.pushState({}, '', '/Consultas/NovoAgendamento');
+                  } else if (view === 'consultas:novo-agendamento-paciente') {
+                    setAppState(prev => ({ ...prev, view: 'novo-agendamento-paciente' }));
+                    window.history.pushState({}, '', '/Consultas/NovoAgendamento/Paciente');
+                  } else if (view === 'consultas:novo-agendamento-procedimento') {
+                    setAppState(prev => ({ ...prev, view: 'novo-agendamento-procedimento' }));
+                    window.history.pushState({}, '', '/Consultas/NovoAgendamento/Procedimento');
+                  } else if (view === 'consultas:novo-agendamento-revisao') {
+                    setAppState(prev => ({ ...prev, view: 'novo-agendamento-revisao' }));
+                    window.history.pushState({}, '', '/Consultas/NovoAgendamento/Revisao');
                   } else if (view === 'consultas:acompanhar') {
                     setAppState(prev => ({ ...prev, view: 'acompanhar' }));
                     window.history.pushState({}, '', '/Consultas/Acompanhar');

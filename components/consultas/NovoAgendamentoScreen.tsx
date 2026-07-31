@@ -20,7 +20,8 @@ import {
     FileDown,
     X,
     ChevronLeft,
-    ChevronRight
+    ChevronRight,
+    Sparkles
 } from 'lucide-react';
 import * as db from '../../services/consultasService';
 import { jsPDF } from 'jspdf';
@@ -32,10 +33,23 @@ const formatPatientName = (patient?: ConsultaPaciente | null) => {
     return patient.nickname ? `${patient.name} (${patient.nickname})` : patient.name;
 };
 
+const calculateAge = (birthDateStr?: string) => {
+    if (!birthDateStr) return '';
+    const birthDate = new Date(birthDateStr + 'T00:00:00');
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const m = today.getMonth() - birthDate.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+    }
+    return age >= 0 ? `${age} anos` : '';
+};
+
 interface NovoAgendamentoScreenProps {
     currentUser: User;
     onBack: () => void;
     onNavigate: (view: string) => void;
+    subView?: string;
     appState: AppState;
 }
 
@@ -43,10 +57,18 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
     currentUser,
     onBack,
     onNavigate,
+    subView,
     appState
 }) => {
     // Step state
     const [step, setStep] = useState<1 | 2 | 3>(1);
+    
+    // Sync subView route with step
+    useEffect(() => {
+        if (subView === 'novo-agendamento-paciente') setStep(1);
+        else if (subView === 'novo-agendamento-procedimento') setStep(2);
+        else if (subView === 'novo-agendamento-revisao') setStep(3);
+    }, [subView]);
     
     // Loading states
     const [loading, setLoading] = useState(false);
@@ -56,7 +78,19 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
     const [patientQuery, setPatientQuery] = useState('');
     const [patientResults, setPatientResults] = useState<ConsultaPaciente[]>([]);
     const [selectedPatient, setSelectedPatient] = useState<ConsultaPaciente | null>(null);
+    const [patientHistory, setPatientHistory] = useState<ConsultaAgendamento[]>([]);
     const [isRegistering, setIsRegistering] = useState(false);
+
+    // Fetch patient history when selectedPatient changes
+    useEffect(() => {
+        if (selectedPatient) {
+            db.getPacienteHistory(selectedPatient.id)
+                .then(setPatientHistory)
+                .catch(err => console.error("Error fetching patient history:", err));
+        } else {
+            setPatientHistory([]);
+        }
+    }, [selectedPatient]);
     
     // Register Patient Form
     const [newPatientName, setNewPatientName] = useState('');
@@ -109,6 +143,8 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
     const [loadingVagas, setLoadingVagas] = useState(false);
     const [isCalendarOpen, setIsCalendarOpen] = useState(false);
     const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
+    const [isSolicitationCalendarOpen, setIsSolicitationCalendarOpen] = useState(false);
+    const [solicitationCalendarMonth, setSolicitationCalendarMonth] = useState<Date>(new Date());
     const [bookingTime, setBookingTime] = useState('');
     const [activeDate, setActiveDate] = useState('');
 
@@ -131,10 +167,9 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
         return Math.max(0, proc.available_quantity);
     };
 
-    // Check if procedure is waitlist-only for Normal priority (0 available normal vacancies)
-    const isNormalWaitlistOnly = selectedProcedure !== null && 
-        bookingPriority === 'Normal' && 
-        getAvailableSlots(selectedProcedure, 'Normal', '') === 0;
+    // Check if procedure is waitlist-only (0 available vacancies for the selected procedure under chosen priority)
+    const isWaitlistOnly = selectedProcedure !== null && 
+        getAvailableSlots(selectedProcedure, bookingPriority, '') === 0;
 
     const getDaysInMonth = (date: Date) => {
         const year = date.getFullYear();
@@ -470,7 +505,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
             if (newPatient) {
                 setSelectedPatient(newPatient);
                 setIsRegistering(false);
-                setStep(2);
+                onNavigate('consultas:novo-agendamento-paciente');
             }
         } catch (err: any) {
             setErrorMessage(err.message || 'Erro ao cadastrar paciente.');
@@ -480,29 +515,38 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
     };
 
     const createNewBooking = async () => {
-        const targetDate = isNormalWaitlistOnly ? formatDateToYYYYMMDD(new Date()) : bookingDate;
-        if (!selectedPatient || !selectedProcedure || !targetDate) return;
+        if (!selectedPatient || !selectedProcedure) return;
+        const targetDate = bookingDate || formatDateToYYYYMMDD(new Date());
         setLoading(true);
         
-        // Determine status based on slot availability (including 20% urgency quota check)
-        const availableSlots = isNormalWaitlistOnly ? 0 : getAvailableSlots(selectedProcedure, bookingPriority, targetDate);
-        const targetStatus = availableSlots >= bookingQty ? ('Solicitado' as const) : ('Fila de espera' as const);
+        // Determine status based on slot availability
+        const availableSlots = getAvailableSlots(selectedProcedure, bookingPriority, targetDate);
+        const targetStatus = (bookingDate && availableSlots >= bookingQty)
+            ? ('Solicitado' as const) 
+            : ('Fila de espera' as const);
+
         const optimisticBooking = {
             patient_id: selectedPatient.id,
             procedimento_id: selectedProcedure.id,
             appointment_date: targetDate,
-            appointment_time: isNormalWaitlistOnly ? undefined : bookingTime || undefined,
+            appointment_time: (bookingDate && !isWaitlistOnly) ? (bookingTime || undefined) : undefined,
             solicitation_date: solicitationDate,
             quantity: bookingQty,
             priority: bookingPriority,
             status: targetStatus,
             created_by: currentUser.id
         };
+
         try {
             const result = await db.createAgendamento(optimisticBooking);
             setCreatedBooking(result);
-            setSuccessMessage('Agendamento realizado com sucesso!');
+            setSuccessMessage(
+                targetStatus === 'Fila de espera'
+                ? 'Paciente inserido na fila de espera com sucesso!'
+                : 'Agendamento realizado com sucesso!'
+            );
         } catch (err: any) {
+            console.error("Erro ao criar agendamento:", err);
             setErrorMessage(err.message || 'Erro ao realizar agendamento.');
         } finally {
             setLoading(false);
@@ -510,13 +554,13 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
     };
 
     const handleRescheduleConflict = async () => {
-        const targetDate = isNormalWaitlistOnly ? formatDateToYYYYMMDD(new Date()) : bookingDate;
+        const targetDate = bookingDate || formatDateToYYYYMMDD(new Date());
         if (!conflictBooking || !targetDate || !selectedProcedure) return;
         setIsConflictModalOpen(false);
         setLoading(true);
         try {
             // Determine target status: check if slots are available on the new date
-            const availableSlots = isNormalWaitlistOnly ? 0 : getAvailableSlots(selectedProcedure, bookingPriority, targetDate);
+            const availableSlots = isWaitlistOnly ? 0 : getAvailableSlots(selectedProcedure, bookingPriority, targetDate);
             const targetStatus = availableSlots > 0 ? 'Agendado' : 'Fila de espera';
 
             const result = await db.updateAgendamentoDateAndStatus(conflictBooking.id, targetDate, targetStatus);
@@ -540,65 +584,71 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
 
     // Handle Schedule Submission
     const handleConfirmBooking = async () => {
-        const targetDate = isNormalWaitlistOnly ? formatDateToYYYYMMDD(new Date()) : bookingDate;
-        if (!selectedPatient || !selectedProcedure || !targetDate) return;
+        if (!selectedPatient || !selectedProcedure) return;
+        const targetDate = bookingDate || formatDateToYYYYMMDD(new Date());
         
         setErrorMessage('');
         setLoading(true);
         
-        // Only run check if priority is Normal
-        const isUrgent = bookingPriority === 'Urgência';
-        
-        if (!isUrgent) {
-            try {
-                // Fetch patient history to check for active same-procedure bookings within 15 days
-                const history = await db.getPacienteHistory(selectedPatient.id);
-                
-                // Find any active/pending booking for the same procedure that is within 15 days of the proposed date
-                // and is NOT an urgency or retorno
-                const activeConflict = history.find(h => {
-                    if (h.procedimento_id !== selectedProcedure.id) return false;
+        try {
+            // Only run check if priority is Normal
+            const isUrgent = bookingPriority === 'Urgência';
+            
+            if (!isUrgent) {
+                try {
+                    // Fetch patient history to check for active same-procedure bookings within 15 days
+                    const history = await db.getPacienteHistory(selectedPatient.id);
                     
-                    const isActive = ['Solicitado', 'Agendado', 'Aguardando Data', 'Fila de espera'].includes(h.status);
-                    if (!isActive) return false;
-                    
-                    const isExc = h.priority === 'Urgência' || h.status === 'Retorno' || h.is_retorno === true;
-                    if (isExc) return false;
+                    // Find any active/pending booking for the same procedure that is within 15 days of the proposed date
+                    // and is NOT an urgency or retorno
+                    const activeConflict = history.find(h => {
+                        if (h.procedimento_id !== selectedProcedure.id) return false;
+                        
+                        const isActive = ['Solicitado', 'Agendado', 'Aguardando Data', 'Fila de espera'].includes(h.status);
+                        if (!isActive) return false;
+                        
+                        const isExc = h.priority === 'Urgência' || h.status === 'Retorno' || h.is_retorno === true;
+                        if (isExc) return false;
 
-                    // Calculate days difference
-                    const d1 = new Date(h.appointment_date + 'T12:00:00');
-                    const d2 = new Date(targetDate + 'T12:00:00');
-                    const diffTime = Math.abs(d1.getTime() - d2.getTime());
-                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                    
-                    return diffDays <= 15;
-                });
+                        // Calculate days difference
+                        const d1 = new Date(h.appointment_date + 'T12:00:00');
+                        const d2 = new Date(targetDate + 'T12:00:00');
+                        const diffTime = Math.abs(d1.getTime() - d2.getTime());
+                        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                        
+                        return diffDays <= 15;
+                    });
 
-                if (activeConflict) {
-                    const existingDate = new Date(activeConflict.appointment_date + 'T12:00:00');
-                    const newDate = new Date(targetDate + 'T12:00:00');
-                    
-                    if (newDate.getTime() < existingDate.getTime()) {
-                        // Proposed date is closer! Show modal to reschedule
-                        setConflictBooking(activeConflict);
-                        setIsConflictModalOpen(true);
-                        setLoading(false);
-                        return;
-                    } else {
-                        // Existing date is closer! Block booking
-                        const formattedOldDate = new Date(activeConflict.appointment_date + 'T00:00:00').toLocaleDateString('pt-BR');
-                        setErrorMessage(`Não é permitido ter dois agendamentos ativos para o mesmo procedimento no período de 15 dias. O agendamento mais próximo (em ${formattedOldDate}) foi mantido.`);
-                        setLoading(false);
-                        return;
+                    if (activeConflict) {
+                        const existingDate = new Date(activeConflict.appointment_date + 'T12:00:00');
+                        const newDate = new Date(targetDate + 'T12:00:00');
+                        
+                        if (newDate.getTime() < existingDate.getTime()) {
+                            // Proposed date is closer! Show modal to reschedule
+                            setConflictBooking(activeConflict);
+                            setIsConflictModalOpen(true);
+                            setLoading(false);
+                            return;
+                        } else {
+                            // Existing date is closer! Block booking
+                            const formattedOldDate = new Date(activeConflict.appointment_date + 'T00:00:00').toLocaleDateString('pt-BR');
+                            setErrorMessage(`Não é permitido ter dois agendamentos ativos para o mesmo procedimento no período de 15 dias. O agendamento mais próximo (em ${formattedOldDate}) foi mantido.`);
+                            setLoading(false);
+                            return;
+                        }
                     }
+                } catch (err: any) {
+                    console.error("Error checking conflict:", err);
                 }
-            } catch (err: any) {
-                console.error("Error checking conflict:", err);
             }
-        }
 
-        // If no conflict or conflict bypassed/resolved, proceed with normal booking
-        await createNewBooking();
+            // If no conflict or conflict bypassed/resolved, proceed with normal booking
+            await createNewBooking();
+        } catch (err: any) {
+            console.error("Error in handleConfirmBooking:", err);
+            setErrorMessage(err.message || 'Erro ao confirmar agendamento.');
+            setLoading(false);
+        }
     };
 
     // Download Receipt PDF
@@ -806,12 +856,12 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                         <div className="grid grid-cols-2 gap-x-6 gap-y-3.5 text-xs font-bold text-slate-500">
                             <div className="space-y-0.5">
                                 <span className="text-[9px] uppercase tracking-wider text-slate-400 block font-extrabold">Paciente</span>
-                                <span className="text-slate-800 uppercase font-black truncate block">{formatPatientName(createdBooking.paciente || selectedPatient)}</span>
+                                <span className="text-slate-800 uppercase font-black break-words block">{formatPatientName(createdBooking.paciente || selectedPatient)}</span>
                             </div>
                             
                             <div className="space-y-0.5">
                                 <span className="text-[9px] uppercase tracking-wider text-slate-400 block font-extrabold">Procedimento</span>
-                                <span className="text-slate-800 uppercase font-black truncate block">{createdBooking.procedimento?.name || selectedProcedure?.name}</span>
+                                <span className="text-slate-800 uppercase font-black break-words block">{createdBooking.procedimento?.name || selectedProcedure?.name}</span>
                             </div>
 
                             <div className="space-y-0.5">
@@ -820,10 +870,20 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                             </div>
 
                             <div className="space-y-0.5">
+                                <span className="text-[9px] uppercase tracking-wider text-slate-400 block font-extrabold">Data da Solicitação</span>
+                                <span className="text-slate-800 font-bold block">
+                                    {createdBooking.solicitation_date
+                                        ? new Date(createdBooking.solicitation_date + 'T12:00:00').toLocaleDateString('pt-BR')
+                                        : new Date(solicitationDate + 'T12:00:00').toLocaleDateString('pt-BR')}
+                                </span>
+                            </div>
+
+                            <div className="space-y-0.5 col-span-2">
                                 <span className="text-[9px] uppercase tracking-wider text-slate-400 block font-extrabold">Data e Hora</span>
-                                <span className="text-slate-700 block font-semibold">
-                                    {new Date(createdBooking.appointment_date + 'T00:00:00').toLocaleDateString('pt-BR')}
-                                    {bookingTime ? ` às ${bookingTime}` : ''}
+                                <span className={`block font-extrabold ${createdBooking.status === 'Fila de espera' || !createdBooking.appointment_time ? 'text-amber-600 font-extrabold' : 'text-slate-800'}`}>
+                                    {createdBooking.status !== 'Fila de espera' && createdBooking.appointment_time
+                                        ? `${new Date(createdBooking.appointment_date + 'T12:00:00').toLocaleDateString('pt-BR')} às ${createdBooking.appointment_time.substring(0, 5)}`
+                                        : 'Aguardando Vaga'}
                                 </span>
                             </div>
                         </div>
@@ -926,86 +986,45 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                     </div>
                 </div>
 
-                {/* Custom Stepper Timeline */}
-                <div className="hidden sm:flex items-center gap-5 bg-white border border-slate-200/70 rounded-2xl p-1.5 px-4 shadow-sm">
+                {/* Barra de Abas com Rotas URL Dedicadas */}
+                <div className="flex items-center gap-1.5 sm:gap-2 bg-slate-100/90 p-1.5 rounded-2xl border border-slate-200/80 shadow-inner">
                     {[
-                        { stepNum: 1, label: 'Paciente', icon: UserIcon },
-                        { stepNum: 2, label: 'Agendamento', icon: CalendarDays },
-                        { stepNum: 3, label: 'Confirmação', icon: CheckCircle2 }
-                    ].map((s) => {
-                        const Icon = s.icon;
-                        const isActive = step === s.stepNum;
-                        const isCompleted = step > s.stepNum;
+                        { stepNum: 1, label: 'Paciente', route: 'consultas:novo-agendamento-paciente', icon: UserIcon },
+                        { stepNum: 2, label: 'Procedimento', route: 'consultas:novo-agendamento-procedimento', icon: CalendarDays },
+                        { stepNum: 3, label: 'Revisão e Confirmação', route: 'consultas:novo-agendamento-revisao', icon: CheckCircle2 }
+                    ].map((tab) => {
+                        const Icon = tab.icon;
+                        const isActive = step === tab.stepNum;
                         const isClickable = (() => {
-                            if (s.stepNum === 1) return true;
-                            if (s.stepNum === 2) return !!selectedPatient;
-                            if (s.stepNum === 3) return !!selectedPatient && !!selectedProcedure && (!!bookingDate || isNormalWaitlistOnly);
+                            if (tab.stepNum === 1) return true;
+                            if (tab.stepNum === 2) return !!selectedPatient;
+                            if (tab.stepNum === 3) return !!selectedPatient && !!selectedProcedure && (!!bookingDate || isWaitlistOnly);
                             return false;
                         })();
                         return (
-                            <React.Fragment key={s.stepNum}>
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        if (isClickable) setStep(s.stepNum as 1 | 2 | 3);
-                                    }}
-                                    disabled={!isClickable}
-                                    className={`flex items-center gap-2 outline-none border-0 bg-transparent p-0 transition-all ${
-                                        isClickable 
-                                        ? 'cursor-pointer hover:opacity-80 active:scale-[0.98]' 
-                                        : 'cursor-not-allowed opacity-50'
-                                    }`}
-                                >
-                                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all duration-300 ${
-                                        isCompleted 
-                                        ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' 
-                                        : isActive 
-                                        ? 'bg-sky-600 text-white shadow-lg shadow-sky-600/20 scale-105' 
-                                        : 'bg-slate-100 text-slate-400 border border-slate-200/50'
-                                    }`}>
-                                        {isCompleted ? <Check className="w-4.5 h-4.5" strokeWidth={3} /> : <Icon className="w-4 h-4" />}
-                                    </div>
-                                    <span className={`text-[9px] uppercase tracking-wider font-extrabold transition-colors duration-300 ${
-                                        isActive ? 'text-sky-600 font-black' : isCompleted ? 'text-emerald-600' : 'text-slate-400'
-                                    }`}>
-                                        {s.label}
-                                    </span>
-                                </button>
-                                {s.stepNum < 3 && (
-                                    <div className={`h-[2px] w-6 rounded-full transition-all duration-300 ${
-                                        isCompleted ? 'bg-emerald-400' : 'bg-slate-200'
-                                    }`} />
-                                )}
-                            </React.Fragment>
-                        );
-                    })}
-                </div>
-
-                {/* Mobile Stepper Dot Indicator */}
-                <div className="flex sm:hidden items-center gap-1.5 bg-white p-2 rounded-xl border border-slate-100 shadow-sm">
-                    {[1, 2, 3].map((s) => {
-                        const isClickable = (() => {
-                            if (s === 1) return true;
-                            if (s === 2) return !!selectedPatient;
-                            if (s === 3) return !!selectedPatient && !!selectedProcedure && (!!bookingDate || isNormalWaitlistOnly);
-                            return false;
-                        })();
-                        return (
-                            <button 
-                                key={s}
+                            <button
+                                key={tab.stepNum}
                                 type="button"
                                 onClick={() => {
-                                    if (isClickable) setStep(s as 1 | 2 | 3);
+                                    if (isClickable) {
+                                        onNavigate(tab.route);
+                                    }
                                 }}
                                 disabled={!isClickable}
-                                className={`h-2 rounded-full transition-all duration-300 outline-none border-0 p-0 ${
-                                    step === s 
-                                    ? 'w-6 bg-sky-600' 
-                                    : step > s 
-                                    ? 'w-2 bg-emerald-500' 
-                                    : 'w-2 bg-slate-200'
-                                } ${isClickable ? 'cursor-pointer hover:opacity-80' : 'cursor-not-allowed opacity-40'}`}
-                            />
+                                className={`px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-300 flex items-center gap-2 outline-none border-0 ${
+                                    isActive
+                                    ? 'bg-sky-600 text-white shadow-md shadow-sky-600/20 scale-[1.02] cursor-default'
+                                    : isClickable
+                                    ? 'bg-white text-slate-700 hover:bg-sky-50 hover:text-sky-700 shadow-sm cursor-pointer'
+                                    : 'bg-transparent text-slate-400 cursor-not-allowed opacity-50'
+                                }`}
+                            >
+                                <div className={`w-6 h-6 rounded-lg flex items-center justify-center ${isActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                                    <Icon className="w-3.5 h-3.5" />
+                                </div>
+                                <span className="hidden md:inline">{tab.label}</span>
+                                <span className="md:hidden">Aba {tab.stepNum}</span>
+                            </button>
                         );
                     })}
                 </div>
@@ -1035,208 +1054,318 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                 {/* STEP 1: PACIENTE */}
                 {step === 1 && (
                     <div className="flex-1 flex flex-col min-h-0 animate-in fade-in duration-300">
-                        <div className="flex items-center justify-between mb-5 shrink-0">
-                            <div>
-                                <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">Identificação</h4>
-                                <h3 className="text-base font-black text-slate-800 uppercase tracking-tight mt-0.5">Vincular Paciente</h3>
-                            </div>
-                            <button
-                                onClick={() => {
-                                    setIsRegistering(!isRegistering);
-                                    setSelectedPatient(null);
-                                    setErrorMessage('');
-                                }}
-                                className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all duration-300 flex items-center gap-2 border shadow-sm active:scale-95 ${
-                                    isRegistering 
-                                    ? 'bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700' 
-                                    : 'bg-sky-50 border-sky-100 hover:bg-sky-100/50 text-sky-700'
-                                }`}
-                            >
-                                <UserPlus className="w-4 h-4" />
-                                {isRegistering ? 'Buscar Existente' : 'Cadastrar Novo'}
-                            </button>
-                        </div>
-
-
-                        {!isRegistering ? (
-                            /* SEARCH PACIENTE */
-                            <div className="flex-1 flex flex-col min-h-0">
-                                <div className="relative mb-5 shrink-0">
-                                    <input
-                                        type="text"
-                                        placeholder="Pesquise por Nome Completo ou CPF..."
-                                        className="w-full bg-slate-50/50 border border-slate-200/80 rounded-2xl pl-12 pr-4 py-4 text-sm font-medium focus:bg-white focus:outline-none focus:ring-4 focus:ring-sky-500/10 focus:border-sky-500 transition-all text-slate-900 placeholder:text-slate-400 shadow-inner"
-                                        value={patientQuery}
-                                        onChange={(e) => setPatientQuery(e.target.value)}
-                                    />
-                                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
-                                    {searching && (
-                                        <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 text-sky-600 w-5 h-5 animate-spin" />
-                                    )}
+                        {selectedPatient && !isRegistering ? (
+                            /* ABA 1: INFORMAÇÕES COMPLETAS DO PACIENTE SELECIONADO */
+                            <div className="flex-1 flex flex-col min-h-0 space-y-3 overflow-y-auto scrollbar-none pr-0.5">
+                                <div className="flex items-center justify-between shrink-0 bg-gradient-to-r from-sky-50 to-indigo-50/50 border border-sky-100 p-3 sm:p-3.5 rounded-2xl shadow-sm">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-xl bg-sky-600 text-white flex items-center justify-center font-black text-base shadow-md shadow-sky-600/20">
+                                            {selectedPatient.name.charAt(0).toUpperCase()}
+                                        </div>
+                                        <div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full">Paciente Vinculado</span>
+                                            </div>
+                                            <h3 className="text-sm sm:text-base font-black text-slate-900 uppercase tracking-tight mt-0.5">{formatPatientName(selectedPatient)}</h3>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => {
+                                            setSelectedPatient(null);
+                                            onNavigate('consultas:novo-agendamento');
+                                        }}
+                                        className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600 text-slate-600 rounded-xl text-xs font-extrabold transition-all shadow-sm active:scale-95 flex items-center gap-1.5 cursor-pointer shrink-0"
+                                    >
+                                        <X className="w-3.5 h-3.5 text-rose-500" />
+                                        Alterar Paciente
+                                    </button>
                                 </div>
 
-                                <div className="flex-1 overflow-y-auto border border-slate-100 rounded-2xl bg-slate-50/30 p-3 custom-scrollbar min-h-0">
-                                    {patientResults.length > 0 ? (
-                                        <div className="space-y-2.5">
-                                            {patientResults.map((patient) => (
-                                                <div 
-                                                    key={patient.id}
-                                                    onClick={() => setSelectedPatient(patient)}
-                                                    className={`p-4 rounded-xl border transition-all duration-300 cursor-pointer flex items-center justify-between group/card ${
-                                                        selectedPatient?.id === patient.id
-                                                        ? 'bg-gradient-to-r from-sky-50 to-white border-sky-400 ring-2 ring-sky-500/5 shadow-md translate-x-1'
-                                                        : 'bg-white border-slate-100 hover:border-slate-300 hover:shadow-md hover:-translate-y-0.5'
-                                                    }`}
-                                                >
+                                {/* Cartão de Informações Pessoais do Paciente */}
+                                <div className="bg-slate-50/70 border border-slate-200/80 rounded-2xl p-4 space-y-3 shadow-sm">
+                                    <h4 className="text-xs font-black uppercase tracking-widest text-slate-600 flex items-center gap-2 pb-2 border-b border-slate-200/80">
+                                        <UserIcon className="w-4 h-4 text-sky-600" />
+                                        Informações Completas do Paciente
+                                    </h4>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5 text-xs font-semibold">
+                                        <div>
+                                            <span className="block text-[8.5px] font-black text-slate-400 uppercase tracking-wider mb-0.5">Nome Completo</span>
+                                            <span className="text-slate-900 font-extrabold uppercase text-xs block">{selectedPatient.name}</span>
+                                        </div>
+                                        <div>
+                                            <span className="block text-[8.5px] font-black text-slate-400 uppercase tracking-wider mb-0.5">Apelido</span>
+                                            <span className="text-slate-800 font-bold uppercase block text-xs">{selectedPatient.nickname || 'Não informado'}</span>
+                                        </div>
+                                        <div>
+                                            <span className="block text-[8.5px] font-black text-slate-400 uppercase tracking-wider mb-0.5">CPF</span>
+                                            <span className="text-slate-800 font-mono font-bold block text-xs">{selectedPatient.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}</span>
+                                        </div>
+                                        <div>
+                                            <span className="block text-[8.5px] font-black text-slate-400 uppercase tracking-wider mb-0.5">Data de Nascimento</span>
+                                            <span className="text-slate-800 font-bold block text-xs">
+                                                {new Date(selectedPatient.birth_date + 'T12:00:00').toLocaleDateString('pt-BR')} 
+                                                {calculateAge(selectedPatient.birth_date) ? ` (${calculateAge(selectedPatient.birth_date)})` : ''}
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <span className="block text-[8.5px] font-black text-slate-400 uppercase tracking-wider mb-0.5">Telefone / WhatsApp</span>
+                                            <span className="text-slate-800 font-bold block text-xs">{selectedPatient.phone || 'Não informado'}</span>
+                                        </div>
+                                        <div>
+                                            <span className="block text-[8.5px] font-black text-slate-400 uppercase tracking-wider mb-0.5">Cidade</span>
+                                            <span className="text-slate-800 font-bold uppercase block text-xs">{selectedPatient.city || 'SÃO JOSÉ DO GOIABAL - MG'}</span>
+                                        </div>
+                                        <div>
+                                            <span className="block text-[8.5px] font-black text-slate-400 uppercase tracking-wider mb-0.5">Bairro</span>
+                                            <span className="text-slate-800 font-bold uppercase block text-xs">{selectedPatient.neighborhood || 'Não informado'}</span>
+                                        </div>
+                                        <div className="sm:col-span-2">
+                                            <span className="block text-[8.5px] font-black text-slate-400 uppercase tracking-wider mb-0.5">Endereço (Rua / Número)</span>
+                                            <span className="text-slate-800 font-bold uppercase block text-xs">{selectedPatient.street || 'Não informado'}</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Cartão de Histórico de Agendamentos do Paciente */}
+                                <div className="bg-slate-50/70 border border-slate-200/80 rounded-2xl p-4 space-y-2 shadow-sm">
+                                    <h4 className="text-xs font-black uppercase tracking-widest text-slate-600 flex items-center gap-2 pb-2 border-b border-slate-200/80">
+                                        <Activity className="w-4 h-4 text-indigo-600" />
+                                        Histórico Recente de Agendamentos do Paciente
+                                    </h4>
+                                    {patientHistory.length > 0 ? (
+                                        <div className="space-y-2 max-h-36 overflow-y-auto scrollbar-none pr-1">
+                                            {patientHistory.slice(0, 4).map(h => (
+                                                <div key={h.id} className="p-3 bg-white rounded-xl border border-slate-200/70 flex items-center justify-between text-xs hover:border-slate-300 transition-colors shadow-sm">
                                                     <div>
-                                                        <div className="font-extrabold text-slate-800 text-sm group-hover/card:text-slate-900 transition-colors">{formatPatientName(patient)}</div>
-                                                        <div className="flex items-center gap-4 text-xs text-slate-400 mt-1.5 font-bold uppercase tracking-wider">
-                                                            <span className="flex items-center gap-1"><UserIcon className="w-3.5 h-3.5 text-slate-300" /> CPF: {patient.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}</span>
-                                                            <span>Nasc: {new Date(patient.birth_date).toLocaleDateString('pt-BR')}</span>
-                                                        </div>
+                                                        <span className="font-extrabold text-slate-800 uppercase block">{h.procedimento?.name || 'Procedimento'}</span>
+                                                        <span className="text-[10px] text-slate-400 font-bold">
+                                                            Data: {new Date(h.appointment_date + 'T12:00:00').toLocaleDateString('pt-BR')} • Prioridade: {h.priority}
+                                                        </span>
                                                     </div>
-                                                    {selectedPatient?.id === patient.id && (
-                                                        <div className="w-7 h-7 rounded-xl bg-sky-600 text-white flex items-center justify-center animate-in zoom-in shadow-md shadow-sky-600/20">
-                                                            <Check className="w-4.5 h-4.5" strokeWidth={3} />
-                                                        </div>
-                                                    )}
+                                                    <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase border ${
+                                                        h.status === 'Agendado' || h.status === 'Solicitado'
+                                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                                                        : h.status === 'Fila de espera'
+                                                        ? 'bg-amber-50 text-amber-700 border-amber-100'
+                                                        : 'bg-slate-100 text-slate-600 border-slate-200'
+                                                    }`}>
+                                                        {h.status}
+                                                    </span>
                                                 </div>
                                             ))}
                                         </div>
                                     ) : (
-                                        <div className="h-full flex flex-col items-center justify-center text-slate-400 p-8">
-                                            <div className="p-4 rounded-2xl bg-white border border-slate-100 shadow-sm mb-4">
-                                                <Users className="w-8 h-8 text-slate-300" />
-                                            </div>
-                                            {patientQuery.trim().length >= 3 ? (
-                                                <p className="text-sm font-semibold text-slate-500">Nenhum paciente cadastrado com estes dados.</p>
-                                            ) : (
-                                                <p className="text-xs font-semibold text-center text-slate-400 leading-relaxed uppercase tracking-wider">Digite ao menos 3 caracteres<br/>para buscar o paciente</p>
-                                            )}
-                                        </div>
+                                        <p className="text-xs text-slate-400 font-semibold py-1.5">Nenhum agendamento anterior registrado para este paciente em nossa base.</p>
                                     )}
                                 </div>
 
-                                <div className="mt-5 flex justify-end shrink-0">
+                                <div className="pt-1 flex justify-end shrink-0">
                                     <button
-                                        onClick={() => setStep(2)}
-                                        disabled={!selectedPatient}
-                                        className="px-8 py-3.5 bg-sky-600 hover:bg-sky-700 disabled:opacity-40 disabled:hover:bg-sky-600 text-white font-extrabold rounded-2xl shadow-lg shadow-sky-600/10 hover:shadow-sky-600/20 active:scale-95 disabled:active:scale-100 transition-all text-xs uppercase tracking-widest"
+                                        onClick={() => onNavigate('consultas:novo-agendamento-procedimento')}
+                                        className="px-6 py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-extrabold rounded-xl shadow-lg shadow-sky-600/10 hover:shadow-sky-600/20 active:scale-95 transition-all text-xs uppercase tracking-widest flex items-center gap-2 cursor-pointer"
                                     >
-                                        Avançar
+                                        Avançar para Procedimento
+                                        <ChevronRight className="w-4 h-4" />
                                     </button>
                                 </div>
                             </div>
                         ) : (
-                            /* REGISTER PACIENTE */
-                            <form onSubmit={handleRegisterPatient} className="flex-1 flex flex-col min-h-0 justify-between">
-                                <div className="space-y-5 overflow-y-auto flex-1 min-h-0 pr-1 custom-scrollbar">
+                            /* BUSCAR OU CADASTRAR PACIENTE */
+                            <div className="flex-1 flex flex-col min-h-0">
+                                <div className="flex items-center justify-between mb-5 shrink-0">
                                     <div>
-                                        <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5 ml-1">Nome Completo</label>
-                                        <input
-                                            type="text"
-                                            className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all text-xs font-semibold uppercase placeholder:text-slate-300 shadow-inner"
-                                            placeholder="Ex: Maria das Graças Silva"
-                                            value={newPatientName}
-                                            onChange={(e) => setNewPatientName(e.target.value.toUpperCase())}
-                                            required
-                                        />
+                                        <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">Identificação</h4>
+                                        <h3 className="text-base font-black text-slate-800 uppercase tracking-tight mt-0.5">Vincular Paciente</h3>
                                     </div>
-                                    <div>
-                                        <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5 ml-1">Apelido</label>
-                                        <input
-                                            type="text"
-                                            className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all text-xs font-semibold uppercase placeholder:text-slate-300 shadow-inner"
-                                            placeholder="Ex: Netinho"
-                                            value={newPatientNickname}
-                                            onChange={(e) => setNewPatientNickname(e.target.value.toUpperCase())}
-                                        />
-                                    </div>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                                        <div>
-                                            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5 ml-1">CPF</label>
-                                            <input
-                                                type="text"
-                                                className={`w-full rounded-xl border bg-slate-50/50 p-3.5 text-slate-900 focus:bg-white focus:outline-none focus:ring-4 outline-none transition-all text-xs font-bold tracking-wider shadow-inner ${
-                                                    cpfError 
-                                                    ? 'border-rose-300 focus:border-rose-500 focus:ring-rose-500/10' 
-                                                    : 'border-slate-200 focus:border-sky-500 focus:ring-sky-500/10'
-                                                }`}
-                                                placeholder="000.000.000-00"
-                                                value={newPatientCpf}
-                                                onChange={(e) => handleCpfChange(e.target.value)}
-                                                required
-                                            />
-                                            {cpfError && <span className="text-[9px] text-rose-500 font-extrabold ml-1 mt-1 block uppercase tracking-wider">{cpfError}</span>}
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5 ml-1">Data de Nascimento</label>
-                                            <input
-                                                type="date"
-                                                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all text-xs font-bold shadow-inner"
-                                                value={newPatientBirthDate}
-                                                onChange={(e) => setNewPatientBirthDate(e.target.value)}
-                                                required
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                                        <div>
-                                            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5 ml-1">Telefone</label>
-                                            <input
-                                                type="text"
-                                                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all text-xs font-bold tracking-wider shadow-inner"
-                                                placeholder="(00) 00000-0000"
-                                                value={newPatientPhone}
-                                                onChange={(e) => handlePhoneChange(e.target.value)}
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5 ml-1">Bairro</label>
-                                            <input
-                                                type="text"
-                                                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all text-xs font-semibold uppercase placeholder:text-slate-300 shadow-inner"
-                                                placeholder="Ex: Centro"
-                                                value={newPatientNeighborhood}
-                                                onChange={(e) => setNewPatientNeighborhood(e.target.value.toUpperCase())}
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                                        <div>
-                                            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5 ml-1">Rua</label>
-                                            <input
-                                                type="text"
-                                                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all text-xs font-semibold uppercase placeholder:text-slate-300 shadow-inner"
-                                                placeholder="Ex: Rua Principal, 10"
-                                                value={newPatientStreet}
-                                                onChange={(e) => setNewPatientStreet(e.target.value.toUpperCase())}
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5 ml-1">Cidade</label>
-                                            <input
-                                                type="text"
-                                                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all text-xs font-semibold uppercase placeholder:text-slate-300 shadow-inner"
-                                                placeholder="Ex: São José do Goiabal - MG"
-                                                value={newPatientCity}
-                                                onChange={(e) => setNewPatientCity(e.target.value.toUpperCase())}
-                                                required
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="mt-5 flex justify-end shrink-0">
                                     <button
-                                        type="submit"
-                                        disabled={loading}
-                                        className="px-8 py-3.5 bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-extrabold rounded-2xl shadow-lg shadow-sky-600/10 hover:shadow-sky-600/20 active:scale-95 transition-all text-xs uppercase tracking-widest flex items-center gap-2"
+                                        onClick={() => {
+                                            setIsRegistering(!isRegistering);
+                                            setSelectedPatient(null);
+                                            setErrorMessage('');
+                                        }}
+                                        className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all duration-300 flex items-center gap-2 border shadow-sm active:scale-95 ${
+                                            isRegistering 
+                                            ? 'bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700' 
+                                            : 'bg-sky-50 border-sky-100 hover:bg-sky-100/50 text-sky-700'
+                                        }`}
                                     >
-                                        {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-                                        Salvar & Avançar
+                                        <UserPlus className="w-4 h-4" />
+                                        {isRegistering ? 'Buscar Existente' : 'Cadastrar Novo'}
                                     </button>
                                 </div>
-                            </form>
+
+                                {!isRegistering ? (
+                                    /* SEARCH PACIENTE */
+                                    <div className="flex-1 flex flex-col min-h-0">
+                                        <div className="relative mb-5 shrink-0">
+                                            <input
+                                                type="text"
+                                                placeholder="Pesquise por Nome Completo ou CPF..."
+                                                className="w-full bg-slate-50/50 border border-slate-200/80 rounded-2xl pl-12 pr-4 py-4 text-sm font-medium focus:bg-white focus:outline-none focus:ring-4 focus:ring-sky-500/10 focus:border-sky-500 transition-all text-slate-900 placeholder:text-slate-400 shadow-inner"
+                                                value={patientQuery}
+                                                onChange={(e) => setPatientQuery(e.target.value)}
+                                            />
+                                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
+                                            {searching && (
+                                                <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 text-sky-600 w-5 h-5 animate-spin" />
+                                            )}
+                                        </div>
+
+                                        <div className="flex-1 overflow-y-auto border border-slate-100 rounded-2xl bg-slate-50/30 p-3 custom-scrollbar min-h-0">
+                                            {patientResults.length > 0 ? (
+                                                <div className="space-y-2.5">
+                                                    {patientResults.map((patient) => (
+                                                        <div 
+                                                            key={patient.id}
+                                                            onClick={() => {
+                                                                setSelectedPatient(patient);
+                                                                onNavigate('consultas:novo-agendamento-paciente');
+                                                            }}
+                                                            className={`p-4 rounded-xl border transition-all duration-300 cursor-pointer flex items-center justify-between group/card ${
+                                                                selectedPatient?.id === patient.id
+                                                                ? 'bg-gradient-to-r from-sky-50 to-white border-sky-400 ring-2 ring-sky-500/5 shadow-md translate-x-1'
+                                                                : 'bg-white border-slate-100 hover:border-slate-300 hover:shadow-md hover:-translate-y-0.5'
+                                                            }`}
+                                                        >
+                                                            <div>
+                                                                <div className="font-extrabold text-slate-800 text-sm group-hover/card:text-slate-900 transition-colors">{formatPatientName(patient)}</div>
+                                                                <div className="flex items-center gap-4 text-xs text-slate-400 mt-1.5 font-bold uppercase tracking-wider">
+                                                                    <span className="flex items-center gap-1"><UserIcon className="w-3.5 h-3.5 text-slate-300" /> CPF: {patient.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}</span>
+                                                                    <span>Nasc: {new Date(patient.birth_date).toLocaleDateString('pt-BR')}</span>
+                                                                </div>
+                                                            </div>
+                                                            <div className="w-7 h-7 rounded-xl bg-sky-600 text-white flex items-center justify-center animate-in zoom-in shadow-md shadow-sky-600/20">
+                                                                <Check className="w-4.5 h-4.5" strokeWidth={3} />
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <div className="h-full flex flex-col items-center justify-center text-slate-400 p-8">
+                                                    <div className="p-4 rounded-2xl bg-white border border-slate-100 shadow-sm mb-4">
+                                                        <Users className="w-8 h-8 text-slate-300" />
+                                                    </div>
+                                                    {patientQuery.trim().length >= 3 ? (
+                                                        <p className="text-sm font-semibold text-slate-500">Nenhum paciente cadastrado com estes dados.</p>
+                                                    ) : (
+                                                        <p className="text-xs font-semibold text-center text-slate-400 leading-relaxed uppercase tracking-wider">Digite ao menos 3 caracteres<br/>para buscar o paciente</p>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                ) : (
+                                    /* REGISTER PACIENTE */
+                                    <form onSubmit={handleRegisterPatient} className="flex-1 flex flex-col min-h-0 justify-between">
+                                        <div className="space-y-5 overflow-y-auto flex-1 min-h-0 pr-1 custom-scrollbar">
+                                            <div>
+                                                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5 ml-1">Nome Completo</label>
+                                                <input
+                                                    type="text"
+                                                    className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all text-xs font-semibold uppercase placeholder:text-slate-300 shadow-inner"
+                                                    placeholder="Ex: Maria das Graças Silva"
+                                                    value={newPatientName}
+                                                    onChange={(e) => setNewPatientName(e.target.value.toUpperCase())}
+                                                    required
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5 ml-1">Apelido</label>
+                                                <input
+                                                    type="text"
+                                                    className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all text-xs font-semibold uppercase placeholder:text-slate-300 shadow-inner"
+                                                    placeholder="Ex: Netinho"
+                                                    value={newPatientNickname}
+                                                    onChange={(e) => setNewPatientNickname(e.target.value.toUpperCase())}
+                                                />
+                                            </div>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                                                <div>
+                                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5 ml-1">CPF</label>
+                                                    <input
+                                                        type="text"
+                                                        className={`w-full rounded-xl border bg-slate-50/50 p-3.5 text-slate-900 focus:bg-white focus:outline-none focus:ring-4 outline-none transition-all text-xs font-bold tracking-wider shadow-inner ${
+                                                            cpfError 
+                                                            ? 'border-rose-300 focus:border-rose-500 focus:ring-rose-500/10' 
+                                                            : 'border-slate-200 focus:border-sky-500 focus:ring-sky-500/10'
+                                                        }`}
+                                                        placeholder="000.000.000-00"
+                                                        value={newPatientCpf}
+                                                        onChange={(e) => handleCpfChange(e.target.value)}
+                                                        required
+                                                    />
+                                                    {cpfError && <span className="text-[9px] text-rose-500 font-extrabold ml-1 mt-1 block uppercase tracking-wider">{cpfError}</span>}
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5 ml-1">Data de Nascimento</label>
+                                                    <input
+                                                        type="date"
+                                                        className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all text-xs font-bold shadow-inner"
+                                                        value={newPatientBirthDate}
+                                                        onChange={(e) => setNewPatientBirthDate(e.target.value)}
+                                                        required
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                                                <div>
+                                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5 ml-1">Telefone</label>
+                                                    <input
+                                                        type="text"
+                                                        className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all text-xs font-bold tracking-wider shadow-inner"
+                                                        placeholder="(00) 00000-0000"
+                                                        value={newPatientPhone}
+                                                        onChange={(e) => handlePhoneChange(e.target.value)}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5 ml-1">Bairro</label>
+                                                    <input
+                                                        type="text"
+                                                        className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all text-xs font-semibold uppercase placeholder:text-slate-300 shadow-inner"
+                                                        placeholder="Ex: Centro"
+                                                        value={newPatientNeighborhood}
+                                                        onChange={(e) => setNewPatientNeighborhood(e.target.value.toUpperCase())}
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                                                <div>
+                                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5 ml-1">Rua</label>
+                                                    <input
+                                                        type="text"
+                                                        className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all text-xs font-semibold uppercase placeholder:text-slate-300 shadow-inner"
+                                                        placeholder="Ex: Rua Principal, 10"
+                                                        value={newPatientStreet}
+                                                        onChange={(e) => setNewPatientStreet(e.target.value.toUpperCase())}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5 ml-1">Cidade</label>
+                                                    <input
+                                                        type="text"
+                                                        className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all text-xs font-semibold uppercase placeholder:text-slate-300 shadow-inner"
+                                                        placeholder="Ex: São José do Goiabal - MG"
+                                                        value={newPatientCity}
+                                                        onChange={(e) => setNewPatientCity(e.target.value.toUpperCase())}
+                                                        required
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="mt-5 flex justify-end shrink-0">
+                                            <button
+                                                type="submit"
+                                                disabled={loading}
+                                                className="px-8 py-3.5 bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-extrabold rounded-2xl shadow-lg shadow-sky-600/10 hover:shadow-sky-600/20 active:scale-95 transition-all text-xs uppercase tracking-widest flex items-center gap-2 cursor-pointer"
+                                            >
+                                                {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                                                Salvar & Avançar
+                                            </button>
+                                        </div>
+                                    </form>
+                                )}
+                            </div>
                         )}
                     </div>
                 )}
@@ -1244,246 +1373,301 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                 {/* STEP 2: SELECIONAR EXAME E DATA */}
                 {step === 2 && (
                     <div className="flex-1 flex flex-col min-h-0 animate-in fade-in duration-300">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-3 shrink-0 gap-2">
-                            <div>
-                                <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">Seleção</h4>
-                                <h3 className="text-base font-black text-slate-800 uppercase tracking-tight mt-0.5">Detalhes do Agendamento</h3>
-                            </div>
-                            <div className="px-4 py-2 bg-sky-50 border border-sky-100 rounded-xl flex items-center gap-2">
-                                <UserIcon className="w-4 h-4 text-sky-600" />
-                                <span className="text-[10px] text-sky-700 font-extrabold uppercase tracking-wide">Paciente: {formatPatientName(selectedPatient)}</span>
-                            </div>
-                        </div>
+                        {!selectedProcedure ? (
+                            /* VISÃO 1: APENAS A LISTA DE EXAMES COM PESQUISA */
+                            <div className="flex-1 flex flex-col min-h-0">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 shrink-0 gap-2">
+                                    <div>
+                                        <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">Aba 2: Procedimento</h4>
+                                        <h3 className="text-base font-black text-slate-800 uppercase tracking-tight mt-0.5">Selecione o Exame ou Consulta</h3>
+                                    </div>
+                                    <div className="px-3.5 py-2 bg-sky-50 border border-sky-100 rounded-xl flex items-center gap-2 shrink-0">
+                                        <UserIcon className="w-4 h-4 text-sky-600" />
+                                        <span className="text-[10px] text-sky-700 font-extrabold uppercase tracking-wide">Paciente: {formatPatientName(selectedPatient)}</span>
+                                    </div>
+                                </div>
 
-                        <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 min-h-0">
-                            {/* Left Col: Search & Procedure list */}
-                            <div className="flex flex-col min-h-0">
-                                <div className="relative mb-3.5 shrink-0">
+                                {/* Campo de Pesquisa de Exames */}
+                                <div className="relative mb-4 shrink-0">
                                     <input
                                         type="text"
-                                        placeholder="Buscar exame ou consulta..."
-                                        className="w-full bg-slate-50 border border-slate-200/80 rounded-xl pl-10 pr-4 py-3 text-xs font-semibold focus:bg-white focus:outline-none focus:border-sky-500 focus:ring-4 focus:ring-sky-500/5 transition-all text-slate-900"
+                                        placeholder="Pesquisar exame ou consulta por nome ou código..."
+                                        className="w-full bg-slate-50/70 border border-slate-200/80 rounded-2xl pl-12 pr-4 py-3.5 text-xs font-semibold focus:bg-white focus:outline-none focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 transition-all text-slate-900 shadow-inner"
                                         value={procedureQuery}
                                         onChange={(e) => setProcedureQuery(e.target.value)}
                                     />
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+                                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4.5 h-4.5" />
                                 </div>
 
-                                <div className="flex-1 overflow-y-auto border border-slate-100 rounded-2xl bg-slate-50/20 p-2.5 custom-scrollbar min-h-0 space-y-2">
+                                {/* Lista Completa de Exames/Procedimentos */}
+                                <div className="flex-1 overflow-y-auto border border-slate-100 rounded-2xl bg-slate-50/20 p-3 custom-scrollbar min-h-0">
                                     {filteredProcedures.length > 0 ? (
-                                        filteredProcedures.map((proc) => {
-                                            const hasSlots = proc.available_quantity > 0;
-                                            const isCritical = proc.available_quantity > 0 && proc.available_quantity <= 5;
-                                            const isSelected = selectedProcedure?.id === proc.id;
-                                            
-                                            return (
-                                                <div 
-                                                    key={proc.id}
-                                                    onClick={() => setSelectedProcedure(proc)}
-                                                    className={`p-3.5 rounded-xl border transition-all duration-300 flex items-center justify-between group/proc cursor-pointer hover:-translate-y-0.5 ${
-                                                        isSelected
-                                                        ? 'bg-gradient-to-r from-sky-50 to-white border-sky-400 ring-2 ring-sky-500/5 shadow-md'
-                                                        : 'bg-white border-slate-100 hover:border-slate-300 hover:shadow-sm'
-                                                    }`}
-                                                >
-                                                    <div className="min-w-0 pr-2">
-                                                        <div className="font-extrabold text-slate-800 text-xs truncate uppercase group-hover/proc:text-slate-950">{proc.name}</div>
-                                                        <span className={`inline-block px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider rounded border mt-1.5 ${
-                                                            proc.type === 'Exame'
-                                                            ? 'bg-sky-50 text-sky-600 border-sky-100'
-                                                            : proc.type === 'Consulta'
-                                                            ? 'bg-indigo-50 text-indigo-600 border-indigo-100'
-                                                            : 'bg-rose-50 text-rose-600 border-rose-100'
-                                                        }`}>
-                                                            {proc.type}
-                                                        </span>
-                                                        {proc.code && (
-                                                            <span className="inline-block px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider rounded border mt-1.5 ml-1.5 bg-slate-50 border-slate-200 text-slate-500">
-                                                                CÓD. {proc.code}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    <div className="shrink-0 text-right">
-                                                        <span className={`inline-block px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider border shadow-sm ${
-                                                            !hasSlots 
-                                                            ? 'bg-rose-50 text-rose-600 border-rose-100 shadow-rose-100/30' 
-                                                            : isCritical 
-                                                            ? 'bg-amber-50 text-amber-600 border-amber-100 shadow-amber-100/30 animate-pulse' 
-                                                            : 'bg-emerald-50 text-emerald-600 border-emerald-100 shadow-emerald-100/30'
-                                                        }`}>
-                                                            {Math.max(0, proc.available_quantity)} vagas
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                            );
-                                        })
-                                    ) : (
-                                        <div className="h-full flex flex-col items-center justify-center text-slate-400 p-8">
-                                            <Calendar className="w-8 h-8 mb-2 opacity-25" />
-                                            <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Nenhum exame/consulta ativo.</p>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Right Col: Date & Quantity */}
-                            <div className="flex flex-col justify-between p-4 bg-slate-50/50 border border-slate-100 rounded-3xl min-h-0">
-                                <div className="space-y-3 flex-1 overflow-y-auto pr-1 pb-1.5 custom-scrollbar min-h-0">
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">Data da Solicitação</label>
-                                            <input
-                                                type="date"
-                                                className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-xs font-bold text-slate-900 focus:border-sky-500 focus:ring-4 focus:ring-sky-500/5 outline-none shadow-sm transition-all"
-                                                value={solicitationDate}
-                                                onChange={(e) => setSolicitationDate(e.target.value)}
-                                                required
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">Data da Consulta/Exame</label>
-                                            <div className="relative">
-                                                <button
-                                                    type="button"
-                                                    disabled={!selectedProcedure || isNormalWaitlistOnly}
-                                                    onClick={() => {
-                                                        setIsCalendarOpen(true);
-                                                    }}
-                                                    className={`w-full rounded-xl border p-2.5 text-xs font-bold text-left flex items-center justify-between shadow-sm transition-all ${
-                                                        !selectedProcedure
-                                                        ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed shadow-none'
-                                                        : isNormalWaitlistOnly
-                                                        ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed shadow-none'
-                                                        : 'border-emerald-600 bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-500/10 focus:ring-emerald-500/20 focus:ring-4 outline-none'
-                                                    }`}
-                                                >
-                                                    <span>
-                                                        {!selectedProcedure
-                                                            ? 'Selecione um procedimento'
-                                                            : isNormalWaitlistOnly
-                                                            ? 'Fila de espera (Não há vagas normais disponíveis)'
-                                                            : bookingDate 
-                                                                ? `${new Date(bookingDate + 'T12:00:00').toLocaleDateString('pt-BR')}${bookingTime ? ` às ${bookingTime}` : ''}`
-                                                                : 'Selecione a Data'}
-                                                    </span>
-                                                    <Calendar className={`w-4 h-4 ${(!selectedProcedure || isNormalWaitlistOnly) ? 'text-slate-400' : 'text-white'}`} />
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">Prioridade do Agendamento</label>
-                                        <div className="grid grid-cols-2 gap-2.5">
-                                            {[
-                                                { value: 'Normal', label: 'Normal', color: 'border-slate-200 hover:border-slate-300 text-slate-600 bg-white' },
-                                                { value: 'Urgência', label: 'Urgência', color: 'border-rose-200 bg-rose-50/30 text-rose-700 hover:bg-rose-50' }
-                                            ].map((opt) => {
-                                                const isSel = bookingPriority === opt.value;
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                                            {filteredProcedures.map((proc) => {
+                                                const hasSlots = proc.available_quantity > 0;
+                                                const isCritical = proc.available_quantity > 0 && proc.available_quantity <= 5;
                                                 return (
-                                                    <button
-                                                        key={opt.value}
-                                                        type="button"
-                                                        onClick={() => setBookingPriority(opt.value as 'Normal' | 'Urgência')}
-                                                        className={`py-2 px-3 rounded-xl border text-xs font-black uppercase tracking-wider transition-all duration-300 active:scale-95 text-center flex items-center justify-center gap-2 ${
-                                                            isSel
-                                                            ? opt.value === 'Urgência'
-                                                                ? 'bg-rose-600 border-rose-600 text-white shadow-lg shadow-rose-600/20'
-                                                                : 'bg-sky-600 border-sky-600 text-white shadow-lg shadow-sky-600/20'
-                                                            : opt.color
-                                                        }`}
+                                                    <div 
+                                                        key={proc.id}
+                                                        onClick={() => setSelectedProcedure(proc)}
+                                                        className="p-4 rounded-2xl border bg-white border-slate-200/80 hover:border-sky-400 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 flex flex-col justify-between group cursor-pointer"
                                                     >
-                                                        {opt.value === 'Urgência' && (
-                                                            <div className={`w-2 h-2 rounded-full ${isSel ? 'bg-white' : 'bg-rose-600'} animate-ping`} />
-                                                        )}
-                                                        {opt.label}
-                                                    </button>
+                                                        <div className="space-y-2">
+                                                            <div className="font-black text-slate-800 text-xs uppercase group-hover:text-sky-600 transition-colors leading-snug">
+                                                                {proc.name}
+                                                            </div>
+                                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                                                <span className={`px-2 py-0.5 text-[8px] font-black uppercase tracking-wider rounded border ${
+                                                                    proc.type === 'Exame'
+                                                                    ? 'bg-sky-50 text-sky-600 border-sky-100'
+                                                                    : proc.type === 'Consulta'
+                                                                    ? 'bg-indigo-50 text-indigo-600 border-indigo-100'
+                                                                    : 'bg-rose-50 text-rose-600 border-rose-100'
+                                                                }`}>
+                                                                    {proc.type}
+                                                                </span>
+                                                                {proc.code && (
+                                                                    <span className="px-2 py-0.5 text-[8px] font-black uppercase tracking-wider rounded border bg-slate-50 border-slate-200 text-slate-500">
+                                                                        CÓD. {proc.code}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        <div className="mt-4 pt-2.5 border-t border-slate-100 flex items-center justify-between">
+                                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Vagas Disponíveis</span>
+                                                            <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider border shadow-sm ${
+                                                                !hasSlots 
+                                                                ? 'bg-rose-50 text-rose-600 border-rose-100' 
+                                                                : isCritical 
+                                                                ? 'bg-amber-50 text-amber-600 border-amber-100 animate-pulse' 
+                                                                : 'bg-emerald-50 text-emerald-600 border-emerald-100'
+                                                            }`}>
+                                                                {Math.max(0, proc.available_quantity)} vagas
+                                                            </span>
+                                                        </div>
+                                                    </div>
                                                 );
                                             })}
                                         </div>
-                                    </div>
-
-
-                                    {/* Selection summary formatted as a premium ticket */}
-                                    {selectedProcedure && (
-                                        <div className="relative p-3 bg-gradient-to-b from-white to-slate-50/50 border border-slate-200/60 rounded-2xl space-y-2 shadow-md shadow-slate-100/40 overflow-hidden group">
-                                            {/* Lateral ticket circle cutouts */}
-                                            <div className="absolute top-1/2 -left-2.5 w-5 h-5 bg-slate-100 border-r border-slate-200/60 rounded-full -translate-y-1/2"></div>
-                                            <div className="absolute top-1/2 -right-2.5 w-5 h-5 bg-slate-100 border-l border-slate-200/60 rounded-full -translate-y-1/2"></div>
-
-                                            <h5 className="text-[9px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1.5 pb-1.5 border-b border-dashed border-slate-200">
-                                                <Ticket className="w-3 h-3 text-sky-500" />
-                                                Resumo do Voucher
-                                            </h5>
-                                            <div className="space-y-1 pt-0.5 text-[11px]">
-                                                <div className="flex justify-between items-center">
-                                                    <span className="font-bold text-slate-400">Procedimento:</span>
-                                                    <span className="font-black text-slate-800 truncate max-w-[170px] uppercase">{selectedProcedure.name}</span>
-                                                </div>
-                                                <div className="flex justify-between items-center">
-                                                    <span className="font-bold text-slate-400">Data da Solicitação:</span>
-                                                    <span className="font-black text-slate-800">
-                                                        {solicitationDate ? new Date(solicitationDate + 'T12:00:00').toLocaleDateString('pt-BR') : '-'}
-                                                    </span>
-                                                </div>
-                                                <div className="flex justify-between items-center">
-                                                    <span className="font-bold text-slate-400">Data e Hora:</span>
-                                                    <span className="font-black text-slate-800">
-                                                        {isNormalWaitlistOnly
-                                                            ? 'Fila de Espera (Automático)'
-                                                            : bookingDate 
-                                                                ? `${new Date(bookingDate + 'T12:00:00').toLocaleDateString('pt-BR')}${bookingTime ? ` às ${bookingTime}` : ''}`
-                                                                : '-'}
-                                                    </span>
-                                                </div>
-                                                <div className="flex justify-between items-center">
-                                                    <span className="font-bold text-slate-400">Vagas Disponíveis:</span>
-                                                    <span className={`font-black ${
-                                                        (!isNormalWaitlistOnly && getAvailableSlots(selectedProcedure, bookingPriority, bookingDate) > 0) 
-                                                        ? 'text-emerald-600' 
-                                                        : 'text-rose-600'
-                                                    }`}>
-                                                        {isNormalWaitlistOnly ? 0 : getAvailableSlots(selectedProcedure, bookingPriority, bookingDate)} vagas
-                                                    </span>
-                                                </div>
-                                                <div className="flex justify-between items-center">
-                                                    <span className="font-bold text-slate-400">Prioridade:</span>
-                                                    <span className={`font-black uppercase text-[9px] px-2 py-0.5 rounded ${
-                                                        bookingPriority === 'Urgência' ? 'bg-rose-500 text-white shadow-sm' : 'bg-slate-100 text-slate-700'
-                                                    }`}>{bookingPriority}</span>
-                                                </div>
-                                                {isNormalWaitlistOnly ? (
-                                                    <div className="text-[9.5px] font-bold text-amber-600 bg-amber-50 border border-amber-100 p-2 rounded-xl mt-1.5 flex items-center gap-1.5 col-span-2 shadow-sm">
-                                                        <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-500" />
-                                                        <span>Sem vagas normais. Paciente irá para a fila de espera.</span>
-                                                    </div>
-                                                ) : getAvailableSlots(selectedProcedure, bookingPriority, bookingDate) <= 0 ? (
-                                                    <div className="text-[9.5px] font-bold text-amber-600 bg-amber-50 border border-amber-100 p-2 rounded-xl mt-1.5 flex items-center gap-1.5 col-span-2 shadow-sm">
-                                                        <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-500" />
-                                                        <span>Sem vagas normais. Paciente irá para a fila de espera.</span>
-                                                    </div>
-                                                ) : null}
-                                            </div>
+                                    ) : (
+                                        <div className="h-full flex flex-col items-center justify-center text-slate-400 p-8">
+                                            <Calendar className="w-8 h-8 mb-2 opacity-25" />
+                                            <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Nenhum exame ou consulta encontrado.</p>
                                         </div>
                                     )}
                                 </div>
 
+                                {/* Botão Voltar */}
                                 <div className="mt-4 flex justify-between shrink-0">
                                     <button
-                                        onClick={() => setStep(1)}
-                                        className="px-5 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 font-extrabold rounded-2xl active:scale-95 transition-all text-xs uppercase tracking-wider"
+                                        onClick={() => onNavigate('consultas:novo-agendamento-paciente')}
+                                        className="px-5 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 font-extrabold rounded-2xl active:scale-95 transition-all text-xs uppercase tracking-wider cursor-pointer"
                                     >
-                                        Voltar
-                                    </button>
-                                    <button
-                                        onClick={() => setStep(3)}
-                                        disabled={!selectedProcedure || (!bookingDate && !isNormalWaitlistOnly)}
-                                        className="px-6 py-2.5 bg-sky-600 hover:bg-sky-700 disabled:opacity-40 disabled:hover:bg-sky-600 text-white font-extrabold rounded-2xl shadow-lg shadow-sky-600/10 hover:shadow-sky-600/20 active:scale-95 disabled:active:scale-100 transition-all text-xs uppercase tracking-wider"
-                                    >
-                                        Revisar
+                                        Voltar para Paciente
                                     </button>
                                 </div>
                             </div>
-                        </div>
+                        ) : (
+                            /* VISÃO 2: TELA DO PROCEDIMENTO SELECIONADO */
+                            <div className="flex-1 flex flex-col min-h-0 space-y-3 overflow-y-auto scrollbar-none pr-0.5">
+                                {/* Cabeçalho da Tela do Procedimento */}
+                                <div className="flex items-center justify-between shrink-0 bg-gradient-to-r from-sky-50 to-indigo-50/50 border border-sky-100 p-3 sm:p-3.5 rounded-2xl shadow-sm">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-9 h-9 rounded-xl bg-sky-600 text-white flex items-center justify-center font-black text-sm shadow-md shadow-sky-600/20">
+                                            <CalendarDays className="w-4.5 h-4.5" />
+                                        </div>
+                                        <div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 bg-sky-100 text-sky-700 rounded-full">Tela do Procedimento</span>
+                                                <span className="text-[9px] font-bold text-slate-400 uppercase">CÓD. {selectedProcedure.code || 'N/A'}</span>
+                                            </div>
+                                            <h3 className="text-sm sm:text-base font-black text-slate-900 uppercase tracking-tight mt-0.5">{selectedProcedure.name}</h3>
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setSelectedProcedure(null)}
+                                        className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-extrabold transition-all shadow-sm active:scale-95 flex items-center gap-1.5 cursor-pointer shrink-0"
+                                    >
+                                        <ArrowLeft className="w-3.5 h-3.5 text-slate-500" />
+                                        Trocar Procedimento
+                                    </button>
+                                </div>
+
+                                {/* Form Grid da Tela do Procedimento */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1 min-h-0">
+                                    {/* Formulário de Agendamento */}
+                                    <div className="bg-slate-50/70 border border-slate-200/80 rounded-2xl p-4 flex flex-col justify-between space-y-3 shadow-sm min-h-0">
+                                        <div>
+                                            <h4 className="text-xs font-black uppercase tracking-widest text-slate-600 flex items-center gap-2 pb-2 border-b border-slate-200/80 mb-3">
+                                                <Calendar className="w-4 h-4 text-sky-600" />
+                                                Dados do Agendamento
+                                            </h4>
+                                            
+                                            <div className="space-y-3">
+                                                <div>
+                                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">Data da Solicitação</label>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setIsSolicitationCalendarOpen(true)}
+                                                        className="w-full rounded-xl border border-slate-200 bg-white p-2.5 text-xs font-bold text-slate-800 hover:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none shadow-sm transition-all flex items-center justify-between cursor-pointer group"
+                                                    >
+                                                        <div className="flex items-center gap-2">
+                                                            <Calendar className="w-4 h-4 text-sky-600 group-hover:scale-110 transition-transform" />
+                                                            <span>
+                                                                {solicitationDate
+                                                                    ? new Date(solicitationDate + 'T12:00:00').toLocaleDateString('pt-BR')
+                                                                    : 'Selecionar Data da Solicitação'}
+                                                            </span>
+                                                        </div>
+                                                        <span className="text-[9px] font-black uppercase tracking-wider text-sky-700 bg-sky-50 px-2 py-0.5 rounded-md border border-sky-100">
+                                                            Alterar Data
+                                                        </span>
+                                                    </button>
+                                                </div>
+
+                                                <div>
+                                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">Prioridade do Agendamento</label>
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        {[
+                                                            { value: 'Normal', label: 'Normal', color: 'border-slate-200 hover:border-slate-300 text-slate-600 bg-white' },
+                                                            { value: 'Urgência', label: 'Urgência', color: 'border-rose-200 bg-rose-50/30 text-rose-700 hover:bg-rose-50' }
+                                                        ].map((opt) => {
+                                                            const isSel = bookingPriority === opt.value;
+                                                            return (
+                                                                <button
+                                                                    key={opt.value}
+                                                                    type="button"
+                                                                    onClick={() => setBookingPriority(opt.value as 'Normal' | 'Urgência')}
+                                                                    className={`py-2 px-3 rounded-xl border text-xs font-black uppercase tracking-wider transition-all duration-300 active:scale-95 text-center flex items-center justify-center gap-2 cursor-pointer ${
+                                                                        isSel
+                                                                        ? opt.value === 'Urgência'
+                                                                            ? 'bg-rose-600 border-rose-600 text-white shadow-lg shadow-rose-600/20'
+                                                                            : 'bg-sky-600 border-sky-600 text-white shadow-lg shadow-sky-600/20'
+                                                                        : opt.color
+                                                                    }`}
+                                                                >
+                                                                    {opt.value === 'Urgência' && (
+                                                                        <div className={`w-2 h-2 rounded-full ${isSel ? 'bg-white' : 'bg-rose-600'} animate-ping`} />
+                                                                    )}
+                                                                    {opt.label}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+
+                                                <div>
+                                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">Data e Horário da Consulta / Exame</label>
+                                                    <button
+                                                        type="button"
+                                                        disabled={isWaitlistOnly}
+                                                        onClick={() => setIsCalendarOpen(true)}
+                                                        className={`w-full rounded-xl border p-2.5 text-xs font-bold text-left flex items-center justify-between shadow-sm transition-all ${
+                                                            isWaitlistOnly
+                                                            ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed shadow-none'
+                                                            : 'border-emerald-600 bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-500/10 focus:ring-emerald-500/20 focus:ring-4 outline-none cursor-pointer'
+                                                        }`}
+                                                    >
+                                                        <span>
+                                                            {isWaitlistOnly
+                                                                ? `Fila de espera (Não há vagas de ${bookingPriority.toLowerCase()} disponíveis)`
+                                                                : bookingDate 
+                                                                    ? `${new Date(bookingDate + 'T12:00:00').toLocaleDateString('pt-BR')}${bookingTime ? ` às ${bookingTime}` : ''}`
+                                                                    : 'Clique para Selecionar a Data e Horário no Calendário'}
+                                                        </span>
+                                                        <Calendar className={`w-4 h-4 ${isWaitlistOnly ? 'text-slate-400' : 'text-white'}`} />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Resumo do Voucher */}
+                                    <div className="bg-slate-50/70 border border-slate-200/80 rounded-2xl p-4 flex flex-col justify-between space-y-3 shadow-sm min-h-0">
+                                        <div>
+                                            <h4 className="text-xs font-black uppercase tracking-widest text-slate-600 flex items-center gap-2 pb-2 border-b border-slate-200/80 mb-2.5">
+                                                <Ticket className="w-4 h-4 text-indigo-600" />
+                                                Resumo do Voucher
+                                            </h4>
+
+                                            <div className="relative p-3.5 bg-gradient-to-b from-white to-slate-50/50 border border-slate-200/60 rounded-xl space-y-2 shadow-md shadow-slate-100/40 overflow-hidden">
+                                                {/* Círculos recortados do ticket */}
+                                                <div className="absolute top-1/2 -left-2.5 w-4 h-4 bg-slate-100 border-r border-slate-200/60 rounded-full -translate-y-1/2"></div>
+                                                <div className="absolute top-1/2 -right-2.5 w-4 h-4 bg-slate-100 border-l border-slate-200/60 rounded-full -translate-y-1/2"></div>
+
+                                                <div className="space-y-2 text-xs">
+                                                    <div className="flex justify-between items-start gap-3">
+                                                        <span className="font-bold text-slate-400 shrink-0">Paciente:</span>
+                                                        <span className="font-black text-slate-800 uppercase text-right break-words">{formatPatientName(selectedPatient)}</span>
+                                                    </div>
+                                                    <div className="flex justify-between items-start gap-3">
+                                                        <span className="font-bold text-slate-400 shrink-0">Procedimento:</span>
+                                                        <span className="font-black text-slate-800 uppercase text-right break-words">{selectedProcedure.name}</span>
+                                                    </div>
+                                                    <div className="flex justify-between items-start gap-3">
+                                                        <span className="font-bold text-slate-400 shrink-0">Data da Solicitação:</span>
+                                                        <span className="font-black text-slate-800 text-right">
+                                                            {solicitationDate ? new Date(solicitationDate + 'T12:00:00').toLocaleDateString('pt-BR') : '-'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex justify-between items-start gap-3">
+                                                        <span className="font-bold text-slate-400 shrink-0">Data e Hora Escolhida:</span>
+                                                        <span className="font-black text-slate-800 text-right break-words">
+                                                            {isWaitlistOnly
+                                                                ? 'Fila de Espera (Automático)'
+                                                                : bookingDate 
+                                                                    ? `${new Date(bookingDate + 'T12:00:00').toLocaleDateString('pt-BR')}${bookingTime ? ` às ${bookingTime}` : ''}`
+                                                                    : 'Aguardando seleção...'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex justify-between items-center gap-3">
+                                                        <span className="font-bold text-slate-400 shrink-0">Vagas Disponíveis:</span>
+                                                        <span className={`font-black ${
+                                                            (!isWaitlistOnly && getAvailableSlots(selectedProcedure, bookingPriority, bookingDate) > 0) 
+                                                            ? 'text-emerald-600' 
+                                                            : 'text-rose-600'
+                                                        }`}>
+                                                            {isWaitlistOnly ? 0 : getAvailableSlots(selectedProcedure, bookingPriority, bookingDate)} vagas
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex justify-between items-center gap-3">
+                                                        <span className="font-bold text-slate-400 shrink-0">Prioridade:</span>
+                                                        <span className={`font-black uppercase text-[10px] px-2 py-0.5 rounded ${
+                                                            bookingPriority === 'Urgência' ? 'bg-rose-500 text-white shadow-sm' : 'bg-slate-100 text-slate-700'
+                                                        }`}>{bookingPriority}</span>
+                                                    </div>
+                                                    {isWaitlistOnly || getAvailableSlots(selectedProcedure, bookingPriority, bookingDate) <= 0 ? (
+                                                        <div className="text-[9.5px] font-bold text-amber-600 bg-amber-50 border border-amber-100 p-2 rounded-xl mt-1.5 flex items-center gap-2 shadow-sm">
+                                                            <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-500" />
+                                                            <span>Sem vagas de {bookingPriority.toLowerCase()} disponíveis. Paciente irá para a fila de espera.</span>
+                                                        </div>
+                                                    ) : null}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex justify-between pt-2 border-t border-slate-200/80 shrink-0">
+                                            <button
+                                                type="button"
+                                                onClick={() => setSelectedProcedure(null)}
+                                                className="px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-extrabold rounded-xl active:scale-95 transition-all text-xs uppercase tracking-wider cursor-pointer"
+                                            >
+                                                Escolher Outro Exame
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => onNavigate('consultas:novo-agendamento-revisao')}
+                                                disabled={!bookingDate && !isWaitlistOnly}
+                                                className="px-6 py-2.5 bg-sky-600 hover:bg-sky-700 disabled:opacity-40 text-white font-extrabold rounded-xl shadow-lg shadow-sky-600/10 hover:shadow-sky-600/20 active:scale-95 transition-all text-xs uppercase tracking-widest flex items-center gap-2 cursor-pointer"
+                                            >
+                                                Avançar para Revisão
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -1519,7 +1703,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                             <div>
                                                 <span className="block text-[8px] font-black text-slate-400 uppercase tracking-wider">Data de Nascimento</span>
                                                 <span className="text-xs font-bold text-slate-700">
-                                                    {selectedPatient && new Date(selectedPatient.birth_date).toLocaleDateString('pt-BR')}
+                                                    {selectedPatient && new Date(selectedPatient.birth_date + 'T12:00:00').toLocaleDateString('pt-BR')}
                                                 </span>
                                             </div>
                                         </div>
@@ -1536,13 +1720,13 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                     <div className="space-y-3 pt-2">
                                         <div>
                                             <span className="block text-[8px] font-black text-slate-400 uppercase tracking-wider">Procedimento Escolhido</span>
-                                            <span className="text-sm font-black text-slate-800 truncate block uppercase">{selectedProcedure?.name}</span>
+                                            <span className="text-sm font-black text-slate-800 block uppercase break-words leading-tight">{selectedProcedure?.name}</span>
                                         </div>
                                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                                             <div>
                                                 <span className="block text-[8px] font-black text-slate-400 uppercase tracking-wider">Data do Atendimento</span>
                                                 <span className="text-xs font-bold text-slate-700">
-                                                    {isNormalWaitlistOnly
+                                                    {isWaitlistOnly
                                                         ? 'Fila de Espera (Registro Automático)'
                                                         : (bookingDate && new Date(bookingDate + 'T12:00:00').toLocaleDateString('pt-BR')) + (bookingTime ? ` às ${bookingTime}` : '')}
                                                 </span>
@@ -1559,7 +1743,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                             </div>
                                             <div>
                                                 <span className="block text-[8px] font-black text-slate-400 uppercase tracking-wider">Status Estimado</span>
-                                                {isNormalWaitlistOnly ? (
+                                                {isWaitlistOnly ? (
                                                     <span className="inline-block text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded mt-0.5 bg-amber-50 text-amber-700 border border-amber-100 font-extrabold animate-pulse">
                                                         Fila de Espera
                                                     </span>
@@ -1587,10 +1771,10 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
 
                         <div className="mt-6 flex justify-between shrink-0">
                             <button
-                                onClick={() => setStep(2)}
-                                className="px-5 py-3 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 font-extrabold rounded-2xl active:scale-95 transition-all text-xs uppercase tracking-wider"
+                                onClick={() => onNavigate('consultas:novo-agendamento-procedimento')}
+                                className="px-5 py-3 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 font-extrabold rounded-2xl active:scale-95 transition-all text-xs uppercase tracking-wider cursor-pointer"
                             >
-                                Voltar
+                                Voltar para Procedimento
                             </button>
                             <button
                                 onClick={handleConfirmBooking}
@@ -2210,6 +2394,245 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                 </div>,
                 document.body
             )}
+            {/* MODAL: CALENDÁRIO MODERNO DA DATA DA SOLICITAÇÃO */}
+            {isSolicitationCalendarOpen && typeof document !== 'undefined' && createPortal(
+                <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-md animate-in fade-in duration-300">
+                    <div className="bg-white rounded-[2.5rem] shadow-[0_25px_70px_rgba(0,0,0,0.2)] w-full max-w-md overflow-hidden border border-slate-100 flex flex-col transform transition-all animate-in zoom-in-95 duration-300">
+                        
+                        {/* Header com Gradiente Moderno */}
+                        <div className="bg-gradient-to-r from-sky-600 via-indigo-600 to-sky-700 p-5 sm:p-6 text-white flex justify-between items-center relative overflow-hidden shrink-0">
+                            <div className="absolute -right-6 -bottom-6 w-28 h-28 bg-white/10 rounded-full blur-xl pointer-events-none"></div>
+                            <div className="relative z-10">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest bg-white/20 text-white backdrop-blur-md flex items-center gap-1">
+                                        <Sparkles className="w-3 h-3" /> Regulação & Consultas
+                                    </span>
+                                </div>
+                                <h3 className="text-lg font-black text-white uppercase tracking-tight">Data da Solicitação</h3>
+                                <p className="text-[11px] text-sky-100 font-bold opacity-90">Selecione o dia da solicitação médica</p>
+                            </div>
+                            <button 
+                                type="button"
+                                onClick={() => setIsSolicitationCalendarOpen(false)} 
+                                className="relative z-10 p-2 bg-white/10 hover:bg-white/20 rounded-xl text-white transition-all hover:rotate-90 duration-300 backdrop-blur-md cursor-pointer"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        {/* Conteúdo do Calendário */}
+                        <div className="p-5 sm:p-6 space-y-4 flex-1 min-h-0 bg-white">
+                            
+                            {/* Seletor de Mês */}
+                            <div className="flex items-center justify-between bg-slate-50 border border-slate-200/80 p-2 rounded-2xl">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const prev = new Date(solicitationCalendarMonth);
+                                        prev.setMonth(prev.getMonth() - 1);
+                                        setSolicitationCalendarMonth(prev);
+                                    }}
+                                    className="p-2 hover:bg-white hover:shadow-sm rounded-xl text-slate-600 transition-all active:scale-95 cursor-pointer"
+                                >
+                                    <ChevronLeft className="w-4 h-4" />
+                                </button>
+                                
+                                <span className="text-xs font-black text-slate-800 uppercase tracking-wide">
+                                    {solicitationCalendarMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+                                </span>
+
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const next = new Date(solicitationCalendarMonth);
+                                        next.setMonth(next.getMonth() + 1);
+                                        setSolicitationCalendarMonth(next);
+                                    }}
+                                    className="p-2 hover:bg-white hover:shadow-sm rounded-xl text-slate-600 transition-all active:scale-95 cursor-pointer"
+                                >
+                                    <ChevronRight className="w-4 h-4" />
+                                </button>
+                            </div>
+
+                            {/* Botões de Atalho Rápido */}
+                            <div className="flex gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const today = formatDateToYYYYMMDD(new Date());
+                                        setSolicitationDate(today);
+                                        setSolicitationCalendarMonth(new Date());
+                                    }}
+                                    className={`flex-1 py-2 px-3 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                                        solicitationDate === formatDateToYYYYMMDD(new Date())
+                                        ? 'bg-sky-600 text-white border-sky-600 shadow-md shadow-sky-600/20'
+                                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                                    }`}
+                                >
+                                    Hoje ({new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })})
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const yest = new Date();
+                                        yest.setDate(yest.getDate() - 1);
+                                        setSolicitationDate(formatDateToYYYYMMDD(yest));
+                                        setSolicitationCalendarMonth(yest);
+                                    }}
+                                    className={`flex-1 py-2 px-3 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                                        solicitationDate === formatDateToYYYYMMDD(new Date(Date.now() - 86400000))
+                                        ? 'bg-sky-600 text-white border-sky-600 shadow-md shadow-sky-600/20'
+                                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                                    }`}
+                                >
+                                    Ontem
+                                </button>
+                            </div>
+
+                            {/* Dias da Semana */}
+                            <div className="grid grid-cols-7 text-center gap-1">
+                                {['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'].map((day) => (
+                                    <span key={day} className="text-[9px] font-black text-slate-400 uppercase tracking-widest py-1">
+                                        {day}
+                                    </span>
+                                ))}
+                            </div>
+
+                            {/* Grid de Dias do Mês */}
+                            <div className="grid grid-cols-7 gap-1">
+                                {getDaysInMonth(solicitationCalendarMonth).map((dateObj, idx) => {
+                                    if (!dateObj) return <div key={`empty-${idx}`} className="h-9" />;
+
+                                    const dateStr = formatDateToYYYYMMDD(dateObj);
+                                    const isSelected = solicitationDate === dateStr;
+                                    const isToday = dateStr === formatDateToYYYYMMDD(new Date());
+
+                                    return (
+                                        <button
+                                            key={dateStr}
+                                            type="button"
+                                            onClick={() => {
+                                                setSolicitationDate(dateStr);
+                                            }}
+                                            className={`h-9 rounded-xl font-bold text-xs flex flex-col items-center justify-center transition-all cursor-pointer active:scale-95 ${
+                                                isSelected
+                                                ? 'bg-gradient-to-br from-sky-500 to-indigo-600 text-white font-black shadow-md shadow-sky-500/30 scale-[1.05]'
+                                                : isToday
+                                                ? 'bg-sky-50 text-sky-700 border border-sky-200 font-extrabold'
+                                                : 'hover:bg-slate-100 text-slate-700'
+                                            }`}
+                                        >
+                                            <span>{dateObj.getDate()}</span>
+                                            {isToday && !isSelected && (
+                                                <span className="w-1 h-1 bg-sky-500 rounded-full mt-0.5" />
+                                            )}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between shrink-0">
+                            <div className="text-[11px] font-bold text-slate-500">
+                                Data Selecionada: <span className="font-black text-slate-800">{solicitationDate ? new Date(solicitationDate + 'T12:00:00').toLocaleDateString('pt-BR') : 'Nenhuma'}</span>
+                            </div>
+
+                            <button
+                                type="button"
+                                onClick={() => setIsSolicitationCalendarOpen(false)}
+                                className="px-6 py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-extrabold rounded-xl shadow-lg shadow-sky-600/20 active:scale-95 transition-all text-xs uppercase tracking-widest cursor-pointer"
+                            >
+                                Confirmar
+                            </button>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
+            {/* MODAL: SUCESSO DE AGENDAMENTO */}
+            {createdBooking && typeof document !== 'undefined' && createPortal(
+                <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-md animate-in fade-in duration-300">
+                    <div className="bg-white rounded-[2.5rem] shadow-[0_25px_70px_rgba(0,0,0,0.2)] w-full max-w-md overflow-hidden border border-slate-100 flex flex-col transform transition-all animate-in zoom-in-95 duration-300 text-center p-6 space-y-4">
+                        
+                        <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto text-emerald-600 shadow-lg shadow-emerald-500/20">
+                            <CheckCircle2 className="w-10 h-10" />
+                        </div>
+
+                        <div>
+                            <span className="text-[10px] font-black uppercase tracking-widest px-3 py-1 bg-emerald-50 text-emerald-700 rounded-full border border-emerald-100">
+                                {createdBooking.status === 'Fila de espera' ? 'Fila de Espera' : 'Agendamento Confirmado'}
+                            </span>
+                            <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight mt-2">
+                                {createdBooking.status === 'Fila de espera'
+                                    ? 'Paciente Registrado na Fila de Espera!'
+                                    : 'Agendamento Realizado com Sucesso!'}
+                            </h3>
+                            <p className="text-xs text-slate-500 font-semibold mt-1">
+                                {createdBooking.status === 'Fila de espera'
+                                    ? 'O paciente ingressou na fila de espera e será notificado assim que surgirem novas vagas.'
+                                    : `Agendado para ${new Date(createdBooking.appointment_date + 'T12:00:00').toLocaleDateString('pt-BR')} ${createdBooking.appointment_time ? 'às ' + createdBooking.appointment_time.substring(0, 5) : ''}`}
+                            </p>
+                        </div>
+
+                        <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl text-left space-y-2 text-xs font-bold text-slate-700">
+                            <div className="flex justify-between">
+                                <span className="text-slate-400">Paciente:</span>
+                                <span className="text-slate-900 font-extrabold uppercase">{createdBooking.paciente?.name || selectedPatient?.name}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-slate-400">Procedimento:</span>
+                                <span className="text-sky-600 font-black uppercase">{createdBooking.procedimento?.name || selectedProcedure?.name}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-slate-400">Data da Solicitação:</span>
+                                <span className="text-slate-800 font-bold">
+                                    {createdBooking.solicitation_date
+                                        ? new Date(createdBooking.solicitation_date + 'T12:00:00').toLocaleDateString('pt-BR')
+                                        : new Date(solicitationDate + 'T12:00:00').toLocaleDateString('pt-BR')}
+                                </span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-slate-400">Data e Hora:</span>
+                                <span className={`font-black ${createdBooking.status === 'Fila de espera' || !createdBooking.appointment_time ? 'text-amber-600' : 'text-slate-800'}`}>
+                                    {createdBooking.status !== 'Fila de espera' && createdBooking.appointment_time
+                                        ? `${new Date(createdBooking.appointment_date + 'T12:00:00').toLocaleDateString('pt-BR')} às ${createdBooking.appointment_time.substring(0, 5)}`
+                                        : 'Aguardando Vaga'}
+                                </span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-slate-400">Prioridade:</span>
+                                <span className="text-slate-800 uppercase font-extrabold">{createdBooking.priority}</span>
+                            </div>
+                        </div>
+
+                        <div className="pt-2 space-y-2.5">
+                            <button
+                                type="button"
+                                onClick={() => handleDownloadPdf(createdBooking)}
+                                disabled={isGenerating}
+                                className="w-full py-3.5 bg-sky-600 hover:bg-sky-700 text-white font-extrabold rounded-2xl shadow-lg shadow-sky-600/20 active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer"
+                            >
+                                {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
+                                Baixar Recibo (PDF)
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setCreatedBooking(null);
+                                    onNavigate('consultas');
+                                }}
+                                className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 font-extrabold rounded-2xl active:scale-95 transition-all text-xs uppercase tracking-wider cursor-pointer"
+                            >
+                                Concluir e Voltar
+                            </button>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
             {printingBooking && (
                 <ConsultaPdfGenerator
                     bookingId={printingBooking.id}
@@ -2221,6 +2644,9 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                     is_retorno={printingBooking.is_retorno}
                     currentUser={currentUser}
                     state={appState}
+                    solicitationDate={printingBooking.solicitation_date || solicitationDate}
+                    appointmentTime={printingBooking.appointment_time || bookingTime}
+                    status={printingBooking.status}
                 />
             )}
         </div>

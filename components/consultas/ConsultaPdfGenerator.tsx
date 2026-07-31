@@ -14,6 +14,9 @@ interface ConsultaPdfGeneratorProps {
     is_retorno?: boolean;
     currentUser: User;
     state: AppState;
+    solicitationDate?: string;
+    appointmentTime?: string;
+    status?: string;
 }
 
 export const ConsultaPdfGenerator: React.FC<ConsultaPdfGeneratorProps> = ({
@@ -25,13 +28,19 @@ export const ConsultaPdfGenerator: React.FC<ConsultaPdfGeneratorProps> = ({
     priority,
     is_retorno,
     currentUser,
-    state
+    state,
+    solicitationDate,
+    appointmentTime,
+    status
 }) => {
-    const formatDateBr = (d: string) => {
+    const formatDateBr = (d?: string) => {
         if (!d) return '';
         const [year, month, day] = d.split('-');
+        if (!year || !month || !day) return d;
         return `${day}/${month}/${year}`;
     };
+
+    const isWaitlist = status === 'Fila de espera' || !appointmentTime;
 
     return createPortal(
         <div
@@ -86,8 +95,10 @@ export const ConsultaPdfGenerator: React.FC<ConsultaPdfGeneratorProps> = ({
                             </div>
 
                             <div className="relative z-10 space-y-6">
-                                <span className="inline-block px-3 py-1 rounded bg-sky-600 text-white text-[8pt] uppercase font-black tracking-widest">
-                                    Status: Agendado
+                                <span className={`inline-block px-3 py-1 rounded text-[8pt] uppercase font-black tracking-widest ${
+                                    isWaitlist ? 'bg-amber-100 text-amber-800' : 'bg-sky-600 text-white'
+                                }`}>
+                                    Status: {status || (isWaitlist ? 'Fila de espera' : 'Agendado')}
                                 </span>
 
                                 <div className="grid grid-cols-2 gap-8 border-t border-slate-200/80 pt-6">
@@ -123,13 +134,17 @@ export const ConsultaPdfGenerator: React.FC<ConsultaPdfGeneratorProps> = ({
                                                 <span className="font-extrabold text-slate-800 text-sm uppercase">{procedure.name}</span>
                                             </div>
                                             <div>
-                                                <span className="block text-[7pt] font-bold uppercase text-slate-400 tracking-wider">Tipo de Atendimento</span>
-                                                <span className="font-bold text-slate-800 uppercase">{procedure.type}</span>
+                                                <span className="block text-[7pt] font-bold uppercase text-slate-400 tracking-wider">Data da Solicitação</span>
+                                                <span className="font-extrabold text-slate-800">{formatDateBr(solicitationDate || date)}</span>
                                             </div>
                                             <div className="grid grid-cols-2 gap-4">
                                                 <div>
-                                                    <span className="block text-[7pt] font-bold uppercase text-slate-400 tracking-wider">Data Agendada</span>
-                                                    <span className="font-bold text-slate-800">{formatDateBr(date)}</span>
+                                                    <span className="block text-[7pt] font-bold uppercase text-slate-400 tracking-wider">Data e Hora</span>
+                                                    <span className={`font-extrabold ${isWaitlist ? 'text-amber-700 font-bold' : 'text-slate-800'}`}>
+                                                        {!isWaitlist
+                                                            ? `${formatDateBr(date)}${appointmentTime ? ' às ' + appointmentTime.substring(0, 5) : ''}`
+                                                            : 'Aguardando Vaga'}
+                                                    </span>
                                                 </div>
                                                 <div>
                                                     <span className="block text-[7pt] font-bold uppercase text-slate-400 tracking-wider">Prioridade</span>
