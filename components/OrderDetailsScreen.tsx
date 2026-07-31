@@ -640,24 +640,47 @@ export const OrderDetailsScreen: React.FC<OrderDetailsScreenProps> = ({
                         </div>
                         <div className="min-w-0">
                             <span className="text-[9px] uppercase font-black tracking-widest text-slate-400 block mb-1">Situação do Processo</span>
-                            {order.status === 'approved' && <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100 uppercase tracking-wide flex items-center gap-1.5 w-fit"><CheckCircle2 className="w-3 h-3" /> Aprovado</span>}
-                            {order.status === 'pending' && <span className="text-[9px] font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full border border-slate-200 uppercase tracking-wide flex items-center gap-1.5 w-fit"><Clock className="w-3 h-3" /> Pendente</span>}
-                            {order.status === 'awaiting_ficha' && <span className="text-[9px] font-bold text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-100 uppercase tracking-wide flex items-center gap-1.5 w-fit"><Clock className="w-3 h-3 animate-pulse" /> Aguardando Ficha</span>}
-                            {order.status === 'rejected' && <span className="text-[9px] font-bold text-rose-600 bg-rose-50 px-2.5 py-1 rounded-full border border-rose-100 uppercase tracking-wide flex items-center gap-1.5 w-fit"><XCircle className="w-3 h-3" /> Rejeitado</span>}
-                            {order.status === 'payment_account' && (
-                                <button
-                                    onClick={async () => {
-                                        setIsProcessing(true);
-                                        const fetched = await purchaseAccountService.getAccounts();
-                                        setAccounts(fetched);
-                                        setIsAccountModalOpen(true);
-                                        setIsProcessing(false);
-                                    }}
-                                    className="text-[9px] font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full border border-indigo-200 uppercase tracking-wide flex items-center gap-1.5 w-fit hover:bg-indigo-600 hover:text-white transition-all animate-pulse"
-                                >
-                                    <Landmark className="w-3 h-3" /> Aprovação
-                                </button>
-                            )}
+                            <div className="flex items-center gap-2 flex-wrap">
+                                {order.status === 'approved' && <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100 uppercase tracking-wide flex items-center gap-1.5 w-fit"><CheckCircle2 className="w-3 h-3" /> Aprovado</span>}
+                                {order.status === 'pending' && <span className="text-[9px] font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full border border-slate-200 uppercase tracking-wide flex items-center gap-1.5 w-fit"><Clock className="w-3 h-3" /> Pendente</span>}
+                                {order.status === 'awaiting_ficha' && <span className="text-[9px] font-bold text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-100 uppercase tracking-wide flex items-center gap-1.5 w-fit"><Clock className="w-3 h-3 animate-pulse" /> Aguardando Ficha</span>}
+                                {order.status === 'rejected' && <span className="text-[9px] font-bold text-rose-600 bg-rose-50 px-2.5 py-1 rounded-full border border-rose-100 uppercase tracking-wide flex items-center gap-1.5 w-fit"><XCircle className="w-3 h-3" /> Rejeitado</span>}
+                                {order.status === 'payment_account' && (
+                                    <button
+                                        onClick={async () => {
+                                            setIsProcessing(true);
+                                            const fetched = await purchaseAccountService.getAccounts();
+                                            setAccounts(fetched);
+                                            setIsAccountModalOpen(true);
+                                            setIsProcessing(false);
+                                        }}
+                                        className="text-[9px] font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full border border-indigo-200 uppercase tracking-wide flex items-center gap-1.5 w-fit hover:bg-indigo-600 hover:text-white transition-all animate-pulse"
+                                    >
+                                        <Landmark className="w-3 h-3" /> Aprovação
+                                    </button>
+                                )}
+                                {currentUser.role === 'admin' && (order.status === 'pending' || order.status === 'awaiting_approval' || order.status === 'awaiting_ficha') && (
+                                    <button
+                                        onClick={async () => {
+                                            if (!onUpdateOrderStatus || isProcessing) return;
+                                            setIsProcessing(true);
+                                            try {
+                                                await onUpdateOrderStatus(order, 'approved', 'Aprovação Administrativa');
+                                                setOrder(prev => ({ ...prev, status: 'approved' }));
+                                            } catch (error) {
+                                                console.error("Erro ao aprovar pedido:", error);
+                                                alert("Erro ao aprovar pedido.");
+                                            } finally {
+                                                setIsProcessing(false);
+                                            }
+                                        }}
+                                        disabled={isProcessing}
+                                        className="text-[9px] font-black text-white bg-emerald-600 hover:bg-emerald-700 px-3 py-1 rounded-full uppercase tracking-wider flex items-center gap-1 transition-all shadow-sm active:scale-95 disabled:opacity-50"
+                                    >
+                                        <CheckCircle2 className="w-3 h-3" /> Aprovar Pedido
+                                    </button>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>

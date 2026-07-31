@@ -146,7 +146,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             if (o.assigned_user_id === userId) return true;
 
             // Depende do Administrador para aprovar/prosseguir
-            if (['pending', 'awaiting_approval'].includes(o.status) && (userRole === 'admin' || permissions.includes('parent_admin'))) {
+            if (['pending', 'awaiting_approval', 'awaiting_ficha'].includes(o.status) && (userRole === 'admin' || permissions.includes('parent_admin'))) {
                 return true;
             }
 

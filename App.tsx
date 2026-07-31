@@ -2578,7 +2578,7 @@ const App: React.FC = () => {
 
     // RULE: Admin approval/rejection only allowed if current status is "Em Aprovação"
     if (orderToUpdate.blockType === 'compras' && (status === 'approved' || status === 'rejected')) {
-      const isEmAprovacao = !orderToUpdate.status || orderToUpdate.status === 'pending' || orderToUpdate.status === 'awaiting_approval' || orderToUpdate.status === 'payment_account';
+      const isEmAprovacao = !orderToUpdate.status || orderToUpdate.status === 'pending' || orderToUpdate.status === 'awaiting_approval' || orderToUpdate.status === 'payment_account' || orderToUpdate.status === 'awaiting_ficha';
       if (!isEmAprovacao) {
         showToast('Ação Bloqueada: O fluxo deste pedido já avançou para compras e não permite reavaliação administrativa.', 'error');
         return;

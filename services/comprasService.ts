@@ -263,9 +263,9 @@ export const updateOrderStatus = async (id: string, status: string, historyEntry
     let finalStatus = status;
 
 
-    // RULE: Admin approval/rejection only allowed if current status is "Em Aprovação" (pending/awaiting_approval)
+    // RULE: Admin approval/rejection only allowed if current status is "Em Aprovação" (pending/awaiting_approval/awaiting_ficha)
     if (status === 'approved' || status === 'rejected') {
-        const isEmAprovacao = !current?.status || current.status === 'pending' || current.status === 'awaiting_approval' || current.status === 'payment_account';
+        const isEmAprovacao = !current?.status || current.status === 'pending' || current.status === 'awaiting_approval' || current.status === 'payment_account' || current.status === 'awaiting_ficha';
         if (!isEmAprovacao) {
             throw new Error("Validação de Segurança: A aprovação ou rejeição só é permitida enquanto o pedido está em fase de aprovação inicial.");
         }
