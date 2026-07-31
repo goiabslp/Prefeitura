@@ -4,6 +4,7 @@ import { AbastecimentoService, AbastecimentoRecord, GasStation } from '../../ser
 import { supabase } from '../../services/supabaseClient';
 import { GestureItem } from '../common/GestureItem';
 import { formatLocalDateTime, getLocalISOData } from '../../utils/dateUtils';
+import { getDisplayInvoiceNumber } from '../../utils/invoiceUtils';
 
 interface AbastecimentoListProps {
     onBack: () => void;
@@ -54,7 +55,7 @@ const AbastecimentoCard = ({ item, isAdmin, onEdit, onDelete, vehicleModelMap, v
                     <div className="flex flex-col wide:flex-row wide:items-center gap-4">
                         <div className="flex-1 grid grid-cols-2 wide:grid-cols-12 gap-4 items-center">
                             {/* Always Visible Fields */}
-                            <DataItem label="Nº Nota" value={item.invoiceNumber || '-'} icon={FileText} flex="col-span-1 wide:col-span-1" />
+                            <DataItem label="Nº Nota" value={getDisplayInvoiceNumber(item.invoiceNumber) || '-'} icon={FileText} flex="col-span-1 wide:col-span-1" />
                             <DataItem label="Data" value={formatLocalDateTime(item.date)} icon={Calendar} flex="col-span-1 wide:col-span-2" />
                             <DataItem label="Veículo" value={vehicleModelMap[item.vehicle] ? `${vehicleModelMap[item.vehicle]}` : item.vehicle} icon={Truck} colorClass="text-slate-900 uppercase tracking-tight" flex="col-span-2 wide:col-span-3" />
                             <DataItem label="Motorista" value={item.driver} icon={User} colorClass="text-slate-600 uppercase tracking-tight" flex="col-span-1 wide:col-span-2" />

@@ -7,6 +7,7 @@ import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import { Printer, X, FileSpreadsheet, Fuel, Building2, Calendar, LayoutDashboard, Car } from 'lucide-react';
 import { formatLocalDate, formatLocalDateTime } from '../../utils/dateUtils';
+import { getDisplayInvoiceNumber } from '../../utils/invoiceUtils';
 
 interface AbastecimentoReportPDFProps {
     data: {
@@ -578,7 +579,7 @@ export const AbastecimentoReportPDF: React.FC<AbastecimentoReportPDFProps> = ({
                                     return (
                                         <tr key={idx} className="text-[7.5pt] font-medium text-slate-700">
                                             <td className="px-3 py-2">{formatLocalDate(r.date)}</td>
-                                            <td className="px-3 py-2 uppercase truncate font-mono text-[9px]">{r.invoiceNumber || '-'}</td>
+                                            <td className="px-3 py-2 uppercase truncate font-mono text-[9px]">{getDisplayInvoiceNumber(r.invoiceNumber) || '-'}</td>
                                             <td className="px-3 py-2 uppercase">
                                                 <p className="font-bold leading-none">{r.vehicle}</p>
                                                 <p className="text-[5.5pt] text-slate-400 font-bold mt-0.5">{r.derivedPlate}</p>
@@ -674,7 +675,7 @@ export const AbastecimentoReportPDF: React.FC<AbastecimentoReportPDFProps> = ({
 
                                     return (
                                         <tr key={idx} className="text-[7pt] font-medium text-slate-700">
-                                            <td className="px-2 py-2 font-mono text-[8.5px] text-center whitespace-nowrap">{item.invoiceNumber || '-'}</td>
+                                            <td className="px-2 py-2 font-mono text-[8.5px] text-center whitespace-nowrap">{getDisplayInvoiceNumber(item.invoiceNumber) || '-'}</td>
                                             <td className="px-2 py-2 whitespace-nowrap text-center text-[6.5pt]">{new Date(item.date).toLocaleDateString('pt-BR')}</td>
                                             <td className="px-2 py-2 uppercase">
                                                 <div className="flex flex-col">
@@ -726,7 +727,7 @@ export const AbastecimentoReportPDF: React.FC<AbastecimentoReportPDFProps> = ({
                                             <td className="px-4 py-2">
                                                 <div className="flex flex-col">
                                                     <span className="font-bold text-slate-900">{new Date(r.date).toLocaleDateString('pt-BR')}</span>
-                                                    <span className="text-[9px] font-mono text-slate-400 uppercase">{r.invoiceNumber || '-'}</span>
+                                                    <span className="text-[9px] font-mono text-slate-400 uppercase">{getDisplayInvoiceNumber(r.invoiceNumber) || '-'}</span>
                                                 </div>
                                             </td>
                                             <td className="px-4 py-2 uppercase">

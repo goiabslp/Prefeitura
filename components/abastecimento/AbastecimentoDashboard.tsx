@@ -11,6 +11,7 @@ import { supabase } from '../../services/supabaseClient';
 import { uploadFile } from '../../services/storageService';
 import { generateEmpenhoReportPDF } from '../../utils/empenhoReportGenerator';
 import { formatLocalDate } from '../../utils/dateUtils';
+import { getDisplayInvoiceNumber } from '../../utils/invoiceUtils';
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
     BarChart, Bar, PieChart, Pie, Cell, AreaChart, Area
@@ -2420,7 +2421,7 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
                                                 </span>
                                             </td>
                                             <td className="px-6 py-4 font-bold text-slate-600">
-                                                {r.invoiceNumber || '-'}
+                                                {getDisplayInvoiceNumber(r.invoiceNumber) || '-'}
                                             </td>
                                             <td className="px-6 py-4">
                                                 <span className="font-bold text-slate-600 uppercase">{r.driver}</span>

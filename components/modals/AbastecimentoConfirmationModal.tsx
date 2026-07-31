@@ -2,6 +2,7 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import { CheckCircle2, X, AlertTriangle, Fuel, Truck, FileText, Droplets, DollarSign, ChevronLeft, User } from 'lucide-react';
 import { parseFormattedNumber } from '../../utils/numberUtils';
+import { getDisplayInvoiceNumber } from '../../utils/invoiceUtils';
 
 interface AbastecimentoConfirmationModalProps {
     isOpen: boolean;
@@ -89,7 +90,7 @@ export const AbastecimentoConfirmationModal: React.FC<AbastecimentoConfirmationM
                                 </div>
                                 <div className="flex flex-col min-w-0">
                                     <span className="text-[8px] sm:text-[9px] uppercase font-bold text-slate-400 tracking-wider truncate">Nº da Nota</span>
-                                    <span className="text-sm sm:text-base font-black text-slate-900 truncate">{data.invoiceNumber || '---'}</span>
+                                    <span className="text-sm sm:text-base font-black text-slate-900 truncate">{getDisplayInvoiceNumber(data.invoiceNumber) || '---'}</span>
                                 </div>
                             </div>
 

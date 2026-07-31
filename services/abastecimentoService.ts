@@ -1,5 +1,6 @@
 import { supabase } from './supabaseClient';
 import { handleSupabaseError } from '../utils/errorUtils';
+import { getDisplayInvoiceNumber, generateInvoiceSuffix } from '../utils/invoiceUtils';
 
 export interface FuelConfig {
     diesel: number;
@@ -138,7 +139,7 @@ export const AbastecimentoService = {
             if (filters) {
                 if (filters.search) {
                     const s = filters.search.toLowerCase();
-                    query = query.or(`vehicle.ilike.%${s}%,driver.ilike.%${s}%,fiscal.ilike.%${s}%,invoice_number.eq.${s}`);
+                    query = query.or(`vehicle.ilike.%${s}%,driver.ilike.%${s}%,fiscal.ilike.%${s}%,invoice_number.ilike.%${s}%`);
                 }
                 if (filters.date) {
                     const start = `${filters.date}T00:00:00-03:00`;
@@ -313,6 +314,31 @@ export const AbastecimentoService = {
             console.error('[AbastecimentoService] updateReportPaymentStatus Error:', error);
             throw error;
         }
+    },
+
+    generateUniqueInvoiceId: async (userNote: string): Promise<string> => {
+        if (!userNote || !userNote.trim()) return '';
+        const baseNote = getDisplayInvoiceNumber(userNote);
+        let uniqueId = '';
+        let isUnique = false;
+        let attempts = 0;
+
+        while (!isUnique && attempts < 10) {
+            attempts++;
+            const suffix = generateInvoiceSuffix();
+            uniqueId = `${baseNote}-${suffix}`;
+
+            const { data, error } = await supabase
+                .from('abastecimentos')
+                .select('id')
+                .eq('invoice_number', uniqueId)
+                .maybeSingle();
+
+            if (!error && !data) {
+                isUnique = true;
+            }
+        }
+        return uniqueId || `${baseNote}-${generateInvoiceSuffix()}`;
     },
 
     checkInvoiceExists: async (invoiceNumber: string, station: string, excludeId?: string): Promise<boolean> => {

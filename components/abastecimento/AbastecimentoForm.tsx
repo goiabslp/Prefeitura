@@ -11,6 +11,7 @@ import { parseFormattedNumber, formatNumberInput } from '../../utils/numberUtils
 import { CustomDateTimeInput } from '../common/CustomDateTimeInput';
 import { AbastecimentoConfirmationModal } from '../modals/AbastecimentoConfirmationModal';
 import { getLocalISOData } from '../../utils/dateUtils';
+import { getDisplayInvoiceNumber } from '../../utils/invoiceUtils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useCachedVehicles } from '../../hooks/useCachedVehicles';
 import { useCachedPersons } from '../../hooks/useCachedPersons';
@@ -180,7 +181,7 @@ export const AbastecimentoForm: React.FC<AbastecimentoFormProps> = ({
             const ft = fuelTypes.find(t => t.key === tp || t.label === tp || initialData.fuelType.includes(t.key));
             if (ft) setFuelType(ft.key);
             setStation(initialData.station || '');
-            setInvoiceNumber(initialData.invoiceNumber || '');
+            setInvoiceNumber(getDisplayInvoiceNumber(initialData.invoiceNumber || ''));
             setCost(initialData.cost);
             setUnitPrice(initialData.unit_price || 0);
             setFormattedCost(`R$ ${initialData.cost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
@@ -198,7 +199,19 @@ export const AbastecimentoForm: React.FC<AbastecimentoFormProps> = ({
 
     useEffect(() => { if (!isInitialLoad && fuelType) setUnitPrice(fuelPrices[fuelType] || 0); }, [fuelType]);
 
-    const buildRecord = () => {
+    const resolveInvoiceId = async (userNote: string) => {
+        if (!userNote || !userNote.trim()) return '';
+        const trimmed = userNote.trim();
+        const baseNote = getDisplayInvoiceNumber(trimmed);
+        if (initialData?.invoiceNumber && getDisplayInvoiceNumber(initialData.invoiceNumber) === baseNote) {
+            if (/^.*-[A-Za-z0-9]{6}$/.test(initialData.invoiceNumber)) {
+                return initialData.invoiceNumber;
+            }
+        }
+        return await AbastecimentoService.generateUniqueInvoiceId(baseNote);
+    };
+
+    const buildRecord = (customInvoiceId?: string) => {
         // Data e hora capturadas automaticamente no momento do salvamento para novos registros
         const nowLocal = getLocalISOData(new Date());
         const currentDateStr = initialData ? date : nowLocal.date;
@@ -217,7 +230,7 @@ export const AbastecimentoForm: React.FC<AbastecimentoFormProps> = ({
             liters: parseFormattedNumber(liters),
             odometer: parseFormattedNumber(odometer),
             cost: Number(cost.toFixed(2)),
-            station, invoiceNumber,
+            station, invoiceNumber: customInvoiceId !== undefined ? customInvoiceId : invoiceNumber,
             userId: initialData?.userId || authUser?.id,
             userName: initialData?.userName || authUser?.name,
             sectorId: mv?.sectorId || initialData?.sectorId,
@@ -233,25 +246,29 @@ export const AbastecimentoForm: React.FC<AbastecimentoFormProps> = ({
         const lv = parseFormattedNumber(liters);
         const ov = parseFormattedNumber(odometer);
         if (lv <= 0) { alert('A quantidade de litros deve ser maior que zero.'); return; }
+
+        const finalInvoiceId = await resolveInvoiceId(invoiceNumber);
+        const record = buildRecord(finalInvoiceId);
+
         if (!initialData) {
             if (ov <= 0) { alert('O odômetro deve ser maior que zero.'); return; }
             if (lastOdometer !== null && ov <= lastOdometer) {
                 if (authUser?.role === 'admin' || authUser?.permissions?.includes('parent_admin')) {
-                    setPendingData(buildRecord()); setAdminOverrideModalOpen(true); return;
+                    setPendingData(record); setAdminOverrideModalOpen(true); return;
                 } else {
                     alert(`BLOQUEIO: Odômetro ${ov.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} <= último (${lastOdometer.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})`); return;
                 }
             }
         }
-        if (invoiceNumber && station) {
-            const dup = await AbastecimentoService.checkInvoiceExists(invoiceNumber, station, initialData?.id);
+        if (finalInvoiceId && station) {
+            const dup = await AbastecimentoService.checkInvoiceExists(finalInvoiceId, station, initialData?.id);
             if (dup) {
-                setDupInvoiceData({ number: invoiceNumber, station });
+                setDupInvoiceData({ number: getDisplayInvoiceNumber(finalInvoiceId), station });
                 setDupInvoiceModalOpen(true);
                 return;
             }
         }
-        setPendingData(buildRecord());
+        setPendingData(record);
         setConfirmModalOpen(true);
     };
 
@@ -350,9 +367,10 @@ export const AbastecimentoForm: React.FC<AbastecimentoFormProps> = ({
             const curStep = mobileStepsList[mobileStep - 1];
             if ((curStep.key === 'nota' || curStep.key === 'posto') && invoiceNumber && station) {
                 try {
-                    const dup = await AbastecimentoService.checkInvoiceExists(invoiceNumber, station, initialData?.id);
+                    const finalId = await resolveInvoiceId(invoiceNumber);
+                    const dup = await AbastecimentoService.checkInvoiceExists(finalId, station, initialData?.id);
                     if (dup) {
-                        setDupInvoiceData({ number: invoiceNumber, station });
+                        setDupInvoiceData({ number: getDisplayInvoiceNumber(finalId), station });
                         setDupInvoiceModalOpen(true);
                         return;
                     }

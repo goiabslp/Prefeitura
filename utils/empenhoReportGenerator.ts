@@ -2,6 +2,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { AbastecimentoRecord } from '../services/abastecimentoService';
 import { Person } from '../types';
+import { getDisplayInvoiceNumber } from './invoiceUtils';
 
 const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
@@ -91,7 +92,7 @@ export const generateEmpenhoReportPDF = (
                     r.derivedPlate || '-',
                     driverDisplay,
                     formatNumber(r.odometer || 0),
-                    r.invoiceNumber || r.fiscal || '-',
+                    getDisplayInvoiceNumber(r.invoiceNumber) || r.fiscal || '-',
                     formatNumber(r.liters || 0),
                     formatCurrency(unitPrice),
                     formatStation(r.station || '-')
