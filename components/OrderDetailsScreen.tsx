@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
+import { OperationQRCode } from './common/OperationQRCode';
 import {
     ArrowLeft, FileText, History, Paperclip, Download, Calendar,
     CheckCircle2, XCircle, Sparkles, PackageCheck, Landmark,
@@ -565,7 +566,16 @@ export const OrderDetailsScreen: React.FC<OrderDetailsScreenProps> = ({
 
     // Helper to render Attachments Tab Content
     const renderAttachments = () => (
-        <div className="p-4 w-full">
+        <div className="p-4 w-full space-y-4">
+            {/* QR da Operação */}
+            <div className="flex items-center justify-between p-4 bg-slate-50 border border-slate-100 rounded-2xl">
+                <div className="flex flex-col text-left">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Upload Rápido</span>
+                    <span className="text-xs text-slate-500 font-medium mt-0.5">Use o QR Code para anexar arquivos do celular</span>
+                </div>
+                <OperationQRCode moduleName={order.blockType === 'licitacao' ? 'licitacao' : 'compras'} recordId={order.id} />
+            </div>
+
             {order.attachments && order.attachments.length > 0 ? (
                 <div className="grid grid-cols-1 desktop:grid-cols-2 gap-4">
                     {order.attachments.map(att => (

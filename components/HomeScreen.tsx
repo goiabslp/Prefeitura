@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FilePlus, Package, History, FileText, ArrowRight, ArrowLeft, ShoppingCart, Gavel, Wallet, Inbox, CalendarRange, FileSearch, Droplet, Fuel, BarChart3, TrendingUp, LogOut, Sprout, HardHat, Activity, Car, ChevronDown, CalendarDays, Users, LayoutGrid, Megaphone, Database, Pill, Timer } from 'lucide-react';
+import { FilePlus, Package, History, FileText, ArrowRight, ArrowLeft, ShoppingCart, Gavel, Wallet, Inbox, CalendarRange, FileSearch, Droplet, Fuel, BarChart3, TrendingUp, LogOut, Sprout, HardHat, Activity, Car, ChevronDown, CalendarDays, Users, LayoutGrid, Megaphone, Database, Pill, Timer, Upload } from 'lucide-react';
 import { UserRole, UIConfig, AppPermission, BlockType, DiariaEvento } from '../types';
 import { TasksDashboard } from './dashboard/TasksDashboard';
 import { QuickTaskCreation } from './dashboard/QuickTaskCreation';
@@ -135,6 +135,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     const canAccessMarketing = (permissions.includes('parent_marketing') || userRole === 'admin') && isModuleActive('parent_marketing');
     const canAccessConsultas = (permissions.includes('parent_consultas') || userRole === 'admin') && isModuleActive('parent_consultas');
     const canAccessFarmacia = (permissions.includes('parent_farmacia') || userRole === 'admin') && isModuleActive('parent_farmacia');
+    const canAccessUpload = (permissions.includes('parent_upload') || userRole === 'admin') && isModuleActive('parent_upload');
     const firstName = userName.split(' ')[0];
 
     const getPendingCount = (blockType: string) => {
@@ -548,6 +549,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
                                 {canAccessScheduling && renderModuleButton(() => { setActiveBlock('agendamento'); onVehicleScheduling?.(); }, 'violet', CalendarRange, 'Veículos', 'Agendamento', '250ms', false, getPendingCount('agendamento'))}
                                 {canAccessAbastecimento && renderModuleButton(() => setActiveBlock('abastecimento'), 'cyan', Droplet, 'Abastecimento', 'Combustível', '300ms', false, getPendingCount('abastecimento'))}
+                                {canAccessUpload && renderModuleButton(() => {
+                                    window.history.pushState({}, '', '/Upload');
+                                    window.dispatchEvent(new Event('popstate'));
+                                }, 'sky', Upload, 'Upload Rápido', 'Anexar documentos', '320ms', false)}
 
                                 {/* Field Modules */}
                                 {canAccessAgricultura && renderModuleButton(() => onAgricultura?.(), 'emerald', Sprout, 'Agricultura', 'Gestão rural', '350ms', false, getPendingCount('agricultura'))}

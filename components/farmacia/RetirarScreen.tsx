@@ -64,6 +64,7 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
     const [newPatientNeighborhood, setNewPatientNeighborhood] = useState('');
     const [newPatientStreet, setNewPatientStreet] = useState('');
     const [newPatientCity, setNewPatientCity] = useState('SÃO JOSÉ DO GOIABAL -MG');
+    const [newPatientSusNumber, setNewPatientSusNumber] = useState('');
     const [registering, setRegistering] = useState(false);
 
     // Success notification modal state
@@ -175,7 +176,7 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
         const grouped = new Map<string, typeof list[0]>();
         
         filteredList.forEach(m => {
-            const key = `${m.nome}-${m.dosagem || ''}-${m.forma_farmaceutica || ''}`;
+            const key = `${m.nome}-${m.dosagem || ''}-${m.tipo || ''}`;
             const existing = grouped.get(key);
             
             if (!existing) {
@@ -764,6 +765,7 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                     setNewPatientNeighborhood('');
                                     setNewPatientStreet('');
                                     setNewPatientCity('SÃO JOSÉ DO GOIABAL -MG');
+                                    setNewPatientSusNumber('');
                                 }}
                                 className="p-1.5 hover:bg-slate-200 rounded-lg text-slate-500 transition-colors"
                             >
@@ -789,7 +791,8 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                         phone: newPatientPhone.trim() || null,
                                         neighborhood: newPatientNeighborhood.trim() || null,
                                         street: newPatientStreet.trim() || null,
-                                        city: newPatientCity.trim() || null
+                                        city: newPatientCity.trim() || null,
+                                        sus_number: newPatientSusNumber.trim() || null
                                     });
                                     if (created) {
                                         // Update local patients state list
@@ -807,6 +810,7 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                         setNewPatientNeighborhood('');
                                         setNewPatientStreet('');
                                         setNewPatientCity('SÃO JOSÉ DO GOIABAL -MG');
+                                        setNewPatientSusNumber('');
                                         setIsRegModalOpen(false);
                                         showAlert('Paciente cadastrado com sucesso!', 'success');
                                     } else {
@@ -878,8 +882,18 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                 </div>
                             </div>
 
-                            {/* Linha 3: Rua, Bairro e Cidade */}
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            {/* Linha 3: Número do SUS e Rua */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">Número do SUS</label>
+                                    <input
+                                        type="text"
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 px-3.5 text-xs text-slate-900 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-bold tracking-wider shadow-inner"
+                                        placeholder="000 0000 0000 0000"
+                                        value={newPatientSusNumber}
+                                        onChange={(e) => setNewPatientSusNumber(e.target.value.replace(/\D/g, '').slice(0, 15))}
+                                    />
+                                </div>
                                 <div>
                                     <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">Rua</label>
                                     <input
@@ -890,6 +904,10 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                         onChange={(e) => setNewPatientStreet(e.target.value.toUpperCase())}
                                     />
                                 </div>
+                            </div>
+
+                            {/* Linha 4: Bairro e Cidade */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 <div>
                                     <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">Bairro</label>
                                     <input
@@ -927,6 +945,7 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                         setNewPatientNeighborhood('');
                                         setNewPatientStreet('');
                                         setNewPatientCity('SÃO JOSÉ DO GOIABAL -MG');
+                                        setNewPatientSusNumber('');
                                     }}
                                     className="flex-1 py-3 rounded-xl border border-slate-200 text-slate-700 font-extrabold text-xs uppercase tracking-wider hover:bg-slate-50 transition-all active:scale-98"
                                 >

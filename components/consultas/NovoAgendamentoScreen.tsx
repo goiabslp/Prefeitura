@@ -101,6 +101,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
     const [newPatientNeighborhood, setNewPatientNeighborhood] = useState('');
     const [newPatientStreet, setNewPatientStreet] = useState('');
     const [newPatientCity, setNewPatientCity] = useState('SÃO JOSÉ DO GOIABAL -MG');
+    const [newPatientSusNumber, setNewPatientSusNumber] = useState('');
     const [cpfError, setCpfError] = useState('');
     const [showCpfNotFoundModal, setShowCpfNotFoundModal] = useState(false);
     const [unregisteredCpf, setUnregisteredCpf] = useState('');
@@ -347,9 +348,9 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
         return () => document.removeEventListener('click', handleOutsideClick);
     }, []);
 
-    const handleConfirmReservedDateAndTime = async (id: string) => {
-        const date = reservedDates[id];
-        const time = reservedTimes[id];
+    const handleConfirmReservedDateAndTime = async (id: string, dateParam?: string, timeParam?: string) => {
+        const date = dateParam || reservedDates[id];
+        const time = timeParam || reservedTimes[id];
         if (!date || !time) {
             alert('Por favor, preencha a data e a hora.');
             return;
@@ -367,6 +368,8 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
             setLoading(false);
         }
     };
+
+    const handleConfirmReservedBooking = handleConfirmReservedDateAndTime;
 
     const handleCloseReservedModal = () => {
         setConfirmedReservedBookings({});
@@ -450,21 +453,27 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                 const query = patientQuery.toLowerCase();
                 const allPatients = await db.getPacientes();
                 
-                // Filter by name or CPF
+                // Filter by name, nickname, CPF or SUS number
                 const results = allPatients.filter(p => 
                     p.name.toLowerCase().includes(query) || 
-                    p.cpf.includes(query.replace(/\D/g, ''))
+                    (p.nickname || '').toLowerCase().includes(query) ||
+                    p.cpf.includes(query.replace(/\D/g, '')) ||
+                    (p.sus_number || '').includes(query.replace(/\D/g, ''))
                 );
                 
                 setPatientResults(results);
                 setSearching(false);
 
-                // Ao pesquisar um CPF válido NÃO CADASTRADO, deve exibir um modal
+                // Ao pesquisar um CPF de 11 dígitos não cadastrado, deve abrir o modal de cadastro imediatamente
                 const cleanQuery = query.replace(/\D/g, '');
                 if (cleanQuery.length === 11) {
-                    const exists = results.some(p => p.cpf.replace(/\D/g, '') === cleanQuery);
-                    if (!exists) {
-                        setUnregisteredCpf(patientQuery);
+                    const found = results.find(p => p.cpf.replace(/\D/g, '') === cleanQuery);
+                    if (found) {
+                        setSelectedPatient(found);
+                    } else {
+                        const formattedCpf = `${cleanQuery.slice(0, 3)}.${cleanQuery.slice(3, 6)}.${cleanQuery.slice(6, 9)}-${cleanQuery.slice(9, 11)}`;
+                        setNewPatientCpf(formattedCpf);
+                        setUnregisteredCpf(formattedCpf);
                         setShowCpfNotFoundModal(true);
                     }
                 }
@@ -505,12 +514,25 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                 phone: newPatientPhone.trim() || null,
                 neighborhood: newPatientNeighborhood.trim() || null,
                 street: newPatientStreet.trim() || null,
-                city: newPatientCity.trim() || null
+                city: newPatientCity.trim() || null,
+                sus_number: newPatientSusNumber.trim() || null
             });
 
             if (newPatient) {
                 setSelectedPatient(newPatient);
                 setIsRegistering(false);
+                setShowCpfNotFoundModal(false);
+                setNewPatientName('');
+                setNewPatientNickname('');
+                setNewPatientCpf('');
+                setNewPatientBirthDate('');
+                setNewPatientPhone('');
+                setNewPatientNeighborhood('');
+                setNewPatientStreet('');
+                setNewPatientCity('SÃO JOSÉ DO GOIABAL -MG');
+                setNewPatientSusNumber('');
+                setCpfError('');
+                setPatientQuery('');
                 onNavigate('consultas:novo-agendamento-paciente');
             }
         } catch (err: any) {
@@ -923,6 +945,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                     setNewPatientNeighborhood('');
                                     setNewPatientStreet('');
                                     setNewPatientCity('SÃO JOSÉ DO GOIABAL -MG');
+                                    setNewPatientSusNumber('');
                                     setCpfError('');
                                     setSelectedProcedure(null);
                                     setBookingQty(1);
@@ -1338,7 +1361,11 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                             <span className="block text-[8.5px] font-black text-slate-400 uppercase tracking-wider mb-0.5">Bairro</span>
                                             <span className="text-slate-800 font-bold uppercase block text-xs">{selectedPatient.neighborhood || 'Não informado'}</span>
                                         </div>
-                                        <div className="sm:col-span-2">
+                                        <div>
+                                            <span className="block text-[8.5px] font-black text-slate-400 uppercase tracking-wider mb-0.5">Número do SUS</span>
+                                            <span className="text-slate-800 font-bold block text-xs">{selectedPatient.sus_number || 'Não informado'}</span>
+                                        </div>
+                                        <div className="sm:col-span-1">
                                             <span className="block text-[8.5px] font-black text-slate-400 uppercase tracking-wider mb-0.5">Endereço (Rua / Número)</span>
                                             <span className="text-slate-800 font-bold uppercase block text-xs">{selectedPatient.street || 'Não informado'}</span>
                                         </div>
@@ -1419,7 +1446,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                         <div className="relative mb-5 shrink-0">
                                             <input
                                                 type="text"
-                                                placeholder="Pesquise por Nome Completo ou CPF..."
+                                                placeholder="Pesquise por Nome Completo, CPF ou Número do SUS..."
                                                 className="w-full bg-slate-50/50 border border-slate-200/80 rounded-2xl pl-12 pr-4 py-4 text-sm font-medium focus:bg-white focus:outline-none focus:ring-4 focus:ring-sky-500/10 focus:border-sky-500 transition-all text-slate-900 placeholder:text-slate-400 shadow-inner"
                                                 value={patientQuery}
                                                 onChange={(e) => setPatientQuery(e.target.value)}
@@ -1548,7 +1575,17 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                                     />
                                                 </div>
                                             </div>
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+                                                <div>
+                                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5 ml-1">Número do SUS</label>
+                                                    <input
+                                                        type="text"
+                                                        className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all text-xs font-bold tracking-wider shadow-inner"
+                                                        placeholder="000 0000 0000 0000"
+                                                        value={newPatientSusNumber}
+                                                        onChange={(e) => setNewPatientSusNumber(e.target.value.replace(/\D/g, '').slice(0, 15))}
+                                                    />
+                                                </div>
                                                 <div>
                                                     <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5 ml-1">Rua</label>
                                                     <input
@@ -2615,21 +2652,177 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                 </div>,
                 document.body
             )}
-            {printingBooking && (
-                <ConsultaPdfGenerator
-                    bookingId={printingBooking.id}
-                    patient={printingBooking.paciente || selectedPatient!}
-                    procedure={printingBooking.procedimento || selectedProcedure!}
-                    date={printingBooking.appointment_date}
-                    quantity={printingBooking.quantity}
-                    priority={printingBooking.priority}
-                    is_retorno={printingBooking.is_retorno}
-                    currentUser={currentUser}
-                    state={appState}
-                    solicitationDate={printingBooking.solicitation_date || solicitationDate}
-                    appointmentTime={printingBooking.appointment_time || bookingTime}
-                    status={printingBooking.status}
-                />
+            {/* MODAL: CADASTRO RÁPIDO DE PACIENTE NÃO ENCONTRADO (ESTILO FARMÁCIA POPULAR) */}
+            {showCpfNotFoundModal && typeof document !== 'undefined' && createPortal(
+                <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-md animate-in fade-in duration-200">
+                    <div className="bg-white rounded-[2.5rem] shadow-[0_25px_70px_rgba(0,0,0,0.2)] w-full max-w-2xl overflow-hidden border border-slate-100 flex flex-col transform transition-all animate-in zoom-in-95 duration-200">
+                        {/* Header */}
+                        <div className="p-6 bg-gradient-to-r from-sky-600 to-indigo-600 text-white flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-white">
+                                    <UserPlus className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <h3 className="font-black text-base uppercase tracking-tight">Cadastrar Novo Paciente</h3>
+                                    <p className="text-xs text-sky-100 font-semibold">
+                                        CPF <span className="font-mono font-bold underline">{unregisteredCpf || newPatientCpf}</span> não encontrado no sistema
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowCpfNotFoundModal(false);
+                                    setErrorMessage('');
+                                }}
+                                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors cursor-pointer"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        {/* Form Body */}
+                        <form onSubmit={handleRegisterPatient} className="p-6 space-y-4 text-left overflow-y-auto max-h-[80vh]">
+                            {errorMessage && (
+                                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-bold flex items-center gap-2">
+                                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                                    <span>{errorMessage}</span>
+                                </div>
+                            )}
+
+                            {/* CPF + Nome Completo */}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div className="md:col-span-1">
+                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1 ml-1">CPF do Paciente</label>
+                                    <input
+                                        type="text"
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-100 py-3 px-3.5 text-xs text-slate-600 font-mono font-bold outline-none cursor-not-allowed shadow-inner"
+                                        value={newPatientCpf}
+                                        disabled
+                                    />
+                                </div>
+                                <div className="md:col-span-2">
+                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1 ml-1">Nome Completo *</label>
+                                    <input
+                                        type="text"
+                                        autoFocus
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-3 px-3.5 text-xs text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all font-semibold uppercase shadow-inner"
+                                        placeholder="Nome Completo do Paciente"
+                                        value={newPatientName}
+                                        onChange={(e) => setNewPatientName(e.target.value.toUpperCase())}
+                                        required
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Apelido + Nasc + Telefone */}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1 ml-1">Apelido</label>
+                                    <input
+                                        type="text"
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-3 px-3.5 text-xs text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all font-semibold uppercase shadow-inner"
+                                        placeholder="Ex: Netinho"
+                                        value={newPatientNickname}
+                                        onChange={(e) => setNewPatientNickname(e.target.value.toUpperCase())}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1 ml-1">Data de Nascimento *</label>
+                                    <input
+                                        type="date"
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-3 px-3.5 text-xs text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all font-bold shadow-inner cursor-pointer"
+                                        value={newPatientBirthDate}
+                                        onChange={(e) => setNewPatientBirthDate(e.target.value)}
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1 ml-1">Telefone</label>
+                                    <input
+                                        type="text"
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-3 px-3.5 text-xs text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all font-bold tracking-wider shadow-inner"
+                                        placeholder="(00) 00000-0000"
+                                        value={newPatientPhone}
+                                        onChange={(e) => handlePhoneChange(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Número do SUS + Rua */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1 ml-1">Número do SUS</label>
+                                    <input
+                                        type="text"
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-3 px-3.5 text-xs text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all font-bold tracking-wider shadow-inner"
+                                        placeholder="000 0000 0000 0000"
+                                        value={newPatientSusNumber}
+                                        onChange={(e) => setNewPatientSusNumber(e.target.value.replace(/\D/g, '').slice(0, 15))}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1 ml-1">Rua</label>
+                                    <input
+                                        type="text"
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-3 px-3.5 text-xs text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all font-semibold uppercase shadow-inner"
+                                        placeholder="Ex: Rua Principal, 10"
+                                        value={newPatientStreet}
+                                        onChange={(e) => setNewPatientStreet(e.target.value.toUpperCase())}
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Bairro + Cidade */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1 ml-1">Bairro</label>
+                                    <input
+                                        type="text"
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-3 px-3.5 text-xs text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all font-semibold uppercase shadow-inner"
+                                        placeholder="Ex: Centro"
+                                        value={newPatientNeighborhood}
+                                        onChange={(e) => setNewPatientNeighborhood(e.target.value.toUpperCase())}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1 ml-1">Cidade *</label>
+                                    <input
+                                        type="text"
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-3 px-3.5 text-xs text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all font-semibold uppercase shadow-inner"
+                                        placeholder="Ex: São José do Goiabal - MG"
+                                        value={newPatientCity}
+                                        onChange={(e) => setNewPatientCity(e.target.value.toUpperCase())}
+                                        required
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Buttons */}
+                            <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setShowCpfNotFoundModal(false);
+                                        setErrorMessage('');
+                                    }}
+                                    className="px-5 py-3 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 transition-all uppercase tracking-wider cursor-pointer"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={loading}
+                                    className="px-6 py-3 bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-700 hover:to-indigo-700 text-white font-extrabold rounded-xl shadow-lg shadow-sky-600/20 active:scale-95 transition-all text-xs uppercase tracking-widest flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                                >
+                                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                                    Salvar & Selecionar Paciente
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>,
+                document.body
             )}
         </div>
     );

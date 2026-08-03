@@ -101,6 +101,7 @@ import { ProjetosModule } from './components/projetos/ProjetosModule';
 import { MarketingModule } from './components/marketing/MarketingModule';
 import { ConsultasModule } from './components/consultas/ConsultasModule';
 import { FarmaciaModule } from './components/farmacia/FarmaciaModule';
+import { UploadHub } from './components/upload/UploadHub';
 import { SystemUpdateScreen } from './components/SystemUpdateScreen';
 import { NovoEventoScreen } from './components/diarias/NovoEventoScreen';
 import { LancamentosScreen } from './components/diarias/LancamentosScreen';
@@ -200,7 +201,8 @@ const VIEW_TO_PATH: Record<string, string> = {
   'farmacia:dashboard-medicamentos': '/FarmaciaPopular/Dashboard/Medicamentos',
   'farmacia:dashboard-pacientes': '/FarmaciaPopular/Dashboard/Pacientes',
   'farmacia:dashboard-relatorios': '/FarmaciaPopular/Dashboard/Relatorios',
-  'farmacia:dashboard-rename': '/FarmaciaPopular/Dashboard/Rename'
+  'farmacia:dashboard-rename': '/FarmaciaPopular/Dashboard/Rename',
+  'upload': '/Upload'
 };
 
 const PATH_TO_STATE: Record<string, any> = Object.fromEntries(
@@ -263,7 +265,7 @@ const mapLicitacaoProcessToOrder = (process: any): Order => {
 
 const App: React.FC = () => {
   // State controlling the active module view
-  const [currentView, setCurrentView] = useState<'login' | 'home' | 'admin' | 'tracking' | 'editor' | 'vehicle-scheduling' | 'abastecimento' | 'agricultura' | 'obras' | 'order-details' | 'tasks-dashboard' | 'purchase-inventory' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'diarias-novo-evento' | 'diarias-lancamentos' | 'diarias-gestores' | 'diarias-viajar' | 'licitacao' | 'licitacao:new' | 'licitacao:view' | 'licitacao:details' | 'licitacao-all' | 'licitacao-screening' | 'consultas' | 'farmacia'>('login');
+  const [currentView, setCurrentView] = useState<'login' | 'home' | 'admin' | 'tracking' | 'editor' | 'vehicle-scheduling' | 'abastecimento' | 'agricultura' | 'obras' | 'order-details' | 'tasks-dashboard' | 'purchase-inventory' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'diarias-novo-evento' | 'diarias-lancamentos' | 'diarias-gestores' | 'diarias-viajar' | 'licitacao' | 'licitacao:new' | 'licitacao:view' | 'licitacao:details' | 'licitacao-all' | 'licitacao-screening' | 'consultas' | 'farmacia' | 'upload'>('login');
   const [remoteAccessState, setRemoteAccessState] = useState<any>(null);
 
   useEffect(() => {
@@ -1074,6 +1076,9 @@ const App: React.FC = () => {
         return;
       } else if (path.startsWith('/diarias/novo')) {
         setCurrentView('diarias-novo-evento');
+        return;
+      } else if (path.startsWith('/upload')) {
+        setCurrentView('upload');
         return;
       }
 
@@ -4765,6 +4770,16 @@ const App: React.FC = () => {
                 }}
                 onLogout={signOut}
                 appState={appState}
+              />
+            )}
+
+            {currentView === 'upload' && (
+              <UploadHub
+                currentUser={currentUser}
+                onBack={() => {
+                  setCurrentView('home');
+                  window.history.pushState({}, '', '/PaginaInicial');
+                }}
               />
             )}
 

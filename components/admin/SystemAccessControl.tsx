@@ -5,7 +5,7 @@ import {
   ChevronRight, ChevronDown, Layout, Settings2, Power,
   Activity, Info, FileText, ShoppingCart, Gavel, Briefcase,
   Car, Calendar, Truck, Fuel, Sprout, HardHat, CheckSquare,
-  Users, Megaphone, Box, Monitor, Smartphone
+  Users, Megaphone, Box, Monitor, Smartphone, Upload
 } from 'lucide-react';
 import { useSystemSettings } from '../../contexts/SystemSettingsContext';
 import { GlobalLoading } from '../common/GlobalLoading';
@@ -37,6 +37,7 @@ export const SystemAccessControl: React.FC<SystemAccessControlProps> = ({ onBack
             case 'parent_rh': return <Users className="w-7 h-7 transition-transform duration-500 group-hover:scale-110" />;
             case 'parent_marketing': return <Megaphone className="w-7 h-7 transition-transform duration-500 group-hover:scale-110" />;
             case 'parent_projetos': return <Box className="w-7 h-7 transition-transform duration-500 group-hover:scale-110" />;
+            case 'parent_upload': return <Upload className="w-7 h-7 transition-transform duration-500 group-hover:scale-110" />;
             default: return <Layout className="w-7 h-7 transition-transform duration-500 group-hover:scale-110" />;
         }
     };

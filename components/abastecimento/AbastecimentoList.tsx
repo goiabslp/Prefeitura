@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { OperationQRCode } from '../common/OperationQRCode';
 import { ArrowLeft, Search, Filter, Fuel, Trash2, Calendar, User, Truck, ShieldCheck, FileText, ChevronDown, Check, X } from 'lucide-react';
 import { AbastecimentoService, AbastecimentoRecord, GasStation } from '../../services/abastecimentoService';
 import { supabase } from '../../services/supabaseClient';
@@ -101,6 +102,15 @@ const AbastecimentoCard = ({ item, isAdmin, onEdit, onDelete, vehicleModelMap, v
                         <DataItem label="Fiscal" value={item.fiscal || 'Sistema'} icon={ShieldCheck} colorClass="text-slate-600 font-medium" flex="col-span-1 wide:w-auto" />
                         <DataItem label="Quantidade" value={`${item.liters.toFixed(3)} L`} flex="col-span-1 wide:w-auto" colorClass="text-slate-600" />
                         <DataItem label="Odômetro" value={`${item.odometer.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Km`} flex="col-span-1 wide:w-auto" colorClass="text-slate-600" />
+
+                        {/* QR da Operação */}
+                        <div className="col-span-2 wide:col-span-auto self-center">
+                            <OperationQRCode 
+                                moduleName="abastecimento" 
+                                recordId={item.id} 
+                                instructions="Tire fotos do cupom fiscal e anexe comprovantes de abastecimento diretamente do seu celular."
+                            />
+                        </div>
 
                         {/* Action Buttons in Expanded View */}
                         {isAdmin && (

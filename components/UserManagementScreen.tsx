@@ -1055,6 +1055,13 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                           { id: 'parent_farmacia_aprovar', label: 'Aprovar Ajustes' }
                         ],
                         color: 'violet'
+                      },
+                      {
+                        title: 'Upload Rápido',
+                        permissions: [
+                          { id: 'parent_upload', label: 'Módulo: Upload Rápido' }
+                        ],
+                        color: 'sky'
                       }
                     ].map((category) => (
                       <div key={category.title} className="bg-slate-50/50 rounded-2xl p-5 border border-slate-100/60">

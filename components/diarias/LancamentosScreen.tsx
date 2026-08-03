@@ -22,6 +22,7 @@ import { uploadFile } from '../../services/storageService';
 import { TwoFactorModal } from '../TwoFactorModal';
 import { DiariasReportModal } from './DiariasReportModal';
 import { ImageCropModal } from '../common/ImageCropModal';
+import { OperationQRCode } from '../common/OperationQRCode';
 import { performLocationCheckpointSync } from '../../services/locationTrackingService';
 
 
@@ -2510,6 +2511,15 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                       <Paperclip className="w-3.5 h-3.5 text-amber-600" /> Comprovantes de Despesas Anexados
                     </span>
+                  </div>
+
+                  {/* QR da Operação */}
+                  <div className="flex items-center justify-between p-4 bg-slate-50 border border-slate-150 rounded-2xl">
+                    <div className="flex flex-col text-left">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Upload Rápido</span>
+                      <span className="text-xs text-slate-500 font-medium mt-0.5">Use o QR Code para anexar comprovantes do celular</span>
+                    </div>
+                    <OperationQRCode moduleName="diarias" recordId={selectedEvento.id} />
                   </div>
 
                   {selectedEvento.status !== 'concluido' && selectedEvento.status !== 'cancelado' && (
