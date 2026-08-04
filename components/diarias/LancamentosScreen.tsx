@@ -159,6 +159,9 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
   const [adminElapsedMinutes, setAdminElapsedMinutes] = useState<number>(46);
   const [isAdminUpdating, setIsAdminUpdating] = useState<boolean>(false);
 
+  // Estado para Modal de Confirmação antes de Editar (Aviso de reinício de fluxo para Aguardando Gestor)
+  const [confirmEditEventoModal, setConfirmEditEventoModal] = useState<DiariaEvento | null>(null);
+
   // Estado e Função para Forçar Sincronização Manual de GPS via Botão de Localização
   const [syncingTripId, setSyncingTripId] = useState<string | null>(null);
 
@@ -672,8 +675,16 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
     setEditDataSaida(evento.data_saida ? evento.data_saida.slice(0, 16) : '');
     setEditDataRetorno(evento.data_retorno ? evento.data_retorno.slice(0, 16) : '');
     setEditHospedagemDias(evento.hospedagem_dias !== undefined && evento.hospedagem_dias !== null ? evento.hospedagem_dias : '');
-    setValorDiaria(evento.valor_diaria ? String(evento.valor_diaria) : '');
-    setRelatorioViagem(evento.relatorio_viagem || '');
+    // Quando o botão EDITAR for acionado, o valor da diária vem vazio por padrão
+    if (isEdit) {
+      setValorDiaria('');
+    } else {
+      setValorDiaria(evento.valor_diaria ? String(evento.valor_diaria) : '');
+    }
+
+    // Texto do Relatório Oficial da Viagem sempre vem vazio por padrão conforme solicitado
+    setRelatorioViagem('');
+
     setJustificativaGestor(evento.justificativa_gestor || '');
     setComprovantes(evento.comprovantes_gestor || []);
     
@@ -684,7 +695,13 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
       : 'resumo';
       
     setModalActiveTab(validTab);
-    setModalType('gestor');
+
+    if (evento.status === 'aguardando_administrador' || (evento.status === 'concluido' && currentUser?.role === 'admin')) {
+      setModalType('admin');
+      setAdminStep('review');
+    } else {
+      setModalType('gestor');
+    }
   };
 
   const handleSaveFullEdit = async () => {
@@ -693,6 +710,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
 
     try {
       const updatedPayload: Partial<DiariaEvento> = {
+        status: 'aguardando_gestor', // Retorna obrigatoriamente para a revisão do gestor
         destino: editDestino,
         motivo: editMotivo,
         veiculo: editVeiculo,
@@ -715,7 +733,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
       setEventos(prev => prev.map(evt => evt.id === selectedEvento.id ? updatedEvento : evt));
       window.dispatchEvent(new Event('diarias_eventos_updated'));
 
-      alert('Todas as alterações da solicitação foram salvas com sucesso!');
+      alert('Solicitação atualizada! O evento retornou ao status de revisão pelo gestor e está pronto para seguir o fluxo.');
     } catch (err) {
       console.error('Erro ao salvar alterações da solicitação:', err);
       alert('Falha ao salvar as alterações da viagem.');
@@ -2278,16 +2296,14 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                           </button>
                         )}
 
-                        {currentUser?.role === 'admin' && evento.status === 'concluido' && (
-                          <button
-                            onClick={() => handleOpenReview(evento)}
-                            className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 shadow-xs shrink-0 flex items-center gap-1"
-                            title="Editar Viagem Concluída (Administrador)"
-                          >
-                            <Pencil className="w-3 h-3" />
-                            <span>Editar</span>
-                          </button>
-                        )}
+                        <button
+                          onClick={() => setConfirmEditEventoModal(evento)}
+                          className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 shadow-xs shrink-0 flex items-center gap-1"
+                          title="Editar Viagem (Reinicia fluxo a partir de Aguardando Gestor)"
+                        >
+                          <Pencil className="w-3 h-3" />
+                          <span>EDITAR</span>
+                        </button>
 
                         {currentUser?.role === 'admin' && (
                           <button
@@ -2790,7 +2806,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
               {(selectedEvento.status === 'aguardando_gestor' || !selectedEvento.status) && (
                 <button 
                   onClick={handleGestorApprove}
-                  disabled={justificativaGestor.trim().length < 300 || isSubmitting || isUploading}
+                  disabled={isSubmitting || isUploading}
                   className="px-4 sm:px-6 py-2.5 sm:py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white font-black text-xs uppercase tracking-widest rounded-xl sm:rounded-2xl transition-all shadow-lg shadow-indigo-600/20 active:scale-95 flex items-center justify-center gap-2 w-full sm:w-auto whitespace-nowrap"
                 >
                   {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -2890,120 +2906,113 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                     <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-6 animate-fade-in">
                       <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                          <FileText className="w-3.5 h-3.5 text-indigo-600" /> Resumo Geral do Evento
+                          <FileText className="w-3.5 h-3.5 text-indigo-600" /> Parâmetros e Dados da Viagem (Editáveis)
                         </span>
                         <span className={`px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest shadow-sm ${getStatusBadge(selectedEvento.status).style}`}>
                           {getStatusBadge(selectedEvento.status).label}
                         </span>
                       </div>
 
-                      {(() => {
-                        const vehicleText = selectedEvento.veiculo === 'OUTRO' 
-                          ? (selectedEvento.veiculo_outro || 'OUTRO (Personalizado)')
-                          : (selectedEvento.veiculo || 'Não informado');
-
-                        const distanceText = selectedEvento.distancia !== undefined && selectedEvento.distancia !== null && selectedEvento.distancia !== 0
-                          ? `${selectedEvento.distancia} KM`
-                          : (selectedEvento.distancia === 0 ? '0 KM' : 'Não informada');
-
-                        const hospedagemText = selectedEvento.hospedagem 
-                          ? `Sim (${selectedEvento.hospedagem_dias || 1} dia(s))` 
-                          : 'Não';
-
-                        return (
-                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                            <div className="bg-slate-50/80 border border-slate-200/60 p-4 rounded-2xl flex items-center gap-3.5 shadow-sm">
-                              <div className="w-11 h-11 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shrink-0">
-                                <Users className="w-5 h-5" />
-                              </div>
-                              <div className="min-w-0">
-                                <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Servidor</span>
-                                <p className="text-xs font-extrabold text-slate-900 truncate" title={selectedEvento.pessoas[0]?.name}>
-                                  {selectedEvento.pessoas[0]?.name || '---'}
-                                </p>
-                              </div>
-                            </div>
-
-                            <div className="bg-slate-50/80 border border-slate-200/60 p-4 rounded-2xl flex items-center gap-3.5 shadow-sm">
-                              <div className="w-11 h-11 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
-                                <MapPin className="w-5 h-5" />
-                              </div>
-                              <div className="min-w-0">
-                                <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Destino</span>
-                                <p className="text-xs font-extrabold text-slate-900 truncate" title={selectedEvento.destino}>
-                                  {selectedEvento.destino}
-                                </p>
-                              </div>
-                            </div>
-
-                            <div className="bg-slate-50/80 border border-slate-200/60 p-4 rounded-2xl flex items-center gap-3.5 shadow-sm">
-                              <div className="w-11 h-11 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shrink-0">
-                                <Car className="w-5 h-5" />
-                              </div>
-                              <div className="min-w-0">
-                                <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Veículo Usado</span>
-                                <p className="text-xs font-extrabold text-slate-900 truncate" title={vehicleText}>
-                                  {vehicleText}
-                                </p>
-                              </div>
-                            </div>
-
-                            <div className="bg-slate-50/80 border border-slate-200/60 p-4 rounded-2xl flex items-center gap-3.5 shadow-sm">
-                              <div className="w-11 h-11 rounded-xl bg-violet-50 border border-violet-100 flex items-center justify-center text-violet-600 shrink-0">
-                                <Navigation className="w-5 h-5" />
-                              </div>
-                              <div className="min-w-0">
-                                <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Distância (KM)</span>
-                                <p className="text-xs font-extrabold text-slate-900 truncate">
-                                  {distanceText}
-                                </p>
-                              </div>
-                            </div>
-
-                            <div className="bg-slate-50/80 border border-slate-200/60 p-4 rounded-2xl flex items-center gap-3.5 shadow-sm">
-                              <div className="w-11 h-11 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600 shrink-0">
-                                <Calendar className="w-5 h-5" />
-                              </div>
-                              <div className="min-w-0">
-                                <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Data/Hora Saída</span>
-                                <p className="text-xs font-extrabold text-slate-900 truncate">
-                                  {formatDate(selectedEvento.data_saida)}
-                                </p>
-                              </div>
-                            </div>
-
-                            <div className="bg-slate-50/80 border border-slate-200/60 p-4 rounded-2xl flex items-center gap-3.5 shadow-sm">
-                              <div className="w-11 h-11 rounded-xl bg-purple-50 border border-purple-100 flex items-center justify-center text-purple-600 shrink-0">
-                                <Calendar className="w-5 h-5" />
-                              </div>
-                              <div className="min-w-0">
-                                <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Data/Hora Retorno</span>
-                                <p className="text-xs font-extrabold text-slate-900 truncate">
-                                  {formatDate(selectedEvento.data_retorno)}
-                                </p>
-                              </div>
-                            </div>
-
-                            <div className="bg-slate-50/80 border border-slate-200/60 p-4 rounded-2xl flex items-center gap-3.5 shadow-sm sm:col-span-2 md:col-span-1 lg:col-span-2">
-                              <div className="w-11 h-11 rounded-xl bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600 shrink-0">
-                                <Hotel className="w-5 h-5" />
-                              </div>
-                              <div className="min-w-0">
-                                <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Hospedagem Solicitada</span>
-                                <p className="text-xs font-extrabold text-slate-900 truncate">
-                                  {hospedagemText}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })()}
-
-                      <div className="pt-4 border-t border-slate-100 space-y-2">
-                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Motivo Informado pelo Motorista / Servidor</span>
-                        <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 text-xs text-slate-700 font-medium leading-relaxed break-words break-all whitespace-pre-wrap overflow-hidden">
-                          {selectedEvento.motivo}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-black uppercase tracking-wider text-slate-500">Destino</label>
+                          <input
+                            type="text"
+                            value={editDestino}
+                            onChange={(e) => setEditDestino(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-indigo-500"
+                          />
                         </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-black uppercase tracking-wider text-slate-500">Veículo Usado</label>
+                          <select
+                            value={editVeiculo}
+                            onChange={(e) => setEditVeiculo(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-indigo-500"
+                          >
+                            <option value="FROTA OFICIAL">FROTA OFICIAL</option>
+                            <option value="PRÓPRIO / PARTICULAR">PRÓPRIO / PARTICULAR</option>
+                            <option value="TRANSPORTE PÚBLICO / ÔNIBUS">TRANSPORTE PÚBLICO / ÔNIBUS</option>
+                            <option value="OUTRO">OUTRO (Personalizado)</option>
+                          </select>
+                        </div>
+
+                        {editVeiculo === 'OUTRO' && (
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-black uppercase tracking-wider text-slate-500">Descrição do Veículo</label>
+                            <input
+                              type="text"
+                              value={editVeiculoOutro}
+                              onChange={(e) => setEditVeiculoOutro(e.target.value)}
+                              placeholder="Ex: Carro Próprio Modelo X"
+                              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-indigo-500"
+                            />
+                          </div>
+                        )}
+
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-black uppercase tracking-wider text-slate-500">Distância (KM)</label>
+                          <input
+                            type="number"
+                            value={editDistancia}
+                            onChange={(e) => setEditDistancia(e.target.value ? Number(e.target.value) : '')}
+                            placeholder="Ex: 180"
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-indigo-500"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-black uppercase tracking-wider text-slate-500">Data/Hora Saída</label>
+                          <input
+                            type="datetime-local"
+                            value={editDataSaida}
+                            onChange={(e) => setEditDataSaida(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-indigo-500"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-black uppercase tracking-wider text-slate-500">Data/Hora Retorno</label>
+                          <input
+                            type="datetime-local"
+                            value={editDataRetorno}
+                            onChange={(e) => setEditDataRetorno(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-indigo-500"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-black uppercase tracking-wider text-slate-500">Valor da Diária (R$)</label>
+                          <input
+                            type="text"
+                            value={valorDiaria}
+                            onChange={(e) => setValorDiaria(e.target.value)}
+                            placeholder="R$ 0,00"
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-indigo-700 outline-none focus:bg-white focus:border-indigo-500"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-black uppercase tracking-wider text-slate-500">Dias de Hospedagem</label>
+                          <input
+                            type="number"
+                            value={editHospedagemDias}
+                            onChange={(e) => setEditHospedagemDias(e.target.value ? Number(e.target.value) : '')}
+                            placeholder="Ex: 1"
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-indigo-500"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1 pt-2">
+                        <label className="text-[9px] font-black uppercase tracking-wider text-slate-500">Motivo / Descrição da Viagem</label>
+                        <textarea
+                          value={editMotivo}
+                          onChange={(e) => setEditMotivo(e.target.value)}
+                          rows={3}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-xs font-medium text-slate-900 outline-none focus:bg-white focus:border-indigo-500 transition-all resize-none"
+                        />
                       </div>
                     </div>
                   )}
@@ -3022,19 +3031,110 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                   )}
 
                   {modalActiveTab === 'comprovantes' && (
-                    <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-4 animate-fade-in">
+                    <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-6 animate-fade-in">
                       <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                           <Paperclip className="w-3.5 h-3.5 text-amber-600" /> Comprovantes de Despesas Anexados
                         </span>
                         <span className="text-xs font-extrabold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
-                          {(selectedEvento.comprovantes_gestor || []).length} comprovante(s)
+                          {(comprovantes || []).length} comprovante(s)
                         </span>
                       </div>
 
-                      {selectedEvento.comprovantes_gestor && selectedEvento.comprovantes_gestor.length > 0 ? (
+                      {/* QR da Operação */}
+                      <div className="flex items-center justify-between p-4 bg-slate-50 border border-slate-150 rounded-2xl">
+                        <div className="flex flex-col text-left">
+                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Upload Rápido</span>
+                          <span className="text-xs text-slate-500 font-medium mt-0.5">Use o QR Code para anexar comprovantes do celular</span>
+                        </div>
+                        <OperationQRCode moduleName="diarias" recordId={selectedEvento.id} />
+                      </div>
+
+                      {/* Formulário de Adicionar Comprovante no Modal Admin */}
+                      <div className="space-y-4 bg-slate-50 p-5 rounded-2xl border border-slate-200/80">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-black uppercase tracking-wider text-slate-500">Tipo de Despesa</label>
+                            <select
+                              value={newExpenseType}
+                              onChange={(e) => setNewExpenseType(e.target.value)}
+                              className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-indigo-500"
+                            >
+                              <option value="Hospedagem">Hospedagem</option>
+                              <option value="Combustível">Combustível</option>
+                              <option value="Alimentação">Alimentação</option>
+                              <option value="Estacionamento">Estacionamento</option>
+                              <option value="Outros">Outros</option>
+                            </select>
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-black uppercase tracking-wider text-slate-500">Valor da Despesa</label>
+                            <input
+                              type="text"
+                              value={newExpenseValue}
+                              onChange={(e) => setNewExpenseValue(e.target.value)}
+                              placeholder="R$ 0,00"
+                              className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-indigo-500"
+                            />
+                          </div>
+                        </div>
+                        
+                        <div className="space-y-2 pt-1">
+                          <input 
+                            type="file" 
+                            id="comprovante-file-admin"
+                            accept={newExpenseType === 'Hospedagem' ? 'application/pdf,.pdf' : 'image/*,.pdf'}
+                            onChange={handleComprovanteUpload}
+                            disabled={isUploading || !newExpenseValue}
+                            className="hidden"
+                          />
+                          <input 
+                            type="file" 
+                            id="comprovante-camera-admin"
+                            accept="image/*"
+                            capture="environment"
+                            onChange={handleComprovanteUpload}
+                            disabled={isUploading || !newExpenseValue || newExpenseType === 'Hospedagem'}
+                            className="hidden"
+                          />
+
+                          <div className={`grid gap-3 ${newExpenseType === 'Hospedagem' ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-2'}`}>
+                            {newExpenseType !== 'Hospedagem' && (
+                              <label 
+                                htmlFor="comprovante-camera-admin"
+                                className={`flex items-center justify-center gap-2 border-2 border-dashed border-indigo-300 hover:border-indigo-500 rounded-2xl py-3 cursor-pointer text-xs font-bold text-indigo-700 hover:text-indigo-800 bg-indigo-50/60 hover:bg-indigo-100/80 transition-all active:scale-[0.99] ${!newExpenseValue ? 'opacity-50 cursor-not-allowed' : ''}`}
+                              >
+                                {isUploading ? (
+                                  <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
+                                ) : (
+                                  <Camera className="w-4 h-4 text-indigo-600 shrink-0" />
+                                )}
+                                <span>{isUploading ? 'Enviando foto...' : 'Tirar Foto na Hora'}</span>
+                              </label>
+                            )}
+
+                            <label 
+                              htmlFor="comprovante-file-admin"
+                              className={`flex items-center justify-center gap-2 border-2 border-dashed ${newExpenseType === 'Hospedagem' ? 'border-indigo-500 bg-indigo-50/90 hover:bg-indigo-100/90 text-indigo-900 shadow-sm' : 'border-slate-300 hover:border-slate-400 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900'} rounded-2xl py-3 cursor-pointer text-xs font-bold transition-all active:scale-[0.99] ${!newExpenseValue ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            >
+                              {isUploading ? (
+                                <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
+                              ) : (
+                                <Upload className="w-4 h-4 text-indigo-600 shrink-0" />
+                              )}
+                              <span>
+                                {isUploading 
+                                  ? 'Enviando arquivo...' 
+                                  : (newExpenseType === 'Hospedagem' ? '📄 Selecionar PDF de Hospedagem' : 'Escolher Arquivo')}
+                              </span>
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+
+                      {comprovantes && comprovantes.length > 0 ? (
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          {selectedEvento.comprovantes_gestor.map((c: Attachment, idx: number) => {
+                          {comprovantes.map((c: Attachment, idx: number) => {
                             const isImage = c.type && c.type.startsWith('image/');
                             return (
                               <div key={c.id} className="rounded-2xl border border-slate-200 overflow-hidden bg-slate-50 shadow-sm hover:shadow-md transition-shadow">
@@ -3046,11 +3146,21 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                                       {c.expenseType || c.name || 'Despesa'}
                                     </span>
                                   </div>
-                                  {c.expenseValue && (
-                                    <span className="text-xs font-black text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100 shrink-0">
-                                      R$ {c.expenseValue}
-                                    </span>
-                                  )}
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    {c.expenseValue && (
+                                      <span className="text-xs font-black text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100">
+                                        R$ {c.expenseValue}
+                                      </span>
+                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={() => removeComprovante(c.id)}
+                                      className="p-1 hover:bg-red-50 text-slate-400 hover:text-red-500 rounded-lg transition-colors"
+                                      title="Remover comprovante"
+                                    >
+                                      <X className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
                                 </div>
 
                                 {/* Preview da imagem ou link */}
@@ -3986,6 +4096,71 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
             setPendingCropFile(null);
           }}
         />
+      )}
+
+      {/* Modal de Confirmação para Reiniciar o Fluxo a partir de Aguardando Gestor ao Editar */}
+      {confirmEditEventoModal && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/80 p-4 animate-fade-in" onClick={() => setConfirmEditEventoModal(null)}>
+          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-200 animate-scale-up" onClick={e => e.stopPropagation()}>
+            <div className="p-6 bg-gradient-to-r from-amber-600 to-amber-700 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center text-white shrink-0">
+                  <AlertTriangle className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black tracking-tight">Reiniciar Fluxo da Viagem</h3>
+                  <p className="text-[10px] text-amber-100 font-medium">Aviso de Edição de Solicitação</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setConfirmEditEventoModal(null)} 
+                className="p-1 hover:bg-white/10 rounded-full text-amber-100 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 bg-slate-50/50">
+              <p className="text-xs text-slate-700 font-medium leading-relaxed">
+                Ao editar esta solicitação, ela retornará automaticamente e o fluxo de aprovação será reiniciado a partir do status:
+              </p>
+
+              <div className="bg-amber-50 border border-amber-200/80 p-4 rounded-2xl flex items-center gap-3 text-amber-900 shadow-sm">
+                <RefreshCw className="w-5 h-5 text-amber-600 shrink-0" />
+                <div>
+                  <span className="text-[9px] font-black uppercase tracking-wider text-amber-600 block">Novo Status Inicial</span>
+                  <span className="text-sm font-black tracking-tight text-amber-900 uppercase">AGUARDANDO GESTOR</span>
+                </div>
+              </div>
+
+              <p className="text-[11px] text-slate-500 italic">
+                Deseja realmente prosseguir para a edição dos dados e arquivos da solicitação?
+              </p>
+            </div>
+
+            <div className="p-4 bg-white border-t border-slate-100 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setConfirmEditEventoModal(null)}
+                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs uppercase tracking-wider rounded-xl transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const ev = confirmEditEventoModal;
+                  setConfirmEditEventoModal(null);
+                  handleOpenReview(ev, true);
+                }}
+                className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-md shadow-amber-600/30 active:scale-95 flex items-center gap-2"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+                <span>Prosseguir e Editar</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
