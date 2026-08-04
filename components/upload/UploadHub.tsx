@@ -20,8 +20,8 @@ interface OperationDetails {
 }
 
 export const UploadHub: React.FC<UploadHubProps> = ({ currentUser, onBack }) => {
-    // Nav & Stages: 'hub' | 'scanner' | 'form' | 'success'
-    const [stage, setStage] = useState<'hub' | 'scanner' | 'form' | 'success'>('hub');
+    // Nav & Stages: 'hub' | 'scanner' | 'processing_qr' | 'form' | 'success'
+    const [stage, setStage] = useState<'hub' | 'scanner' | 'processing_qr' | 'form' | 'success'>('hub');
     const [opCodeInput, setOpCodeInput] = useState<string>('');
     const [loading, setLoading] = useState<boolean>(false);
     const [errorMsg, setErrorMsg] = useState<string>('');
@@ -106,7 +106,7 @@ export const UploadHub: React.FC<UploadHubProps> = ({ currentUser, onBack }) => 
                         inversionAttempts: 'dontInvert',
                     });
                     if (code && code.data) {
-                        handleCodeSubmit(code.data);
+                        handleQrCodeScanned(code.data);
                         return; // stop scanning
                     }
                 }
@@ -115,6 +115,18 @@ export const UploadHub: React.FC<UploadHubProps> = ({ currentUser, onBack }) => 
         if (scanningRef.current) {
             requestAnimationFrame(tickScanner);
         }
+    };
+
+    const handleQrCodeScanned = async (codeStr: string) => {
+        stopCamera();
+        setStage('processing_qr');
+        setErrorMsg('');
+        
+        // Delay visual de 1.5s
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        
+        // Executa a busca e validação do código
+        await handleCodeSubmit(codeStr);
     };
 
     const handleCodeSubmit = async (codeStr: string) => {
@@ -359,7 +371,7 @@ export const UploadHub: React.FC<UploadHubProps> = ({ currentUser, onBack }) => 
     };
 
     return (
-        <div className="flex flex-col min-h-screen bg-slate-900 text-white font-sans overflow-hidden">
+        <div className="w-full flex-1 flex flex-col bg-slate-900 text-white font-sans overflow-hidden">
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-4 bg-slate-800/80 backdrop-blur-md border-b border-slate-700/50 shrink-0">
                 <button
@@ -405,12 +417,12 @@ export const UploadHub: React.FC<UploadHubProps> = ({ currentUser, onBack }) => 
                                         placeholder="EX: A7K9F2"
                                         value={opCodeInput}
                                         onChange={(e) => setOpCodeInput(e.target.value.toUpperCase())}
-                                        className="flex-1 bg-slate-800 border border-slate-700/80 rounded-2xl p-4 text-center text-lg font-mono font-black tracking-widest text-white focus:outline-none focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 transition-all placeholder:text-slate-600"
+                                        className="flex-1 min-w-0 bg-slate-800 border border-slate-700/80 rounded-2xl p-3.5 sm:p-4 text-center text-base sm:text-lg font-mono font-black tracking-widest text-white focus:outline-none focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 transition-all placeholder:text-slate-600"
                                     />
                                     <button
                                         onClick={() => handleCodeSubmit(opCodeInput)}
                                         disabled={loading || opCodeInput.length !== 6}
-                                        className="px-6 py-4 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 disabled:opacity-50 text-white font-extrabold rounded-2xl shadow-lg shadow-sky-500/15 active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center justify-center cursor-pointer shrink-0"
+                                        className="px-4 sm:px-6 py-3.5 sm:py-4 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 disabled:opacity-50 text-white font-extrabold rounded-2xl shadow-lg shadow-sky-500/15 active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center justify-center cursor-pointer shrink-0"
                                     >
                                         {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Confirmar'}
                                     </button>
@@ -456,6 +468,9 @@ export const UploadHub: React.FC<UploadHubProps> = ({ currentUser, onBack }) => 
                         <div className="relative aspect-square w-full bg-black rounded-3xl overflow-hidden border-2 border-sky-500/30 shadow-2xl flex items-center justify-center max-w-sm mx-auto">
                             <video 
                                 ref={videoRef}
+                                autoPlay
+                                muted
+                                playsInline
                                 className="absolute inset-0 w-full h-full object-cover"
                             />
                             
@@ -474,6 +489,37 @@ export const UploadHub: React.FC<UploadHubProps> = ({ currentUser, onBack }) => 
                         >
                             Voltar
                         </button>
+                    </div>
+                )}
+
+                {/* 2.5. PROCESSING QR STAGE */}
+                {stage === 'processing_qr' && (
+                    <div className="flex-1 flex flex-col justify-center items-center text-center space-y-8 py-12 animate-fade-in relative">
+                        <style>{`
+                            @keyframes scanMove {
+                                0%, 100% { top: 10%; opacity: 0.3; }
+                                50% { top: 90%; opacity: 1; }
+                            }
+                            .animate-scan-line {
+                                animation: scanMove 1.5s infinite ease-in-out;
+                            }
+                        `}</style>
+                        <div className="relative w-28 h-28 flex items-center justify-center">
+                            {/* Círculo externo pulsante */}
+                            <div className="absolute inset-0 rounded-full border-2 border-sky-500/20 animate-ping opacity-75"></div>
+                            {/* Círculo de fundo brilhoso */}
+                            <div className="absolute w-24 h-24 bg-gradient-to-tr from-sky-500/10 to-indigo-500/10 rounded-full border border-sky-500/30 flex items-center justify-center shadow-lg shadow-sky-500/5">
+                                <QrCode className="w-12 h-12 text-sky-400 animate-pulse" />
+                            </div>
+                            {/* Linha laser de escaneamento simulada */}
+                            <div className="absolute left-2 right-2 h-0.5 bg-sky-400 shadow-md shadow-sky-500/50 rounded animate-scan-line"></div>
+                        </div>
+                        <div className="space-y-2">
+                            <h3 className="text-lg font-black uppercase tracking-widest text-sky-400 animate-pulse">Código Detectado!</h3>
+                            <p className="text-[11px] font-semibold text-slate-400 leading-relaxed px-6">
+                                Sincronizando documentos e validando permissões de acesso...
+                            </p>
+                        </div>
                     </div>
                 )}
 
