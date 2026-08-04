@@ -785,6 +785,15 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
     const file = e.target.files?.[0];
     if (!file || !selectedEvento) return;
 
+    if (expenseType === 'Hospedagem') {
+      const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+      if (!isPdf) {
+        alert('Atenção: Para despesas do tipo Hospedagem, o anexo deve ser obrigatoriamente um arquivo no formato PDF.');
+        if (e.target) e.target.value = '';
+        return;
+      }
+    }
+
     if (file.type && file.type.startsWith('image/')) {
       setPendingCropFile(file);
     } else {
@@ -1289,7 +1298,7 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept="image/*,application/pdf"
+                    accept={expenseType === 'Hospedagem' ? 'application/pdf,.pdf' : 'image/*,application/pdf'}
                     onChange={handleComprovanteUpload}
                     className="hidden"
                   />
@@ -1299,6 +1308,7 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
                     accept="image/*"
                     capture="environment"
                     onChange={handleComprovanteUpload}
+                    disabled={expenseType === 'Hospedagem'}
                     className="hidden"
                   />
 

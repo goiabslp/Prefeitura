@@ -4,7 +4,7 @@ import {
   FileText, Search, Hash as HashIcon, CheckCircle2, 
   X, AlertTriangle, Upload, Paperclip, Check, Trash2,
   Car, Navigation, Hotel, BookOpen, Copy, Download, FileDown, XCircle, Receipt, Pencil,
-  UserPlus, Square, Timer, Clock, Plus, ArrowRightLeft, UserCheck, Play, ShieldCheck, Camera
+  UserPlus, Square, Timer, Clock, Plus, ArrowRightLeft, UserCheck, Play, ShieldCheck, Camera, Save
 } from 'lucide-react';
 import { getDiariasDespesasEnabled, setDiariasDespesasEnabled } from '../../services/diariasSettingsService';
 import { DiariaEvento, User, Attachment, Sector, Job, Person, Order } from '../../types';
@@ -646,11 +646,37 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
     } catch (e) {}
   };
 
-  const handleOpenReview = (evento: DiariaEvento) => {
+  // Estados para Edição Total de qualquer campo da solicitação de viagem (Modo EDITAR)
+  const [isFullEditMode, setIsFullEditMode] = useState<boolean>(true);
+  const [editDestino, setEditDestino] = useState<string>('');
+  const [editMotivo, setEditMotivo] = useState<string>('');
+  const [editVeiculo, setEditVeiculo] = useState<string>('');
+  const [editVeiculoOutro, setEditVeiculoOutro] = useState<string>('');
+  const [editDistancia, setEditDistancia] = useState<number | ''>('');
+  const [editDataSaida, setEditDataSaida] = useState<string>('');
+  const [editDataRetorno, setEditDataRetorno] = useState<string>('');
+  const [editHospedagemDias, setEditHospedagemDias] = useState<number | ''>('');
+  const [isSavingFullEdit, setIsSavingFullEdit] = useState<boolean>(false);
+
+  const handleOpenReview = (evento: DiariaEvento, isEdit = true) => {
     setSelectedEvento(evento);
+    setIsFullEditMode(true);
     setTransferGestorCargo(evento.gestor_transferido_cargo || '');
     
-    // Ler o parametro modalTab da URL se fornecido, senao default 'resumo'
+    // Inicializar todos os campos editáveis da viagem
+    setEditDestino(evento.destino || '');
+    setEditMotivo(evento.motivo || '');
+    setEditVeiculo(evento.veiculo || 'OUTRO');
+    setEditVeiculoOutro(evento.veiculo_outro || '');
+    setEditDistancia(evento.distancia !== undefined && evento.distancia !== null ? evento.distancia : '');
+    setEditDataSaida(evento.data_saida ? evento.data_saida.slice(0, 16) : '');
+    setEditDataRetorno(evento.data_retorno ? evento.data_retorno.slice(0, 16) : '');
+    setEditHospedagemDias(evento.hospedagem_dias !== undefined && evento.hospedagem_dias !== null ? evento.hospedagem_dias : '');
+    setValorDiaria(evento.valor_diaria ? String(evento.valor_diaria) : '');
+    setRelatorioViagem(evento.relatorio_viagem || '');
+    setJustificativaGestor(evento.justificativa_gestor || '');
+    setComprovantes(evento.comprovantes_gestor || []);
+    
     const urlParams = new URLSearchParams(window.location.search);
     const tabParam = urlParams.get('modalTab');
     const validTab = (tabParam && ['resumo', 'justificativa', 'comprovantes', 'relatorio'].includes(tabParam))
@@ -658,23 +684,43 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
       : 'resumo';
       
     setModalActiveTab(validTab);
+    setModalType('gestor');
+  };
+
+  const handleSaveFullEdit = async () => {
+    if (!selectedEvento) return;
+    setIsSavingFullEdit(true);
+
     try {
-      const currentUrl = new URL(window.location.href);
-      currentUrl.searchParams.set('modalTab', validTab);
-      window.history.replaceState({}, '', currentUrl.toString());
-    } catch (e) {}
+      const updatedPayload: Partial<DiariaEvento> = {
+        destino: editDestino,
+        motivo: editMotivo,
+        veiculo: editVeiculo,
+        veiculo_outro: editVeiculoOutro,
+        distancia: Number(editDistancia) || 0,
+        data_saida: editDataSaida ? new Date(editDataSaida).toISOString() : selectedEvento.data_saida,
+        data_retorno: editDataRetorno ? new Date(editDataRetorno).toISOString() : selectedEvento.data_retorno,
+        hospedagem_dias: Number(editHospedagemDias) || 0,
+        valor_diaria: Number(valorDiaria) || selectedEvento.valor_diaria || 0,
+        justificativa_gestor: justificativaGestor,
+        relatorio_viagem: relatorioViagem,
+        gestor_transferido_cargo: transferGestorCargo,
+        comprovantes_gestor: comprovantes
+      };
 
-    if ((evento.status === 'aguardando_administrador' || (evento.status === 'concluido' && currentUser?.role === 'admin')) && currentUser?.role === 'admin') {
-      setModalType('admin');
-      setAdminStep('review');
-      setValorDiaria(evento.valor_diaria ? String(evento.valor_diaria) : '');
+      await updateDiariaEvento(selectedEvento.id, updatedPayload as any);
 
-      // Se já há um relatório salvo, usa ele; senão, vem em branco por padrão
-      setRelatorioViagem(evento.relatorio_viagem || '');
-    } else {
-      setModalType('gestor');
-      setJustificativaGestor(evento.justificativa_gestor || '');
-      setComprovantes(evento.comprovantes_gestor || []);
+      const updatedEvento = { ...selectedEvento, ...updatedPayload };
+      setSelectedEvento(updatedEvento);
+      setEventos(prev => prev.map(evt => evt.id === selectedEvento.id ? updatedEvento : evt));
+      window.dispatchEvent(new Event('diarias_eventos_updated'));
+
+      alert('Todas as alterações da solicitação foram salvas com sucesso!');
+    } catch (err) {
+      console.error('Erro ao salvar alterações da solicitação:', err);
+      alert('Falha ao salvar as alterações da viagem.');
+    } finally {
+      setIsSavingFullEdit(false);
     }
   };
 
@@ -767,6 +813,14 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
   const handleComprovanteUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && selectedEvento) {
+      if (newExpenseType === 'Hospedagem') {
+        const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+        if (!isPdf) {
+          alert('Atenção: Para despesas do tipo Hospedagem, o anexo deve ser obrigatoriamente um arquivo no formato PDF.');
+          if (e.target) e.target.value = '';
+          return;
+        }
+      }
       if (file.type && file.type.startsWith('image/')) {
         setPendingCropFile(file);
       } else {
@@ -983,20 +1037,48 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
       const relatorioBlocks = splitTextIntoBlocks(relatorioText, 4500);
       const numRelatorioPages = relatorioBlocks.length;
 
-      // Páginas dedicadas aos comprovantes (grade de 2 colunas: 2 anexos por linha, até 4 por folha A4)
-      const numComprovantesPages = totalComprovantes > 0 ? Math.ceil(totalComprovantes / 4) : 0;
+      // Separar comprovantes regulares (fotos/imagens) dos anexos em PDF de Hospedagem
+      const hospedagemPdfs = listComprovantes.filter(c => 
+        (c.expenseType === 'Hospedagem' || (c.name && c.name.toLowerCase().endsWith('.pdf'))) && 
+        ((c.type && c.type.includes('pdf')) || (c.url && c.url.toLowerCase().includes('.pdf')) || (c.name && c.name.toLowerCase().endsWith('.pdf')))
+      );
 
-      const totalPages = 1 + numRelatorioPages + (totalComprovantes > 0 ? numComprovantesPages : 0);
+      const normalComprovantes = listComprovantes.filter(c => !hospedagemPdfs.includes(c));
+
+      const numComprovantesPages = normalComprovantes.length > 0 ? Math.ceil(normalComprovantes.length / 4) : 0;
+      const numHospedagemPages = hospedagemPdfs.length;
+
+      const totalPages = 1 + numRelatorioPages + (normalComprovantes.length > 0 ? numComprovantesPages : 0) + numHospedagemPages;
 
       const renderCard = (c: Attachment, idx: number) => {
         const isImage = (c.type && c.type.startsWith('image/')) ||
           /\.(jpg|jpeg|png|webp|gif|bmp|svg)(\?.*)?$/i.test(c.url || '') ||
           /\.(jpg|jpeg|png|webp|gif|bmp|svg)/i.test(c.name || '');
+        const isHospedagemPdf = (c.expenseType === 'Hospedagem' || (c.name && c.name.toLowerCase().endsWith('.pdf'))) &&
+          ((c.type && c.type.includes('pdf')) || (c.url && c.url.toLowerCase().includes('.pdf')) || (c.name && c.name.toLowerCase().endsWith('.pdf')));
+
         const tipo = c.expenseType || c.name || 'Despesa';
         const valor = c.expenseValue ? `R$ ${c.expenseValue}` : '—';
-        const imgOrLink = isImage
-          ? `<div class="comp-img-wrap"><img class="comp-img" src="${c.url}" alt="Comprovante ${idx + 1}" crossorigin="anonymous" /></div>`
-          : `<div class="comp-img-wrap"><a class="comp-link" href="${c.url}" target="_blank">📎 Visualizar arquivo anexo</a></div>`;
+        
+        let imgOrLink = '';
+        if (isHospedagemPdf) {
+          imgOrLink = `
+            <div class="comp-img-wrap" style="flex-direction: column; gap: 6px; justify-content: center; background: #f8fafc;">
+              <div style="font-size: 26pt;">📄</div>
+              <div style="font-size: 8.5pt; font-weight: 900; color: #4f46e5; text-align: center; text-transform: uppercase;">
+                DOCUMENTO DE HOSPEDAGEM (PDF)
+              </div>
+              <div style="font-size: 7pt; font-weight: 700; color: #64748b; text-align: center; max-width: 90%;">
+                Anexo impresso integralmente ao final deste relatório
+              </div>
+            </div>
+          `;
+        } else if (isImage) {
+          imgOrLink = `<div class="comp-img-wrap"><img class="comp-img" src="${c.url}" alt="Comprovante ${idx + 1}" crossorigin="anonymous" /></div>`;
+        } else {
+          imgOrLink = `<div class="comp-img-wrap"><a class="comp-link" href="${c.url}" target="_blank">📎 Visualizar arquivo anexo</a></div>`;
+        }
+
         const filename = c.name ? `<div class="comp-filename">${c.name}</div>` : '';
         return `<div class="comprovante-card">
           <div class="comp-header">
@@ -1067,14 +1149,14 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
         `;
       }
 
-      // Gerar páginas exclusivas de comprovantes (grade 2 colunas: 2 anexos por linha)
+      // Gerar páginas exclusivas de comprovantes regulares (grade 2 colunas)
       let extraComprovantesPagesHtml = '';
-      if (totalComprovantes > 0) {
+      if (normalComprovantes.length > 0) {
         for (let ep = 0; ep < numComprovantesPages; ep++) {
           const currentPageNum = 1 + numRelatorioPages + 1 + ep;
-          const isOverallLastPage = currentPageNum === totalPages;
+          const isOverallLastPage = currentPageNum === totalPages && hospedagemPdfs.length === 0;
           const startIndex = ep * 4;
-          const pageCards = listComprovantes.slice(startIndex, startIndex + 4);
+          const pageCards = normalComprovantes.slice(startIndex, startIndex + 4);
           const cardsHtml = pageCards.map((c, i) => renderCard(c, startIndex + i)).join('');
 
           extraComprovantesPagesHtml += `
@@ -1100,6 +1182,52 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                   <div class="section-body">
                     <div class="comprovantes-grid">${cardsHtml}</div>
                   </div>
+                </div>
+              </div>
+
+              <!-- Rodapé Página ${currentPageNum} -->
+              <div class="footer-bar">
+                <span>Código da Viagem: <strong style="color: #0f172a;">${protocol}</strong></span>
+                <span>Página ${currentPageNum} de ${totalPages}</span>
+              </div>
+            </div>
+          `;
+        }
+      }
+
+      // Gerar páginas exclusivas para os anexos PDF de Hospedagem (impressos integralmente no final da diária)
+      let hospedagemPagesHtml = '';
+      if (hospedagemPdfs.length > 0) {
+        for (let hp = 0; hp < hospedagemPdfs.length; hp++) {
+          const pdfItem = hospedagemPdfs[hp];
+          const currentPageNum = 1 + numRelatorioPages + (normalComprovantes.length > 0 ? numComprovantesPages : 0) + hp + 1;
+          const isOverallLastPage = currentPageNum === totalPages;
+
+          hospedagemPagesHtml += `
+            <div class="page ${isOverallLastPage ? 'page-last' : ''}" style="page-break-before: always; height: 100vh; display: flex; flex-direction: column; justify-content: space-between; padding: 0; margin: 0;">
+              <div>
+                <div style="padding: 10px 16px; background: #0f172a; color: #ffffff; display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #4f46e5;">
+                  <div style="display: flex; align-items: center; gap: 10px;">
+                    <span style="font-size: 14pt;">📄</span>
+                    <div>
+                      <div style="font-size: 9.5pt; font-weight: 900; letter-spacing: 0.04em; text-transform: uppercase;">ANEXO DE HOSPEDAGEM - IMPRESSÃO DO COMPROVANTE</div>
+                      <div style="font-size: 7.5pt; color: #94a3b8; font-weight: 600;">${pdfItem.name || 'comprovante_hospedagem.pdf'} ${pdfItem.expenseValue ? `(Valor: R$ ${pdfItem.expenseValue})` : ''}</div>
+                    </div>
+                  </div>
+                  <div style="text-align: right;">
+                    <div style="font-size: 8.5pt; font-weight: 900; color: #38bdf8;">${protocol}</div>
+                  </div>
+                </div>
+
+                <div style="width: 100%; height: calc(100vh - 75px); background: #ffffff;">
+                  <object data="${pdfItem.url}#toolbar=0&navpanes=0&scrollbar=0" type="application/pdf" style="width: 100%; height: 100%; border: none;">
+                    <embed src="${pdfItem.url}#toolbar=0&navpanes=0&scrollbar=0" type="application/pdf" style="width: 100%; height: 100%; border: none;" />
+                    <iframe src="${pdfItem.url}#toolbar=0&navpanes=0&scrollbar=0" style="width: 100%; height: 100%; border: none;">
+                      <p style="padding: 20px; text-align: center; font-size: 10pt;">
+                        Visualizar PDF de Hospedagem: <a href="${pdfItem.url}" target="_blank">Clique para abrir o arquivo</a>
+                      </p>
+                    </iframe>
+                  </object>
                 </div>
               </div>
 
@@ -1583,6 +1711,9 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
 
           <!-- PÁGINAS EXTRAS DE COMPROVANTES (SE HOUVER) -->
           ${extraComprovantesPagesHtml}
+
+          <!-- ANEXOS EM PDF DE HOSPEDAGEM (IMPRESSOS INTEGRALMENTE NO FINAL DO DOCUMENTO DA VIAGEM) -->
+          ${hospedagemPagesHtml}
         </body>
         </html>
       `;
@@ -2269,186 +2400,113 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                 <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm space-y-6 animate-fade-in">
                   <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                      <FileText className="w-3.5 h-3.5 text-indigo-600" /> Resumo Geral do Evento
+                      <FileText className="w-3.5 h-3.5 text-indigo-600" /> Parâmetros e Dados da Viagem (Editáveis)
                     </span>
                     <span className={`px-3 py-1 rounded-full border text-[9px] font-black uppercase tracking-widest shadow-sm ${getStatusBadge(selectedEvento.status).style}`}>
                       {getStatusBadge(selectedEvento.status).label}
                     </span>
                   </div>
 
-                  {(() => {
-                    const vehicleText = selectedEvento.veiculo === 'OUTRO' 
-                      ? (selectedEvento.veiculo_outro || 'OUTRO (Personalizado)')
-                      : (selectedEvento.veiculo || 'Não informado');
-
-                    const distanceText = selectedEvento.distancia !== undefined && selectedEvento.distancia !== null && selectedEvento.distancia !== 0
-                      ? `${selectedEvento.distancia} KM`
-                      : (selectedEvento.distancia === 0 ? '0 KM' : 'Não informada');
-
-                    const hospedagemText = selectedEvento.hospedagem 
-                      ? `Sim (${selectedEvento.hospedagem_dias || 1} dia(s))` 
-                      : 'Não';
-
-                    return (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                        <div className="bg-slate-50/90 border border-slate-200/70 p-3 rounded-xl flex items-start gap-2.5 shadow-sm">
-                          <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shrink-0 mt-0.5">
-                            <Users className="w-4 h-4" />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block leading-tight">Servidor</span>
-                            <p className="text-xs font-extrabold text-slate-900 leading-snug break-words">
-                              {selectedEvento.pessoas[0]?.name || '---'}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="bg-slate-50/90 border border-slate-200/70 p-3 rounded-xl flex items-start gap-2.5 shadow-sm">
-                          <div className="w-8 h-8 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 shrink-0 mt-0.5">
-                            <MapPin className="w-4 h-4" />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block leading-tight">Destino</span>
-                            <p className="text-xs font-extrabold text-slate-900 leading-snug break-words">
-                              {selectedEvento.destino}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="bg-slate-50/90 border border-slate-200/70 p-3 rounded-xl flex items-start gap-2.5 shadow-sm">
-                          <div className="w-8 h-8 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shrink-0 mt-0.5">
-                            <Car className="w-4 h-4" />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block leading-tight">Veículo Usado</span>
-                            <p className="text-xs font-extrabold text-slate-900 leading-snug break-words">
-                              {vehicleText}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="bg-slate-50/90 border border-slate-200/70 p-3 rounded-xl flex items-start gap-2.5 shadow-sm">
-                          <div className="w-8 h-8 rounded-lg bg-violet-50 border border-violet-100 flex items-center justify-center text-violet-600 shrink-0 mt-0.5">
-                            <Navigation className="w-4 h-4" />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block leading-tight">Distância (KM)</span>
-                            <p className="text-xs font-extrabold text-slate-900 leading-snug break-words">
-                              {distanceText}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="bg-slate-50/90 border border-slate-200/70 p-3 rounded-xl flex items-start gap-2.5 shadow-sm">
-                          <div className="w-8 h-8 rounded-lg bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600 shrink-0 mt-0.5">
-                            <Calendar className="w-4 h-4" />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block leading-tight">Data/Hora Saída</span>
-                            <p className="text-xs font-extrabold text-slate-900 leading-snug break-words">
-                              {formatDate(getEffectiveDataSaida(selectedEvento))}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="bg-slate-50/90 border border-slate-200/70 p-3 rounded-xl flex items-start gap-2.5 shadow-sm">
-                          <div className="w-8 h-8 rounded-lg bg-purple-50 border border-purple-100 flex items-center justify-center text-purple-600 shrink-0 mt-0.5">
-                            <Calendar className="w-4 h-4" />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block leading-tight">Data/Hora Retorno</span>
-                            <p className="text-xs font-extrabold text-slate-900 leading-snug break-words">
-                              {formatDate(selectedEvento.data_retorno)}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="bg-slate-50/90 border border-slate-200/70 p-3 rounded-xl flex items-start gap-2.5 shadow-sm sm:col-span-2 md:col-span-1 lg:col-span-2">
-                          <div className="w-8 h-8 rounded-lg bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600 shrink-0 mt-0.5">
-                            <Hotel className="w-4 h-4" />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block leading-tight">Hospedagem Solicitada</span>
-                            <p className="text-xs font-extrabold text-slate-900 leading-snug break-words">
-                              {hospedagemText}
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Card de Último Checkpoint da Localização em Tempo Real */}
-                        {(() => {
-                          const cp = selectedEvento.ultimo_checkpoint || (selectedEvento as any).checklist?.ultimo_checkpoint;
-                          const isEmViag = selectedEvento.status === 'em_viagem' || (selectedEvento.pessoas && selectedEvento.pessoas.some(p => (p as any).viagem_inicio && !(p as any).viagem_fim));
-                          if (!cp && !isEmViag) return null;
-                          const cidadeStr = cp ? cp.cidade : 'São José do Goiabal - MG';
-                          return (
-                            <div className="bg-cyan-50/90 border border-cyan-200/80 p-3 rounded-xl flex items-start gap-2.5 shadow-sm sm:col-span-2 md:col-span-1 lg:col-span-2">
-                              <div className="w-8 h-8 rounded-lg bg-cyan-100 border border-cyan-200 flex items-center justify-center text-cyan-700 shrink-0 mt-0.5 animate-pulse">
-                                <MapPin className="w-4 h-4 text-cyan-600 animate-bounce" />
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center justify-between">
-                                  <span className="text-[9px] font-black uppercase tracking-wider text-cyan-700 block leading-tight">Último Checkpoint da Localização (Tempo Real)</span>
-                                  {cp?.timestamp && (
-                                    <span className="text-[9px] font-mono font-bold text-cyan-800">
-                                      {new Date(cp.timestamp).toLocaleTimeString('pt-BR')}
-                                    </span>
-                                  )}
-                                </div>
-                                <p className="text-xs font-black text-slate-900 leading-snug break-words mt-0.5">
-                                  📍 {cidadeStr}
-                                  {cp ? (cp.fora_origem ? ' (Fora do Município de Origem)' : ' (No Município de Origem)') : ' (Aguardando atualização de GPS)'}
-                                </p>
-                              </div>
-                            </div>
-                          );
-                        })()}
-
-                        {/* Status de Validação da Saída */}
-                        {(selectedEvento.modo_inicio || selectedEvento.status === 'em_viagem' || selectedEvento.status === 'aguardando_gestor' || selectedEvento.status === 'concluido') && (
-                          <div className="bg-slate-50/90 border border-slate-200/70 p-3 rounded-xl flex items-start gap-2.5 shadow-sm sm:col-span-2 md:col-span-1 lg:col-span-2">
-                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 border ${
-                              selectedEvento.modo_inicio === 'manual' || selectedEvento.saida_validada
-                                ? 'bg-emerald-50 border-emerald-100 text-emerald-600'
-                                : selectedEvento.modo_inicio === 'automatico' && !selectedEvento.saida_validada
-                                ? 'bg-rose-50 border-rose-100 text-rose-600'
-                                : 'bg-slate-50 border-slate-150 text-slate-600'
-                            }`}>
-                              <ShieldCheck className="w-4 h-4" />
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block leading-tight">Validação da Saída</span>
-                              <p className={`text-xs font-extrabold mt-0.5 ${
-                                selectedEvento.modo_inicio === 'manual' || selectedEvento.saida_validada
-                                  ? 'text-emerald-700'
-                                  : selectedEvento.modo_inicio === 'automatico' && !selectedEvento.saida_validada
-                                  ? 'text-rose-700'
-                                  : 'text-slate-700'
-                              }`}>
-                                {selectedEvento.modo_inicio === 'manual' ? (
-                                  'Saída Validada (Iniciada Manualmente)'
-                                ) : selectedEvento.modo_inicio === 'automatico' ? (
-                                  selectedEvento.saida_validada ? (
-                                    'Saída Validada (Início Automático via GPS)'
-                                  ) : (
-                                    'Saída Inválida (Sem checkpoint fora do município de origem)'
-                                  )
-                                ) : (
-                                  'Saída Validada (Legado/Manual)'
-                                )}
-                              </p>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })()}
-
-                  <div className="pt-4 border-t border-slate-100 space-y-2">
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Motivo Informado pelo Motorista / Servidor</span>
-                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 text-xs text-slate-700 font-medium leading-relaxed break-words break-all whitespace-pre-wrap overflow-hidden">
-                      {selectedEvento.motivo}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black uppercase tracking-wider text-slate-500">Destino</label>
+                      <input
+                        type="text"
+                        value={editDestino}
+                        onChange={(e) => setEditDestino(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-indigo-500"
+                      />
                     </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black uppercase tracking-wider text-slate-500">Veículo Usado</label>
+                      <select
+                        value={editVeiculo}
+                        onChange={(e) => setEditVeiculo(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-indigo-500"
+                      >
+                        <option value="FROTA OFICIAL">FROTA OFICIAL</option>
+                        <option value="PRÓPRIO / PARTICULAR">PRÓPRIO / PARTICULAR</option>
+                        <option value="TRANSPORTE PÚBLICO / ÔNIBUS">TRANSPORTE PÚBLICO / ÔNIBUS</option>
+                        <option value="OUTRO">OUTRO (Personalizado)</option>
+                      </select>
+                    </div>
+
+                    {editVeiculo === 'OUTRO' && (
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black uppercase tracking-wider text-slate-500">Descrição do Veículo</label>
+                        <input
+                          type="text"
+                          value={editVeiculoOutro}
+                          onChange={(e) => setEditVeiculoOutro(e.target.value)}
+                          placeholder="Ex: Carro Próprio Modelo X"
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-indigo-500"
+                        />
+                      </div>
+                    )}
+
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black uppercase tracking-wider text-slate-500">Distância (KM)</label>
+                      <input
+                        type="number"
+                        value={editDistancia}
+                        onChange={(e) => setEditDistancia(e.target.value ? Number(e.target.value) : '')}
+                        placeholder="Ex: 180"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-indigo-500"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black uppercase tracking-wider text-slate-500">Data/Hora Saída</label>
+                      <input
+                        type="datetime-local"
+                        value={editDataSaida}
+                        onChange={(e) => setEditDataSaida(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-indigo-500"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black uppercase tracking-wider text-slate-500">Data/Hora Retorno</label>
+                      <input
+                        type="datetime-local"
+                        value={editDataRetorno}
+                        onChange={(e) => setEditDataRetorno(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-indigo-500"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black uppercase tracking-wider text-slate-500">Valor da Diária (R$)</label>
+                      <input
+                        type="text"
+                        value={valorDiaria}
+                        onChange={(e) => setValorDiaria(e.target.value)}
+                        placeholder="R$ 0,00"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-indigo-700 outline-none focus:bg-white focus:border-indigo-500"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black uppercase tracking-wider text-slate-500">Dias de Hospedagem</label>
+                      <input
+                        type="number"
+                        value={editHospedagemDias}
+                        onChange={(e) => setEditHospedagemDias(e.target.value ? Number(e.target.value) : '')}
+                        placeholder="Ex: 1"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:bg-white focus:border-indigo-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1 pt-2">
+                    <label className="text-[9px] font-black uppercase tracking-wider text-slate-500">Motivo / Descrição da Viagem</label>
+                    <textarea
+                      value={editMotivo}
+                      onChange={(e) => setEditMotivo(e.target.value)}
+                      rows={3}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-xs font-medium text-slate-900 outline-none focus:bg-white focus:border-indigo-500 transition-all resize-none"
+                    />
                   </div>
                 </div>
               )}
@@ -2569,6 +2627,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                         <input 
                           type="file" 
                           id="comprovante-file"
+                          accept={newExpenseType === 'Hospedagem' ? 'application/pdf,.pdf' : 'image/*,.pdf'}
                           onChange={handleComprovanteUpload}
                           disabled={isUploading || !newExpenseValue}
                           className="hidden"
@@ -2579,38 +2638,50 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                           accept="image/*"
                           capture="environment"
                           onChange={handleComprovanteUpload}
-                          disabled={isUploading || !newExpenseValue}
+                          disabled={isUploading || !newExpenseValue || newExpenseType === 'Hospedagem'}
                           className="hidden"
                         />
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className={`grid gap-3 ${newExpenseType === 'Hospedagem' ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-2'}`}>
+                          {newExpenseType !== 'Hospedagem' && (
+                            <label 
+                              htmlFor="comprovante-camera"
+                              className={`flex items-center justify-center gap-2 border-2 border-dashed border-indigo-300 hover:border-indigo-500 rounded-2xl py-3 cursor-pointer text-xs font-bold text-indigo-700 hover:text-indigo-800 bg-indigo-50/60 hover:bg-indigo-100/80 transition-all active:scale-[0.99] ${!newExpenseValue ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            >
+                              {isUploading ? (
+                                <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
+                              ) : (
+                                <Camera className="w-4 h-4 text-indigo-600 shrink-0" />
+                              )}
+                              <span>{isUploading ? 'Enviando foto...' : 'Tirar Foto na Hora'}</span>
+                            </label>
+                          )}
+
                           <label 
-                            htmlFor="comprovante-camera"
-                            className={`flex items-center justify-center gap-2 border-2 border-dashed border-indigo-300 hover:border-indigo-500 rounded-2xl py-3 cursor-pointer text-xs font-bold text-indigo-700 hover:text-indigo-800 bg-indigo-50/60 hover:bg-indigo-100/80 transition-all active:scale-[0.99] ${!newExpenseValue ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            htmlFor="comprovante-file"
+                            className={`flex items-center justify-center gap-2 border-2 border-dashed ${newExpenseType === 'Hospedagem' ? 'border-indigo-500 bg-indigo-50/90 hover:bg-indigo-100/90 text-indigo-900 shadow-sm' : 'border-slate-300 hover:border-slate-400 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900'} rounded-2xl py-3 cursor-pointer text-xs font-bold transition-all active:scale-[0.99] ${!newExpenseValue ? 'opacity-50 cursor-not-allowed' : ''}`}
                           >
                             {isUploading ? (
                               <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
                             ) : (
-                              <Camera className="w-4 h-4 text-indigo-600 shrink-0" />
+                              <Upload className="w-4 h-4 text-indigo-600 shrink-0" />
                             )}
-                            <span>{isUploading ? 'Enviando foto...' : 'Tirar Foto na Hora'}</span>
-                          </label>
-
-                          <label 
-                            htmlFor="comprovante-file"
-                            className={`flex items-center justify-center gap-2 border-2 border-dashed border-slate-300 hover:border-slate-400 rounded-2xl py-3 cursor-pointer text-xs font-bold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-50 transition-all active:scale-[0.99] ${!newExpenseValue ? 'opacity-50 cursor-not-allowed' : ''}`}
-                          >
-                            {isUploading ? (
-                              <Loader2 className="w-4 h-4 animate-spin text-slate-600" />
-                            ) : (
-                              <Upload className="w-4 h-4 text-slate-600 shrink-0" />
-                            )}
-                            <span>{isUploading ? 'Enviando arquivo...' : 'Escolher Arquivo'}</span>
+                            <span>
+                              {isUploading 
+                                ? 'Enviando arquivo...' 
+                                : (newExpenseType === 'Hospedagem' ? '📄 Selecionar PDF de Hospedagem' : 'Escolher Arquivo')}
+                            </span>
                           </label>
                         </div>
 
+                        {newExpenseType === 'Hospedagem' && (
+                          <p className="text-[10px] text-indigo-700 font-bold text-center bg-indigo-50/80 p-2 rounded-xl border border-indigo-100">
+                            ℹ️ Para comprovantes de Hospedagem, anexe o arquivo em formato PDF. O documento será impresso integralmente ao final da viagem.
+                          </p>
+                        )}
+
                         {!newExpenseValue && (
-                          <p className="text-[9px] text-amber-600 font-bold text-center">Preencha o valor da despesa antes de tirar foto ou carregar o arquivo.</p>
+                          <p className="text-[9px] text-amber-600 font-bold text-center">Preencha o valor da despesa antes de carregar o arquivo.</p>
                         )}
                       </div>
                     </div>
@@ -2690,36 +2761,37 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
             </div>
 
             <div className="px-4 sm:px-8 py-4 border-t border-slate-200 bg-white flex flex-row items-center justify-end gap-2 sm:gap-3 shrink-0">
-              {(selectedEvento.status === 'aguardando_gestor' || selectedEvento.status === 'aguardando_aprovacao' || !selectedEvento.status) ? (
+              <button 
+                onClick={handleCloseModal}
+                className="px-4 sm:px-6 py-2.5 sm:py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs uppercase tracking-wider rounded-xl sm:rounded-2xl transition-colors w-full sm:w-auto text-center"
+              >
+                Fechar
+              </button>
+
+              <button 
+                type="button"
+                onClick={handleSaveFullEdit}
+                disabled={isSavingFullEdit || isUploading}
+                className="px-5 sm:px-7 py-2.5 sm:py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-black text-xs uppercase tracking-widest rounded-xl sm:rounded-2xl transition-all shadow-lg shadow-emerald-600/30 active:scale-95 flex items-center justify-center gap-2 w-full sm:w-auto whitespace-nowrap"
+              >
+                {isSavingFullEdit ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                <span>Salvar Alterações da Viagem</span>
+              </button>
+
+              {(selectedEvento.status === 'aguardando_gestor' || selectedEvento.status === 'aguardando_aprovacao' || !selectedEvento.status) && (
                 <button 
                   onClick={() => setIsRejectModalOpen(true)}
-                  className="px-4 sm:px-6 py-2.5 sm:py-3 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 font-bold text-xs uppercase tracking-wider rounded-xl sm:rounded-2xl transition-colors w-full sm:w-auto text-center"
+                  className="px-4 sm:px-5 py-2.5 sm:py-3 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 font-bold text-xs uppercase tracking-wider rounded-xl sm:rounded-2xl transition-colors w-full sm:w-auto text-center"
                 >
                   Rejeitar
                 </button>
-              ) : (
-                <button 
-                  onClick={handleCloseModal}
-                  className="px-4 sm:px-6 py-2.5 sm:py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs uppercase tracking-wider rounded-xl sm:rounded-2xl transition-colors w-full sm:w-auto text-center"
-                >
-                  Fechar
-                </button>
               )}
-              {selectedEvento.status === 'aguardando_aprovacao' && (
-                <button 
-                  onClick={handleGestorApprove}
-                  disabled={isSubmitting || isUploading}
-                  className="px-4 sm:px-7 py-2.5 sm:py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white font-black text-xs uppercase tracking-widest rounded-xl sm:rounded-2xl transition-all shadow-lg shadow-emerald-600/20 active:scale-95 flex items-center justify-center gap-2 w-full sm:w-auto whitespace-nowrap"
-                >
-                  {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
-                  <span>Aprovar Viagem</span>
-                </button>
-              )}
+
               {(selectedEvento.status === 'aguardando_gestor' || !selectedEvento.status) && (
                 <button 
                   onClick={handleGestorApprove}
                   disabled={justificativaGestor.trim().length < 300 || isSubmitting || isUploading}
-                  className="px-4 sm:px-7 py-2.5 sm:py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white font-black text-xs uppercase tracking-widest rounded-xl sm:rounded-2xl transition-all shadow-lg shadow-indigo-600/20 active:scale-95 flex items-center justify-center gap-2 w-full sm:w-auto whitespace-nowrap"
+                  className="px-4 sm:px-6 py-2.5 sm:py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white font-black text-xs uppercase tracking-widest rounded-xl sm:rounded-2xl transition-all shadow-lg shadow-indigo-600/20 active:scale-95 flex items-center justify-center gap-2 w-full sm:w-auto whitespace-nowrap"
                 >
                   {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
                   <span>{transferGestorCargo ? `Transferir` : 'Aprovar / Enviar'}</span>
