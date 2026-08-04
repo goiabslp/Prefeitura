@@ -21,7 +21,8 @@ import {
     X,
     ChevronLeft,
     ChevronRight,
-    Sparkles
+    Sparkles,
+    Info
 } from 'lucide-react';
 import * as db from '../../services/consultasService';
 import { jsPDF } from 'jspdf';
@@ -126,6 +127,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
     const [successMessage, setSuccessMessage] = useState('');
     const [createdBooking, setCreatedBooking] = useState<ConsultaAgendamento | null>(null);
     const [isGenerating, setIsGenerating] = useState(false);
+    const [gestorUserIds, setGestorUserIds] = useState<string[]>([]);
 
     const [activeDateDropdownId, setActiveDateDropdownId] = useState<string | null>(null);
     const [activeTimeDropdownId, setActiveTimeDropdownId] = useState<string | null>(null);
@@ -249,6 +251,22 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
         };
         fetchProcedures();
     }, []);
+
+    useEffect(() => {
+        const fetchGestores = async () => {
+            try {
+                const gestores = await db.getConsultasGestores();
+                setGestorUserIds(gestores);
+            } catch (err) {
+                console.error('Error fetching gestores in NovoAgendamentoScreen:', err);
+            }
+        };
+        fetchGestores();
+    }, []);
+
+    const isAdmin = currentUser.role === 'admin';
+    const isGestor = gestorUserIds.includes(currentUser.id);
+    const canSeeSlots = isAdmin || isGestor;
 
     useEffect(() => {
         const handleOutsideClick = (e: MouseEvent) => {
@@ -432,15 +450,19 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
         
         // Determine status based on slot availability
         const availableSlots = getAvailableSlots(selectedProcedure, bookingPriority, targetDate);
-        const targetStatus = (bookingDate && availableSlots >= bookingQty)
-            ? ('Solicitado' as const) 
-            : ('Fila de espera' as const);
+        
+        // Se for usuário comum, vai sempre como Fila de Espera
+        const targetStatus = (!canSeeSlots)
+            ? ('Fila de espera' as const)
+            : (bookingDate && availableSlots >= bookingQty)
+                ? ('Solicitado' as const) 
+                : ('Fila de espera' as const);
 
         const optimisticBooking = {
             patient_id: selectedPatient.id,
             procedimento_id: selectedProcedure.id,
-            appointment_date: targetDate,
-            appointment_time: (bookingDate && !isWaitlistOnly) ? (bookingTime || undefined) : undefined,
+            appointment_date: canSeeSlots ? targetDate : undefined,
+            appointment_time: (canSeeSlots && bookingDate && !isWaitlistOnly) ? (bookingTime || undefined) : undefined,
             solicitation_date: solicitationDate,
             quantity: bookingQty,
             priority: bookingPriority,
@@ -1338,14 +1360,14 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                                     <div 
                                                         key={proc.id}
                                                         onClick={() => setSelectedProcedure(proc)}
-                                                        className="p-4 rounded-2xl border bg-white border-slate-200/80 hover:border-sky-400 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 flex flex-col justify-between group cursor-pointer"
+                                                        className="p-3 rounded-xl border bg-white border-slate-200/80 hover:border-sky-400 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 flex flex-col justify-center group cursor-pointer"
                                                     >
-                                                        <div className="space-y-2">
-                                                            <div className="font-black text-slate-800 text-xs uppercase group-hover:text-sky-600 transition-colors leading-snug">
-                                                                {proc.name}
+                                                        <div className="space-y-1.5">
+                                                            <div className="font-extrabold text-slate-800 text-[11px] uppercase group-hover:text-sky-600 transition-colors leading-snug">
+                                                                 {proc.name}
                                                             </div>
                                                             <div className="flex items-center gap-1.5 flex-wrap">
-                                                                <span className={`px-2 py-0.5 text-[8px] font-black uppercase tracking-wider rounded border ${
+                                                                <span className={`px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider rounded border ${
                                                                     proc.type === 'Exame'
                                                                     ? 'bg-sky-50 text-sky-600 border-sky-100'
                                                                     : proc.type === 'Consulta'
@@ -1355,23 +1377,22 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                                                     {proc.type}
                                                                 </span>
                                                                 {proc.code && (
-                                                                    <span className="px-2 py-0.5 text-[8px] font-black uppercase tracking-wider rounded border bg-slate-50 border-slate-200 text-slate-500">
+                                                                    <span className="px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider rounded border bg-slate-50 border-slate-200 text-slate-500">
                                                                         CÓD. {proc.code}
                                                                     </span>
                                                                 )}
+                                                                {canSeeSlots && (
+                                                                    <span className={`px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider rounded border ${
+                                                                        !hasSlots 
+                                                                        ? 'bg-rose-50 text-rose-600 border-rose-100' 
+                                                                        : isCritical 
+                                                                        ? 'bg-amber-50 text-amber-600 border-amber-100 animate-pulse' 
+                                                                        : 'bg-emerald-50 text-emerald-600 border-emerald-100'
+                                                                    }`}>
+                                                                        {Math.max(0, proc.available_quantity)} vagas
+                                                                    </span>
+                                                                )}
                                                             </div>
-                                                        </div>
-                                                        <div className="mt-4 pt-2.5 border-t border-slate-100 flex items-center justify-between">
-                                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Vagas Disponíveis</span>
-                                                            <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider border shadow-sm ${
-                                                                !hasSlots 
-                                                                ? 'bg-rose-50 text-rose-600 border-rose-100' 
-                                                                : isCritical 
-                                                                ? 'bg-amber-50 text-amber-600 border-amber-100 animate-pulse' 
-                                                                : 'bg-emerald-50 text-emerald-600 border-emerald-100'
-                                                            }`}>
-                                                                {Math.max(0, proc.available_quantity)} vagas
-                                                            </span>
                                                         </div>
                                                     </div>
                                                 );
@@ -1485,28 +1506,35 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                                     </div>
                                                 </div>
 
-                                                <div>
-                                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">Data e Horário da Consulta / Exame</label>
-                                                    <button
-                                                        type="button"
-                                                        disabled={isWaitlistOnly}
-                                                        onClick={() => setIsCalendarOpen(true)}
-                                                        className={`w-full rounded-xl border p-2.5 text-xs font-bold text-left flex items-center justify-between shadow-sm transition-all ${
-                                                            isWaitlistOnly
-                                                            ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed shadow-none'
-                                                            : 'border-emerald-600 bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-500/10 focus:ring-emerald-500/20 focus:ring-4 outline-none cursor-pointer'
-                                                        }`}
-                                                    >
-                                                        <span>
-                                                            {isWaitlistOnly
-                                                                ? `Fila de espera (Não há vagas de ${bookingPriority.toLowerCase()} disponíveis)`
-                                                                : bookingDate 
-                                                                    ? `${new Date(bookingDate + 'T12:00:00').toLocaleDateString('pt-BR')}${bookingTime ? ` às ${bookingTime}` : ''}`
-                                                                    : 'Clique para Selecionar a Data e Horário no Calendário'}
-                                                        </span>
-                                                        <Calendar className={`w-4 h-4 ${isWaitlistOnly ? 'text-slate-400' : 'text-white'}`} />
-                                                    </button>
-                                                </div>
+                                                {canSeeSlots ? (
+                                                    <div>
+                                                        <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">Data e Horário da Consulta / Exame</label>
+                                                        <button
+                                                            type="button"
+                                                            disabled={isWaitlistOnly}
+                                                            onClick={() => setIsCalendarOpen(true)}
+                                                            className={`w-full rounded-xl border p-2.5 text-xs font-bold text-left flex items-center justify-between shadow-sm transition-all ${
+                                                                isWaitlistOnly
+                                                                ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed shadow-none'
+                                                                : 'border-emerald-600 bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-500/10 focus:ring-emerald-500/20 focus:ring-4 outline-none cursor-pointer'
+                                                            }`}
+                                                        >
+                                                            <span>
+                                                                {isWaitlistOnly
+                                                                    ? `Fila de espera (Não há vagas de ${bookingPriority.toLowerCase()} disponíveis)`
+                                                                    : bookingDate 
+                                                                        ? `${new Date(bookingDate + 'T12:00:00').toLocaleDateString('pt-BR')}${bookingTime ? ` às ${bookingTime}` : ''}`
+                                                                        : 'Clique para Selecionar a Data e Horário no Calendário'}
+                                                            </span>
+                                                            <Calendar className={`w-4 h-4 ${isWaitlistOnly ? 'text-slate-400' : 'text-white'}`} />
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <div className="p-3 bg-amber-50 border border-amber-100 rounded-xl text-[11px] font-bold text-amber-800 flex items-center gap-2">
+                                                        <Info className="w-4 h-4 text-amber-600 shrink-0" />
+                                                        <span>A solicitação será direcionada automaticamente para a Fila de Espera.</span>
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
@@ -1542,30 +1570,32 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                                     <div className="flex justify-between items-start gap-3">
                                                         <span className="font-bold text-slate-400 shrink-0">Data e Hora Escolhida:</span>
                                                         <span className="font-black text-slate-800 text-right break-words">
-                                                            {isWaitlistOnly
+                                                            {!canSeeSlots || isWaitlistOnly
                                                                 ? 'Fila de Espera (Automático)'
                                                                 : bookingDate 
                                                                     ? `${new Date(bookingDate + 'T12:00:00').toLocaleDateString('pt-BR')}${bookingTime ? ` às ${bookingTime}` : ''}`
                                                                     : 'Aguardando seleção...'}
                                                         </span>
                                                     </div>
-                                                    <div className="flex justify-between items-center gap-3">
-                                                        <span className="font-bold text-slate-400 shrink-0">Vagas Disponíveis:</span>
-                                                        <span className={`font-black ${
-                                                            (!isWaitlistOnly && getAvailableSlots(selectedProcedure, bookingPriority, bookingDate) > 0) 
-                                                            ? 'text-emerald-600' 
-                                                            : 'text-rose-600'
-                                                        }`}>
-                                                            {isWaitlistOnly ? 0 : getAvailableSlots(selectedProcedure, bookingPriority, bookingDate)} vagas
-                                                        </span>
-                                                    </div>
+                                                    {canSeeSlots && (
+                                                        <div className="flex justify-between items-center gap-3">
+                                                            <span className="font-bold text-slate-400 shrink-0">Vagas Disponíveis:</span>
+                                                            <span className={`font-black ${
+                                                                (!isWaitlistOnly && getAvailableSlots(selectedProcedure, bookingPriority, bookingDate) > 0) 
+                                                                ? 'text-emerald-600' 
+                                                                : 'text-rose-600'
+                                                            }`}>
+                                                                {isWaitlistOnly ? 0 : getAvailableSlots(selectedProcedure, bookingPriority, bookingDate)} vagas
+                                                            </span>
+                                                        </div>
+                                                    )}
                                                     <div className="flex justify-between items-center gap-3">
                                                         <span className="font-bold text-slate-400 shrink-0">Prioridade:</span>
                                                         <span className={`font-black uppercase text-[10px] px-2 py-0.5 rounded ${
                                                             bookingPriority === 'Urgência' ? 'bg-rose-500 text-white shadow-sm' : 'bg-slate-100 text-slate-700'
                                                         }`}>{bookingPriority}</span>
                                                     </div>
-                                                    {isWaitlistOnly || getAvailableSlots(selectedProcedure, bookingPriority, bookingDate) <= 0 ? (
+                                                    {canSeeSlots && (isWaitlistOnly || getAvailableSlots(selectedProcedure, bookingPriority, bookingDate) <= 0) ? (
                                                         <div className="text-[9.5px] font-bold text-amber-600 bg-amber-50 border border-amber-100 p-2 rounded-xl mt-1.5 flex items-center gap-2 shadow-sm">
                                                             <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-500" />
                                                             <span>Sem vagas de {bookingPriority.toLowerCase()} disponíveis. Paciente irá para a fila de espera.</span>
@@ -1586,7 +1616,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                             <button
                                                 type="button"
                                                 onClick={() => onNavigate('consultas:novo-agendamento-revisao')}
-                                                disabled={!bookingDate && !isWaitlistOnly}
+                                                disabled={canSeeSlots && !bookingDate && !isWaitlistOnly}
                                                 className="px-6 py-2.5 bg-sky-600 hover:bg-sky-700 disabled:opacity-40 text-white font-extrabold rounded-xl shadow-lg shadow-sky-600/10 hover:shadow-sky-600/20 active:scale-95 transition-all text-xs uppercase tracking-widest flex items-center gap-2 cursor-pointer"
                                             >
                                                 Avançar para Revisão
@@ -1654,7 +1684,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                             <div>
                                                 <span className="block text-[8px] font-black text-slate-400 uppercase tracking-wider">Data do Atendimento</span>
                                                 <span className="text-xs font-bold text-slate-700">
-                                                    {isWaitlistOnly
+                                                    {!canSeeSlots || isWaitlistOnly
                                                         ? 'Fila de Espera (Registro Automático)'
                                                         : (bookingDate && new Date(bookingDate + 'T12:00:00').toLocaleDateString('pt-BR')) + (bookingTime ? ` às ${bookingTime}` : '')}
                                                 </span>
@@ -1671,11 +1701,11 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                             </div>
                                             <div>
                                                 <span className="block text-[8px] font-black text-slate-400 uppercase tracking-wider">Status Estimado</span>
-                                                {isWaitlistOnly ? (
+                                                {!canSeeSlots || isWaitlistOnly ? (
                                                     <span className="inline-block text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded mt-0.5 bg-amber-50 text-amber-700 border border-amber-100 font-extrabold animate-pulse">
                                                         Fila de Espera
                                                     </span>
-                                                ) : selectedProcedure && getAvailableSlots(selectedProcedure, bookingPriority, bookingDate) > 0 ? (
+                                                ) : selectedProcedure && canSeeSlots && getAvailableSlots(selectedProcedure, bookingPriority, bookingDate) > 0 ? (
                                                     <span className="inline-block text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded mt-0.5 bg-emerald-50 text-emerald-700 border border-emerald-100 font-extrabold">
                                                         Agendado
                                                     </span>
