@@ -21,7 +21,7 @@ import { getGlobalSettings } from '../../services/settingsService';
 import { uploadFile } from '../../services/storageService';
 import { TwoFactorModal } from '../TwoFactorModal';
 import { DiariasReportModal } from './DiariasReportModal';
-import { ImageCropModal } from '../common/ImageCropModal';
+import { DocumentScannerModal } from '../common/DocumentScannerModal';
 import { OperationQRCode } from '../common/OperationQRCode';
 import { performLocationCheckpointSync } from '../../services/locationTrackingService';
 
@@ -983,8 +983,8 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
       const relatorioBlocks = splitTextIntoBlocks(relatorioText, 4500);
       const numRelatorioPages = relatorioBlocks.length;
 
-      // Páginas dedicadas aos comprovantes (exatamente 4 por folha em tamanho padronizado)
-      const numComprovantesPages = totalComprovantes > 0 ? Math.ceil(totalComprovantes / 4) : 0;
+      // Páginas dedicadas aos comprovantes (exatamente 2 por folha em tamanho padronizado para maximizar legibilidade)
+      const numComprovantesPages = totalComprovantes > 0 ? Math.ceil(totalComprovantes / 2) : 0;
 
       const totalPages = 1 + numRelatorioPages + (totalComprovantes > 0 ? numComprovantesPages : 0);
 
@@ -1067,14 +1067,14 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
         `;
       }
 
-      // Gerar páginas exclusivas de comprovantes (exatamente 04 por folha em grade 2x2 padronizada)
+      // Gerar páginas exclusivas de comprovantes (exatamente 02 por folha em coluna vertical padronizada)
       let extraComprovantesPagesHtml = '';
       if (totalComprovantes > 0) {
         for (let ep = 0; ep < numComprovantesPages; ep++) {
           const currentPageNum = 1 + numRelatorioPages + 1 + ep;
           const isOverallLastPage = currentPageNum === totalPages;
-          const startIndex = ep * 4;
-          const pageCards = listComprovantes.slice(startIndex, startIndex + 4);
+          const startIndex = ep * 2;
+          const pageCards = listComprovantes.slice(startIndex, startIndex + 2);
           const cardsHtml = pageCards.map((c, i) => renderCard(c, startIndex + i)).join('');
 
           extraComprovantesPagesHtml += `
@@ -1298,17 +1298,17 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
               z-index: 100;
             }
             .comprovantes-grid {
-              display: grid;
-              grid-template-columns: repeat(2, 1fr);
-              gap: 14px;
-              margin-top: 2px;
+              display: flex;
+              flex-direction: column;
+              gap: 16px;
+              margin-top: 6px;
             }
             .comprovante-card {
               border: 1px solid #cbd5e1;
-              border-radius: 8px;
+              border-radius: 10px;
               overflow: hidden;
               background: #ffffff;
-              height: 350px;
+              height: 380px;
               display: flex;
               flex-direction: column;
               justify-content: space-between;
@@ -1319,7 +1319,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
               display: flex;
               align-items: center;
               justify-content: space-between;
-              padding: 6px 10px;
+              padding: 8px 12px;
               background: #f1f5f9;
               border-bottom: 1px solid #cbd5e1;
             }
@@ -1330,7 +1330,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
               font-family: monospace;
             }
             .comp-tipo {
-              font-size: 9pt;
+              font-size: 9.5pt;
               font-weight: 900;
               color: #0f172a;
               text-transform: uppercase;
@@ -1342,28 +1342,26 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
               text-overflow: ellipsis;
             }
             .comp-valor {
-              font-size: 9.5pt;
+              font-size: 10pt;
               font-weight: 900;
               color: #4f46e5;
             }
             .comp-img-wrap {
-              padding: 6px;
+              padding: 8px;
               display: flex;
               align-items: center;
               justify-content: center;
-              height: 280px;
-              min-height: 280px;
+              height: 310px;
+              min-height: 310px;
               background: #ffffff;
               overflow: hidden;
               position: relative;
             }
             .comp-img {
               max-width: 95%;
-              max-height: 250px;
+              max-height: 295px;
               object-fit: contain;
               border-radius: 4px;
-              transform: rotate(90deg) scale(1.35);
-              -webkit-transform: rotate(90deg) scale(1.35);
             }
             .comp-link {
               display: flex;
@@ -3888,13 +3886,13 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
         </div>
       )}
 
-      {/* Modal de Corte e Edição de Imagem */}
+      {/* Modal de Digitalização e Processamento Inteligente de Imagem */}
       {pendingCropFile && (
-        <ImageCropModal
+        <DocumentScannerModal
           imageFile={pendingCropFile}
-          onConfirm={(croppedFile) => {
+          onConfirm={(processedFile) => {
             setPendingCropFile(null);
-            processComprovanteUpload(croppedFile);
+            processComprovanteUpload(processedFile);
           }}
           onCancel={() => {
             setPendingCropFile(null);
