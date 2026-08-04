@@ -201,13 +201,14 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
 
   // Processa a imagem (Warp Perspective + Filtros)
   const processImage = async () => {
-    if (!imageRef.current || !imageSrc) return;
+    const imgElement = imageRef.current;
+    if (!imgElement || !imageSrc) return;
     setIsProcessing(true);
     setActiveTab('preview');
 
     setTimeout(() => {
       try {
-        const img = imageRef.current!;
+        const img = imgElement;
         const natW = img.naturalWidth;
         const natH = img.naturalHeight;
 
