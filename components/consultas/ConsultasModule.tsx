@@ -34,8 +34,8 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
     const canAccessAcompanhar = (currentUser.permissions?.includes('parent_consultas_acompanhar') || isAdmin) && isAcompanharActive;
     const canAccessDados = (currentUser.permissions?.includes('parent_consultas_dados') || isAdmin) && isDadosActive;
 
-    const showNovoAgendamento = (subView === 'novo-agendamento' || (subView?.startsWith('novo-agendamento') ?? false) || subView === 'definir-agenda' || subView === 'vagas-reservadas') && canAccessNovoAgendamento;
-    const showAcompanhar = subView === 'acompanhar' && canAccessAcompanhar;
+    const showNovoAgendamento = (subView === 'novo-agendamento' || (subView?.startsWith('novo-agendamento') ?? false) || subView === 'vagas-reservadas') && canAccessNovoAgendamento;
+    const showAcompanhar = (subView === 'acompanhar' || subView === 'definir-agenda') && canAccessAcompanhar;
     const showDados = (subView === 'dados' || (subView?.startsWith('dados') ?? false)) && canAccessDados;
     
     const isSubView = showNovoAgendamento || showAcompanhar || showDados;
@@ -152,6 +152,8 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
                         <AcompanharScreen
                             currentUser={currentUser}
                             onBack={() => onNavigate('consultas')}
+                            onNavigate={onNavigate}
+                            subView={subView}
                             appState={appState}
                         />
                     ) : showDados ? (
