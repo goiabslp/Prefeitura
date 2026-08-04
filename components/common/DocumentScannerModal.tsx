@@ -351,7 +351,11 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
             bgCanvas.height = destH;
             const bgCtx = bgCanvas.getContext('2d');
             if (bgCtx) {
-              bgCtx.filter = 'blur(16px)';
+              try {
+                bgCtx.filter = 'blur(16px)';
+              } catch (e) {
+                console.warn('Canvas filter blur não suportado pelo navegador:', e);
+              }
               bgCtx.drawImage(smallCanvas, 0, 0, destW, destH);
               
               const bgImageData = bgCtx.getImageData(0, 0, destW, destH);
@@ -461,10 +465,19 @@ export const DocumentScannerModal: React.FC<DocumentScannerModalProps> = ({
           (blob) => {
             if (blob) {
               const nameClean = imageFile.name ? imageFile.name.replace(/\.[^/.]+$/, "") : 'comprovante';
-              const file = new File([blob], `${nameClean}_digitalizado.jpg`, {
-                type: 'image/jpeg',
-                lastModified: Date.now()
-              });
+              let file: File;
+              try {
+                file = new File([blob], `${nameClean}_digitalizado.jpg`, {
+                  type: 'image/jpeg',
+                  lastModified: Date.now()
+                });
+              } catch (e) {
+                // Fallback para navegadores/WebView do iOS que não suportam o construtor new File com Blobs
+                const blobAsFile = blob as any;
+                blobAsFile.name = `${nameClean}_digitalizado.jpg`;
+                blobAsFile.lastModified = Date.now();
+                file = blobAsFile as File;
+              }
               
               const newUrl = URL.createObjectURL(file);
               setProcessedImageSrc(newUrl);
