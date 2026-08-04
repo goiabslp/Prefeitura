@@ -983,8 +983,8 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
       const relatorioBlocks = splitTextIntoBlocks(relatorioText, 4500);
       const numRelatorioPages = relatorioBlocks.length;
 
-      // Páginas dedicadas aos comprovantes (exatamente 2 por folha em tamanho padronizado para maximizar legibilidade)
-      const numComprovantesPages = totalComprovantes > 0 ? Math.ceil(totalComprovantes / 2) : 0;
+      // Páginas dedicadas aos comprovantes (grade de 2 colunas: 2 anexos por linha, até 4 por folha A4)
+      const numComprovantesPages = totalComprovantes > 0 ? Math.ceil(totalComprovantes / 4) : 0;
 
       const totalPages = 1 + numRelatorioPages + (totalComprovantes > 0 ? numComprovantesPages : 0);
 
@@ -1067,14 +1067,14 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
         `;
       }
 
-      // Gerar páginas exclusivas de comprovantes (exatamente 02 por folha em coluna vertical padronizada)
+      // Gerar páginas exclusivas de comprovantes (grade 2 colunas: 2 anexos por linha)
       let extraComprovantesPagesHtml = '';
       if (totalComprovantes > 0) {
         for (let ep = 0; ep < numComprovantesPages; ep++) {
           const currentPageNum = 1 + numRelatorioPages + 1 + ep;
           const isOverallLastPage = currentPageNum === totalPages;
-          const startIndex = ep * 2;
-          const pageCards = listComprovantes.slice(startIndex, startIndex + 2);
+          const startIndex = ep * 4;
+          const pageCards = listComprovantes.slice(startIndex, startIndex + 4);
           const cardsHtml = pageCards.map((c, i) => renderCard(c, startIndex + i)).join('');
 
           extraComprovantesPagesHtml += `
@@ -1298,17 +1298,17 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
               z-index: 100;
             }
             .comprovantes-grid {
-              display: flex;
-              flex-direction: column;
-              gap: 16px;
-              margin-top: 6px;
+              display: grid;
+              grid-template-columns: repeat(2, 1fr);
+              gap: 10px;
+              margin-top: 4px;
             }
             .comprovante-card {
               border: 1px solid #cbd5e1;
-              border-radius: 10px;
+              border-radius: 6px;
               overflow: hidden;
               background: #ffffff;
-              height: 380px;
+              height: 420px;
               display: flex;
               flex-direction: column;
               justify-content: space-between;
@@ -1319,49 +1319,65 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
               display: flex;
               align-items: center;
               justify-content: space-between;
-              padding: 8px 12px;
-              background: #f1f5f9;
-              border-bottom: 1px solid #cbd5e1;
+              padding: 3px 8px;
+              background: #f8fafc;
+              border-bottom: 1px solid #e2e8f0;
             }
             .comp-num {
-              font-size: 8.5pt;
+              font-size: 7.5pt;
               font-weight: 900;
               color: #64748b;
               font-family: monospace;
             }
             .comp-tipo {
-              font-size: 9.5pt;
+              font-size: 8pt;
               font-weight: 900;
               color: #0f172a;
               text-transform: uppercase;
               letter-spacing: 0.02em;
               flex: 1;
-              padding: 0 8px;
+              padding: 0 6px;
               white-space: nowrap;
               overflow: hidden;
               text-overflow: ellipsis;
             }
             .comp-valor {
-              font-size: 10pt;
+              font-size: 8.5pt;
               font-weight: 900;
               color: #4f46e5;
             }
             .comp-img-wrap {
-              padding: 8px;
+              padding: 1px;
               display: flex;
               align-items: center;
               justify-content: center;
-              height: 310px;
-              min-height: 310px;
+              flex: 1;
+              width: 100%;
+              height: 385px;
+              min-height: 385px;
               background: #ffffff;
               overflow: hidden;
               position: relative;
             }
             .comp-img {
-              max-width: 95%;
-              max-height: 295px;
+              width: 100%;
+              height: 100%;
+              max-width: 100%;
+              max-height: 100%;
               object-fit: contain;
-              border-radius: 4px;
+              border-radius: 2px;
+            }
+            .comp-filename {
+              padding: 2px 6px;
+              font-size: 7pt;
+              font-weight: 600;
+              color: #64748b;
+              background: #f8fafc;
+              border-top: 1px solid #f1f5f9;
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+              text-align: center;
             }
             .comp-link {
               display: flex;
