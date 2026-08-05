@@ -250,6 +250,7 @@ const mapLicitacaoProcessToOrder = (process: any): Order => {
         itens: process.itens || process.licitacao_itens, // Keep as undefined when not fetched yet
         finalDocumentUrl: process.assinatura ? 'true' : null,
         fase: process.fase,
+        checkin_finalizado: process.checkin_finalizado,
         resolucaoDescricao: process.resolucao_descricao,
         resolucaoNumero: process.resolucao_numero,
         fichaOrcamentaria: process.ficha_orcamentaria,

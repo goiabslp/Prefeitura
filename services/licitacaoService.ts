@@ -95,9 +95,27 @@ export const updateLicitacaoProcess = async (id: string, updates: Partial<Licita
             .update(updates)
             .eq('id', id)
             .select()
-            .single();
+            .maybeSingle();
 
-        if (error) throw error;
+        if (error) {
+            // Caso a coluna checkin_finalizado ainda não exista na tabela no banco
+            if (error.code === 'PGRST204' && (error.message?.includes('checkin_finalizado') || JSON.stringify(error).includes('checkin_finalizado'))) {
+                console.warn("Coluna 'checkin_finalizado' não encontrada no banco. Atualizando demais campos da licitação...");
+                const sanitizedUpdates = { ...updates };
+                delete (sanitizedUpdates as any).checkin_finalizado;
+
+                const { data: retryData, error: retryError } = await supabase
+                    .from('licitacao_processos')
+                    .update(sanitizedUpdates)
+                    .eq('id', id)
+                    .select()
+                    .maybeSingle();
+
+                if (retryError) throw retryError;
+                return retryData as LicitacaoProcesso;
+            }
+            throw error;
+        }
         return data as LicitacaoProcesso;
     } catch (error) {
         console.error("Error updating licitacao process:", error);

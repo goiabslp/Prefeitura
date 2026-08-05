@@ -20,6 +20,7 @@ export interface LicitacaoProcesso {
     criado_em: string;
     atualizado_em: string;
     fase?: string;
+    checkin_finalizado?: any;
     resolucao_descricao?: string;
     resolucao_numero?: string;
     ficha_orcamentaria?: string;

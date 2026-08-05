@@ -48,10 +48,14 @@ export const useUpdateLicitacaoProcess = () => {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: ({ id, updates }: { id: string; updates: Partial<LicitacaoProcesso> }) => licitacaoService.updateLicitacaoProcess(id, updates),
-        onSuccess: (data) => {
+        onSuccess: (data, variables) => {
+            queryClient.setQueriesData({ queryKey: licitacaoKeys.lists() }, (oldData: LicitacaoProcesso[] | undefined) => {
+                if (!oldData) return oldData;
+                return oldData.map(p => p.id === variables.id ? { ...p, ...variables.updates } : p);
+            });
             queryClient.invalidateQueries({ queryKey: licitacaoKeys.all });
-            if (data) {
-                queryClient.invalidateQueries({ queryKey: licitacaoKeys.process(data.id) });
+            if (variables?.id) {
+                queryClient.invalidateQueries({ queryKey: licitacaoKeys.process(variables.id) });
             }
         }
     });
