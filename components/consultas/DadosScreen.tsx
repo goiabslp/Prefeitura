@@ -385,16 +385,15 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
             return;
         }
 
-        // Validação local de duplicidade (mesmo nome, tipo e recurso)
+        // Validação local de duplicidade (mesmo nome e tipo)
         const isDuplicate = procedures.some(p => 
             p.name.trim().toUpperCase() === procName.trim().toUpperCase() &&
             p.type === procType &&
-            (p.recurso || 'Não Se Aplica') === procRecurso &&
             (!editingProc || p.id !== editingProc.id)
         );
 
         if (isDuplicate) {
-            setProcError('Já existe um procedimento cadastrado com o mesmo nome, tipo e recurso.');
+            setProcError('Já existe um procedimento cadastrado com o mesmo nome e tipo.');
             return;
         }
 
@@ -406,7 +405,7 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                     code: procCode,
                     type: procType,
                     status: procStatus,
-                    recurso: procRecurso
+                    recurso: 'Não Se Aplica'
                 });
             } else {
                 await db.createProcedimento({
@@ -416,14 +415,14 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                     total_quantity: 0,
                     available_quantity: 0,
                     status: procStatus,
-                    recurso: procRecurso
+                    recurso: 'Não Se Aplica'
                 });
             }
             setIsProcModalOpen(false);
             fetchTabContent();
         } catch (err: any) {
-            if (err.message && (err.message.includes('unique_procedimento_nome_tipo_recurso') || err.message.includes('unique constraint') || err.message.includes('duplicate key'))) {
-                setProcError('Já existe um procedimento cadastrado com o mesmo nome, tipo e recurso.');
+            if (err.message && (err.message.includes('unique_procedimento_nome_tipo') || err.message.includes('unique constraint') || err.message.includes('duplicate key'))) {
+                setProcError('Já existe um procedimento cadastrado com o mesmo nome e tipo.');
             } else {
                 setProcError(err.message || 'Erro ao salvar procedimento.');
             }
@@ -671,8 +670,16 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                 )}
 
                 {/* 3. PROCEDIMENTOS TAB */}
-                {activeTab === 'procedimentos' && (
-                    <div className="space-y-4">
+                {activeTab === 'procedimentos' && (() => {
+                    const filteredProcedures = procedures.filter(p =>
+                        p.name.toLowerCase().includes(procSearch.toLowerCase()) ||
+                        (p.code && p.code.toLowerCase().includes(procSearch.toLowerCase())) ||
+                        p.type.toLowerCase().includes(procSearch.toLowerCase()) ||
+                        (p.recurso && p.recurso.toLowerCase().includes(procSearch.toLowerCase()))
+                    );
+
+                    return (
+                        <div className="space-y-4">
                         {selectedProc ? (
                             /* DETALHES DO PROCEDIMENTO */
                             (() => {
@@ -869,16 +876,28 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                             /* LISTAGEM DE PROCEDIMENTOS */
                             <>
                                 <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-                                    <div className="relative w-full sm:max-w-md">
-                                        <input
-                                            type="text"
-                                            placeholder="Buscar exame ou consulta..."
-                                            className="w-full bg-white border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs font-semibold placeholder:text-slate-500 focus:outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/15 transition-all text-slate-900 shadow-sm"
-                                            value={procSearch}
-                                            onChange={(e) => setProcSearch(e.target.value)}
-                                        />
-                                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4" />
+                                    <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
+                                        <div className="relative w-full sm:w-72 md:w-80">
+                                            <input
+                                                type="text"
+                                                placeholder="Buscar exame ou consulta..."
+                                                className="w-full bg-white border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-xs font-semibold placeholder:text-slate-500 focus:outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/15 transition-all text-slate-900 shadow-sm"
+                                                value={procSearch}
+                                                onChange={(e) => setProcSearch(e.target.value)}
+                                            />
+                                            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4" />
+                                        </div>
+
+                                        {/* Badge do Número Total de Procedimentos Cadastrados */}
+                                        <div className="flex items-center gap-2 px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl shadow-sm">
+                                            <Activity className="w-4 h-4 text-sky-600 shrink-0" />
+                                            <span className="text-xs font-bold text-slate-600">Total Cadastrados:</span>
+                                            <span className="px-2.5 py-0.5 bg-sky-600 text-white rounded-lg text-xs font-black shadow-sm">
+                                                {procedures.length}
+                                            </span>
+                                        </div>
                                     </div>
+
                                     <button
                                         onClick={() => handleOpenProcModal()}
                                         className="w-full sm:w-auto px-4 py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-extrabold rounded-xl shadow-md hover:shadow-sky-500/10 active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-1.5"
@@ -1001,7 +1020,8 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                             </>
                         )}
                     </div>
-                )}
+                );
+            })()}
 
                 {/* 4. HISTORICO TAB */}
                 {activeTab === 'historico' && (
@@ -1392,36 +1412,22 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                                     />
                                 </div>
                             </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Recurso</label>
-                                    <select
-                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none transition-all text-xs font-semibold appearance-none cursor-pointer"
-                                        value={procRecurso}
-                                        onChange={(e) => setProcRecurso(e.target.value as 'Não Se Aplica' | 'FM' | 'PPI')}
-                                    >
-                                        <option value="Não Se Aplica">Não Se Aplica</option>
-                                        <option value="FM">FM</option>
-                                        <option value="PPI">PPI</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Status</label>
-                                    <div className="flex gap-4 pt-3">
-                                        {['Ativo', 'Inativo'].map(st => (
-                                            <label key={st} className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700">
-                                                <input
-                                                    type="radio"
-                                                    name="procStatus"
-                                                    value={st}
-                                                    checked={procStatus === st}
-                                                    onChange={() => setProcStatus(st as 'Ativo' | 'Inativo')}
-                                                    className="w-4 h-4 text-sky-600 border-slate-300 focus:ring-sky-500"
-                                                />
-                                                {st}
-                                            </label>
-                                        ))}
-                                    </div>
+                            <div>
+                                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Status</label>
+                                <div className="flex gap-4 pt-2">
+                                    {['Ativo', 'Inativo'].map(st => (
+                                        <label key={st} className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700">
+                                            <input
+                                                type="radio"
+                                                name="procStatus"
+                                                value={st}
+                                                checked={procStatus === st}
+                                                onChange={() => setProcStatus(st as 'Ativo' | 'Inativo')}
+                                                className="w-4 h-4 text-sky-600 border-slate-300 focus:ring-sky-500"
+                                            />
+                                            {st}
+                                        </label>
+                                    ))}
                                 </div>
                             </div>
                             <div className="pt-4 border-t border-slate-50 flex justify-end gap-3 shrink-0">
