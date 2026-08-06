@@ -10,7 +10,7 @@ import { licitacaoKeys } from './hooks/useLicitacaoModule';
 
 
 import {
-  User, Order, AppState, BlockType, Attachment, Person, Sector, Job,
+  User, UserRole, AppPermission, Order, AppState, BlockType, Attachment, Person, Sector, Job,
   Vehicle, VehicleBrand, VehicleSchedule, Signature, StatusMovement
 } from './types';
 import html2canvas from 'html2canvas';
@@ -321,7 +321,54 @@ const App: React.FC = () => {
     }
   };
 
-  const { user: currentUser, signIn, signOut, refreshUser, loading: authLoading } = useAuth();
+  const { user: rawUser, signIn, signOut, refreshUser, loading: authLoading } = useAuth();
+
+  const currentUser = React.useMemo(() => {
+    if (!rawUser) return null;
+    const isUserAdmin = rawUser.role === 'admin' || rawUser.realRole === 'admin';
+    const activeTestRole = rawUser.testRole || (isUserAdmin ? (localStorage.getItem(`test_role_${rawUser.id}`) as UserRole) : null);
+
+    if (!isUserAdmin || !activeTestRole) {
+      return {
+        ...rawUser,
+        realRole: rawUser.role
+      };
+    }
+
+    let testPermissions: AppPermission[] = rawUser.permissions || [];
+    if (activeTestRole === 'admin') {
+      testPermissions = [
+        'parent_criar_oficio', 'parent_admin', 'parent_compras', 'parent_diarias', 'parent_diarias_editor',
+        'parent_diarias_historico', 'parent_diarias_novo_evento', 'parent_diarias_lancamentos', 'parent_diarias_gestores',
+        'parent_diarias_viajar', 'parent_frotas', 'parent_agendamento_veiculo', 'parent_abastecimento',
+        'parent_abastecimento_novo', 'parent_abastecimento_gestao', 'parent_abastecimento_dashboard', 'parent_agricultura',
+        'parent_obras', 'parent_tarefas', 'parent_calendario', 'parent_rh', 'parent_rh_horas_extras', 'parent_rh_historico',
+        'parent_projetos', 'parent_marketing', 'parent_compras_itens', 'parent_compras_dados', 'parent_licitacao',
+        'parent_licitacao_processos', 'parent_licitacao_triagem', 'parent_consultas', 'parent_consultas_novo_agendamento',
+        'parent_consultas_acompanhar', 'parent_consultas_dados', 'parent_farmacia', 'parent_farmacia_criar',
+        'parent_farmacia_editar', 'parent_farmacia_excluir', 'parent_farmacia_aprovar', 'parent_farmacia_consultar',
+        'parent_farmacia_retirar', 'parent_farmacia_estoque', 'parent_farmacia_dashboard', 'parent_frotas_dashboard',
+        'parent_frotas_leve', 'parent_frotas_pesado', 'parent_frotas_acessorio', 'parent_upload'
+      ];
+    } else if (activeTestRole === 'compras') {
+      testPermissions = ['parent_criar_oficio', 'parent_compras', 'parent_compras_itens', 'parent_compras_dados', 'parent_rh', 'parent_calendario', 'parent_abastecimento'];
+    } else if (activeTestRole === 'licitacao') {
+      testPermissions = ['parent_criar_oficio', 'parent_licitacao', 'parent_licitacao_processos', 'parent_licitacao_triagem', 'parent_rh', 'parent_calendario'];
+    } else if (activeTestRole === 'marketing') {
+      testPermissions = ['parent_criar_oficio', 'parent_marketing', 'parent_rh', 'parent_calendario'];
+    } else if (activeTestRole === 'collaborator') {
+      testPermissions = ['parent_criar_oficio', 'parent_rh', 'parent_calendario'];
+    }
+
+    return {
+      ...rawUser,
+      role: activeTestRole,
+      testRole: activeTestRole,
+      realRole: rawUser.role,
+      permissions: testPermissions
+    };
+  }, [rawUser]);
+
   const { moduleStatus } = useSystemSettings();
   const isModuleActive = (key: string) => moduleStatus[key] !== false;
   const permissions = currentUser?.permissions || [];
@@ -3665,8 +3712,16 @@ const App: React.FC = () => {
     setCurrentView('licitacao-all');
   };
 
-  // Helper for self-updates or other minor updates
   const handleUpdateUserInApp = async (u: User) => {
+    // Handle testRole local persistence
+    if (u.testRole !== undefined) {
+      if (u.testRole) {
+        localStorage.setItem(`test_role_${u.id}`, u.testRole);
+      } else {
+        localStorage.removeItem(`test_role_${u.id}`);
+      }
+    }
+
     // PREVENT DB ERROR: Do not try to update mock users (non-UUID ids) in Supabase
     // Real Supabase IDs are UUIDs (36 chars). Mock IDs are 'user_guilherme', etc.
     const isMockUser = u.id.length < 30 || u.id.startsWith('user_');
@@ -3677,10 +3732,10 @@ const App: React.FC = () => {
       return;
     }
 
-    const { error } = await supabase.from('profiles').update({
+    const updatePayload: any = {
       name: u.name,
       username: u.username,
-      role: u.role,
+      role: u.realRole || u.role,
       sector: u.sector,
       job_title: u.jobTitle,
       email: u.email,
@@ -3698,7 +3753,9 @@ const App: React.FC = () => {
       avatar: u.avatar,
       sector_id: u.sectorId,
       job_id: u.jobId
-    }).eq('id', u.id);
+    };
+
+    const { error } = await supabase.from('profiles').update(updatePayload).eq('id', u.id);
 
     if (u.password) {
       const { error: rpcError } = await supabase.rpc('update_user_password', { user_id: u.id, new_password: u.password });
@@ -3714,10 +3771,10 @@ const App: React.FC = () => {
       alert("Erro ao atualizar perfil: " + error.message);
     } else {
       setUsers(p => p.map(us => us.id === u.id ? u : us));
-      if (currentUser && currentUser.id === u.id) {
+      if (rawUser && rawUser.id === u.id) {
         await refreshUser();
       }
-      if (u.status === 'blocked' && currentUser && currentUser.id !== u.id) {
+      if (u.status === 'blocked' && rawUser && rawUser.id !== u.id) {
         await supabase.channel('global_events').send({
           type: 'broadcast',
           event: 'user-blocked',
@@ -3837,6 +3894,35 @@ const App: React.FC = () => {
                     );
                   })()}
                   <main className="flex-1 h-full overflow-hidden flex flex-col relative bg-slate-50">
+                    {currentUser?.testRole && (
+                      <div className="bg-amber-500 text-white px-4 py-2 flex items-center justify-between text-xs font-bold shadow-md z-50 shrink-0">
+                        <div className="flex items-center gap-2">
+                          <span className="flex h-2.5 w-2.5 relative">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
+                          </span>
+                          <span>
+                            🧪 MODO DE TESTE ATIVO: Perfil <strong>{currentUser.testRole.toUpperCase()}</strong> (Perfil Real: Administrador)
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (currentUser) {
+                                handleUpdateUserInApp({
+                                  ...currentUser,
+                                  testRole: null
+                                });
+                              }
+                            }}
+                            className="px-3 py-1 bg-white text-amber-900 font-extrabold rounded-lg hover:bg-amber-50 transition-colors text-[11px] uppercase tracking-wider shadow"
+                          >
+                            Encerrar Teste
+                          </button>
+                        </div>
+                      </div>
+                    )}
                     {currentView === 'admin' && (adminTab === null || adminTab === 'dashboard') ? (
                       <div className="flex-1 overflow-y-auto custom-scrollbar p-8">
                         <AdminDashboard

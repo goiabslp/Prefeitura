@@ -9,7 +9,7 @@ interface AdminMenuProps {
 }
 
 export const AdminMenu: React.FC<AdminMenuProps> = ({ currentUser, onTabChange }) => {
-  const isAdmin = currentUser.role === 'admin' || currentUser.permissions.includes('parent_admin');
+  const isAdmin = currentUser.role === 'admin' || currentUser.realRole === 'admin' || currentUser.permissions.includes('parent_admin');
 
   const adminModules = [
     {

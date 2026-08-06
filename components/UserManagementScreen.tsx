@@ -5,7 +5,7 @@ import { User, UserRole, Signature, AppPermission, Job, Sector, Person } from '.
 import {
   Plus, Search, Edit2, Trash2, ShieldCheck, Users, Save, X, Key,
   PenTool, LayoutGrid, User as UserIcon, CheckCircle2, Gavel, ShoppingCart, Briefcase, Network,
-  Eye, EyeOff, RotateCcw, AlertTriangle, Clock, Lock, Copy, Check, Info, Trash, ToggleRight, ArrowLeft, RefreshCw, Megaphone
+  Eye, EyeOff, RotateCcw, AlertTriangle, Clock, Lock, Copy, Check, Info, Trash, ToggleRight, ArrowLeft, RefreshCw, Megaphone, FlaskConical
 } from 'lucide-react';
 
 const generateStrongPassword = () => {
@@ -93,7 +93,7 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
   });
   const [toast, setToast] = useState<{ show: boolean, message: string, type: 'success' | 'error' }>({ show: false, message: '', type: 'success' });
 
-  const isAdmin = currentUser.role === 'admin';
+  const isAdmin = currentUser.role === 'admin' || currentUser.realRole === 'admin';
 
   const [formData, setFormData] = useState<Partial<User>>({
     name: '',
@@ -442,6 +442,13 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                           {user.role}
                         </span>
 
+                        {user.testRole && (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200 shadow-sm">
+                            <FlaskConical className="w-3 h-3 text-amber-500 animate-pulse" />
+                            Teste: {user.testRole}
+                          </span>
+                        )}
+
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-slate-100/50 text-slate-500 border border-slate-200/50">
                           {user.jobTitle || 'Sem Cargo'}
                         </span>
@@ -599,6 +606,58 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                     })}
                   </div>
                 </div>
+
+                {/* Duplicação: Tipo de Perfil Teste (Apenas para Usuários Administradores) */}
+                {isAdmin && (
+                  <div className="space-y-4 pt-4 border-t border-slate-100">
+                    <div className="flex items-center justify-between">
+                      <label className={labelClass}>Tipo de Perfil Teste</label>
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                        <FlaskConical className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
+                        Apenas para Administradores
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      Selecione um tipo de perfil para testar as permissões e visualizações do sistema como se fosse outro usuário.
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3">
+                      {[
+                        { id: '', label: 'Sem Teste', desc: 'Usar perfil real.', icon: <RotateCcw className="w-5 h-5" />, color: 'slate' },
+                        { id: 'admin', label: 'Admin', desc: 'Testar como Admin.', icon: <ShieldCheck className="w-5 h-5" />, color: 'indigo' },
+                        { id: 'compras', label: 'Compras', desc: 'Testar Compras.', icon: <ShoppingCart className="w-5 h-5" />, color: 'emerald' },
+                        { id: 'licitacao', label: 'Licitação', desc: 'Testar Licitação.', icon: <Gavel className="w-5 h-5" />, color: 'blue' },
+                        { id: 'marketing', label: 'Marketing', desc: 'Testar Marketing.', icon: <Megaphone className="w-5 h-5" />, color: 'fuchsia' },
+                        { id: 'collaborator', label: 'Colaborador', desc: 'Testar Colaborador.', icon: <UserIcon className="w-5 h-5" />, color: 'slate' }
+                      ].map((tRole) => {
+                        const isSelected = (!formData.testRole && tRole.id === '') || formData.testRole === tRole.id;
+
+                        return (
+                          <button
+                            key={tRole.id || 'none'}
+                            type="button"
+                            onClick={() => setFormData({ ...formData, testRole: (tRole.id as UserRole) || null })}
+                            className={`relative p-3.5 rounded-2xl border-2 text-left transition-all duration-300 group cursor-pointer ${isSelected
+                              ? `bg-${tRole.color}-50 border-${tRole.color}-600 ring-4 ring-${tRole.color}-600/10 shadow-sm`
+                              : 'bg-white border-slate-100 hover:border-slate-300'
+                              }`}
+                          >
+                            <div className="flex items-start justify-between">
+                              <div className={`p-2 rounded-xl transition-colors ${isSelected ? `bg-${tRole.color}-600 text-white` : 'bg-slate-100 text-slate-400 group-hover:bg-amber-100 group-hover:text-amber-600'
+                                }`}>
+                                {tRole.icon}
+                              </div>
+                              {isSelected && <CheckCircle2 className={`w-4 h-4 text-${tRole.color}-600 animate-fade-in`} />}
+                            </div>
+                            <div className="mt-2.5">
+                              <h4 className={`font-bold text-xs ${isSelected ? `text-${tRole.color}-900` : 'text-slate-800'}`}>{tRole.label}</h4>
+                              <p className="text-[10px] mt-0.5 leading-tight text-slate-500">{tRole.desc}</p>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-slate-100">
                   <div className="md:col-span-2">

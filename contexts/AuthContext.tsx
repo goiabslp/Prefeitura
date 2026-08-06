@@ -94,6 +94,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     username: data.username || email.split('@')[0], // Fallback username
                     name: data.name || '',
                     role: (data.role as UserRole) || 'collaborator',
+                    testRole: data.test_role || (localStorage.getItem(`test_role_${data.id}`) as UserRole) || undefined,
                     sector: data.sector,
                     sectorId: data.sector_id,
                     jobTitle: data.job_title,

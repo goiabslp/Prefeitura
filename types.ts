@@ -250,6 +250,8 @@ export interface User {
   mustChangePassword?: boolean;
   name: string;
   role: UserRole;
+  testRole?: UserRole | null;
+  realRole?: UserRole;
   sector?: string;
   sectorId?: string;
   jobTitle?: string;
