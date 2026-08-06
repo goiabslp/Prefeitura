@@ -365,11 +365,11 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
       };
     }
 
-    if (evento.status === 'aguardando_aprovacao' || evento.status === 'aguardando_gestor') {
+    if (evento.status === 'em_analise' || evento.status === 'aguardando_aprovacao' || evento.status === 'aguardando_gestor') {
       return { 
         allowed: false, 
         isPendingApproval: true,
-        reason: 'Esta solicitação de viagem está aguardando aprovação do seu gestor ou o administrador. O botão de início será liberado automaticamente após a aprovação.' 
+        reason: 'Esta solicitação de viagem está Em Análise pelo seu gestor ou administrador. O botão de início será liberado automaticamente após a aprovação.' 
       };
     }
 
@@ -947,10 +947,10 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
                             <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200 animate-pulse shrink-0">
                               Em Percurso
                             </span>
-                          ) : (evt.status === 'aguardando_aprovacao' || evt.status === 'aguardando_gestor') ? (
+                          ) : (evt.status === 'em_analise' || evt.status === 'aguardando_aprovacao' || evt.status === 'aguardando_gestor') ? (
                             <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200 flex items-center gap-1 shrink-0">
                               <Lock className="w-3 h-3 text-amber-600" />
-                              <span>Aguardando Aprovação</span>
+                              <span>Em Análise</span>
                             </span>
                           ) : (
                             <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-100 shrink-0">
@@ -1062,10 +1062,10 @@ export const ViajarScreen: React.FC<ViajarScreenProps> = ({ currentUser, onBack 
                           <Timer className="w-4 h-4 text-emerald-600" />
                           <span>Em Percurso</span>
                         </span>
-                      ) : (selectedEvento.status === 'aguardando_aprovacao' || selectedEvento.status === 'aguardando_gestor') ? (
+                      ) : (selectedEvento.status === 'em_analise' || selectedEvento.status === 'aguardando_aprovacao' || selectedEvento.status === 'aguardando_gestor') ? (
                         <span className="px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200 flex items-center gap-1.5">
                           <Lock className="w-4 h-4 text-amber-600" />
-                          <span>Aguardando Aprovação</span>
+                          <span>Em Análise</span>
                         </span>
                       ) : (
                         <span className="px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-100">

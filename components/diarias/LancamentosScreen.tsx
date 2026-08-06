@@ -933,7 +933,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
   const handleGestorApprove = async () => {
     if (!selectedEvento) return;
 
-    if (selectedEvento.status === 'aguardando_aprovacao') {
+    if (selectedEvento.status === 'em_analise' || selectedEvento.status === 'aguardando_aprovacao') {
       setIsSubmitting(true);
       try {
         await updateDiariaEvento(selectedEvento.id, {
@@ -2095,7 +2095,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
 
                   const isCurrentUserGestor = evento.gestor_transferido_cargo ? isTransferredGestor : (isConfiguredGestor || isAdmin);
 
-                  const canApproveAguardandoAprovacao = evento.status === 'aguardando_aprovacao' && (
+                  const canApproveAguardandoAprovacao = (evento.status === 'em_analise' || evento.status === 'aguardando_aprovacao') && (
                     hasGestor ? (isConfiguredGestor || isAdmin) : isAdmin
                   );
 
@@ -2794,7 +2794,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                 <span>Salvar Alterações da Viagem</span>
               </button>
 
-              {(selectedEvento.status === 'aguardando_gestor' || selectedEvento.status === 'aguardando_aprovacao' || !selectedEvento.status) && (
+              {(selectedEvento.status === 'aguardando_gestor' || selectedEvento.status === 'em_analise' || selectedEvento.status === 'aguardando_aprovacao' || !selectedEvento.status) && (
                 <button 
                   onClick={() => setIsRejectModalOpen(true)}
                   className="px-4 sm:px-5 py-2.5 sm:py-3 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 font-bold text-xs uppercase tracking-wider rounded-xl sm:rounded-2xl transition-colors w-full sm:w-auto text-center"
@@ -2803,14 +2803,18 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                 </button>
               )}
 
-              {(selectedEvento.status === 'aguardando_gestor' || !selectedEvento.status) && (
+              {(selectedEvento.status === 'aguardando_gestor' || selectedEvento.status === 'em_analise' || selectedEvento.status === 'aguardando_aprovacao' || !selectedEvento.status) && (
                 <button 
                   onClick={handleGestorApprove}
                   disabled={isSubmitting || isUploading}
                   className="px-4 sm:px-6 py-2.5 sm:py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white font-black text-xs uppercase tracking-widest rounded-xl sm:rounded-2xl transition-all shadow-lg shadow-indigo-600/20 active:scale-95 flex items-center justify-center gap-2 w-full sm:w-auto whitespace-nowrap"
                 >
                   {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
-                  <span>{transferGestorCargo ? `Transferir` : 'Aprovar / Enviar'}</span>
+                  <span>
+                    {selectedEvento.status === 'em_analise' || selectedEvento.status === 'aguardando_aprovacao'
+                      ? 'Aprovar Viagem'
+                      : transferGestorCargo ? `Transferir` : 'Aprovar / Enviar'}
+                  </span>
                 </button>
               )}
             </div>

@@ -1061,11 +1061,8 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
     if (!isFormValid || !currentUser) return;
     setIsLoading(true);
     
-    const hasReturn = !!returnDateTime.trim() && isGestorOrAdmin;
-
-    const initialStatus = isGestorOrAdmin
-      ? (hasReturn ? 'aguardando_gestor' : 'viagem_programada')
-      : 'aguardando_aprovacao';
+    const hasReturn = !!returnDateTime.trim();
+    const initialStatus = 'em_analise';
 
     try {
       // Cria uma viagem individualizada para cada servidor selecionado
