@@ -1,8 +1,9 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { ArrowLeft, TrendingUp, Droplet, DollarSign, Truck, Settings, LayoutDashboard, Building2, MapPin, CreditCard, Fuel, Save, Plus, Calendar, ChevronDown, History, BarChart3, Search, ChevronRight, FileText, Filter, FileSpreadsheet, Download, CalendarDays, Factory, Car, AlertTriangle, Trash2, CheckSquare, Check, X, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, TrendingUp, Droplet, DollarSign, Truck, Settings, LayoutDashboard, Building2, MapPin, CreditCard, Fuel, Save, Plus, Calendar, ChevronDown, History, BarChart3, Search, ChevronRight, FileText, Filter, FileSpreadsheet, Download, CalendarDays, Factory, Car, AlertTriangle, Trash2, CheckSquare, Check, X, ShieldAlert, Users, UserCheck, User } from 'lucide-react';
 import { ModernSelect } from '../common/ModernSelect';
 import { ModernDateInput } from '../common/ModernDateInput';
+import { MonthYearPicker } from '../common/MonthYearPicker';
 import { AbastecimentoService, AbastecimentoRecord, AbastecimentoReportHistory, ScheduledPriceUpdate, GasStation, FuelConfig } from '../../services/abastecimentoService';
 import { getVehicles, getSectors } from '../../services/entityService';
 import { AbastecimentoReportPDF } from './AbastecimentoReportPDF';
@@ -29,7 +30,7 @@ interface AbastecimentoDashboardProps {
     refreshTrigger?: number;
 }
 
-type TabType = 'overview' | 'vehicle' | 'sector' | 'reports' | 'lancamentos' | 'config';
+type TabType = 'overview' | 'vehicle' | 'sector' | 'driver' | 'reports' | 'lancamentos' | 'config';
 
 interface VehicleStat {
     id: string; // The key used in records (r.vehicle)
@@ -719,8 +720,24 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
     const [activeTab, setActiveTab] = useState<TabType>('overview');
     const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+    const [periodMode, setPeriodMode] = useState<'monthly' | 'daily'>('monthly');
+    const [customStartDate, setCustomStartDate] = useState<string>(() => {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        return `${year}-${month}-01`;
+    });
+    const [customEndDate, setCustomEndDate] = useState<string>(() => {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    });
     const [vehicleSearchTerm, setVehicleSearchTerm] = useState('');
     const [selectedVehicle, setSelectedVehicle] = useState<string | null>(null);
+    const [driverSearchTerm, setDriverSearchTerm] = useState('');
+    const [selectedDriver, setSelectedDriver] = useState<string | null>(null);
     const [allRecords, setAllRecords] = useState<AbastecimentoRecord[]>([]);
     const [showPrintPreview, setShowPrintPreview] = useState(false);
     const [reportMode, setReportMode] = useState<'simplified' | 'complete' | 'listagem' | 'empenhado'>('complete');
@@ -822,6 +839,9 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
         } else if (activeTab === 'reports' || activeTab === 'lancamentos') {
             startDateStr = appliedFilters.startDate;
             endDateStr = appliedFilters.endDate;
+        } else if (periodMode === 'daily') {
+            startDateStr = customStartDate;
+            endDateStr = customEndDate;
         } else {
             // Dashboard: período de 6 meses relativo a selectedMonth e selectedYear
             // Data inicial: 5 meses antes de selectedMonth
@@ -850,10 +870,10 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
         loadReportHistory();
     }, []);
 
-    // Recarregar registros de abastecimento quando mudar de mês, ano, aba ou quando filtros forem aplicados
+    // Recarregar registros de abastecimento quando mudar de mês, ano, período diário, aba ou quando filtros forem aplicados
     useEffect(() => {
         loadRecords();
-    }, [selectedMonth, selectedYear, activeTab, appliedFilters]);
+    }, [selectedMonth, selectedYear, periodMode, customStartDate, customEndDate, activeTab, appliedFilters]);
 
     // Registrar o canal do Supabase para atualizar em tempo real
     useEffect(() => {
@@ -871,7 +891,7 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
         return () => {
             supabase.removeChannel(channel);
         };
-    }, [selectedMonth, selectedYear, activeTab, appliedFilters]);
+    }, [selectedMonth, selectedYear, periodMode, customStartDate, customEndDate, activeTab, appliedFilters]);
 
     // Efeito para tratar o gatilho de atualização manual
     useEffect(() => {
@@ -927,6 +947,10 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
     const stats = useMemo(() => {
         // Current filtered records
         const filtered = allRecords.filter(r => {
+            if (periodMode === 'daily' && customStartDate && customEndDate) {
+                const rDateStr = r.date.substring(0, 10);
+                return rDateStr >= customStartDate && rDateStr <= customEndDate;
+            }
             const date = new Date(r.date);
             return date.getMonth() === selectedMonth && date.getFullYear() === selectedYear;
         });
@@ -1203,7 +1227,7 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
             costAlerts,
             COLORS
         };
-    }, [selectedMonth, selectedYear, allRecords, vehicles, sectors]);
+    }, [selectedMonth, selectedYear, periodMode, customStartDate, customEndDate, allRecords, vehicles, sectors]);
 
     const sectorStats = useMemo(() => {
         // Find vehicles belonging to the selected sector
@@ -1221,6 +1245,10 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
 
         // Records for current month filtered by sector
         const currentMonthRecords = allRecords.filter(r => {
+            if (periodMode === 'daily' && customStartDate && customEndDate) {
+                const rDateStr = r.date.substring(0, 10);
+                return rDateStr >= customStartDate && rDateStr <= customEndDate && sectorVehiclePlateSet.has(r.vehicle);
+            }
             const date = new Date(r.date);
             return date.getMonth() === selectedMonth &&
                 date.getFullYear() === selectedYear &&
@@ -1347,7 +1375,77 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
             driverRankingData,
             activeVehiclesCount: uniqueVehiclesThisMonth
         };
-    }, [selectedMonth, selectedYear, selectedSector, allRecords, vehicles, sectors]);
+    }, [selectedMonth, selectedYear, periodMode, customStartDate, customEndDate, selectedSector, allRecords, vehicles, sectors]);
+
+    const driverStats = useMemo(() => {
+        const currentPeriodRecords = allRecords.filter(r => {
+            if (periodMode === 'daily' && customStartDate && customEndDate) {
+                const rDateStr = r.date.substring(0, 10);
+                return rDateStr >= customStartDate && rDateStr <= customEndDate;
+            }
+            const date = new Date(r.date);
+            return date.getMonth() === selectedMonth && date.getFullYear() === selectedYear;
+        });
+
+        const groups: Record<string, AbastecimentoRecord[]> = {};
+        currentPeriodRecords.forEach(r => {
+            const driverName = (r.driver && r.driver.trim()) ? r.driver.trim().toUpperCase() : 'NÃO IDENTIFICADO';
+            if (!groups[driverName]) groups[driverName] = [];
+            groups[driverName].push(r);
+        });
+
+        const list = Object.entries(groups).map(([driverName, recs]) => {
+            const totalCost = recs.reduce((sum, r) => sum + r.cost, 0);
+            const totalLiters = recs.reduce((sum, r) => sum + r.liters, 0);
+            const count = recs.length;
+
+            const sortedByDate = [...recs].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+            const lastRefuel = sortedByDate[0]?.date || '';
+
+            const vehiclesUsed = Array.from(new Set(recs.map(r => r.vehicle)));
+
+            const matchedPerson = persons.find(p => p.name?.toUpperCase() === driverName);
+            let sectorName = 'Geral';
+            if (matchedPerson?.sectorId) {
+                const s = sectors.find(sec => sec.id === matchedPerson.sectorId);
+                if (s) sectorName = s.name;
+            } else if (vehiclesUsed.length > 0) {
+                const matchedV = vehicles.find(v => v.plate === vehiclesUsed[0] || `${v.model} - ${v.brand}` === vehiclesUsed[0]);
+                if (matchedV?.sectorId) {
+                    const s = sectors.find(sec => sec.id === matchedV.sectorId);
+                    if (s) sectorName = s.name;
+                }
+            }
+
+            let efficiencySum = 0;
+            let efficiencyCount = 0;
+            recs.forEach(r => {
+                const eff = (r as any).efficiency;
+                if (eff && eff > 0) {
+                    efficiencySum += eff;
+                    efficiencyCount++;
+                }
+            });
+            const avgKmL = efficiencyCount > 0 ? efficiencySum / efficiencyCount : 0;
+
+            return {
+                name: driverName,
+                personId: matchedPerson?.id,
+                cpf: matchedPerson?.cpf,
+                sectorName,
+                totalCost,
+                totalLiters,
+                count,
+                lastRefuel,
+                vehiclesUsed,
+                avgKmL,
+                records: sortedByDate
+            };
+        });
+
+        list.sort((a, b) => b.totalCost - a.totalCost);
+        return list;
+    }, [allRecords, selectedMonth, selectedYear, periodMode, customStartDate, customEndDate, persons, sectors, vehicles]);
 
     const reportData = useMemo(() => {
         // Pre-process all records to include derived sector/plate once
@@ -2597,6 +2695,402 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
         );
     };
 
+    const renderDriverDetail = () => {
+        const driverData = driverStats.find(d => d.name === selectedDriver);
+
+        if (!driverData) {
+            return (
+                <div className="bg-white p-8 rounded-2xl text-center">
+                    <p className="text-slate-500 font-bold">Motorista não encontrado.</p>
+                    <button onClick={() => setSelectedDriver(null)} className="mt-4 text-emerald-600 font-bold hover:underline">Voltar para lista</button>
+                </div>
+            );
+        }
+
+        const evolutionData = driverData.records.map(r => ({
+            date: new Date(r.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+            cost: r.cost,
+            liters: r.liters,
+            vehicle: r.vehicle
+        })).reverse();
+
+        const fuelBreakdown: Record<string, number> = {};
+        driverData.records.forEach(r => {
+            const fuel = r.fuelType.split(' - ')[0];
+            fuelBreakdown[fuel] = (fuelBreakdown[fuel] || 0) + r.cost;
+        });
+
+        const fuelPieData = Object.entries(fuelBreakdown).map(([name, value]) => ({ name, value }));
+        const PIE_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899'];
+
+        return (
+            <div className="space-y-6 animate-fade-in pb-16">
+                {/* Header & Back Button */}
+                <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                        <button
+                            onClick={() => setSelectedDriver(null)}
+                            className="p-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl transition-all flex items-center justify-center font-bold text-xs gap-2 cursor-pointer active:scale-95"
+                        >
+                            <ArrowLeft className="w-5 h-5 text-slate-600" />
+                            <span>Voltar para Lista</span>
+                        </button>
+                        <div className="w-14 h-14 bg-emerald-100 border border-emerald-200 rounded-2xl flex items-center justify-center text-emerald-700 font-black text-xl shrink-0">
+                            {driverData.name.substring(0, 2)}
+                        </div>
+                        <div>
+                            <div className="flex items-center gap-3">
+                                <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tight">{driverData.name}</h1>
+                                <span className="bg-emerald-100 text-emerald-800 text-xs font-bold px-3 py-1 rounded-full uppercase">
+                                    🏢 {driverData.sectorName}
+                                </span>
+                            </div>
+                            <p className="text-xs text-slate-500 font-medium mt-1">
+                                Relatório individual de consumo, veículos operados e histórico de abastecimentos
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                {/* KPI Cards Grid for Individual Driver */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="bg-white p-5 rounded-[1.5rem] border border-slate-200 shadow-sm">
+                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Total Gasto</span>
+                        <h3 className="text-2xl font-black text-emerald-900 mt-1">{formatCurrency(driverData.totalCost)}</h3>
+                        <p className="text-xs text-slate-400 font-medium mt-1">{driverData.count} abastecimentos</p>
+                    </div>
+
+                    <div className="bg-white p-5 rounded-[1.5rem] border border-slate-200 shadow-sm">
+                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Volume Total</span>
+                        <h3 className="text-2xl font-black text-blue-900 mt-1">{formatNumber(driverData.totalLiters, 1)} L</h3>
+                        <p className="text-xs text-slate-400 font-medium mt-1">Total de litros</p>
+                    </div>
+
+                    <div className="bg-white p-5 rounded-[1.5rem] border border-slate-200 shadow-sm">
+                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Eficiência Média</span>
+                        <h3 className="text-2xl font-black text-cyan-900 mt-1">
+                            {driverData.avgKmL > 0 ? `${formatNumber(driverData.avgKmL, 1)} km/L` : '--'}
+                        </h3>
+                        <p className="text-xs text-slate-400 font-medium mt-1">Rendimento médio do condutor</p>
+                    </div>
+
+                    <div className="bg-white p-5 rounded-[1.5rem] border border-slate-200 shadow-sm">
+                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Veículos Utilizados</span>
+                        <h3 className="text-2xl font-black text-indigo-900 mt-1">{driverData.vehiclesUsed.length} veículos</h3>
+                        <p className="text-xs text-slate-400 font-medium mt-1">Frota operada pelo motorista</p>
+                    </div>
+                </div>
+
+                {/* Charts Section for Driver */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Evolution Chart */}
+                    <div className="lg:col-span-2 bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm">
+                        <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider mb-6 flex items-center gap-2">
+                            <TrendingUp className="w-4 h-4 text-emerald-600" />
+                            Histórico de Gastos por Abastecimento
+                        </h3>
+                        <div className="h-[280px] w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <AreaChart data={evolutionData}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                    <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#64748b' }} />
+                                    <YAxis tick={{ fontSize: 10, fill: '#64748b' }} />
+                                    <Tooltip
+                                        content={({ active, payload }) => {
+                                            if (active && payload && payload.length) {
+                                                const data = payload[0].payload;
+                                                return (
+                                                    <div className="bg-white p-3 rounded-xl shadow-xl border border-slate-100 text-xs">
+                                                        <p className="font-bold text-slate-500 mb-1">{data.date} - {data.vehicle}</p>
+                                                        <p className="font-black text-emerald-600">{formatCurrency(data.cost)}</p>
+                                                        <p className="font-bold text-blue-600">{data.liters} Litros</p>
+                                                    </div>
+                                                );
+                                            }
+                                            return null;
+                                        }}
+                                    />
+                                    <Area type="monotone" dataKey="cost" stroke="#10b981" fill="#d1fae5" strokeWidth={3} />
+                                </AreaChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
+
+                    {/* Fuel Breakdown Pie Chart */}
+                    <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm">
+                        <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider mb-6 flex items-center gap-2">
+                            <Fuel className="w-4 h-4 text-blue-600" />
+                            Gasto por Combustível
+                        </h3>
+                        <div className="h-[220px] w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                    <Pie data={fuelPieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70} label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}>
+                                        {fuelPieData.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                                        ))}
+                                    </Pie>
+                                    <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Complete Refuels Table for Driver */}
+                <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
+                    <div className="p-6 border-b border-slate-100">
+                        <h3 className="text-base font-black text-slate-900 uppercase">Histórico de Abastecimentos</h3>
+                        <p className="text-xs text-slate-500 font-medium">Registros detalhados realizados por este condutor</p>
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-xs text-left">
+                            <thead className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider">
+                                <tr>
+                                    <th className="px-6 py-4">Data / Hora</th>
+                                    <th className="px-6 py-4">Nota Fiscal</th>
+                                    <th className="px-6 py-4">Veículo</th>
+                                    <th className="px-6 py-4">Posto</th>
+                                    <th className="px-6 py-4">Combustível</th>
+                                    <th className="px-6 py-4">Litros</th>
+                                    <th className="px-6 py-4">KM / Odômetro</th>
+                                    <th className="px-6 py-4">Consumo</th>
+                                    <th className="px-6 py-4 text-right">Valor Total</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 font-medium">
+                                {driverData.records.map((r) => (
+                                    <tr key={r.id} className="hover:bg-slate-50/80 transition-colors">
+                                        <td className="px-6 py-4 font-bold text-slate-800">
+                                            {new Date(r.date).toLocaleDateString('pt-BR')}
+                                            <span className="block text-[10px] text-slate-400 font-normal">
+                                                {new Date(r.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 font-bold text-slate-600">
+                                            {getDisplayInvoiceNumber(r.invoiceNumber) || '-'}
+                                        </td>
+                                        <td className="px-6 py-4 font-bold text-slate-700 uppercase">
+                                            🚗 {r.vehicle}
+                                        </td>
+                                        <td className="px-6 py-4 text-slate-600">
+                                            {r.station}
+                                        </td>
+                                        <td className="px-6 py-4 font-bold text-cyan-600">
+                                            {r.fuelType.split(' - ')[0]}
+                                        </td>
+                                        <td className="px-6 py-4 font-bold text-blue-600">
+                                            {formatNumber(r.liters, 1)} L
+                                        </td>
+                                        <td className="px-6 py-4 font-bold text-slate-700">
+                                            {formatNumber(r.odometer, 2)} km
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            {(r as any).efficiency > 0 ? (
+                                                <span className="font-bold text-emerald-600">{formatNumber((r as any).efficiency, 1)} km/L</span>
+                                            ) : (
+                                                <span className="text-slate-300 italic">--</span>
+                                            )}
+                                        </td>
+                                        <td className="px-6 py-4 font-bold text-emerald-600 text-right text-sm">
+                                            {formatCurrency(r.cost)}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    const renderDriverView = () => {
+        if (selectedDriver) {
+            return renderDriverDetail();
+        }
+
+        const filteredDrivers = driverStats.filter(d =>
+            d.name.toLowerCase().includes(driverSearchTerm.toLowerCase()) ||
+            d.sectorName.toLowerCase().includes(driverSearchTerm.toLowerCase()) ||
+            (d.cpf && d.cpf.includes(driverSearchTerm))
+        );
+
+        const totalDriverSpend = driverStats.reduce((acc, d) => acc + d.totalCost, 0);
+        const totalDriverLiters = driverStats.reduce((acc, d) => acc + d.totalLiters, 0);
+        const topDriver = driverStats[0];
+
+        return (
+            <div className="space-y-6 animate-fade-in pb-12">
+                {/* Top KPI Cards for Drivers */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="bg-white p-5 rounded-[1.5rem] border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
+                        <div className="flex items-center gap-3 mb-2">
+                            <div className="p-2 bg-emerald-50 rounded-xl text-emerald-600">
+                                <Users className="w-5 h-5" />
+                            </div>
+                            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Motoristas Ativos</span>
+                        </div>
+                        <h3 className="text-2xl font-black text-slate-900">{driverStats.length} condutores</h3>
+                        <p className="text-[10px] text-slate-400 font-medium mt-1">Com abastecimentos no período</p>
+                    </div>
+
+                    <div className="bg-white p-5 rounded-[1.5rem] border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
+                        <div className="flex items-center gap-3 mb-2">
+                            <div className="p-2 bg-blue-50 rounded-xl text-blue-600">
+                                <DollarSign className="w-5 h-5" />
+                            </div>
+                            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Gasto Total Condutores</span>
+                        </div>
+                        <h3 className="text-2xl font-black text-blue-900">{formatCurrency(totalDriverSpend)}</h3>
+                        <p className="text-[10px] text-slate-400 font-medium mt-1">{formatNumber(totalDriverLiters)} Litros abastecidos</p>
+                    </div>
+
+                    <div className="bg-white p-5 rounded-[1.5rem] border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
+                        <div className="flex items-center gap-3 mb-2">
+                            <div className="p-2 bg-amber-50 rounded-xl text-amber-600">
+                                <UserCheck className="w-5 h-5" />
+                            </div>
+                            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Maior Consumo</span>
+                        </div>
+                        <h3 className="text-lg font-black text-slate-900 truncate" title={topDriver?.name || 'Nenhum'}>
+                            {topDriver?.name || 'N/A'}
+                        </h3>
+                        <p className="text-xs font-bold text-amber-600 mt-0.5">{topDriver ? formatCurrency(topDriver.totalCost) : 'R$ 0,00'}</p>
+                    </div>
+
+                    <div className="bg-white p-5 rounded-[1.5rem] border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
+                        <div className="flex items-center gap-3 mb-2">
+                            <div className="p-2 bg-cyan-50 rounded-xl text-cyan-600">
+                                <BarChart3 className="w-5 h-5" />
+                            </div>
+                            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Média Eficiência</span>
+                        </div>
+                        <h3 className="text-2xl font-black text-cyan-900">
+                            {driverStats.length > 0
+                                ? formatNumber(driverStats.reduce((acc, d) => acc + d.avgKmL, 0) / driverStats.length, 1) + ' km/L'
+                                : '--'}
+                        </h3>
+                        <p className="text-[10px] text-slate-400 font-medium mt-1">Média entre motoristas</p>
+                    </div>
+                </div>
+
+                {/* Search and Header bar for Drivers List */}
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white p-4 sm:p-6 rounded-[1.5rem] border border-slate-200 shadow-sm">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center text-emerald-600">
+                            <Users className="w-5 h-5" />
+                        </div>
+                        <div>
+                            <h2 className="text-lg font-black text-slate-900 uppercase">Gestão e Histórico de Motoristas</h2>
+                            <p className="text-xs text-slate-500 font-medium">Selecione um motorista para ver o relatório de consumo detalhado</p>
+                        </div>
+                    </div>
+
+                    <div className="relative w-full sm:w-80">
+                        <input
+                            type="text"
+                            placeholder="Buscar motorista ou setor..."
+                            value={driverSearchTerm}
+                            onChange={(e) => setDriverSearchTerm(e.target.value)}
+                            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:border-cyan-500 focus:bg-white transition-all"
+                        />
+                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    </div>
+                </div>
+
+                {/* Drivers Cards Grid */}
+                {filteredDrivers.length === 0 ? (
+                    <div className="bg-white p-12 rounded-[2rem] border-2 border-dashed border-slate-200 text-center">
+                        <Users className="w-16 h-16 text-slate-200 mx-auto mb-4" />
+                        <h3 className="text-lg font-bold text-slate-400 uppercase tracking-wider">Nenhum motorista encontrado</h3>
+                        <p className="text-slate-500 text-xs mt-1">Não há abastecimentos atribuídos a motoristas no período selecionado.</p>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 wide:grid-cols-2 xl:grid-cols-3 gap-6">
+                        {filteredDrivers.map((d, index) => (
+                            <div
+                                key={d.name}
+                                onClick={() => setSelectedDriver(d.name)}
+                                className="group bg-white rounded-2xl border border-slate-200 p-6 shadow-sm hover:shadow-xl hover:border-emerald-300 transition-all duration-300 cursor-pointer relative overflow-hidden flex flex-col justify-between"
+                            >
+                                <div className="absolute top-0 right-0 p-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <ChevronRight className="w-5 h-5 text-emerald-500" />
+                                </div>
+
+                                <div>
+                                    <div className="flex items-start gap-4 mb-4">
+                                        <div className="w-12 h-12 bg-emerald-50 border border-emerald-100 rounded-2xl flex items-center justify-center text-emerald-600 shrink-0 font-black text-lg">
+                                            {d.name.substring(0, 2)}
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <div className="flex items-center gap-2">
+                                                <h3 className="text-base font-black text-slate-900 uppercase truncate" title={d.name}>{d.name}</h3>
+                                                {index === 0 && (
+                                                    <span className="bg-amber-100 text-amber-700 text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider">
+                                                        Top 1
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <span className="inline-block mt-1 bg-slate-100 text-slate-600 text-[10px] font-bold px-2 py-0.5 rounded-lg uppercase">
+                                                🏢 {d.sectorName}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-3 py-3 border-y border-slate-100 my-4 text-xs">
+                                        <div>
+                                            <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Valor Gasto</span>
+                                            <span className="text-base font-black text-emerald-600">{formatCurrency(d.totalCost)}</span>
+                                        </div>
+                                        <div>
+                                            <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Volume</span>
+                                            <span className="text-base font-black text-blue-600">{formatNumber(d.totalLiters, 1)} L</span>
+                                        </div>
+                                        <div>
+                                            <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Abastecimentos</span>
+                                            <span className="font-bold text-slate-700">{d.count} registros</span>
+                                        </div>
+                                        <div>
+                                            <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider">Média</span>
+                                            <span className="font-bold text-cyan-600">{d.avgKmL > 0 ? `${formatNumber(d.avgKmL, 1)} km/L` : '--'}</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Vehicles driven by this driver */}
+                                    <div>
+                                        <span className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-2">Veículos Operados ({d.vehiclesUsed.length})</span>
+                                        <div className="flex flex-wrap gap-1">
+                                            {d.vehiclesUsed.slice(0, 3).map((v, i) => (
+                                                <span key={i} className="text-[10px] font-bold bg-slate-50 border border-slate-200 text-slate-600 px-2 py-1 rounded-md uppercase">
+                                                    🚗 {v}
+                                                </span>
+                                            ))}
+                                            {d.vehiclesUsed.length > 3 && (
+                                                <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-1.5 py-1 rounded-md">
+                                                    +{d.vehiclesUsed.length - 3}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-xs">
+                                    <span className="text-[10px] font-medium text-slate-400">
+                                        Último: {d.lastRefuel ? new Date(d.lastRefuel).toLocaleDateString('pt-BR') : '--'}
+                                    </span>
+                                    <span className="font-bold text-emerald-600 group-hover:translate-x-1 transition-transform flex items-center gap-1">
+                                        Relatório Completo &rarr;
+                                    </span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+        );
+    };
+
     const handleUpdatePaymentStatus = async (historyId: string, newStatus: string, recordIds?: string[]) => {
         try {
             await AbastecimentoService.updateReportPaymentStatus(historyId, newStatus, recordIds || []);
@@ -3594,24 +4088,29 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
                     </div>
 
                     <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
-                        {/* Month/Year Selector */}
-                        <div className="flex items-center gap-3">
-                            <div className="w-40">
-                                <ModernSelect
-                                    value={selectedMonth}
-                                    onChange={(val) => setSelectedMonth(Number(val))}
-                                    options={months.map((m, idx) => ({ value: idx, label: m }))}
-                                    icon={CalendarDays}
-                                />
-                            </div>
-                            <div className="w-36">
-                                <ModernSelect
-                                    value={selectedYear}
-                                    onChange={(val) => setSelectedYear(Number(val))}
-                                    options={[2024, 2025, 2026].map(y => ({ value: y, label: String(y) }))}
-                                    icon={Calendar}
-                                />
-                            </div>
+                        {/* Seletor Unificado de Período (Mensal / Diário por Intervalo de Datas) */}
+                        <div className="w-full sm:w-80">
+                            <MonthYearPicker
+                                selectedMonth={selectedMonth}
+                                selectedYear={selectedYear}
+                                onChange={(m, y) => {
+                                    setSelectedMonth(m);
+                                    setSelectedYear(y);
+                                }}
+                                periodMode={periodMode}
+                                startDate={customStartDate}
+                                endDate={customEndDate}
+                                onPeriodModeChange={(mode) => setPeriodMode(mode)}
+                                onDateRangeChange={(start, end) => {
+                                    setCustomStartDate(start);
+                                    setCustomEndDate(end);
+                                }}
+                                onReset={() => {
+                                    setPeriodMode('monthly');
+                                    setSelectedMonth(new Date().getMonth());
+                                    setSelectedYear(new Date().getFullYear());
+                                }}
+                            />
                         </div>
 
                         {/* Tab Navigation */}
@@ -3645,6 +4144,16 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
                             >
                                 <Factory className="w-3.5 h-3.5" />
                                 Setor
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('driver')}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all duration-300 ${activeTab === 'driver'
+                                    ? 'bg-white text-emerald-600 shadow-sm ring-1 ring-black/5'
+                                    : 'text-slate-500 hover:text-slate-700'
+                                    }`}
+                            >
+                                <Users className="w-3.5 h-3.5" />
+                                Motoristas
                             </button>
                             <button
                                 onClick={() => setActiveTab('reports')}
@@ -3687,6 +4196,7 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
                     {activeTab === 'overview' && renderOverview()}
                     {activeTab === 'vehicle' && renderVehicleView()}
                     {activeTab === 'sector' && renderSectorView()}
+                    {activeTab === 'driver' && renderDriverView()}
                     {activeTab === 'reports' && renderReportsView()}
                     {activeTab === 'lancamentos' && renderLancamentosView()}
                     {activeTab === 'config' && user?.role === 'admin' && <ConfigPanel fuelTypes={fuelTypes} gasStations={gasStations as any} />}

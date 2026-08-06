@@ -155,6 +155,7 @@ const VIEW_TO_PATH: Record<string, string> = {
   'abastecimento:new': '/Abastecimento/NovoAbastecimento',
   'abastecimento:management': '/Abastecimento/GestaoAbastecimento',
   'abastecimento:dashboard': '/Abastecimento/DashboardAbastecimento',
+  'abastecimento:dashboard:motorista': '/Abastecimento/DashboardAbastecimento/Motoristas',
   'abastecimento': '/Abastecimento',
   'agricultura': '/Agricultura',
   'obras': '/Obras',
