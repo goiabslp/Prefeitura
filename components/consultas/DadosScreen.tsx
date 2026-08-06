@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { User, ConsultaPaciente, ConsultaProcedimento, ConsultaAgendamento, ConsultaVaga } from '../../types';
 import { ArrowLeft, Users, Calendar, Settings, BarChart3, Plus, Edit2, Search, Check, AlertTriangle, Loader2, History, X, ChevronLeft, ChevronRight, Activity, Stethoscope, Sparkles, Trash2, ShieldCheck, UserCheck, FileSpreadsheet, TrendingUp, UserCog } from 'lucide-react';
 import * as db from '../../services/consultasService';
+import { seedDefaultProcedures } from '../../services/procedimentosSeed';
 import { ResponsiveContainer, AreaChart, XAxis, YAxis, Tooltip, Area, CartesianGrid } from 'recharts';
 import { PacientesTab, formatPatientName } from '../common/PacientesTab';
 
@@ -459,6 +460,37 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
         setIsProcModalOpen(true);
     };
 
+    const handleClearAllProcedures = async () => {
+        if (!window.confirm('ATENÇÃO: Tem certeza que deseja apagar TODOS os procedimentos cadastrados? Esta ação deixará a lista zerada.')) return;
+        setLoading(true);
+        try {
+            for (const proc of procedures) {
+                await db.deleteProcedimento(proc.id);
+            }
+            setProcedures([]);
+            fetchTabContent();
+        } catch (err: any) {
+            console.error('Erro ao limpar procedimentos:', err);
+            alert('Erro ao excluir procedimentos.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleSeedProcedures = async () => {
+        setLoading(true);
+        try {
+            const count = await seedDefaultProcedures();
+            await fetchTabContent();
+            alert(`${count} procedimentos padrão cadastrados com sucesso!`);
+        } catch (err: any) {
+            console.error('Erro ao popular procedimentos:', err);
+            alert(err.message || 'Erro ao cadastrar procedimentos padrão.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const filteredProcedures = procedures.filter(p => 
         p.name.toLowerCase().includes(procSearch.toLowerCase()) ||
         (p.code && p.code.includes(procSearch))
@@ -898,12 +930,23 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                                         </div>
                                     </div>
 
-                                    <button
-                                        onClick={() => handleOpenProcModal()}
-                                        className="w-full sm:w-auto px-4 py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-extrabold rounded-xl shadow-md hover:shadow-sky-500/10 active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-1.5"
-                                    >
-                                        <Plus className="w-4 h-4" /> Novo Procedimento
-                                    </button>
+                                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                                        {procedures.length > 0 && isAdmin && (
+                                            <button
+                                                onClick={handleClearAllProcedures}
+                                                className="px-3.5 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 font-extrabold rounded-xl text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all shadow-xs"
+                                                title="Apagar todos os procedimentos do sistema"
+                                            >
+                                                <Trash2 className="w-4 h-4 text-rose-600" /> Zerar Lista
+                                            </button>
+                                        )}
+                                        <button
+                                            onClick={() => handleOpenProcModal()}
+                                            className="w-full sm:w-auto px-4 py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-extrabold rounded-xl shadow-md hover:shadow-sky-500/10 active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-1.5"
+                                        >
+                                            <Plus className="w-4 h-4" /> Novo Procedimento
+                                        </button>
+                                    </div>
                                 </div>
 
                                 {filteredProcedures.length > 0 ? (
@@ -1015,7 +1058,30 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                                         })}
                                     </div>
                                 ) : (
-                                    <div className="text-center text-xs font-bold text-slate-400 py-12">Nenhum exame ou consulta cadastrado.</div>
+                                    <div className="text-center py-12 p-8 bg-white border border-dashed border-slate-200 rounded-3xl space-y-4">
+                                        <Activity className="w-12 h-12 text-sky-500 mx-auto opacity-75" />
+                                        <div className="space-y-1">
+                                            <h4 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">Nenhum procedimento cadastrado</h4>
+                                            <p className="text-xs text-slate-500 max-w-md mx-auto">Você pode popular automaticamente a lista completa com todos os 122 procedimentos padrão (Consultas, Exames e Cirurgias com seus respectivos códigos de 4 dígitos) ou cadastrar individualmente.</p>
+                                        </div>
+                                        <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                                            <button
+                                                onClick={handleSeedProcedures}
+                                                disabled={loading}
+                                                className="px-5 py-3 bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-700 hover:to-indigo-700 disabled:opacity-50 text-white font-extrabold text-xs uppercase tracking-wider rounded-2xl shadow-lg shadow-sky-500/20 active:scale-95 transition-all flex items-center gap-2"
+                                            >
+                                                <Sparkles className="w-4 h-4 text-amber-300" />
+                                                <span>Cadastrar Lista Padrão (122 Procedimentos)</span>
+                                            </button>
+                                            <button
+                                                onClick={() => handleOpenProcModal()}
+                                                className="px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs uppercase tracking-wider rounded-2xl transition-all flex items-center gap-2"
+                                            >
+                                                <Plus className="w-4 h-4" />
+                                                <span>Cadastrar Manualmente</span>
+                                            </button>
+                                        </div>
+                                    </div>
                                 )}
                             </>
                         )}
