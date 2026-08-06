@@ -353,20 +353,33 @@ export const checkAndAutoUpdateStatuses = async (schedules: VehicleSchedule[]): 
     const updates: Promise<any>[] = [];
 
     for (const schedule of schedules) {
-        if (schedule.status === 'cancelado') continue;
+        if (schedule.status === 'cancelado' || schedule.status === 'concluido') continue;
 
         let newStatus: ScheduleStatus | null = null;
         const departure = new Date(schedule.departureDateTime);
         const ret = schedule.returnDateTime ? new Date(schedule.returnDateTime) : null;
 
-        if (schedule.status === 'confirmado' && now >= departure) {
-            newStatus = 'em_curso';
+        if (now > departure) {
+            if (schedule.status === 'pendente') {
+                newStatus = 'cancelado';
+            } else if (schedule.status === 'confirmado') {
+                newStatus = 'em_curso';
+            } else if (schedule.status === 'em_curso' && ret && now >= ret) {
+                newStatus = 'concluido';
+            }
         } else if (schedule.status === 'em_curso' && ret && now >= ret) {
             newStatus = 'concluido';
         }
 
         if (newStatus) {
-            updates.push(updateScheduleStatus(schedule.id, newStatus));
+            if (newStatus === 'cancelado') {
+                updates.push(updateScheduleStatus(schedule.id, newStatus, {
+                    reason: 'Cancelado automaticamente: Data de saída expirada (anterior à data atual).',
+                    cancelledBy: 'Sistema'
+                }));
+            } else {
+                updates.push(updateScheduleStatus(schedule.id, newStatus));
+            }
         }
     }
 

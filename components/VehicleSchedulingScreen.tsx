@@ -975,6 +975,7 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
           onBack={() => handleSubViewChange('menu')}
           currentUserId={currentUserId}
           userRole={currentUserRole}
+          currentUserSector={currentUserSector}
         />
       )}
       {activeSubView === 'approvals' && canViewApprovals && (

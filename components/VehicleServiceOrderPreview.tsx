@@ -344,34 +344,45 @@ export const VehicleServiceOrderPreview: React.FC<VehicleServiceOrderPreviewProp
                             <div className="html2pdf__page-break" style={{ pageBreakBefore: 'always' }} />
 
                             <PageWrapper state={previewState} pageIndex={1} totalPages={2} isGenerating={isGenerating}>
-                                <div className="flex flex-col gap-3 mt-1 relative">
-                                    <h3 className="text-[10pt] font-black text-slate-800 uppercase tracking-widest text-center border-b border-slate-200 pb-2">
+                                <div className="flex flex-col gap-2 mt-0.5 relative">
+                                    <h3 className="text-[9pt] font-black text-slate-800 uppercase tracking-widest text-center border-b border-slate-200 pb-1">
                                         CHECKLIST DO VEÍCULO
                                     </h3>
 
-                                    {/* Hora de Entrada e Entrega */}
-                                    <div className="grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded-xl border border-slate-200">
-                                        <div className="flex items-center justify-between px-2">
-                                            <span className="text-[8pt] font-black text-slate-500 uppercase tracking-wider">Hora de Entrada no Veículo:</span>
-                                            <span className="text-[9pt] font-mono font-bold text-slate-700">______ : ______ h</span>
+                                    {/* Hora de Entrada, Entrega e Odômetros */}
+                                    <div className="grid grid-cols-2 gap-y-3 gap-x-4 bg-slate-50/90 p-3.5 pt-4 rounded-xl border border-slate-200 border-t-2 border-t-slate-400 mt-2">
+                                        <div className="flex items-center justify-between px-1.5 whitespace-nowrap">
+                                            <span className="text-[6.5pt] font-black text-slate-600 uppercase tracking-wider shrink-0 whitespace-nowrap">Hora de Entrada no Veículo:</span>
+                                            <span className="text-[7.5pt] font-mono font-bold text-slate-700 ml-2 whitespace-nowrap">______ : ______ h</span>
                                         </div>
-                                        <div className="flex items-center justify-between px-2 border-l border-slate-200">
-                                            <span className="text-[8pt] font-black text-slate-500 uppercase tracking-wider">Hora de Entrega do Veículo:</span>
-                                            <span className="text-[9pt] font-mono font-bold text-slate-700">______ : ______ h</span>
+
+                                        <div className="flex items-center justify-between px-1.5 border-l border-slate-200 whitespace-nowrap">
+                                            <span className="text-[6.5pt] font-black text-slate-600 uppercase tracking-wider shrink-0 whitespace-nowrap">Hora de Entrega do Veículo:</span>
+                                            <span className="text-[7.5pt] font-mono font-bold text-slate-700 ml-2 whitespace-nowrap">______ : ______ h</span>
+                                        </div>
+
+                                        <div className="flex items-center justify-between px-1.5 pt-2.5 border-t border-slate-200 whitespace-nowrap">
+                                            <span className="text-[6.5pt] font-black text-slate-600 uppercase tracking-wider shrink-0 whitespace-nowrap">Odômetro Inicial (Km):</span>
+                                            <span className="text-[7.5pt] font-mono font-bold text-slate-700 ml-2 whitespace-nowrap">______________ Km</span>
+                                        </div>
+
+                                        <div className="flex items-center justify-between px-1.5 pt-2.5 border-t border-l border-slate-200 whitespace-nowrap">
+                                            <span className="text-[6.5pt] font-black text-slate-600 uppercase tracking-wider shrink-0 whitespace-nowrap">Odômetro Final (Km):</span>
+                                            <span className="text-[7.5pt] font-mono font-bold text-slate-700 ml-2 whitespace-nowrap">______________ Km</span>
                                         </div>
                                     </div>
 
                                     {/* Tabela do Checklist */}
-                                    <div className="border border-slate-200 rounded-xl overflow-hidden mt-1 bg-white">
+                                    <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
                                         <table className="w-full text-left border-collapse">
                                             <thead>
-                                                <tr className="bg-slate-100 border-b border-slate-200 text-[6pt] font-black uppercase tracking-widest text-slate-500">
-                                                    <th className="p-1.5 pl-4">Item Verificado</th>
-                                                    <th className="p-1.5 text-center w-16">SIM</th>
-                                                    <th className="p-1.5 text-center w-28">NÃO ADEQUADO</th>
+                                                <tr className="bg-slate-100 border-b border-slate-200 text-[5.5pt] font-black uppercase tracking-widest text-slate-500">
+                                                    <th className="py-1 px-3">Item Verificado</th>
+                                                    <th className="py-1 text-center w-14">SIM</th>
+                                                    <th className="py-1 text-center w-24">NÃO ADEQUADO</th>
                                                 </tr>
                                             </thead>
-                                            <tbody className="divide-y divide-slate-100 text-[7pt] text-slate-700 font-bold">
+                                            <tbody className="divide-y divide-slate-100 text-[6.5pt] text-slate-700 font-bold">
                                                 {[
                                                     "Combustível suficiente",
                                                     "Óleo do motor",
@@ -392,21 +403,26 @@ export const VehicleServiceOrderPreview: React.FC<VehicleServiceOrderPreviewProp
                                                     "Ausência de avarias aparentes"
                                                 ].map((item, index) => (
                                                     <tr key={index} className="hover:bg-slate-50/50">
-                                                        <td className="p-1 pl-4 uppercase font-bold text-slate-800">{item}</td>
-                                                        <td className="p-1 text-center text-slate-300 text-lg font-light">☐</td>
-                                                        <td className="p-1 text-center text-slate-300 text-lg font-light">☐</td>
+                                                        <td className="py-0.5 px-3 uppercase font-bold text-slate-800">{item}</td>
+                                                        <td className="py-0.5 text-center text-slate-300 text-sm font-light">☐</td>
+                                                        <td className="py-0.5 text-center text-slate-300 text-sm font-light">☐</td>
                                                     </tr>
                                                 ))}
                                             </tbody>
                                         </table>
-                                    </div>
+                                     </div>
 
-                                    {/* Assinatura */}
-                                    <div className="mt-4 pt-6 border-t border-dashed border-slate-200 flex flex-col items-center">
-                                        <p className="text-[8pt] font-black text-slate-600 uppercase tracking-widest">
-                                            Assinatura do Motorista: ___________________________________________
-                                        </p>
-                                    </div>
+                                     {/* Assinaturas com 15 linhas de espaçamento em relação ao checklist */}
+                                     <div className="mt-14 pt-4 border-t border-dashed border-slate-300 grid grid-cols-2 gap-6 text-center">
+                                         <div>
+                                             <div className="border-b border-slate-400 w-44 mx-auto mb-1"></div>
+                                             <p className="text-[7pt] font-black text-slate-700 uppercase tracking-wider">Assinatura do Condutor</p>
+                                         </div>
+                                         <div>
+                                             <div className="border-b border-slate-400 w-44 mx-auto mb-1"></div>
+                                             <p className="text-[7pt] font-black text-slate-700 uppercase tracking-wider">Visto do Responsável / Frota</p>
+                                         </div>
+                                     </div>
                                 </div>
                             </PageWrapper>
                         </div>
