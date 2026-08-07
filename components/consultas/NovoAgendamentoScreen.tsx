@@ -1342,17 +1342,39 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                     <input
                                         type="text"
                                         placeholder="Pesquisar exame ou consulta por nome ou código..."
-                                        className="w-full bg-slate-50/70 border border-slate-200/80 rounded-2xl pl-12 pr-4 py-3.5 text-xs font-semibold focus:bg-white focus:outline-none focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 transition-all text-slate-900 shadow-inner"
+                                        className="w-full bg-slate-50/70 border border-slate-200/80 rounded-2xl pl-12 pr-10 py-3.5 text-xs font-semibold focus:bg-white focus:outline-none focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 transition-all text-slate-900 shadow-inner"
                                         value={procedureQuery}
                                         onChange={(e) => setProcedureQuery(e.target.value)}
                                     />
                                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4.5 h-4.5" />
+                                    {procedureQuery && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setProcedureQuery('')}
+                                            className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 rounded-full transition-all hover:bg-slate-100"
+                                            title="Limpar pesquisa"
+                                        >
+                                            <X className="w-4 h-4" />
+                                        </button>
+                                    )}
                                 </div>
 
-                                {/* Lista Completa de Exames/Procedimentos */}
+                                {/* Lista de Exames/Procedimentos filtrados apenas mediante pesquisa */}
                                 <div className="flex-1 overflow-y-auto border border-slate-100 rounded-2xl bg-slate-50/20 p-3 custom-scrollbar min-h-0">
-                                    {filteredProcedures.length > 0 ? (
-                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                                    {procedureQuery.trim() === '' ? (
+                                        <div className="h-full flex flex-col items-center justify-center text-slate-400 p-8 text-center animate-fade-in">
+                                            <div className="w-14 h-14 bg-sky-50 text-sky-600 rounded-2xl flex items-center justify-center mb-3 shadow-sm border border-sky-100/60">
+                                                <Search className="w-7 h-7" />
+                                            </div>
+                                            <p className="text-xs font-black uppercase tracking-wider text-slate-700 mb-1">
+                                                Pesquisar Procedimento
+                                            </p>
+                                            <p className="text-[11px] font-semibold text-slate-400 max-w-sm leading-relaxed">
+                                                Digite o nome ou código do exame/consulta no campo acima para exibir os resultados correspondentes.
+                                            </p>
+                                        </div>
+                                    ) : filteredProcedures.length > 0 ? (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 animate-fade-in">
                                             {filteredProcedures.map((proc) => {
                                                 const hasSlots = proc.available_quantity > 0;
                                                 const isCritical = proc.available_quantity > 0 && proc.available_quantity <= 5;
@@ -1399,9 +1421,12 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                             })}
                                         </div>
                                     ) : (
-                                        <div className="h-full flex flex-col items-center justify-center text-slate-400 p-8">
-                                            <Calendar className="w-8 h-8 mb-2 opacity-25" />
-                                            <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Nenhum exame ou consulta encontrado.</p>
+                                        <div className="h-full flex flex-col items-center justify-center text-slate-400 p-8 text-center animate-fade-in">
+                                            <div className="w-12 h-12 bg-slate-100 text-slate-400 rounded-2xl flex items-center justify-center mb-3">
+                                                <Search className="w-6 h-6" />
+                                            </div>
+                                            <p className="text-xs font-black uppercase tracking-wider text-slate-600 mb-1">Nenhum exame ou consulta encontrado</p>
+                                            <p className="text-[11px] font-semibold text-slate-400">Nenhum procedimento corresponde a "{procedureQuery}".</p>
                                         </div>
                                     )}
                                 </div>

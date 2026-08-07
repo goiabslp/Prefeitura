@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Fuel, User, Truck, DollarSign, Save, X, MapPin, FileText, Clock,
-  ChevronLeft, ChevronRight, CheckCircle2, Search, Check, Gauge, Receipt
+  ChevronLeft, ChevronRight, CheckCircle2, Search, Check, Gauge, Receipt, AlertTriangle
 } from 'lucide-react';
 import { AbastecimentoService, AbastecimentoRecord } from '../../services/abastecimentoService';
 import { useAuth } from '../../contexts/AuthContext';
@@ -75,10 +75,15 @@ export const AbastecimentoForm: React.FC<AbastecimentoFormProps> = ({
     const [confirmModalOpen, setConfirmModalOpen] = useState(false);
     const [adminOverrideModalOpen, setAdminOverrideModalOpen] = useState(false);
     const [isOdometerOverridden, setIsOdometerOverridden] = useState(false);
+    const [isMobileVehicleConfirmed, setIsMobileVehicleConfirmed] = useState(false);
     const [pendingData, setPendingData] = useState<any | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const [dupInvoiceModalOpen, setDupInvoiceModalOpen] = useState(false);
     const [dupInvoiceData, setDupInvoiceData] = useState<{ number: string, station: string } | null>(null);
+
+    useEffect(() => {
+        setIsMobileVehicleConfirmed(false);
+    }, [vehicle, mobileStep]);
 
     const normalizeText = (t: string) =>
         t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
@@ -219,7 +224,8 @@ export const AbastecimentoForm: React.FC<AbastecimentoFormProps> = ({
 
         const [yr, mo, dy] = currentDateStr.split('-').map(Number);
         const [hr, mi] = currentTimeStr.split(':').map(Number);
-        const mv = vehicles.find(v => v.plate === vehicle);
+        const mv = selectedVehicleObj || vehicles.find((v: any) => v.plate === vehicle || v.id === vehicle);
+        const vImg = mv?.vehicleImageUrl || (mv as any)?.vehicle_image_url || undefined;
         return {
             id: initialData?.id || crypto.randomUUID(),
             protocol: initialData?.protocol || `ABA-${Math.floor(Math.random() * 100000000).toString().padStart(8, '0')}`,
@@ -237,7 +243,26 @@ export const AbastecimentoForm: React.FC<AbastecimentoFormProps> = ({
             unit_price: unitPrice,
             created_at: initialData?.created_at,
             lastOdometer,
+            vehicleImageUrl: vImg,
+            vehicleModel: mv?.model,
+            vehicleBrand: mv?.brand,
         };
+    };
+
+    const handleFinalSaveDirect = async (dataToSave: any, override: boolean = false) => {
+        if (!dataToSave) return;
+        try {
+            setIsSaving(true);
+            await AbastecimentoService.saveAbastecimento(dataToSave, !!initialData, override || isOdometerOverridden);
+            onSave(dataToSave);
+            setConfirmModalOpen(false);
+            setAdminOverrideModalOpen(false);
+            setIsOdometerOverridden(false);
+        } catch {
+            alert("Erro ao salvar. Verifique sua conexão.");
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     const handleSubmit = async (e?: React.FormEvent) => {
@@ -269,18 +294,19 @@ export const AbastecimentoForm: React.FC<AbastecimentoFormProps> = ({
             }
         }
         setPendingData(record);
-        setConfirmModalOpen(true);
+
+        // Se o veículo tiver foto no cadastro e a foto AINDA NÃO tiver sido confirmada no mobile, exibe o modal.
+        // Se já foi confirmada no mobile ou o veículo não tiver foto, salva diretamente.
+        if (record.vehicleImageUrl && record.vehicleImageUrl.trim().length > 0 && !isMobileVehicleConfirmed) {
+            setConfirmModalOpen(true);
+        } else {
+            await handleFinalSaveDirect(record);
+        }
     };
 
     const handleFinalSave = async (override: boolean | React.MouseEvent = false) => {
         if (!pendingData) return;
-        try {
-            setIsSaving(true);
-            await AbastecimentoService.saveAbastecimento(pendingData, !!initialData, override === true || isOdometerOverridden);
-            onSave(pendingData);
-            setConfirmModalOpen(false); setAdminOverrideModalOpen(false); setIsOdometerOverridden(false);
-        } catch { alert("Erro ao salvar. Verifique sua conexão."); }
-        finally { setIsSaving(false); }
+        await handleFinalSaveDirect(pendingData, override === true);
     };
 
     const vehicleOptions: Option[] = useMemo(() => vehicles.map(v => ({ value: v.plate, label: v.plate, key: v.id })).sort((a, b) => a.label.localeCompare(b.label)), [vehicles]);
@@ -293,7 +319,20 @@ export const AbastecimentoForm: React.FC<AbastecimentoFormProps> = ({
     const filteredStations = useMemo(() => { const t = normalizeText(stationSearch); return gasStations.filter(s => !t || normalizeText(s.name).includes(t)).sort((a, b) => a.name.localeCompare(b.name)); }, [gasStations, stationSearch]);
 
     const selectedFuelLabel = useMemo(() => fuelTypes.find(t => t.key === fuelType)?.label || fuelType, [fuelTypes, fuelType]);
-    const selectedVehicleObj = useMemo(() => vehicles.find(v => v.plate === vehicle), [vehicles, vehicle]);
+    const selectedVehicleObj = useMemo(() => {
+        if (!vehicle) return null;
+        const v = vehicles.find((item: any) => 
+            item.plate === vehicle || 
+            item.id === vehicle ||
+            (item.plate && item.plate.toLowerCase().trim() === vehicle.toLowerCase().trim())
+        );
+        if (!v) return null;
+        const imgUrl = v.vehicleImageUrl || (v as any).vehicle_image_url || null;
+        return {
+            ...v,
+            vehicleImageUrl: imgUrl
+        };
+    }, [vehicles, vehicle]);
 
     const inputClass = "w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-slate-900 focus:bg-white focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 outline-none transition-all";
     const labelClass = "block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5 ml-1";
@@ -315,7 +354,15 @@ export const AbastecimentoForm: React.FC<AbastecimentoFormProps> = ({
                             </p>
                             <div className="flex gap-3">
                                 <button onClick={() => setAdminOverrideModalOpen(false)} className="flex-1 px-4 py-3 rounded-xl border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 transition-all">Não, Corrigir</button>
-                                <button onClick={() => handleFinalSave(true)} className="flex-1 px-4 py-3 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition-all flex items-center justify-center gap-2"><Save className="w-4 h-4 text-cyan-400" />Sim, Sobrescrever</button>
+                                <button onClick={() => {
+                                    setIsOdometerOverridden(true);
+                                    setAdminOverrideModalOpen(false);
+                                    if (pendingData?.vehicleImageUrl && pendingData.vehicleImageUrl.trim().length > 0) {
+                                        setConfirmModalOpen(true);
+                                    } else {
+                                        handleFinalSaveDirect(pendingData, true);
+                                    }
+                                }} className="flex-1 px-4 py-3 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition-all flex items-center justify-center gap-2"><Save className="w-4 h-4 text-cyan-400" />Sim, Sobrescrever</button>
                             </div>
                         </div>
                     </div>
@@ -383,6 +430,10 @@ export const AbastecimentoForm: React.FC<AbastecimentoFormProps> = ({
             else handleSubmit();
         };
         const back = () => {
+            if (mobileStep === total && isMobileVehicleConfirmed && selectedVehicleObj?.vehicleImageUrl) {
+                setIsMobileVehicleConfirmed(false);
+                return;
+            }
             if (mobileStep > 1) { setDirection(-1); setMobileStep(p => p - 1); }
             else onBack();
         };
@@ -511,53 +562,120 @@ export const AbastecimentoForm: React.FC<AbastecimentoFormProps> = ({
                                 )}
 
                                 {cur.key === 'revisao' && (
-                                    <div className="w-full space-y-4">
-                                        <div className="space-y-1">
-                                            <div className="w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto text-emerald-600 shadow-inner mb-1"><CheckCircle2 className="w-6 h-6" /></div>
-                                            <h3 className="text-xl font-black text-slate-900 tracking-tight">Revisar Registro</h3>
-                                            <p className="text-slate-500 text-[11px] font-medium max-w-xs mx-auto">Confirme os dados antes de registrar o abastecimento.</p>
-                                        </div>
-                                        <div className="w-full bg-slate-50 border border-slate-200 rounded-2xl shadow-sm text-left overflow-hidden divide-y divide-slate-100">
-                                            <div className="py-2 px-3">
-                                                <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-0.5">Motorista</span>
-                                                <p className="text-sm font-bold text-slate-800">{driver || '—'}</p>
+                                    selectedVehicleObj?.vehicleImageUrl && !isMobileVehicleConfirmed ? (
+                                        /* PRIMEIRO: FOTO DO VEÍCULO E BOTÃO DE CONFIRMAR VEÍCULO */
+                                        <div className="w-full space-y-4 animate-fade-in">
+                                            <div className="space-y-1 text-center">
+                                                <div className="w-12 h-12 bg-cyan-50 rounded-2xl flex items-center justify-center mx-auto text-cyan-600 shadow-inner mb-1 border border-cyan-100">
+                                                    <Truck className="w-6 h-6" />
+                                                </div>
+                                                <h3 className="text-xl font-black text-slate-900 tracking-tight">Confirmação do Veículo</h3>
+                                                <p className="text-slate-500 text-[11px] font-medium max-w-xs mx-auto">
+                                                    Confirme se o veículo a ser abastecido é o mesmo da fotografia abaixo antes de prosseguir.
+                                                </p>
                                             </div>
-                                            <div className="py-2 px-3 flex justify-between gap-4">
-                                                <div className="flex-1 min-w-0">
-                                                    <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-0.5">Veículo</span>
-                                                    <p className="text-sm font-bold text-slate-800 font-mono truncate">{vehicle || '—'}</p>
-                                                    {selectedVehicleObj && <p className="text-[10px] text-slate-500">{selectedVehicleObj.brand} {selectedVehicleObj.model}</p>}
+
+                                            <div className="w-full bg-slate-950 rounded-3xl overflow-hidden border border-slate-200 shadow-xl relative group">
+                                                <div className="relative aspect-[4/3] w-full overflow-hidden bg-slate-950">
+                                                    <img 
+                                                        src={selectedVehicleObj.vehicleImageUrl} 
+                                                        alt={selectedVehicleObj.model} 
+                                                        className="w-full h-full object-cover" 
+                                                    />
+                                                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent flex flex-col justify-end p-4">
+                                                        <div className="flex items-center justify-between gap-2">
+                                                            <div>
+                                                                <span className="inline-block px-2.5 py-0.5 bg-indigo-600/90 backdrop-blur-md rounded-md text-[9px] font-black uppercase tracking-wider text-white mb-1 shadow-sm">
+                                                                    {selectedVehicleObj.brand} • {selectedVehicleObj.model}
+                                                                </span>
+                                                                <h4 className="text-2xl font-black font-mono text-white flex items-center gap-2">
+                                                                    {selectedVehicleObj.plate}
+                                                                </h4>
+                                                            </div>
+                                                        </div>
+                                                    </div>
                                                 </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-0.5">Combustível</span>
-                                                    <p className="text-sm font-bold text-slate-800">{selectedFuelLabel || '—'}</p>
-                                                    {fuelType && <p className="text-[10px] text-slate-500">R$ {(fuelPrices[fuelType] || 0).toFixed(2)}/L</p>}
+                                                <div className="bg-amber-500/10 border-t border-amber-500/20 p-3 px-4 flex items-center gap-2.5 text-amber-800">
+                                                    <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600" />
+                                                    <p className="text-[11px] font-bold leading-snug">
+                                                        Verifique o veículo físico e a placa antes de confirmar.
+                                                    </p>
                                                 </div>
-                                            </div>
-                                            <div className="py-2 px-3">
-                                                <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-0.5">Posto</span>
-                                                <p className="text-sm font-bold text-slate-800">{station || '—'}</p>
-                                            </div>
-                                            <div className="py-2 px-3 flex justify-between gap-3">
-                                                <div>
-                                                    <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-0.5">Litros</span>
-                                                    <p className="text-sm font-bold text-slate-800 font-mono">{liters || '—'}L</p>
-                                                </div>
-                                                <div>
-                                                    <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-0.5">Odômetro</span>
-                                                    <p className="text-sm font-bold text-slate-800 font-mono">{odometer || '—'}</p>
-                                                </div>
-                                                <div>
-                                                    <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-0.5">Nota</span>
-                                                    <p className="text-sm font-bold text-slate-800 font-mono">{invoiceNumber || '—'}</p>
-                                                </div>
-                                            </div>
-                                            <div className="py-3 px-3 bg-emerald-50">
-                                                <span className="block text-[9px] font-black uppercase tracking-wider text-emerald-600 mb-0.5">Valor Total</span>
-                                                <p className="text-xl font-black text-emerald-700">{formattedCost}</p>
                                             </div>
                                         </div>
-                                    </div>
+                                    ) : (
+                                        /* APÓS: INFORMAÇÕES DO ABASTECIMENTO */
+                                        <div className="w-full space-y-4 animate-fade-in">
+                                            <div className="space-y-1 text-center">
+                                                <div className="w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto text-emerald-600 shadow-inner mb-1"><CheckCircle2 className="w-6 h-6" /></div>
+                                                <h3 className="text-xl font-black text-slate-900 tracking-tight">Revisar Registro</h3>
+                                                <p className="text-slate-500 text-[11px] font-medium max-w-xs mx-auto">Confirme os dados antes de registrar o abastecimento.</p>
+                                            </div>
+
+                                            {selectedVehicleObj?.vehicleImageUrl && (
+                                                <div className="w-full rounded-2xl bg-indigo-950 p-3 text-white flex items-center gap-3 border border-indigo-900 shadow-md">
+                                                    <div className="w-16 h-12 rounded-xl overflow-hidden shrink-0 border border-white/20 bg-slate-900">
+                                                        <img src={selectedVehicleObj.vehicleImageUrl} alt={vehicle} className="w-full h-full object-cover" />
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center gap-1 text-[9px] font-black uppercase text-emerald-400 tracking-wider">
+                                                            <CheckCircle2 className="w-3 h-3" /> Veículo Confirmado
+                                                        </div>
+                                                        <p className="text-sm font-black font-mono tracking-tight truncate">{vehicle}</p>
+                                                        <p className="text-[10px] text-slate-300 font-medium truncate">{selectedVehicleObj.brand} {selectedVehicleObj.model}</p>
+                                                    </div>
+                                                    <button 
+                                                        type="button" 
+                                                        onClick={() => setIsMobileVehicleConfirmed(false)}
+                                                        className="text-[10px] font-extrabold text-indigo-200 underline hover:text-white px-2 py-1"
+                                                    >
+                                                        Ver Foto
+                                                    </button>
+                                                </div>
+                                            )}
+
+                                            <div className="w-full bg-slate-50 border border-slate-200 rounded-2xl shadow-sm text-left overflow-hidden divide-y divide-slate-100">
+                                                <div className="py-2 px-3">
+                                                    <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-0.5">Motorista</span>
+                                                    <p className="text-sm font-bold text-slate-800">{driver || '—'}</p>
+                                                </div>
+                                                <div className="py-2 px-3 flex justify-between gap-4">
+                                                    <div className="flex-1 min-w-0">
+                                                        <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-0.5">Veículo</span>
+                                                        <p className="text-sm font-bold text-slate-800 font-mono truncate">{vehicle || '—'}</p>
+                                                        {selectedVehicleObj && <p className="text-[10px] text-slate-500">{selectedVehicleObj.brand} {selectedVehicleObj.model}</p>}
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-0.5">Combustível</span>
+                                                        <p className="text-sm font-bold text-slate-800">{selectedFuelLabel || '—'}</p>
+                                                        {fuelType && <p className="text-[10px] text-slate-500">R$ {(fuelPrices[fuelType] || 0).toFixed(2)}/L</p>}
+                                                    </div>
+                                                </div>
+                                                <div className="py-2 px-3">
+                                                    <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-0.5">Posto</span>
+                                                    <p className="text-sm font-bold text-slate-800">{station || '—'}</p>
+                                                </div>
+                                                <div className="py-2 px-3 flex justify-between gap-3">
+                                                    <div>
+                                                        <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-0.5">Litros</span>
+                                                        <p className="text-sm font-bold text-slate-800 font-mono">{liters || '—'}L</p>
+                                                    </div>
+                                                    <div>
+                                                        <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-0.5">Odômetro</span>
+                                                        <p className="text-sm font-bold text-slate-800 font-mono">{odometer || '—'}</p>
+                                                    </div>
+                                                    <div>
+                                                        <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-0.5">Nota</span>
+                                                        <p className="text-sm font-bold text-slate-800 font-mono">{invoiceNumber || '—'}</p>
+                                                    </div>
+                                                </div>
+                                                <div className="py-3 px-3 bg-emerald-50">
+                                                    <span className="block text-[9px] font-black uppercase tracking-wider text-emerald-600 mb-0.5">Valor Total</span>
+                                                    <p className="text-xl font-black text-emerald-700">{formattedCost}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )
                                 )}
 
                             </motion.div>
@@ -573,6 +691,11 @@ export const AbastecimentoForm: React.FC<AbastecimentoFormProps> = ({
                     {mobileStep < total ? (
                         <button type="button" onClick={next} disabled={!isMobileStepValid(mobileStep) || isSaving} className="flex-1 flex items-center justify-center gap-1.5 py-3 px-6 bg-slate-900 text-white font-bold uppercase tracking-widest text-[10px] rounded-xl active:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-md shadow-slate-950/15">
                             <span>Avançar</span><ChevronRight className="w-4 h-4" />
+                        </button>
+                    ) : selectedVehicleObj?.vehicleImageUrl && !isMobileVehicleConfirmed ? (
+                        <button type="button" onClick={() => setIsMobileVehicleConfirmed(true)} disabled={isSaving} className="flex-1 flex items-center justify-center gap-1.5 py-3 px-6 bg-indigo-600 text-white font-bold uppercase tracking-widest text-[10px] rounded-xl active:bg-indigo-700 disabled:opacity-50 transition-all shadow-lg shadow-indigo-600/20">
+                            <CheckCircle2 className="w-4 h-4" />
+                            <span>Confirmar Veículo</span>
                         </button>
                     ) : (
                         <button type="button" onClick={() => handleSubmit()} disabled={isSaving} className="flex-1 flex items-center justify-center gap-1.5 py-3 px-6 bg-emerald-600 text-white font-bold uppercase tracking-widest text-[10px] rounded-xl active:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-emerald-600/20">

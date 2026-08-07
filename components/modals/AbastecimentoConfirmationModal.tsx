@@ -17,6 +17,9 @@ interface AbastecimentoConfirmationModalProps {
         cost: number;
         odometer?: number | string;
         lastOdometer?: number | null;
+        vehicleImageUrl?: string;
+        vehicleModel?: string;
+        vehicleBrand?: string;
     } | null;
     isSaving?: boolean;
     isEdit?: boolean;
@@ -53,10 +56,10 @@ export const AbastecimentoConfirmationModal: React.FC<AbastecimentoConfirmationM
                         </div>
                         <div>
                             <h3 className={`text-sm sm:text-base wide:text-xl font-bold ${isInvalidOdometer ? 'text-red-800' : 'text-slate-800'} leading-tight`}>
-                                {isInvalidOdometer ? 'Alerta de Bloqueio' : 'Confirmar Registro'}
+                                {isInvalidOdometer ? 'Alerta de Bloqueio' : 'Confirmação do Veículo'}
                             </h3>
                             <p className="text-[9px] sm:text-xs text-slate-500 font-bold uppercase tracking-wider">
-                                {isInvalidOdometer ? 'Horímetro Inválido' : 'Confira os dados com atenção'}
+                                {isInvalidOdometer ? 'Horímetro Inválido' : 'Verifique se a imagem e a placa conferem com o veículo'}
                             </p>
                         </div>
                     </div>
@@ -77,6 +80,40 @@ export const AbastecimentoConfirmationModal: React.FC<AbastecimentoConfirmationM
                             <p className="text-[10px] text-red-700 font-bold leading-relaxed">
                                 BLOQUEIO: O novo horímetro não pode ser menor ou igual ao último registro.
                             </p>
+                        </div>
+                    )}
+
+                    {/* Vehicle Photo Confirmation Box */}
+                    {data.vehicleImageUrl && (
+                        <div className="rounded-2xl overflow-hidden border border-slate-200 shadow-md bg-slate-950 mb-3">
+                            <div className="relative aspect-[16/9] w-full overflow-hidden bg-slate-950">
+                                <img
+                                    src={data.vehicleImageUrl}
+                                    alt={data.vehicle}
+                                    className="w-full h-full object-cover"
+                                />
+                                <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/30 to-transparent flex flex-col justify-end p-3 sm:p-4">
+                                    <div className="flex items-center justify-between gap-2">
+                                        <div>
+                                            {(data.vehicleBrand || data.vehicleModel) && (
+                                                <span className="inline-block px-2.5 py-0.5 bg-indigo-600/90 backdrop-blur-md rounded-md text-[9px] font-black uppercase tracking-wider text-white mb-1 shadow-sm">
+                                                    {[data.vehicleBrand, data.vehicleModel].filter(Boolean).join(' • ')}
+                                                </span>
+                                            )}
+                                            <h4 className="text-lg sm:text-xl font-black font-mono text-white flex items-center gap-2">
+                                                <Truck className="w-5 h-5 text-cyan-400" />
+                                                {data.vehicle}
+                                            </h4>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="bg-amber-500/10 border-t border-amber-500/20 p-2.5 px-3.5 flex items-center gap-2 text-amber-800">
+                                <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600" />
+                                <p className="text-[10px] sm:text-xs font-bold leading-tight">
+                                    Confirme se o veículo a ser abastecido é o mesmo da foto acima.
+                                </p>
+                            </div>
                         </div>
                     )}
 

@@ -274,6 +274,17 @@ export const FleetManagementScreen: React.FC<FleetManagementScreenProps> = ({
     }
   };
 
+  const handleRemovePhoto = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (photoInputRef.current) {
+      photoInputRef.current.value = '';
+    }
+    setFormData(prev => ({
+      ...prev,
+      vehicleImageUrl: ''
+    }));
+  };
+
   const handleSaveBrand = () => {
     if (!newBrandName.trim()) return;
     const brand: VehicleBrand = {
@@ -800,7 +811,19 @@ export const FleetManagementScreen: React.FC<FleetManagementScreenProps> = ({
 
                     <div className="lg:col-span-5 p-6 border-r border-slate-100 bg-white flex flex-col gap-6">
                       <div className="space-y-4">
-                        <label className={labelClass}><Camera className="w-3.5 h-3.5 inline mr-2" /> Fotografia do Veículo</label>
+                        <div className="flex items-center justify-between">
+                          <label className={labelClass}><Camera className="w-3.5 h-3.5 inline mr-2" /> Fotografia do Veículo</label>
+                          {formData.vehicleImageUrl && (
+                            <button
+                              type="button"
+                              onClick={handleRemovePhoto}
+                              className="text-[10px] font-bold text-rose-600 hover:text-rose-700 flex items-center gap-1 transition-all active:scale-95 bg-rose-50 hover:bg-rose-100 px-2.5 py-1 rounded-lg border border-rose-200"
+                              title="Excluir Fotografia"
+                            >
+                              <Trash2 className="w-3 h-3" /> Excluir Foto
+                            </button>
+                          )}
+                        </div>
                         <div
                           onClick={() => photoInputRef.current?.click()}
                           className={`relative aspect-[4/3] rounded-[2rem] border-4 border-dashed transition-all cursor-pointer group flex flex-col items-center justify-center overflow-hidden shadow-inner
@@ -811,10 +834,35 @@ export const FleetManagementScreen: React.FC<FleetManagementScreenProps> = ({
                           {formData.vehicleImageUrl ? (
                             <>
                               <img src={formData.vehicleImageUrl} alt="Preview" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
-                              <div className="absolute inset-0 bg-indigo-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-3 backdrop-blur-sm">
-                                <div className="bg-white p-4 rounded-full text-indigo-600 shadow-2xl scale-75 group-hover:scale-100 transition-transform duration-500"><Upload className="w-8 h-8" /></div>
-                                <span className="text-white text-xs font-black uppercase tracking-[0.2em] bg-indigo-600 px-5 py-2 rounded-full shadow-xl">Alterar Fotografia</span>
+                              <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-3 backdrop-blur-sm p-4">
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      photoInputRef.current?.click();
+                                    }}
+                                    className="text-white text-xs font-black uppercase tracking-[0.15em] bg-indigo-600 hover:bg-indigo-500 px-4 py-2.5 rounded-xl shadow-xl flex items-center gap-2 transition-all active:scale-95 border border-indigo-400/30"
+                                  >
+                                    <Upload className="w-4 h-4" /> Alterar
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={handleRemovePhoto}
+                                    className="text-white text-xs font-black uppercase tracking-[0.15em] bg-rose-600 hover:bg-rose-500 px-4 py-2.5 rounded-xl shadow-xl flex items-center gap-2 transition-all active:scale-95 border border-rose-400/30"
+                                  >
+                                    <Trash2 className="w-4 h-4" /> Excluir
+                                  </button>
+                                </div>
                               </div>
+                              <button
+                                type="button"
+                                onClick={handleRemovePhoto}
+                                className="absolute top-3 right-3 p-2.5 bg-rose-600/90 hover:bg-rose-600 text-white rounded-xl shadow-xl backdrop-blur-md transition-all active:scale-90 z-10 border border-rose-400/40"
+                                title="Excluir Foto"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
                             </>
                           ) : (
                             <div className="flex flex-col items-center gap-4 text-slate-300 group-hover:text-indigo-400 transition-all">
