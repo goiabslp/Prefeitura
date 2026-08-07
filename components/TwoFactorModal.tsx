@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { ShieldCheck, Loader2 } from 'lucide-react';
 import * as OTPAuth from 'otpauth';
+import { isAuthSessionValid, isAuthPromoDismissedToday } from '../services/authTimeService';
+import { AuthTimePromoModal } from './modals/AuthTimePromoModal';
 
 interface TwoFactorModalProps {
     isOpen: boolean;
@@ -23,15 +25,34 @@ export const TwoFactorModal: React.FC<TwoFactorModalProps> = ({
     const [token, setToken] = useState('');
     const [error, setError] = useState('');
     const [validating, setValidating] = useState(false);
+    const [showPromo, setShowPromo] = useState(false);
 
     useEffect(() => {
         if (isOpen) {
             setToken('');
             setError('');
+            if (!isAuthSessionValid() && !isAuthPromoDismissedToday()) {
+                setShowPromo(true);
+            } else {
+                setShowPromo(false);
+            }
         }
     }, [isOpen]);
 
     if (!isOpen) return null;
+
+    if (showPromo) {
+        return (
+            <AuthTimePromoModal
+                isOpen={showPromo}
+                onClose={() => setShowPromo(false)}
+                onSuccessAuthorized={() => {
+                    setShowPromo(false);
+                    onConfirm();
+                }}
+            />
+        );
+    }
 
     const handleVerify = async () => {
         if (token.length !== 6) {

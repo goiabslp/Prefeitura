@@ -7,9 +7,10 @@ interface ComprasStepperProps {
     currentStep: number;
     stepsStatus: Record<number, StepStatus>;
     onStepClick?: (step: number) => void;
+    itemCounter?: number;
 }
 
-export const ComprasStepper: React.FC<ComprasStepperProps> = ({ currentStep, stepsStatus, onStepClick }) => {
+export const ComprasStepper: React.FC<ComprasStepperProps> = ({ currentStep, stepsStatus, onStepClick, itemCounter }) => {
     const steps = [
         { id: 1, label: 'Detalhes', icon: FileText },
         { id: 2, label: 'Itens', icon: Package },
@@ -48,11 +49,21 @@ export const ComprasStepper: React.FC<ComprasStepperProps> = ({ currentStep, ste
                                 onClick={() => onStepClick && onStepClick(step.id)}
                                 className={`flex flex-col items-center gap-2 relative z-10 cursor-pointer group px-2 bg-white rounded-xl transition-all duration-300 ${status === 'current' ? 'scale-110' : 'hover:scale-105'}`}
                             >
-                                <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all shadow-sm ${circleClass}`}>
+                                <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all shadow-sm relative ${circleClass}`}>
                                     <Icon className="w-5 h-5" />
+                                    {step.id === 2 && itemCounter !== undefined && itemCounter > 0 && (
+                                        <span className="absolute -top-1 -right-1.5 min-w-[18px] h-4.5 px-1 bg-emerald-600 text-white rounded-full text-[9px] font-black flex items-center justify-center border-2 border-white shadow-xs">
+                                            {itemCounter}
+                                        </span>
+                                    )}
                                 </div>
-                                <span className={`text-[10px] uppercase tracking-wider transition-colors ${labelClass}`}>
+                                <span className={`text-[10px] uppercase tracking-wider transition-colors flex items-center gap-1 ${labelClass}`}>
                                     {step.label}
+                                    {step.id === 2 && itemCounter !== undefined && itemCounter > 0 && (
+                                        <span className="px-1.5 py-0.2 bg-emerald-100 text-emerald-800 rounded-full text-[9px] font-black border border-emerald-200">
+                                            {itemCounter}
+                                        </span>
+                                    )}
                                 </span>
                             </div>
 

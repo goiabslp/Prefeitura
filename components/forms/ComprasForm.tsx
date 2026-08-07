@@ -14,6 +14,8 @@ import { SelectionModal } from '../SelectionModal';
 import { normalizeText } from '../../utils/stringUtils';
 import { X } from 'lucide-react';
 import { polishMotivoWithAI } from '../../services/geminiService';
+import { recordAuthSuccess, isAuthSessionValid, isAuthPromoDismissedToday } from '../../services/authTimeService';
+import { AuthTimePromoModal } from '../modals/AuthTimePromoModal';
 
 interface ComprasFormProps {
   state: AppState;
@@ -79,8 +81,9 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
   const signaturesGridRef = useRef<HTMLDivElement>(null);
   const signButtonRef = useRef<HTMLButtonElement>(null);
   const [password, setPassword] = useState('');
-  const [twoFactorCode, setTwoFactorCode] = useState('');
   const [showTwoFactor, setShowTwoFactor] = useState(false);
+  const [showAuthTimePromo, setShowAuthTimePromo] = useState(false);
+  const [twoFactorCode, setTwoFactorCode] = useState('');
   const [isSigned, setIsSigned] = useState(!!content.digitalSignature?.enabled);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -105,7 +108,7 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
   };
 
   const handlePolishBody = async () => {
-    if (!content.body || !content.body.trim()) return;
+    if (!content.body || content.body.trim().length < 100) return;
     setIsPolishingBody(true);
     try {
       const polishedText = await polishMotivoWithAI(content.body);
@@ -259,134 +262,32 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
       */}
 
       {/* END OF HEAD      {/* STEP 1 (Desktop): DETALHES (Solicitante, Requisição, Justificativa) */}
+      {/* STEP 1 (Desktop): DETALHES (Solicitante, Requisição, Prioridade) */}
       {!isMobile && currentStep === 1 && (
-        <>
-          {/* Requisição (Reordenado - Primeiro Bloco) */}
-          <div className="space-y-4 border-t border-slate-200 pt-6">
-            <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-              <ShoppingCart className="w-4 h-4 text-emerald-600" /> Requisição
-            </h3>
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
-              <div>
-                <div className="flex justify-between items-center mb-1.5 flex-wrap gap-2">
-                  <div className="flex items-center gap-2">
-                    <label className={labelClass}>Finalidade do Pedido</label>
-                    <button
-                      type="button"
-                      onClick={handlePolishTitle}
-                      disabled={isPolishingTitle || !content.title?.trim()}
-                      className="px-2 py-0.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-lg text-[9px] font-black uppercase tracking-wider transition-all disabled:opacity-40 flex items-center justify-center gap-1 shadow-xs active:scale-95 shrink-0"
-                      title="Melhorar finalidade com IA Gemini"
-                    >
-                      {isPolishingTitle ? (
-                        <>
-                          <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
-                          <span>Lapidando...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                          <span>Lapidar IA</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                  <span className={`text-xs font-black tracking-wider uppercase px-3 py-1.5 rounded-full flex items-center gap-1.5 border transition-all duration-300 ${
-                    (content.title?.length || 0) >= 100 
-                      ? 'bg-emerald-100 text-emerald-800 border-emerald-200 shadow-sm' 
-                      : 'bg-rose-100 text-rose-800 border-rose-200 shadow-sm animate-pulse'
-                  }`}>
-                    {(content.title?.length || 0) >= 100 ? (
-                      <Check className="w-3.5 h-3.5 text-emerald-600" />
-                    ) : (
-                      <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
-                    )}
-                    <span>{content.title?.length || 0} / 100 caracteres no mínimo</span>
-                  </span>
-                </div>
-                <div className="relative group">
-                  <textarea
-                    value={content.title || ''}
-                    onChange={(e) => handleUpdate('content', 'title', e.target.value)}
-                    disabled={isPolishingTitle}
-                    className="w-full min-h-[120px] bg-slate-50/50 border border-slate-200 rounded-2xl p-4 text-sm font-bold text-slate-900 outline-none focus:bg-white focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/5 transition-all resize-none leading-relaxed disabled:opacity-60"
-                    placeholder="Descreva detalhadamente a finalidade do pedido (mínimo de 100 caracteres)..."
-                  />
-                </div>
-              </div>
-
-              {/* Bloco de Prioridade Compacto e Moderno */}
-              <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div>
-                  <label className={labelClass}>Prioridade</label>
-                  <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Selecione o nível de urgência</p>
-                </div>
-                <div className="flex bg-slate-100/80 p-1 rounded-full gap-1 w-full sm:max-w-md border border-slate-200/50">
-                  {PRIORITY_OPTIONS.map((opt) => {
-                    const Icon = opt.icon;
-                    const isSelected = content.priority === opt.value;
-                    const selectedColors = {
-                      slate: 'bg-white text-slate-700 shadow-sm ring-1 ring-black/5',
-                      indigo: 'bg-indigo-600 text-white shadow-md shadow-indigo-500/30',
-                      amber: 'bg-amber-500 text-white shadow-md shadow-amber-500/30',
-                      rose: 'bg-rose-500 text-white shadow-md shadow-rose-500/30',
-                    };
-
-                    return (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => handleUpdate('content', 'priority', opt.value)}
-                        className={`
-                          flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 sm:px-3 rounded-full text-[10px] font-black uppercase tracking-wider transition-all duration-300
-                          ${isSelected
-                            ? selectedColors[opt.color as keyof typeof selectedColors]
-                            : 'text-slate-400 hover:bg-white/50 hover:text-slate-600'}
-                        `}
-                      >
-                        <Icon className={`w-3.5 h-3.5 ${isSelected ? '' : 'opacity-70'}`} />
-                        <span className="hidden md:inline">{opt.label}</span>
-                        <span className="md:hidden">{opt.label.slice(0, 3)}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Justificativa de Prioridade (Condicional) */}
-              {showPriorityJustification && (
-                <div className="pt-4 animate-slide-up">
-                  <label className={labelClass}>Justificativa da {content.priority}</label>
-                  <div className="relative">
-                    <textarea
-                      value={content.priorityJustification || ''}
-                      onChange={(e) => handleUpdate('content', 'priorityJustification', e.target.value)}
-                      className={`${inputClass} min-h-[100px] resize-none leading-relaxed p-4 border-rose-100 bg-rose-50/20`}
-                      placeholder={`Por que este pedido tem prioridade ${content.priority}?`}
-                    />
-                    <MessageSquare className="absolute right-3 top-3 w-4 h-4 text-rose-300 pointer-events-none" />
-                  </div>
-                </div>
-              )}
+        <div className="space-y-5">
+          {/* Card 1: Identificação do Solicitante */}
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                <User className="w-4 h-4 text-emerald-600" /> Dados do Solicitante
+              </h3>
+              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest bg-slate-100/80 px-2.5 py-1 rounded-md border border-slate-200/60">
+                Identificação Automática
+              </span>
             </div>
-          </div>
 
-          {/* Dados do Solicitante (Reordenado - Segundo Bloco) */}
-          <div className="space-y-4 border-t border-slate-200 pt-6">
-            <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-              <User className="w-4 h-4 text-emerald-600" /> Dados do Solicitante
-            </h3>
-            <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-              <div>
-                <label className={labelClass}>NOME COMPLETO</label>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+              {/* Solicitante */}
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider">Nome Completo</label>
                 <div
                   onClick={() => setIsRequesterOpen(true)}
-                  className={`${inputClass} flex items-center justify-between cursor-pointer py-3 hover:border-emerald-500 transition-colors bg-white`}
+                  className="w-full h-11 bg-slate-50 hover:bg-white border border-slate-200 hover:border-emerald-500 rounded-xl px-3.5 flex items-center justify-between cursor-pointer transition-all shadow-xs"
                 >
-                  <span className={content.requesterName ? 'text-slate-900 font-bold' : 'text-slate-400'}>
+                  <span className={content.requesterName ? 'text-xs font-bold text-slate-900 truncate' : 'text-xs font-medium text-slate-400'}>
                     {content.requesterName || 'Selecione o Solicitante...'}
                   </span>
-                  <ChevronDown className="w-4 h-4 text-slate-400" />
+                  <ChevronDown className="w-4 h-4 text-slate-400 shrink-0 ml-2" />
                 </div>
 
                 <SelectionModal<Person>
@@ -421,29 +322,145 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className={labelClass}>Cargo</label>
-                  <input
-                    type="text" value={content.requesterRole || ''}
-                    readOnly
-                    className={`${inputClass} bg-slate-100/50 cursor-not-allowed text-slate-500`}
-                    placeholder="Cargo automático"
-                  />
-                </div>
-                <div>
-                  <label className={labelClass}>Setor</label>
-                  <input
-                    type="text" value={content.requesterSector || ''}
-                    readOnly
-                    className={`${inputClass} bg-slate-100/50 cursor-not-allowed text-slate-500`}
-                    placeholder="Setor automático"
-                  />
-                </div>
+              {/* Cargo */}
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider">Cargo</label>
+                <input
+                  type="text" value={content.requesterRole || ''}
+                  readOnly
+                  className="w-full h-11 bg-slate-100/70 border border-slate-200/80 rounded-xl px-3.5 text-xs font-semibold text-slate-700 cursor-not-allowed outline-none truncate"
+                  placeholder="Cargo automático"
+                />
+              </div>
+
+              {/* Setor */}
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider">Setor</label>
+                <input
+                  type="text" value={content.requesterSector || ''}
+                  readOnly
+                  className="w-full h-11 bg-slate-100/70 border border-slate-200/80 rounded-xl px-3.5 text-xs font-semibold text-slate-700 cursor-not-allowed outline-none truncate"
+                  placeholder="Setor automático"
+                />
               </div>
             </div>
           </div>
-        </>
+
+          {/* Card 2: Finalidade e Prioridade do Pedido */}
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+            {/* Header com Finalidade do Pedido à esquerda e Nível de Prioridade à direita na mesma linha */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-3 gap-3">
+              <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                <ShoppingCart className="w-4 h-4 text-emerald-600" /> Finalidade do Pedido
+              </h3>
+
+              {/* Nível de Prioridade alinhado na mesma linha */}
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 hidden lg:inline">
+                  Nível de Prioridade:
+                </span>
+                <div className="flex bg-slate-100/90 p-1 rounded-xl gap-1 border border-slate-200/60 shrink-0">
+                  {PRIORITY_OPTIONS.map((opt) => {
+                    const Icon = opt.icon;
+                    const isSelected = content.priority === opt.value;
+                    const selectedColors = {
+                      slate: 'bg-slate-900 text-white shadow-xs font-extrabold',
+                      indigo: 'bg-indigo-600 text-white shadow-xs font-extrabold',
+                      amber: 'bg-amber-500 text-white shadow-xs font-extrabold',
+                      rose: 'bg-rose-500 text-white shadow-xs font-extrabold',
+                    };
+
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => handleUpdate('content', 'priority', opt.value)}
+                        className={`
+                          flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-[10px] uppercase tracking-wider transition-all
+                          ${isSelected
+                            ? selectedColors[opt.color as keyof typeof selectedColors]
+                            : 'text-slate-500 hover:bg-white hover:text-slate-800 font-semibold'}
+                        `}
+                      >
+                        <Icon className={`w-3.5 h-3.5 ${isSelected ? '' : 'opacity-70'}`} />
+                        <span>{opt.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Finalidade do Pedido com Label Bar */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="block text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                  Descrição da Finalidade
+                </label>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handlePolishTitle}
+                    disabled={isPolishingTitle || !content.title?.trim()}
+                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-extrabold uppercase tracking-wider transition-all disabled:opacity-40 flex items-center gap-1.5 shadow-xs active:scale-95 shrink-0"
+                    title="Melhorar finalidade com IA Gemini"
+                  >
+                    {isPolishingTitle ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
+                        <span>Lapidando...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                        <span>Lapidar com IA</span>
+                      </>
+                    )}
+                  </button>
+
+                  <span className={`text-[10px] font-extrabold tracking-wider uppercase px-2.5 py-0.5 rounded-md flex items-center gap-1 border transition-all ${
+                    (content.title?.length || 0) >= 100 
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                      : 'bg-rose-50 text-rose-700 border-rose-200'
+                  }`}>
+                    {(content.title?.length || 0) >= 100 ? (
+                      <Check className="w-3 h-3 text-emerald-600" />
+                    ) : (
+                      <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" />
+                    )}
+                    <span>{content.title?.length || 0} / 100 MÍN.</span>
+                  </span>
+                </div>
+              </div>
+
+              <textarea
+                value={content.title || ''}
+                onChange={(e) => handleUpdate('content', 'title', e.target.value)}
+                disabled={isPolishingTitle}
+                rows={3}
+                className="w-full min-h-[90px] bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-xs font-semibold text-slate-900 outline-none focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all resize-none leading-relaxed disabled:opacity-60"
+                placeholder="Descreva de forma detalhada e clara a finalidade deste pedido de compras (mínimo de 100 caracteres)..."
+              />
+            </div>
+
+            {/* Justificativa de Prioridade (Condicional) */}
+            {showPriorityJustification && (
+              <div className="p-3.5 bg-rose-50/50 border border-rose-200/80 rounded-xl space-y-2 animate-fade-in">
+                <label className="block text-[11px] font-bold text-rose-800 uppercase tracking-wider flex items-center gap-1.5">
+                  <MessageSquare className="w-3.5 h-3.5 text-rose-600" />
+                  Justificativa da Prioridade ({content.priority})
+                </label>
+                <textarea
+                  value={content.priorityJustification || ''}
+                  onChange={(e) => handleUpdate('content', 'priorityJustification', e.target.value)}
+                  rows={2}
+                  className="w-full min-h-[70px] bg-white border border-rose-200 rounded-lg p-3 text-xs font-semibold text-slate-900 outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 transition-all resize-none leading-relaxed"
+                  placeholder={`Explique o motivo do pedido ter prioridade ${content.priority}...`}
+                />
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {/* MOBILE STEP 1: Solicitante */}
@@ -645,7 +662,7 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
         <div className={isMobile ? "w-full bg-white border border-slate-200/80 rounded-3xl shadow-xl p-6 space-y-5 flex flex-col" : "space-y-4 border-t border-slate-200 pt-6"}>
           {isMobile ? (
             <div className="text-center flex flex-col items-center space-y-4 mb-4">
-              <div className="w-14 h-14 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto text-emerald-600 shadow-inner">
+              <div className="w-14 h-14 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto text-emerald-600 shadow-inner border border-emerald-100">
                 <ShoppingCart className="w-7 h-7" />
               </div>
               <div className="space-y-1">
@@ -653,13 +670,28 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
                 <p className="text-slate-500 text-xs font-medium max-w-xs mx-auto">
                   Adicione os produtos ou serviços que deseja solicitar.
                 </p>
+                <div className="pt-2">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 border border-emerald-200 text-emerald-800 font-black text-xs rounded-full shadow-2xs">
+                    <Package className="w-3.5 h-3.5 text-emerald-600" />
+                    {(content.purchaseItems || []).length} {(content.purchaseItems || []).length === 1 ? 'item adicionado' : 'itens adicionados'}
+                  </span>
+                </div>
               </div>
             </div>
           ) : (
-            <div className="mb-6">
-              <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+            <div className="flex items-center justify-between mb-6 pb-3 border-b border-slate-200 flex-wrap gap-2">
+              <h3 className="text-sm font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-2">
                 <Plus className="w-4 h-4 text-emerald-600" /> Itens da Requisição
               </h3>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  Total de itens:
+                </span>
+                <span className="px-3 py-1 bg-emerald-600 text-white font-black text-xs rounded-full shadow-xs flex items-center gap-1.5">
+                  <Package className="w-3.5 h-3.5" />
+                  {(content.purchaseItems || []).length} {(content.purchaseItems || []).length === 1 ? 'item adicionado' : 'itens adicionados'}
+                </span>
+              </div>
             </div>
           )}
 
@@ -879,9 +911,13 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
                 <button
                   type="button"
                   onClick={handlePolishBody}
-                  disabled={isPolishingBody || !content.body?.trim()}
-                  className="px-2 py-0.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-lg text-[9px] font-black uppercase tracking-wider transition-all disabled:opacity-40 flex items-center justify-center gap-1 shadow-xs active:scale-95 shrink-0"
-                  title="Melhorar justificativa com IA Gemini"
+                  disabled={isPolishingBody || (content.body?.trim()?.length || 0) < 100}
+                  className={`px-2.5 py-1 text-[10px] font-black uppercase tracking-wider rounded-lg transition-all flex items-center justify-center gap-1.5 shadow-xs shrink-0 ${
+                    (content.body?.trim()?.length || 0) >= 100 && !isPolishingBody
+                      ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white cursor-pointer active:scale-95 shadow-emerald-600/20 ring-2 ring-emerald-500/20'
+                      : 'bg-slate-200 text-slate-400 cursor-not-allowed opacity-60'
+                  }`}
+                  title={(content.body?.trim()?.length || 0) < 100 ? "Digite no mínimo 100 caracteres para desbloquear o acionamento da IA" : "Melhorar justificativa com IA Gemini"}
                 >
                   {isPolishingBody ? (
                     <>
@@ -890,7 +926,7 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
                     </>
                   ) : (
                     <>
-                      <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                      <Sparkles className={`w-3.5 h-3.5 ${ (content.body?.trim()?.length || 0) >= 100 ? 'text-amber-300 animate-pulse' : 'text-slate-400'}`} />
                       <span>Lapidar IA</span>
                     </>
                   )}
@@ -1318,7 +1354,31 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
                     <button
                       ref={signButtonRef}
                       disabled={!content.signatureName}
-                      onClick={() => setShowTwoFactor(true)}
+                      onClick={() => {
+                        if (isAuthSessionValid()) {
+                          const sigId = Math.random().toString(36).substr(2, 9);
+                          setIsSigned(true);
+                          onUpdate({
+                            ...state,
+                            content: {
+                              ...state.content,
+                              digitalSignature: {
+                                enabled: true,
+                                method: '2FA_SESSION_TIME',
+                                ip: '192.168.1.100',
+                                date: new Date().toISOString(),
+                                id: sigId,
+                                signerName: content.signatureName,
+                                signerRole: content.signatureRole
+                              }
+                            }
+                          });
+                        } else if (!isAuthPromoDismissedToday()) {
+                          setShowAuthTimePromo(true);
+                        } else {
+                          setShowTwoFactor(true);
+                        }
+                      }}
                       className={`
                         group relative inline-flex items-center justify-center gap-3 px-10 py-4 font-bold rounded-2xl shadow-xl transition-all duration-300 overflow-hidden
                         ${!content.signatureName
@@ -1376,6 +1436,7 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
                         disabled={twoFactorCode.length !== 6}
                         onClick={() => {
                           if (twoFactorCode.length === 6) {
+                            recordAuthSuccess();
                             const sigId = Math.random().toString(36).substr(2, 9);
                             setIsSigned(true);
                             onUpdate({
@@ -1399,11 +1460,11 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
                           }
                         }}
                         className={`
-                                    flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-bold text-[10px] sm:text-xs uppercase tracking-wide transition-all shadow-lg
-                                    ${twoFactorCode.length === 6
+                          flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-bold text-[10px] sm:text-xs uppercase tracking-wide transition-all shadow-lg
+                          ${twoFactorCode.length === 6
                             ? 'bg-emerald-600 text-white shadow-emerald-500/30 hover:bg-emerald-700 hover:scale-105 active:scale-95'
                             : 'bg-slate-100 text-slate-300 cursor-not-allowed shadow-none'}
-                                `}
+                        `}
                       >
                         Confirmar
                       </button>
@@ -1414,9 +1475,38 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
             </div>
           )}
 
+          {/* AuthTimePromoModal para sugestão de tempo antes de assinar */}
+          {showAuthTimePromo && (
+            <AuthTimePromoModal
+              isOpen={showAuthTimePromo}
+              onClose={() => {
+                setShowAuthTimePromo(false);
+                setShowTwoFactor(true);
+              }}
+              onSuccessAuthorized={() => {
+                setShowAuthTimePromo(false);
+                const sigId = Math.random().toString(36).substr(2, 9);
+                setIsSigned(true);
+                onUpdate({
+                  ...state,
+                  content: {
+                    ...state.content,
+                    digitalSignature: {
+                      enabled: true,
+                      method: '2FA_SESSION_TIME',
+                      ip: '192.168.1.100',
+                      date: new Date().toISOString(),
+                      id: sigId,
+                      signerName: content.signatureName,
+                      signerRole: content.signatureRole
+                    }
+                  }
+                });
+              }}
+            />
+          )}
         </div>
-      )
-      }
-    </div >
+      )}
+    </div>
   );
 };

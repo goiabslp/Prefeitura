@@ -383,7 +383,7 @@ export const ComprasStepWizard: React.FC<ComprasStepWizardProps> = ({
                 {/* 2. Stepper */}
                 <div className="flex-1 flex justify-center">
                     <div className="w-full max-w-3xl">
-                        <ComprasStepper currentStep={currentStep} stepsStatus={stepsStatus} onStepClick={handleStepClick} />
+                        <ComprasStepper currentStep={currentStep} stepsStatus={stepsStatus} onStepClick={handleStepClick} itemCounter={(content.purchaseItems || []).length} />
                     </div>
                 </div>
 

@@ -78,6 +78,7 @@ import { AbastecimentoForm } from './components/abastecimento/AbastecimentoForm'
 import { AbastecimentoList } from './components/abastecimento/AbastecimentoList';
 import { AbastecimentoDashboard } from './components/abastecimento/AbastecimentoDashboard';
 import { ForcePasswordChangeModal } from './components/ForcePasswordChangeModal';
+import { isAuthSessionValid, recordAuthSuccess } from './services/authTimeService';
 import { AvatarSelectionModal } from './components/modals/AvatarSelectionModal';
 import { NotificationProvider, useNotification } from './contexts/NotificationContext';
 import { SystemSettingsProvider, useSystemSettings } from './contexts/SystemSettingsContext';
@@ -1715,14 +1716,27 @@ const App: React.FC = () => {
       console.log(`[2FA Debug] Found User:`, signerUser);
 
       if (signerUser && (signerUser.twoFactorEnabled || signerUser.twoFactorEnabled2)) {
-        setTwoFASecret(signerUser.twoFactorEnabled ? (signerUser.twoFactorSecret || '') : '');
-        setTwoFASecret2(signerUser.twoFactorEnabled2 ? (signerUser.twoFactorSecret2 || null) : null);
+        if (isAuthSessionValid()) {
+          console.log('[2FA Session] Autenticação temporária válida ativa. Pulando prompt 2FA.');
+          const sigId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).substring(2);
+          digitalSignatureData = {
+            enabled: true,
+            method: '2FA_SESSION_TIME',
+            ip: 'Client-Device',
+            date: new Date().toISOString(),
+            id: sigId
+          };
+          skip2FA = true;
+        } else {
+          setTwoFASecret(signerUser.twoFactorEnabled ? (signerUser.twoFactorSecret || '') : '');
+          setTwoFASecret2(signerUser.twoFactorEnabled2 ? (signerUser.twoFactorSecret2 || null) : null);
 
-        setTwoFASignatureName(signerUser.name);
-        // Store intent to proceed
-        setPendingParams(true);
-        setIs2FAModalOpen(true);
-        return false;
+          setTwoFASignatureName(signerUser.name);
+          // Store intent to proceed
+          setPendingParams(true);
+          setIs2FAModalOpen(true);
+          return false;
+        }
       }
 
       // SAFETY CHECK: If 2FA is meant to be enforced (Digital Signature ON) but signer not found or no 2FA credentials
@@ -4008,14 +4022,16 @@ const App: React.FC = () => {
                         onBack={() => setAdminTab(null)}
                       />
                     ) : currentView === 'admin' && adminTab === '2fa' ? (
-                      <TwoFactorAuthScreen
-                        currentUser={currentUser}
-                        onUpdateUser={(u) => {
-                          handleUpdateUserInApp(u);
-                          // Also update local current user state if needed
-                        }}
-                        onBack={() => setAdminTab(null)}
-                      />
+                      <div className="flex-1 overflow-y-auto custom-scrollbar">
+                        <TwoFactorAuthScreen
+                          currentUser={currentUser}
+                          onUpdateUser={(u) => {
+                            handleUpdateUserInApp(u);
+                            // Also update local current user state if needed
+                          }}
+                          onBack={() => setAdminTab(null)}
+                        />
+                      </div>
                     ) : currentView === 'admin' && adminTab === 'entities' ? (
                       <EntityManagementScreen
                         persons={persons}
@@ -5052,6 +5068,7 @@ const App: React.FC = () => {
                     setPendingParams(false);
                   }}
                   onConfirm={() => {
+                    recordAuthSuccess();
                     setIs2FAModalOpen(false);
                     if (pending2FAAction) {
                       pending2FAAction(undefined);

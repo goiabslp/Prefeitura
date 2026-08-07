@@ -1,9 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { User } from '../types';
-import { ShieldCheck, Smartphone, RefreshCw, CheckCircle, AlertTriangle, Lock, ArrowLeft, Plus } from 'lucide-react';
+import { ShieldCheck, Smartphone, RefreshCw, CheckCircle, AlertTriangle, Lock, ArrowLeft, Plus, Clock, Zap, Check, ShieldAlert } from 'lucide-react';
 import * as OTPAuth from 'otpauth';
 import QRCode from 'qrcode';
 import { supabase } from '../services/supabaseClient';
+import {
+    getAuthTimeSettings,
+    setAuthGracePeriodMinutes,
+    isAuthSessionValid,
+    getAuthSessionTimeRemainingMs,
+    clearAuthSession,
+    GRACE_PERIOD_OPTIONS
+} from '../services/authTimeService';
 
 interface TwoFactorAuthScreenProps {
     currentUser: User;
@@ -12,8 +20,6 @@ interface TwoFactorAuthScreenProps {
 }
 
 export const TwoFactorAuthScreen: React.FC<TwoFactorAuthScreenProps> = ({ currentUser, onUpdateUser, onBack }) => {
-    // We track which slot we are currently editing/viewing in detail (1 or 2)
-    // If null, we show the dashboard with both cards.
     const [editingSlot, setEditingSlot] = useState<1 | 2 | null>(null);
 
     // Setup state
@@ -25,7 +31,30 @@ export const TwoFactorAuthScreen: React.FC<TwoFactorAuthScreenProps> = ({ curren
     const [loading, setLoading] = useState(false);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-    // Clear success message after 5 seconds
+    // Estado da Autenticação Única por Tempo
+    const [authSettings, setAuthSettings] = useState(getAuthTimeSettings());
+    const [timeRemainingMs, setTimeRemainingMs] = useState(getAuthSessionTimeRemainingMs());
+
+    useEffect(() => {
+        const timer = setInterval(() => {
+            setAuthSettings(getAuthTimeSettings());
+            setTimeRemainingMs(getAuthSessionTimeRemainingMs());
+        }, 1000);
+        return () => clearInterval(timer);
+    }, []);
+
+    const formatTimeRemaining = (ms: number) => {
+        if (ms <= 0) return 'Expirado';
+        const totalSec = Math.floor(ms / 1000);
+        const hours = Math.floor(totalSec / 3600);
+        const mins = Math.floor((totalSec % 3600) / 60);
+        const secs = totalSec % 60;
+        if (hours > 0) {
+            return `${hours}h ${mins.toString().padStart(2, '0')}m ${secs.toString().padStart(2, '0')}s`;
+        }
+        return `${mins.toString().padStart(2, '0')}m ${secs.toString().padStart(2, '0')}s`;
+    };
+
     useEffect(() => {
         if (successMessage) {
             const timer = setTimeout(() => setSuccessMessage(null), 5000);
@@ -36,7 +65,6 @@ export const TwoFactorAuthScreen: React.FC<TwoFactorAuthScreenProps> = ({ curren
     const isEnabled1 = currentUser.twoFactorEnabled || false;
     const isEnabled2 = currentUser.twoFactorEnabled2 || false;
 
-    // Reset setup state when switching slots or closing
     const resetSetupState = () => {
         setStep('intro');
         setSecret('');
@@ -48,16 +76,14 @@ export const TwoFactorAuthScreen: React.FC<TwoFactorAuthScreenProps> = ({ curren
 
     const handleStartSetup = async (slot: 1 | 2) => {
         setEditingSlot(slot);
-        setSuccessMessage(null); // Clear any previous success message
+        setSuccessMessage(null);
         setLoading(true);
         setError('');
 
-        // Generate new secret
         const newSecret = new OTPAuth.Secret({ size: 20 });
         const secretStr = newSecret.base32;
         setSecret(secretStr);
 
-        // Label distinguishes the key in the app (e.g. "User (Primary)" vs "User (Backup)")
         const label = `${currentUser.username}${slot === 2 ? ' (Backup)' : ''}`;
 
         const totp = new OTPAuth.TOTP({
@@ -193,12 +219,12 @@ export const TwoFactorAuthScreen: React.FC<TwoFactorAuthScreenProps> = ({ curren
         }
     };
 
-    // If we are actively editing a slot, show the specialized setup UI
+    // If we are actively editing a slot, show setup UI
     if (editingSlot) {
         return (
-            <div className="w-full max-w-3xl mx-auto p-6 animate-fade-in bg-white border border-slate-200 rounded-3xl shadow-xl my-8">
-                <div className="flex items-center justify-between mb-8 pb-6 border-b border-slate-100">
-                    <h3 className="text-xl font-bold text-slate-800">
+            <div className="w-full max-w-3xl mx-auto p-4 sm:p-6 animate-fade-in bg-white border border-slate-200 rounded-3xl shadow-xl my-6">
+                <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-100">
+                    <h3 className="text-lg font-bold text-slate-800">
                         Configurando Autenticador {editingSlot}
                     </h3>
                     <button
@@ -209,17 +235,17 @@ export const TwoFactorAuthScreen: React.FC<TwoFactorAuthScreenProps> = ({ curren
                     </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
-                    <div className="bg-slate-50 p-8 rounded-3xl text-center border-2 border-slate-100 flex flex-col items-center justify-center">
-                        <p className="text-xs font-bold text-slate-500 mb-6 uppercase tracking-widest">Escaneie com seu app</p>
-                        <div className="bg-white p-4 rounded-2xl shadow-sm mb-6">
-                            {qrCodeUrl && <img src={qrCodeUrl} alt="2FA QR Code" className="w-48 h-48 mix-blend-multiply" />}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+                    <div className="bg-slate-50 p-6 rounded-2xl text-center border border-slate-100 flex flex-col items-center justify-center">
+                        <p className="text-[10px] font-bold text-slate-500 mb-4 uppercase tracking-widest">Escaneie com seu app</p>
+                        <div className="bg-white p-3 rounded-xl shadow-sm mb-4">
+                            {qrCodeUrl && <img src={qrCodeUrl} alt="2FA QR Code" className="w-40 h-40 mix-blend-multiply" />}
                         </div>
 
-                        <div className="flex flex-col items-center gap-2">
+                        <div className="flex flex-col items-center gap-1.5">
                             <p className="text-[10px] text-slate-400 font-medium">Chave Secreta</p>
                             <code
-                                className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-mono select-all cursor-pointer hover:border-indigo-300 transition-colors text-slate-600"
+                                className="px-3 py-1 bg-white border border-slate-200 rounded-lg text-[10px] font-mono select-all cursor-pointer hover:border-indigo-300 transition-colors text-slate-600"
                                 onClick={() => navigator.clipboard.writeText(secret)}
                                 title="Clique para copiar"
                             >
@@ -228,10 +254,10 @@ export const TwoFactorAuthScreen: React.FC<TwoFactorAuthScreenProps> = ({ curren
                         </div>
                     </div>
 
-                    <div className="space-y-6">
+                    <div className="space-y-5">
                         <div>
-                            <h3 className="text-lg font-bold text-slate-900 mb-1">Confirme a configuração</h3>
-                            <p className="text-sm text-slate-500">Insira o código de 6 dígitos gerado pelo app.</p>
+                            <h3 className="text-base font-bold text-slate-900 mb-1">Confirme a configuração</h3>
+                            <p className="text-xs text-slate-500">Insira o código de 6 dígitos gerado pelo app.</p>
                         </div>
 
                         <div className="space-y-3">
@@ -243,7 +269,7 @@ export const TwoFactorAuthScreen: React.FC<TwoFactorAuthScreenProps> = ({ curren
                                     setToken(val);
                                     setError('');
                                 }}
-                                className="w-full p-4 border-2 border-slate-200 rounded-xl font-mono text-center text-2xl tracking-[0.5em] focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all"
+                                className="w-full p-3 border-2 border-slate-200 rounded-xl font-mono text-center text-xl tracking-[0.4em] focus:ring-4 focus:ring-indigo-100 focus:border-indigo-500 outline-none transition-all"
                                 placeholder="000000"
                                 autoFocus
                             />
@@ -251,9 +277,9 @@ export const TwoFactorAuthScreen: React.FC<TwoFactorAuthScreenProps> = ({ curren
                             <button
                                 onClick={verifyAndEnable}
                                 disabled={token.length !== 6 || loading}
-                                className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-xl font-bold transition-all hover:shadow-lg shadow-emerald-200 flex items-center justify-center gap-2"
+                                className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all shadow-md shadow-emerald-200 flex items-center justify-center gap-2"
                             >
-                                {loading ? <RefreshCw className="w-5 h-5 animate-spin" /> : <CheckCircle className="w-5 h-5" />}
+                                {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
                                 Ativar Autenticador {editingSlot}
                             </button>
 
@@ -265,140 +291,266 @@ export const TwoFactorAuthScreen: React.FC<TwoFactorAuthScreenProps> = ({ curren
         );
     }
 
-    // Dashboard View - Showing 2 Cards
+    // Dashboard View - Streamlined & Compact Layout
     return (
-        <div className="w-full max-w-5xl mx-auto p-8 animate-fade-in relative">
+        <div className="w-full max-w-5xl mx-auto p-4 sm:p-6 pb-24 animate-fade-in space-y-6">
             {successMessage && (
-                <div className="mb-6 p-4 bg-emerald-100 text-emerald-800 rounded-2xl flex items-center gap-3 animate-slide-down shadow-sm">
-                    <CheckCircle className="w-6 h-6 shrink-0" />
-                    <span className="font-bold">{successMessage}</span>
+                <div className="p-4 bg-emerald-100 text-emerald-800 rounded-2xl flex items-center gap-3 animate-slide-down shadow-sm">
+                    <CheckCircle className="w-5 h-5 shrink-0" />
+                    <span className="font-bold text-sm">{successMessage}</span>
                     <button onClick={() => setSuccessMessage(null)} className="ml-auto p-1 hover:bg-emerald-200 rounded-full transition-colors">
-                        <ArrowLeft className="w-4 h-4 rotate-180" /> {/* Using as close icon approximately */}
+                        <ArrowLeft className="w-4 h-4 rotate-180" />
                     </button>
                 </div>
             )}
-            <div className="flex items-center gap-4 mb-8 pb-6 border-b border-slate-200">
-                {onBack && (
-                    <button onClick={onBack} className="p-2 -ml-2 hover:bg-slate-100 rounded-full text-slate-500 transition-colors">
-                        <ArrowLeft className="w-6 h-6" />
-                    </button>
-                )}
-                <div className="flex-1">
-                    <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Dispositivos de Segurança</h2>
-                    <p className="text-slate-500 mt-1 font-medium">Gerencie até 02 dispositivos autenticadores para sua conta.</p>
+
+            {/* Cabeçalho da Página */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                    {onBack && (
+                        <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-xl text-slate-500 transition-colors shrink-0">
+                            <ArrowLeft className="w-5 h-5" />
+                        </button>
+                    )}
+                    <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <h2 className="text-2xl font-black text-slate-900 tracking-tight">Dispositivos de Segurança</h2>
+                            <span className="px-2.5 py-0.5 bg-slate-100 text-slate-600 text-[10px] font-mono font-bold rounded-md border border-slate-200">
+                                /Admin/autenticador
+                            </span>
+                        </div>
+                        <p className="text-xs text-slate-500 font-medium mt-0.5">
+                            Gerencie os aplicativos de autenticação 2FA e as regras de validade temporária por sessão.
+                        </p>
+                    </div>
+                </div>
+
+                {/* Resumo de Status Rápido */}
+                <div className="flex items-center gap-2 shrink-0">
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold border flex items-center gap-1.5 ${
+                        isEnabled1 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'
+                    }`}>
+                        {isEnabled1 ? <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" /> : <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />}
+                        {isEnabled1 ? '2FA Ativado' : '2FA Pendente'}
+                    </span>
+                    {isAuthSessionValid() && (
+                        <span className="px-3 py-1 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full text-xs font-mono font-bold flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5 text-indigo-600 animate-pulse" />
+                            {formatTimeRemaining(timeRemainingMs)}
+                        </span>
+                    )}
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Grid dos 2 Autenticadores */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Slot 1 */}
-                <div className={`relative p-8 rounded-[2rem] border-2 transition-all duration-300 ${isEnabled1 ? 'bg-emerald-50 border-emerald-500 shadow-xl shadow-emerald-500/10' : 'bg-white border-slate-200 border-dashed'}`}>
-                    <div className="flex items-center gap-4 mb-6">
-                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-sm ${isEnabled1 ? 'bg-emerald-500 text-white shadow-emerald-200' : 'bg-slate-100 text-slate-400'}`}>
-                            <Smartphone className="w-7 h-7" />
-                        </div>
-                        <div>
-                            <h3 className={`text-lg font-black ${isEnabled1 ? 'text-emerald-900' : 'text-slate-700'}`}>Autenticador 01</h3>
-                            <div className="flex items-center gap-2">
-                                <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${isEnabled1 ? 'bg-emerald-200 text-emerald-800' : 'bg-slate-200 text-slate-500'}`}>
-                                    {isEnabled1 ? 'Ativo' : 'Pendente'}
+                <div className={`p-5 rounded-2xl border-2 transition-all duration-300 ${
+                    isEnabled1 ? 'bg-emerald-50/40 border-emerald-500 shadow-sm' : 'bg-white border-slate-200 border-dashed'
+                }`}>
+                    <div className="flex items-center justify-between gap-3 mb-4">
+                        <div className="flex items-center gap-3">
+                            <div className={`w-11 h-11 rounded-xl flex items-center justify-center shadow-xs ${
+                                isEnabled1 ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-400'
+                            }`}>
+                                <Smartphone className="w-5 h-5" />
+                            </div>
+                            <div>
+                                <h3 className={`text-base font-black ${isEnabled1 ? 'text-emerald-950' : 'text-slate-800'}`}>Autenticador 01</h3>
+                                <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
+                                    isEnabled1 ? 'bg-emerald-200/80 text-emerald-900' : 'bg-slate-200 text-slate-500'
+                                }`}>
+                                    {isEnabled1 ? 'Ativo (Principal)' : 'Pendente'}
                                 </span>
                             </div>
                         </div>
-                        {isEnabled1 && <div className="ml-auto w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600 animate-scale-in"><CheckCircle className="w-6 h-6" /></div>}
+                        {isEnabled1 && <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />}
                     </div>
 
                     {isEnabled1 ? (
-                        <div className="space-y-4">
-                            <div className="p-4 bg-white/50 rounded-xl border border-emerald-100 text-sm text-emerald-800 font-medium leading-relaxed">
-                                Este dispositivo está <span className="font-bold underline">protegendo sua conta</span>. O uso dele é obrigatório para assinaturas.
-                            </div>
-                            <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-3">
+                            <p className="text-xs text-emerald-900 bg-white/70 p-3 rounded-xl border border-emerald-100 leading-relaxed font-medium">
+                                Este dispositivo está protegendo sua conta para assinaturas digitais.
+                            </p>
+                            <div className="grid grid-cols-2 gap-2">
                                 <button
                                     onClick={() => handleStartSetup(1)}
-                                    className="py-3 bg-white border border-emerald-200 text-emerald-700 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-emerald-100 hover:border-emerald-300 transition-colors flex items-center justify-center gap-2"
+                                    className="py-2.5 bg-white border border-emerald-200 text-emerald-800 rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-emerald-100 transition-colors flex items-center justify-center gap-1.5"
                                 >
                                     <RefreshCw className="w-3 h-3" /> Redefinir
                                 </button>
                                 <button
                                     onClick={() => confirmDisable(1)}
-                                    className="py-3 bg-red-50 border border-red-200 text-red-600 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-red-100 hover:border-red-300 transition-colors flex items-center justify-center gap-2"
+                                    className="py-2.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-rose-100 transition-colors flex items-center justify-center gap-1.5"
                                 >
                                     <Lock className="w-3 h-3" /> Resetar
                                 </button>
                             </div>
                         </div>
                     ) : (
-                        <div className="space-y-4">
-                            <p className="text-sm text-slate-500">Configure seu dispositivo principal para habilitar a segurança.</p>
+                        <div className="space-y-3">
+                            <p className="text-xs text-slate-500">Configure seu dispositivo principal para ativar a segurança.</p>
                             <button
                                 onClick={() => handleStartSetup(1)}
-                                className="w-full py-4 bg-slate-900 text-white rounded-xl text-sm font-bold shadow-lg hover:shadow-xl hover:scale-[1.02] transition-all flex items-center justify-center gap-2"
+                                className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold uppercase tracking-wider shadow-sm transition-all flex items-center justify-center gap-1.5"
                             >
-                                <Plus className="w-4 h-4" /> Configurar Agora
+                                <Plus className="w-3.5 h-3.5" /> Configurar Agora
                             </button>
                         </div>
                     )}
                 </div>
 
                 {/* Slot 2 */}
-                <div className={`relative p-8 rounded-[2rem] border-2 transition-all duration-300 ${isEnabled2 ? 'bg-indigo-50 border-indigo-500 shadow-xl shadow-indigo-500/10' : 'bg-white border-slate-200 border-dashed opacity-100'}`}>
-                    <div className="flex items-center gap-4 mb-6">
-                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-sm ${isEnabled2 ? 'bg-indigo-500 text-white shadow-indigo-200' : 'bg-slate-100 text-slate-400'}`}>
-                            <Smartphone className="w-7 h-7" />
-                        </div>
-                        <div>
-                            <h3 className={`text-lg font-black ${isEnabled2 ? 'text-indigo-900' : 'text-slate-700'}`}>Autenticador 02</h3>
-                            <div className="flex items-center gap-2">
-                                <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${isEnabled2 ? 'bg-indigo-200 text-indigo-800' : 'bg-slate-200 text-slate-500'}`}>
-                                    {isEnabled2 ? 'Ativo (Backup)' : 'Opcional'}
+                <div className={`p-5 rounded-2xl border-2 transition-all duration-300 ${
+                    isEnabled2 ? 'bg-indigo-50/40 border-indigo-500 shadow-sm' : 'bg-white border-slate-200 border-dashed'
+                }`}>
+                    <div className="flex items-center justify-between gap-3 mb-4">
+                        <div className="flex items-center gap-3">
+                            <div className={`w-11 h-11 rounded-xl flex items-center justify-center shadow-xs ${
+                                isEnabled2 ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'
+                            }`}>
+                                <Smartphone className="w-5 h-5" />
+                            </div>
+                            <div>
+                                <h3 className={`text-base font-black ${isEnabled2 ? 'text-indigo-950' : 'text-slate-800'}`}>Autenticador 02</h3>
+                                <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
+                                    isEnabled2 ? 'bg-indigo-200/80 text-indigo-900' : 'bg-slate-200 text-slate-500'
+                                }`}>
+                                    {isEnabled2 ? 'Ativo (Reserva)' : 'Opcional'}
                                 </span>
                             </div>
                         </div>
-                        {isEnabled2 && <div className="ml-auto w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 animate-scale-in"><CheckCircle className="w-6 h-6" /></div>}
+                        {isEnabled2 && <CheckCircle className="w-5 h-5 text-indigo-600 shrink-0" />}
                     </div>
 
                     {isEnabled2 ? (
-                        <div className="space-y-4">
-                            <div className="p-4 bg-white/50 rounded-xl border border-indigo-100 text-sm text-indigo-800 font-medium leading-relaxed">
+                        <div className="space-y-3">
+                            <p className="text-xs text-indigo-900 bg-white/70 p-3 rounded-xl border border-indigo-100 leading-relaxed font-medium">
                                 Dispositivo de backup ativo. Você pode usar qualquer um dos dois para assinar.
-                            </div>
-                            <div className="grid grid-cols-2 gap-3">
+                            </p>
+                            <div className="grid grid-cols-2 gap-2">
                                 <button
                                     onClick={() => handleStartSetup(2)}
-                                    className="py-3 bg-white border border-indigo-200 text-indigo-700 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-indigo-100 hover:border-indigo-300 transition-colors flex items-center justify-center gap-2"
+                                    className="py-2.5 bg-white border border-indigo-200 text-indigo-800 rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-indigo-100 transition-colors flex items-center justify-center gap-1.5"
                                 >
                                     <RefreshCw className="w-3 h-3" /> Redefinir
                                 </button>
                                 <button
                                     onClick={() => confirmDisable(2)}
-                                    className="py-3 bg-red-50 border border-red-200 text-red-600 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-red-100 hover:border-red-300 transition-colors flex items-center justify-center gap-2"
+                                    className="py-2.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-rose-100 transition-colors flex items-center justify-center gap-1.5"
                                 >
                                     <Lock className="w-3 h-3" /> Resetar
                                 </button>
                             </div>
                         </div>
                     ) : (
-                        <div className="space-y-4">
-                            <p className="text-sm text-slate-500">Adicione um segundo dispositivo como backup de segurança.</p>
+                        <div className="space-y-3">
+                            <p className="text-xs text-slate-500">Adicione um segundo dispositivo como reserva de segurança.</p>
                             <button
                                 onClick={() => handleStartSetup(2)}
                                 disabled={!isEnabled1}
-                                className="w-full py-4 bg-white border-2 border-indigo-100 text-indigo-600 disabled:opacity-50 disabled:border-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed rounded-xl text-sm font-bold hover:border-indigo-300 hover:bg-indigo-50 transition-all flex items-center justify-center gap-2"
+                                className="w-full py-3 bg-white border-2 border-indigo-200 text-indigo-700 disabled:opacity-50 disabled:border-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-indigo-50 transition-all flex items-center justify-center gap-1.5"
                             >
-                                <Plus className="w-4 h-4" /> {isEnabled1 ? 'Configurar Reserva' : 'Ative o Principal Primeiro'}
+                                <Plus className="w-3.5 h-3.5" /> {isEnabled1 ? 'Configurar Reserva' : 'Ative o 01 Primeiro'}
                             </button>
                         </div>
                     )}
                 </div>
             </div>
 
-            <div className="mt-8 p-6 bg-blue-50 border border-blue-100 rounded-2xl flex items-start gap-4">
-                <ShieldCheck className="w-6 h-6 text-blue-600 shrink-0 mt-1" />
-                <div>
-                    <h4 className="font-bold text-blue-900">Como funciona?</h4>
-                    <p className="text-sm text-blue-800 mt-1">
-                        Você pode configurar até dois aplicativos autenticadores (em celulares diferentes, por exemplo).
-                        Ao assinar um documento, <strong>o sistema aceitará o código gerado por QUALQUER UM dos dois dispositivos</strong>.
+            {/* SEÇÃO: AUTENTICAÇÃO ÚNICA POR TEMPO */}
+            <div className="p-5 sm:p-6 bg-white border border-slate-200 rounded-2xl shadow-sm space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+                    <div className="flex items-center gap-3">
+                        <div className="w-11 h-11 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center border border-indigo-100 shadow-inner shrink-0">
+                            <Clock className="w-5 h-5" />
+                        </div>
+                        <div>
+                            <h3 className="text-lg font-black text-slate-900 tracking-tight">Autenticação Única por Tempo</h3>
+                            <p className="text-xs text-slate-500 font-medium mt-0.5">
+                                Defina por quanto tempo a autenticação permanece autorizada após a primeira validação.
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Status da Sessão Ativa */}
+                    <div className="shrink-0">
+                        {isAuthSessionValid() ? (
+                            <div className="bg-emerald-50 border border-emerald-200 p-2.5 px-3.5 rounded-xl flex items-center gap-2.5 shadow-2xs">
+                                <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-ping shrink-0" />
+                                <div>
+                                    <span className="block text-[9px] font-black uppercase tracking-wider text-emerald-700">Autorizado</span>
+                                    <span className="text-xs font-mono font-bold text-emerald-950">{formatTimeRemaining(timeRemainingMs)}</span>
+                                </div>
+                                <button
+                                    onClick={() => {
+                                        clearAuthSession();
+                                        setAuthSettings(getAuthTimeSettings());
+                                        setTimeRemainingMs(0);
+                                    }}
+                                    className="ml-2 text-[9px] font-black uppercase tracking-wider px-2 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg transition-colors shadow-2xs"
+                                    title="Encerrar autorização imediatamente"
+                                >
+                                    Revogar
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="bg-slate-100 border border-slate-200 p-2.5 px-3.5 rounded-xl text-right">
+                                <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400">Modo Atual</span>
+                                <span className="text-xs font-bold text-slate-700">Exigir a cada operação</span>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Opções de Tempo */}
+                <div className="space-y-2">
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                        Selecione a Duração da Validade
+                    </label>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2">
+                        {GRACE_PERIOD_OPTIONS.map((opt) => {
+                            const isSelected = authSettings.gracePeriodMinutes === opt.value;
+                            return (
+                                <button
+                                    key={opt.value}
+                                    type="button"
+                                    onClick={() => {
+                                        setAuthGracePeriodMinutes(opt.value);
+                                        setAuthSettings(getAuthTimeSettings());
+                                        setTimeRemainingMs(getAuthSessionTimeRemainingMs());
+                                    }}
+                                    className={`
+                                        p-3 rounded-xl text-center border-2 transition-all flex flex-col items-center justify-center gap-1 active:scale-95 cursor-pointer
+                                        ${isSelected
+                                            ? 'bg-indigo-600 border-indigo-600 text-white shadow-md ring-2 ring-indigo-300'
+                                            : 'bg-slate-50 border-slate-200 hover:border-slate-300 hover:bg-white text-slate-700'
+                                        }
+                                    `}
+                                >
+                                    <span className={`text-xs font-black uppercase tracking-wider ${isSelected ? 'text-white' : 'text-slate-800'}`}>
+                                        {opt.value === 0 ? 'Desativado' : opt.label}
+                                    </span>
+                                    {opt.value > 0 && (
+                                        <span className={`text-[9px] font-bold ${isSelected ? 'text-indigo-200' : 'text-slate-400'}`}>
+                                            {opt.value >= 60 ? `${opt.value / 60}h` : `${opt.value}m`}
+                                        </span>
+                                    )}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+            </div>
+
+            {/* Banner Explicativo */}
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-start gap-3 text-xs text-slate-600">
+                <ShieldCheck className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                    <strong className="text-slate-900 block font-bold">Como funciona a Autenticação Única por Tempo?</strong>
+                    <p className="leading-relaxed">
+                        Ao escolher um intervalo (ex: 15min ou 1 hora), o código 2FA será solicitado apenas na <strong>primeira assinatura</strong>. 
+                        Após validado, você poderá assinar novos documentos livremente até o tempo expirar ou revogar manualmente.
                     </p>
                 </div>
             </div>
