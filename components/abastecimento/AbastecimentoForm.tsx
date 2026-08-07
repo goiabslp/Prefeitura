@@ -89,13 +89,13 @@ export const AbastecimentoForm: React.FC<AbastecimentoFormProps> = ({
         t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 
     const mobileStepsList = useMemo(() => [
-        { key: 'nota',        title: 'Nota Fiscal' },
         { key: 'veiculo',     title: 'Veículo' },
         { key: 'motorista',   title: 'Motorista' },
         { key: 'posto',       title: 'Posto' },
         { key: 'combustivel', title: 'Combustível' },
         { key: 'litros',      title: 'Litros' },
         { key: 'odometro',    title: 'Odômetro' },
+        { key: 'nota',        title: 'Nota Fiscal' },
         { key: 'revisao',     title: 'Revisão' },
     ], []);
 
