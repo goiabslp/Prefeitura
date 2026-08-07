@@ -10,8 +10,9 @@ import {
   MapPin, Hash, Palette, Calendar, Layers, Network, ChevronDown, Check,
   PenTool, Upload, FileText, Eye, Download, FileCheck, Camera, Image as ImageIcon,
   ArrowLeft, Fuel, Gauge, ShieldCheck, Activity, AlertTriangle, Hammer, ClipboardCheck,
-  ShieldAlert, User, Briefcase, Tag, Flame, Droplets
+  ShieldAlert, User, Briefcase, Tag, Flame, Droplets, Crop, Scissors
 } from 'lucide-react';
+import { ImageCropModal } from './common/ImageCropModal';
 
 interface FleetManagementScreenProps {
   vehicles: Vehicle[];
@@ -260,18 +261,41 @@ export const FleetManagementScreen: React.FC<FleetManagementScreenProps> = ({
     }
   };
 
+  const [fileToCrop, setFileToCrop] = useState<File | null>(null);
+  const [urlToCrop, setUrlToCrop] = useState<string | null>(null);
+  const [isCropModalOpen, setIsCropModalOpen] = useState<boolean>(false);
+
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setFormData(prev => ({
-          ...prev,
-          vehicleImageUrl: reader.result as string
-        }));
-      };
-      reader.readAsDataURL(file);
+      setFileToCrop(file);
+      setUrlToCrop(null);
+      setIsCropModalOpen(true);
+      if (photoInputRef.current) photoInputRef.current.value = '';
     }
+  };
+
+  const handleOpenCropForCurrentPhoto = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (formData.vehicleImageUrl) {
+      setUrlToCrop(formData.vehicleImageUrl);
+      setFileToCrop(null);
+      setIsCropModalOpen(true);
+    }
+  };
+
+  const handleCropConfirm = (croppedFile: File) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setFormData(prev => ({
+        ...prev,
+        vehicleImageUrl: reader.result as string
+      }));
+      setIsCropModalOpen(false);
+      setFileToCrop(null);
+      setUrlToCrop(null);
+    };
+    reader.readAsDataURL(croppedFile);
   };
 
   const handleRemovePhoto = (e?: React.MouseEvent) => {
@@ -814,42 +838,59 @@ export const FleetManagementScreen: React.FC<FleetManagementScreenProps> = ({
                         <div className="flex items-center justify-between">
                           <label className={labelClass}><Camera className="w-3.5 h-3.5 inline mr-2" /> Fotografia do Veículo</label>
                           {formData.vehicleImageUrl && (
-                            <button
-                              type="button"
-                              onClick={handleRemovePhoto}
-                              className="text-[10px] font-bold text-rose-600 hover:text-rose-700 flex items-center gap-1 transition-all active:scale-95 bg-rose-50 hover:bg-rose-100 px-2.5 py-1 rounded-lg border border-rose-200"
-                              title="Excluir Fotografia"
-                            >
-                              <Trash2 className="w-3 h-3" /> Excluir Foto
-                            </button>
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={handleOpenCropForCurrentPhoto}
+                                className="text-[10px] font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-1 transition-all active:scale-95 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-lg border border-emerald-200"
+                                title="Recortar Imagem"
+                              >
+                                <Crop className="w-3 h-3" /> Recortar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleRemovePhoto}
+                                className="text-[10px] font-bold text-rose-600 hover:text-rose-700 flex items-center gap-1 transition-all active:scale-95 bg-rose-50 hover:bg-rose-100 px-2.5 py-1 rounded-lg border border-rose-200"
+                                title="Excluir Fotografia"
+                              >
+                                <Trash2 className="w-3 h-3" /> Excluir
+                              </button>
+                            </div>
                           )}
                         </div>
                         <div
                           onClick={() => photoInputRef.current?.click()}
                           className={`relative aspect-[4/3] rounded-[2rem] border-4 border-dashed transition-all cursor-pointer group flex flex-col items-center justify-center overflow-hidden shadow-inner
-                              ${formData.vehicleImageUrl ? 'border-indigo-600 bg-indigo-50/5' : 'border-slate-100 bg-slate-50 hover:border-indigo-400 hover:bg-white'}
-                            `}
+                               ${formData.vehicleImageUrl ? 'border-indigo-600 bg-indigo-50/5' : 'border-slate-100 bg-slate-50 hover:border-indigo-400 hover:bg-white'}
+                             `}
                         >
                           <input type="file" ref={photoInputRef} onChange={handlePhotoUpload} accept="image/*" className="hidden" />
                           {formData.vehicleImageUrl ? (
                             <>
                               <img src={formData.vehicleImageUrl} alt="Preview" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
                               <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-3 backdrop-blur-sm p-4">
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 flex-wrap justify-center">
+                                  <button
+                                    type="button"
+                                    onClick={handleOpenCropForCurrentPhoto}
+                                    className="text-white text-xs font-black uppercase tracking-[0.15em] bg-emerald-600 hover:bg-emerald-500 px-3.5 py-2 rounded-xl shadow-xl flex items-center gap-2 transition-all active:scale-95 border border-emerald-400/30"
+                                  >
+                                    <Crop className="w-4 h-4" /> Recortar
+                                  </button>
                                   <button
                                     type="button"
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       photoInputRef.current?.click();
                                     }}
-                                    className="text-white text-xs font-black uppercase tracking-[0.15em] bg-indigo-600 hover:bg-indigo-500 px-4 py-2.5 rounded-xl shadow-xl flex items-center gap-2 transition-all active:scale-95 border border-indigo-400/30"
+                                    className="text-white text-xs font-black uppercase tracking-[0.15em] bg-indigo-600 hover:bg-indigo-500 px-3.5 py-2 rounded-xl shadow-xl flex items-center gap-2 transition-all active:scale-95 border border-indigo-400/30"
                                   >
                                     <Upload className="w-4 h-4" /> Alterar
                                   </button>
                                   <button
                                     type="button"
                                     onClick={handleRemovePhoto}
-                                    className="text-white text-xs font-black uppercase tracking-[0.15em] bg-rose-600 hover:bg-rose-500 px-4 py-2.5 rounded-xl shadow-xl flex items-center gap-2 transition-all active:scale-95 border border-rose-400/30"
+                                    className="text-white text-xs font-black uppercase tracking-[0.15em] bg-rose-600 hover:bg-rose-500 px-3.5 py-2 rounded-xl shadow-xl flex items-center gap-2 transition-all active:scale-95 border border-rose-400/30"
                                   >
                                     <Trash2 className="w-4 h-4" /> Excluir
                                   </button>
@@ -2025,6 +2066,20 @@ export const FleetManagementScreen: React.FC<FleetManagementScreenProps> = ({
           document.body
         )
       }
+
+      {/* MODAL INTERATIVO DE CORTE DE IMAGEM */}
+      {isCropModalOpen && (fileToCrop || urlToCrop) && (
+        <ImageCropModal
+          imageFile={fileToCrop}
+          imageUrl={urlToCrop}
+          onConfirm={handleCropConfirm}
+          onCancel={() => {
+            setIsCropModalOpen(false);
+            setFileToCrop(null);
+            setUrlToCrop(null);
+          }}
+        />
+      )}
 
     </>
   );

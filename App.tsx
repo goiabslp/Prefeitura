@@ -4498,6 +4498,7 @@ const App: React.FC = () => {
                   setCurrentView('abastecimento');
                 }}
                 refreshTrigger={lastRefresh}
+                vehicles={vehicles}
               />
             )}
 

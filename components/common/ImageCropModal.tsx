@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Crop, RotateCw, ZoomIn, ZoomOut, Check, X, RefreshCw, Scissors, Maximize2 } from 'lucide-react';
 
 interface ImageCropModalProps {
-  imageFile: File;
+  imageFile?: File | null;
+  imageUrl?: string | null;
   onConfirm: (croppedFile: File) => void;
   onCancel: () => void;
 }
@@ -11,6 +12,7 @@ type AspectRatio = 'free' | '1:1' | '3:4' | '4:3' | '16:9';
 
 export const ImageCropModal: React.FC<ImageCropModalProps> = ({
   imageFile,
+  imageUrl,
   onConfirm,
   onCancel
 }) => {
@@ -42,13 +44,16 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
   });
 
   useEffect(() => {
-    if (!imageFile) return;
-    const url = URL.createObjectURL(imageFile);
-    setImageSrc(url);
-    return () => {
-      URL.revokeObjectURL(url);
-    };
-  }, [imageFile]);
+    if (imageFile) {
+      const url = URL.createObjectURL(imageFile);
+      setImageSrc(url);
+      return () => {
+        URL.revokeObjectURL(url);
+      };
+    } else if (imageUrl) {
+      setImageSrc(imageUrl);
+    }
+  }, [imageFile, imageUrl]);
 
   // Adjust aspect ratio presets
   const applyAspectRatio = (ratio: AspectRatio) => {
@@ -219,7 +224,7 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({
       finalCanvas.toBlob(
         (blob) => {
           if (blob) {
-            const fileName = imageFile.name ? imageFile.name.replace(/\.[^/.]+$/, "") + "_cropped.jpg" : `comprovante_cortado_${Date.now()}.jpg`;
+            const fileName = imageFile?.name ? imageFile.name.replace(/\.[^/.]+$/, "") + "_cropped.jpg" : `foto_veiculo_cortada_${Date.now()}.jpg`;
             const croppedFile = new File([blob], fileName, { type: 'image/jpeg', lastModified: Date.now() });
             onConfirm(croppedFile);
           } else {

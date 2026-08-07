@@ -11,9 +11,10 @@ interface AbastecimentoListProps {
     onBack: () => void;
     onEdit?: (record: AbastecimentoRecord) => void;
     refreshTrigger?: number;
+    vehicles?: any[];
 }
 import { useAuth } from '../../contexts/AuthContext';
-import { Edit } from 'lucide-react';
+import { Edit, Eye } from 'lucide-react';
 
 const getFuelColor = (fuel: string) => {
     const type = fuel.toLowerCase();
@@ -24,21 +25,24 @@ const getFuelColor = (fuel: string) => {
 };
 
 const DataItem = ({ label, value, icon: Icon, colorClass = "text-slate-700", flex = "flex-1", truncateValue = true, isBadge = false }: { label: string, value: string | number, icon?: any, colorClass?: string, flex?: string, truncateValue?: boolean, isBadge?: boolean }) => (
-    <div className={`flex flex-col gap-1 ${flex} min-w-0`}>
+    <div className={`flex flex-col gap-1 ${flex} min-w-0 overflow-hidden`}>
         <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400/80 ml-0.5 whitespace-nowrap overflow-hidden text-ellipsis flex items-center gap-1.5">
-            {Icon && !isBadge && <Icon className="w-3 h-3" />}
-            {label}
+            {Icon && !isBadge && <Icon className="w-3 h-3 shrink-0" />}
+            <span className="truncate">{label}</span>
         </span>
-        <div className={`flex items-center text-sm font-bold transition-colors ${colorClass} ${isBadge ? 'px-2.5 py-1 rounded-lg border w-fit' : ''}`}>
+        <div className={`flex items-center text-sm font-bold transition-colors ${colorClass} ${isBadge ? 'px-2.5 py-0.5 rounded-lg border w-fit max-w-full' : ''}`}>
             {Icon && isBadge && <Icon className="w-3.5 h-3.5 mr-1.5 shrink-0 opacity-70" />}
             <span className={truncateValue ? "truncate" : "whitespace-nowrap"} title={String(value)}>{value}</span>
         </div>
     </div>
 );
 
-const AbastecimentoCard = ({ item, isAdmin, onEdit, onDelete, vehicleModelMap, vehiclePlateMap, vehicleSectorMap }: any) => {
+const AbastecimentoCard = ({ item, isAdmin, onEdit, onDelete, vehicleModelMap, vehiclePlateMap, vehicleSectorMap, vehicleImageMap, onPreviewImage }: any) => {
     const [isExpanded, setIsExpanded] = useState(false);
     const fuelColor = getFuelColor(item.fuelType);
+    const vehiclePhoto = vehicleImageMap[item.vehicle];
+    const vehiclePlate = vehiclePlateMap[item.vehicle];
+    const vehicleModel = vehicleModelMap[item.vehicle] || item.vehicle;
 
     return (
         <GestureItem
@@ -49,91 +53,141 @@ const AbastecimentoCard = ({ item, isAdmin, onEdit, onDelete, vehicleModelMap, v
                 onClick={() => setIsExpanded(!isExpanded)}
                 className={`group bg-white rounded-2xl border transition-all duration-300 relative overflow-hidden cursor-pointer ${isExpanded ? 'border-cyan-200 ring-1 ring-cyan-100 shadow-lg shadow-cyan-500/5' : 'border-slate-200/60 hover:shadow-md hover:border-cyan-200/50'}`}
             >
-                <div className={`absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-transparent via-slate-200 to-transparent group-hover:via-cyan-400 transition-all ${isExpanded ? 'bg-cyan-400' : ''}`} />
+                <div className={`absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-transparent via-cyan-400 to-transparent group-hover:via-cyan-500 transition-all ${isExpanded ? 'bg-cyan-500' : ''}`} />
 
-                <div className="p-4 pl-5">
-                    {/* Minimized / Header Content */}
-                    <div className="flex flex-col wide:flex-row wide:items-center gap-4">
-                        <div className="flex-1 grid grid-cols-2 wide:grid-cols-12 gap-4 items-center">
-                            {/* Always Visible Fields */}
-                            <DataItem label="Nº Nota" value={getDisplayInvoiceNumber(item.invoiceNumber) || '-'} icon={FileText} flex="col-span-1 wide:col-span-1" />
-                            <DataItem label="Data" value={formatLocalDateTime(item.date)} icon={Calendar} flex="col-span-1 wide:col-span-2" />
-                            <DataItem label="Veículo" value={vehicleModelMap[item.vehicle] ? `${vehicleModelMap[item.vehicle]}` : item.vehicle} icon={Truck} colorClass="text-slate-900 uppercase tracking-tight" flex="col-span-2 wide:col-span-3" />
-                            <DataItem label="Motorista" value={item.driver} icon={User} colorClass="text-slate-600 uppercase tracking-tight" flex="col-span-1 wide:col-span-2" />
-                            <DataItem label="Setor" value={vehicleSectorMap[item.vehicle] || '-'} colorClass="text-slate-500 uppercase text-[10px]" flex="col-span-1 wide:col-span-2" />
-                            <DataItem
-                                label="Combustível"
-                                value={item.fuelType.split(' - ')[0].toUpperCase()}
-                                colorClass={fuelColor}
-                                flex="col-span-1 wide:col-span-1"
-                                isBadge={true}
-                            />
-                            <DataItem
-                                label="Custo"
-                                value={`R$ ${item.cost.toFixed(2)}`}
-                                colorClass="text-emerald-700 font-black"
-                                flex="col-span-1 wide:col-span-1"
-                            />
-                            {item.unit_price && (
-                                <DataItem
-                                    label="Preço/L"
-                                    value={`R$ ${item.unit_price.toFixed(2)}`}
-                                    colorClass="text-slate-500 font-medium"
-                                    flex="col-span-1 wide:col-span-1"
-                                />
+                <div className="flex flex-col wide:flex-row items-stretch min-h-[84px]">
+                    
+                    {/* CARD DE PRIMEIRA INFORMAÇÃO - FOTO E DADOS DO VEÍCULO (ALTURA TOTAL ATÉ CAMPO NOTA) */}
+                    <div 
+                        className="bg-slate-50/90 border-b wide:border-b-0 wide:border-r border-slate-100 p-1.5 sm:p-2 px-3 sm:px-4 flex items-center gap-3 shrink-0 self-stretch wide:w-[320px] group-hover:bg-cyan-50/40 group-hover:border-cyan-100/60 transition-all relative"
+                        onClick={(e) => {
+                            if (vehiclePhoto) {
+                                e.stopPropagation();
+                                onPreviewImage?.({
+                                    url: vehiclePhoto,
+                                    title: `${vehicleModel} (${vehiclePlate || 'S/PLACA'})`
+                                });
+                            }
+                        }}
+                    >
+                        <div 
+                            className={`relative group/img w-18 h-18 sm:w-[76px] sm:h-[76px] rounded-xl overflow-hidden bg-slate-200 border-2 transition-all duration-300 flex items-center justify-center shrink-0 shadow-xs ${vehiclePhoto ? 'border-cyan-200 hover:border-cyan-400 cursor-pointer hover:shadow-md' : 'border-slate-200'}`}
+                            title={vehiclePhoto ? "Clique para ampliar a foto do veículo" : "Sem foto de veículo cadastrada"}
+                        >
+                            {vehiclePhoto ? (
+                                <>
+                                    <img
+                                        src={vehiclePhoto}
+                                        alt={vehicleModel}
+                                        className="w-full h-full object-cover transition-transform duration-500 group-hover/img:scale-110"
+                                        onError={(e) => {
+                                            (e.target as HTMLElement).style.display = 'none';
+                                        }}
+                                    />
+                                    <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
+                                        <Eye className="w-5 h-5 text-white drop-shadow-sm" />
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-slate-100 via-slate-200 to-slate-300 text-slate-400 p-1">
+                                    <Truck className="w-7 h-7 stroke-[1.5] text-slate-400" />
+                                </div>
+                            )}
+                            {vehiclePlate && (
+                                <div className="absolute bottom-0 inset-x-0 bg-slate-900/85 backdrop-blur-xs text-white text-[8px] font-mono font-bold text-center py-0.5 tracking-wider truncate px-0.5">
+                                    {vehiclePlate}
+                                </div>
                             )}
                         </div>
 
-                        {/* Chevron Toggle */}
-                        <div className={`text-slate-300 group-hover:text-cyan-500 transition-transform duration-300 ${isExpanded ? 'rotate-180 text-cyan-500' : ''}`}>
-                            <ChevronDown className="w-5 h-5" />
+                        <div className="flex flex-col min-w-0 justify-center flex-1">
+                            <span className="text-[8.5px] font-black uppercase tracking-widest text-cyan-700 bg-cyan-100/60 px-2 py-0.5 rounded-md border border-cyan-200/50 w-fit mb-0.5">
+                                Veículo
+                            </span>
+                            <span className="text-xs sm:text-sm font-extrabold text-slate-900 truncate" title={vehicleModel}>
+                                {vehicleModel}
+                            </span>
+                            <span className="text-[10px] font-bold text-slate-500 font-mono flex items-center gap-1 mt-0.5">
+                                <Truck className="w-3 h-3 text-slate-400" />
+                                {vehiclePlate || 'S/ PLACA'}
+                            </span>
                         </div>
                     </div>
 
-                    {/* Expanded Content */}
-                    <div className={`grid grid-cols-2 wide:flex wide:flex-wrap gap-4 pt-4 mt-4 border-t border-slate-100 transition-all duration-300 origin-top ${isExpanded ? 'opacity-100 max-h-96 scale-100' : 'opacity-0 max-h-0 scale-95 hidden'}`}>
-                        <DataItem
-                            label="Protocolo"
-                            value={item.protocol || item.id.substring(0, 8)}
-                            colorClass="text-slate-400 font-mono text-[9px] bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200"
-                            flex="col-span-1 wide:w-auto"
-                        />
-                        <DataItem label="Placa" value={vehiclePlateMap[item.vehicle] || '-'} colorClass="text-cyan-700 bg-cyan-50 px-2 py-0.5 rounded border border-cyan-100 font-mono text-xs" flex="col-span-1 wide:w-auto" />
-                        <DataItem label="Fiscal" value={item.fiscal || 'Sistema'} icon={ShieldCheck} colorClass="text-slate-600 font-medium" flex="col-span-1 wide:w-auto" />
-                        <DataItem label="Quantidade" value={`${item.liters.toFixed(3)} L`} flex="col-span-1 wide:w-auto" colorClass="text-slate-600" />
-                        <DataItem label="Odômetro" value={`${item.odometer.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Km`} flex="col-span-1 wide:w-auto" colorClass="text-slate-600" />
+                    {/* CONTEÚDO PRINCIPAL DO REGISTRO (CAMPOS A PARTIR DO Nº NOTA) */}
+                    <div className="flex-1 p-4 pl-5 flex flex-col justify-center min-w-0">
+                        <div className="flex flex-col wide:flex-row wide:items-center gap-4">
+                            <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 wide:grid-cols-12 gap-3 items-center min-w-0">
+                                <DataItem label="Nº Nota" value={getDisplayInvoiceNumber(item.invoiceNumber) || '-'} icon={FileText} flex="col-span-1 wide:col-span-1" />
+                                <DataItem label="Data" value={formatLocalDateTime(item.date)} icon={Calendar} flex="col-span-1 wide:col-span-2" />
+                                <DataItem label="Motorista" value={item.driver} icon={User} colorClass="text-slate-600 uppercase tracking-tight" flex="col-span-1 wide:col-span-2" />
+                                <DataItem label="Setor" value={vehicleSectorMap[item.vehicle] || '-'} colorClass="text-slate-500 uppercase text-[10px]" flex="col-span-1 wide:col-span-2" />
+                                <DataItem
+                                    label="Combustível"
+                                    value={item.fuelType.split(' - ')[0].toUpperCase()}
+                                    colorClass={fuelColor}
+                                    flex="col-span-1 wide:col-span-2"
+                                    isBadge={true}
+                                />
+                                <DataItem
+                                    label="Custo"
+                                    value={`R$ ${item.cost.toFixed(2)}`}
+                                    colorClass="text-emerald-700 font-black"
+                                    flex="col-span-1 wide:col-span-3"
+                                />
+                            </div>
 
-                        {/* QR da Operação */}
-                        <div className="col-span-2 wide:col-span-auto self-center">
-                            <OperationQRCode 
-                                moduleName="abastecimento" 
-                                recordId={item.id} 
-                                instructions="Tire fotos do cupom fiscal e anexe comprovantes de abastecimento diretamente do seu celular."
-                            />
+                            {/* Chevron Toggle */}
+                            <div className={`text-slate-300 group-hover:text-cyan-500 transition-transform duration-300 ${isExpanded ? 'rotate-180 text-cyan-500' : ''}`}>
+                                <ChevronDown className="w-5 h-5" />
+                            </div>
                         </div>
 
-                        {/* Action Buttons in Expanded View */}
-                        {isAdmin && (
-                            <div className="flex gap-2 ml-auto mt-2 wide:mt-0 col-span-2 wide:col-span-auto justify-end">
-                                {onEdit && (
-                                    <button
-                                        onClick={(e) => { e.stopPropagation(); onEdit(item); }}
-                                        className="flex items-center gap-2 px-3 py-1.5 text-slate-500 hover:text-cyan-600 hover:bg-cyan-50 rounded-lg transition-colors text-xs font-bold border border-transparent hover:border-cyan-100"
-                                    >
-                                        <Edit className="w-3.5 h-3.5" />
-                                        Editar
-                                    </button>
-                                )}
-                                <button
-                                    onClick={(e) => { e.stopPropagation(); onDelete(item.id); }}
-                                    className="flex items-center gap-2 px-3 py-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors text-xs font-bold border border-transparent hover:border-rose-100"
-                                    title="Excluir Registro"
-                                >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                    Excluir
-                                </button>
+                        {/* Expanded Content */}
+                        <div className={`grid grid-cols-2 wide:flex wide:flex-wrap gap-4 pt-4 mt-4 border-t border-slate-100 transition-all duration-300 origin-top ${isExpanded ? 'opacity-100 max-h-96 scale-100' : 'opacity-0 max-h-0 scale-95 hidden'}`}>
+                            <DataItem
+                                label="Protocolo"
+                                value={item.protocol || item.id.substring(0, 8)}
+                                colorClass="text-slate-400 font-mono text-[9px] bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200"
+                                flex="col-span-1 wide:w-auto"
+                            />
+                            <DataItem label="Placa" value={vehiclePlateMap[item.vehicle] || '-'} colorClass="text-cyan-700 bg-cyan-50 px-2 py-0.5 rounded border border-cyan-100 font-mono text-xs" flex="col-span-1 wide:w-auto" />
+                            <DataItem label="Fiscal" value={item.fiscal || 'Sistema'} icon={ShieldCheck} colorClass="text-slate-600 font-medium" flex="col-span-1 wide:w-auto" />
+                            <DataItem label="Quantidade" value={`${item.liters.toFixed(3)} L`} flex="col-span-1 wide:w-auto" colorClass="text-slate-600" />
+                            <DataItem label="Odômetro" value={`${item.odometer.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Km`} flex="col-span-1 wide:w-auto" colorClass="text-slate-600" />
+
+                            {/* QR da Operação */}
+                            <div className="col-span-2 wide:col-span-auto self-center">
+                                <OperationQRCode 
+                                    moduleName="abastecimento" 
+                                    recordId={item.id} 
+                                    instructions="Tire fotos do cupom fiscal e anexe comprovantes de abastecimento diretamente do seu celular."
+                                />
                             </div>
-                        )}
+
+                            {/* Action Buttons in Expanded View */}
+                            {isAdmin && (
+                                <div className="flex gap-2 ml-auto mt-2 wide:mt-0 col-span-2 wide:col-span-auto justify-end">
+                                    {onEdit && (
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); onEdit(item); }}
+                                            className="flex items-center gap-2 px-3 py-1.5 text-slate-500 hover:text-cyan-600 hover:bg-cyan-50 rounded-lg transition-colors text-xs font-bold border border-transparent hover:border-cyan-100"
+                                        >
+                                            <Edit className="w-3.5 h-3.5" />
+                                            Editar
+                                        </button>
+                                    )}
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); onDelete(item.id); }}
+                                        className="flex items-center gap-2 px-3 py-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors text-xs font-bold border border-transparent hover:border-rose-100"
+                                        title="Excluir Registro"
+                                    >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                        Excluir
+                                    </button>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -141,7 +195,7 @@ const AbastecimentoCard = ({ item, isAdmin, onEdit, onDelete, vehicleModelMap, v
     );
 };
 
-export const AbastecimentoList: React.FC<AbastecimentoListProps> = ({ onBack, onEdit, refreshTrigger }) => {
+export const AbastecimentoList: React.FC<AbastecimentoListProps> = ({ onBack, onEdit, refreshTrigger, vehicles }) => {
     const { user } = useAuth();
     const isAdmin = user?.role === 'admin';
     const [supplies, setSupplies] = useState<AbastecimentoRecord[]>([]);
@@ -151,6 +205,8 @@ export const AbastecimentoList: React.FC<AbastecimentoListProps> = ({ onBack, on
     const [vehicleSectorMap, setVehicleSectorMap] = useState<Record<string, string>>({});
     const [vehiclePlateMap, setVehiclePlateMap] = useState<Record<string, string>>({});
     const [vehicleModelMap, setVehicleModelMap] = useState<Record<string, string>>({});
+    const [vehicleImageMap, setVehicleImageMap] = useState<Record<string, string>>({});
+    const [previewImageModal, setPreviewImageModal] = useState<{ url: string; title: string } | null>(null);
 
     // Pagination State
     const [page, setPage] = useState(1);
@@ -243,21 +299,38 @@ export const AbastecimentoList: React.FC<AbastecimentoListProps> = ({ onBack, on
                 const vMap: Record<string, string> = {};
                 const pMap: Record<string, string> = {};
                 const modelMap: Record<string, string> = {};
+                const imgMap: Record<string, string> = {};
 
-                vehiclesRes.data.forEach((v: any) => {
+                // Map photos from prop if present
+                if (vehicles && Array.isArray(vehicles)) {
+                    vehicles.forEach((v: any) => {
+                        const img = v.vehicle_image_url || v.vehicleImageUrl || v.photo_url || v.document_url || v.documentUrl || '';
+                        if (img) {
+                            if (v.plate) imgMap[v.plate] = img;
+                            const legacyKey = `${v.model} - ${v.brand}`;
+                            imgMap[legacyKey] = img;
+                        }
+                    });
+                }
+
+                vehiclesRes.data?.forEach((v: any) => {
                     const sectorName = sectorLookup[v.sector_id] || 'N/A';
+                    const photoUrl = v.vehicle_image_url || v.vehicleImageUrl || v.photo_url || v.document_url || v.documentUrl || '';
                     if (v.plate) {
                         vMap[v.plate] = sectorName;
                         pMap[v.plate] = v.plate;
                         modelMap[v.plate] = `${v.model} - ${v.brand}`;
+                        if (photoUrl) imgMap[v.plate] = photoUrl;
                     }
                     const legacyKey = `${v.model} - ${v.brand}`;
                     if (!vMap[legacyKey]) vMap[legacyKey] = sectorName;
                     if (!pMap[legacyKey]) pMap[legacyKey] = v.plate || 'S/PLACA';
+                    if (photoUrl && !imgMap[legacyKey]) imgMap[legacyKey] = photoUrl;
                 });
                 setVehicleSectorMap(vMap);
                 setVehiclePlateMap(pMap);
                 setVehicleModelMap(modelMap);
+                setVehicleImageMap(imgMap);
             }
 
         } catch (error) {
@@ -461,6 +534,8 @@ export const AbastecimentoList: React.FC<AbastecimentoListProps> = ({ onBack, on
                                 vehicleModelMap={vehicleModelMap}
                                 vehiclePlateMap={vehiclePlateMap}
                                 vehicleSectorMap={vehicleSectorMap}
+                                vehicleImageMap={vehicleImageMap}
+                                onPreviewImage={(imgData: { url: string; title: string }) => setPreviewImageModal(imgData)}
                             />
                         ))}
 
@@ -485,6 +560,39 @@ export const AbastecimentoList: React.FC<AbastecimentoListProps> = ({ onBack, on
                     </div>
                 )}
             </div>
+
+            {/* LIGHTBOX MODAL PARA FOTO DO VEÍCULO */}
+            {previewImageModal && (
+                <div 
+                    onClick={() => setPreviewImageModal(null)}
+                    className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in"
+                >
+                    <div 
+                        onClick={(e) => e.stopPropagation()}
+                        className="bg-white rounded-3xl overflow-hidden max-w-xl w-full shadow-2xl border border-slate-200 animate-scale-in relative"
+                    >
+                        <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <Truck className="w-5 h-5 text-cyan-400" />
+                                <h3 className="font-bold text-sm tracking-wide">{previewImageModal.title}</h3>
+                            </div>
+                            <button
+                                onClick={() => setPreviewImageModal(null)}
+                                className="p-1 text-slate-400 hover:text-white rounded-lg transition-colors"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="p-3 bg-slate-950 flex items-center justify-center min-h-[300px]">
+                            <img
+                                src={previewImageModal.url}
+                                alt={previewImageModal.title}
+                                className="max-h-[75vh] w-auto object-contain rounded-2xl"
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

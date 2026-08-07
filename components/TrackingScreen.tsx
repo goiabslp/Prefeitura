@@ -624,15 +624,17 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
         'Urgência': { icon: ShieldAlert, color: 'text-rose-600 bg-rose-50 border-rose-200' },
     };
 
+    const isCompactHeader = isDiarias || isCompras || isLicitacao || activeBlock === 'oficio';
+
     return (
         <>
-            <div className="min-h-screen w-full bg-slate-100/50 backdrop-blur-sm font-sans flex items-center justify-center p-4 desktop:p-8 overflow-hidden animate-fade-in">
-                <div className="w-full max-w-6xl bg-white rounded-[2.5rem] shadow-[0_25px_70px_-15px_rgba(0,0,0,0.15)] border border-slate-200 overflow-hidden animate-slide-up flex flex-col h-full max-h-[90vh]">
+            <div className="min-h-screen w-full bg-slate-100/50 backdrop-blur-sm font-sans flex items-center justify-center p-1 sm:p-2 overflow-hidden animate-fade-in">
+                <div className="w-full max-w-[99%] mx-auto bg-white rounded-2xl sm:rounded-3xl shadow-[0_15px_50px_-15px_rgba(0,0,0,0.12)] border border-slate-200 overflow-hidden animate-slide-up flex flex-col h-full max-h-full">
 
-                    <div className={`${(isDiarias || isCompras || (activeBlock as any) === 'oficio') ? 'p-4' : 'p-8'} border-b border-slate-100 shrink-0 bg-white transition-all`}>
-                        <div className={`flex flex-col desktop:flex-row desktop:items-center justify-between ${(isDiarias || isCompras || (activeBlock as any) === 'oficio') ? 'gap-4' : 'gap-6'}`}>
-                            <div className={`${(isDiarias || isCompras || (activeBlock as any) === 'oficio') ? 'flex items-center gap-4 flex-1 min-w-0' : ''}`}>
-                                <div className={(isDiarias || isCompras || (activeBlock as any) === 'oficio') ? "contents" : "block"}>
+                    <div className={`${isCompactHeader ? 'py-2.5 px-4 sm:px-6' : 'p-6'} border-b border-slate-100 shrink-0 bg-white transition-all`}>
+                        <div className={`flex flex-col desktop:flex-row desktop:items-center justify-between ${isCompactHeader ? 'gap-3' : 'gap-5'}`}>
+                            <div className={`${isCompactHeader ? 'flex items-center gap-4 flex-1 min-w-0' : ''}`}>
+                                <div className={isCompactHeader ? "contents" : "block"}>
                                     <button
                                         onClick={() => {
                                             if ((activeBlock as any) === 'oficio' && onBack) {
@@ -641,40 +643,40 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                 onBack();
                                             }
                                         }}
-                                        className={`flex items-center gap-2 text-slate-400 hover:text-indigo-600 transition-colors font-bold uppercase tracking-widest group ${(isDiarias || isCompras || (activeBlock as any) === 'oficio') ? 'text-[10px] p-2 hover:bg-slate-50 rounded-lg -ml-2' : 'text-xs mb-4'}`}
+                                        className={`flex items-center gap-2 text-slate-400 hover:text-indigo-600 transition-colors font-bold uppercase tracking-widest group ${isCompactHeader ? 'text-[10px] p-2 hover:bg-slate-50 rounded-lg -ml-2' : 'text-xs mb-2'}`}
                                         title="Voltar"
                                     >
-                                        <ArrowLeft className={`transition-transform ${(isDiarias || isCompras || (activeBlock as any) === 'oficio') ? 'w-3 h-3' : 'w-4 h-4 group-hover:-translate-x-1'}`} />
-                                        {!((isDiarias || isCompras || (activeBlock as any) === 'oficio')) && ((activeBlock as any) === 'oficio' ? 'Voltar para Oficios' : 'Voltar ao Menu')}
+                                        <ArrowLeft className={`transition-transform ${isCompactHeader ? 'w-3 h-3' : 'w-4 h-4 group-hover:-translate-x-1'}`} />
+                                        {!isCompactHeader && ((activeBlock as any) === 'oficio' ? 'Voltar para Oficios' : 'Voltar ao Menu')}
                                     </button>
 
-                                    <h2 className={`${(isDiarias || isCompras || (activeBlock as any) === 'oficio') ? 'text-xl' : 'text-3xl'} font-extrabold text-slate-900 tracking-tight flex items-center gap-3 shrink-0`}>
-                                        <div className={`${(isDiarias || isCompras || (activeBlock as any) === 'oficio') ? 'w-8 h-8 rounded-lg' : 'w-10 h-10 rounded-xl'} bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-600/30`}>
-                                            <FileText className={`${(isDiarias || isCompras || (activeBlock as any) === 'oficio') ? 'w-4 h-4' : 'w-6 h-6'} text-white`} />
+                                    <h2 className={`${isCompactHeader ? 'text-lg sm:text-xl' : 'text-2xl sm:text-3xl'} font-extrabold text-slate-900 tracking-tight flex items-center gap-3 shrink-0`}>
+                                        <div className={`${isCompactHeader ? 'w-8 h-8 rounded-lg' : 'w-10 h-10 rounded-xl'} bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-600/30`}>
+                                            <FileText className={`${isCompactHeader ? 'w-4 h-4' : 'w-6 h-6'} text-white`} />
                                         </div>
-                                        <span className="truncate">
-                                            {(activeBlock as any) === 'oficio' ? 'Histórico de Ofícios' : `Histórico: ${activeBlock?.toUpperCase()}`}
+                                        <span className="truncate uppercase">
+                                            {isLicitacao ? 'Meus Processos Licitatórios' : (activeBlock as any) === 'oficio' ? 'Histórico de Ofícios' : `Histórico: ${activeBlock?.toUpperCase()}`}
                                         </span>
                                     </h2>
                                 </div>
 
-                                {!(isDiarias || isCompras || (activeBlock as any) === 'oficio') && (
+                                {!isCompactHeader && (
                                     <p className="text-slate-500 text-sm mt-1 font-medium">
                                         {isAdmin ? 'Gerenciamento global de registros.' : isCompras ? 'Pedidos de compra autorizados para seu setor.' : 'Seus documentos gerados neste módulo.'}
                                     </p>
                                 )}
                             </div>
 
-                            <div className={`${(isDiarias || isCompras || activeBlock === 'oficio') ? 'flex-1 max-w-lg flex items-center gap-2' : 'mt-8 flex items-center gap-3 w-full'}`}>
+                            <div className={`${isCompactHeader ? 'flex-1 max-w-lg flex items-center gap-2' : 'mt-4 flex items-center gap-3 w-full'}`}>
                                 <div className="relative flex-1 group">
                                     <input
                                         type="text"
                                         value={searchTerm}
                                         onChange={(e) => setSearchTerm(e.target.value)}
-                                        placeholder={(isDiarias || isCompras || activeBlock === 'oficio') ? "Buscar..." : "Buscar por Setor, Solicitante, Protocolo..."}
-                                        className={`w-full bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 font-medium focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all ${(isDiarias || isCompras || activeBlock === 'oficio') ? 'pl-9 pr-3 py-2 text-xs' : 'pl-11 pr-4 py-3.5 text-sm'}`}
+                                        placeholder={isCompactHeader ? "Buscar por Setor, Objeto, Protocolo..." : "Buscar por Setor, Solicitante, Protocolo..."}
+                                        className={`w-full bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 font-medium focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all ${isCompactHeader ? 'pl-9 pr-3 py-1.5 text-xs' : 'pl-11 pr-4 py-3.5 text-sm'}`}
                                     />
-                                    <Search className={`absolute top-1/2 -translate-y-1/2 text-slate-400 ${(isDiarias || isCompras || activeBlock === 'oficio') ? 'left-3 w-3.5 h-3.5' : 'left-4 w-5 h-5'}`} />
+                                    <Search className={`absolute top-1/2 -translate-y-1/2 text-slate-400 ${isCompactHeader ? 'left-3 w-3.5 h-3.5' : 'left-4 w-5 h-5'}`} />
                                 </div>
                                 {isCompras && (
                                     <div className="relative" ref={statusDropdownRef}>
@@ -793,7 +795,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                             </div>
                         ) : filteredOrders.length > 0 ? (
                             <div className="min-w-full">
-                                    <div className="border-b border-slate-100 bg-slate-50 hidden desktop:grid desktop:grid-cols-12 gap-4 px-8 py-4 sticky top-0 z-10">
+                                    <div className="border-b border-slate-100 bg-slate-50 hidden desktop:grid desktop:grid-cols-12 gap-3 px-4 sm:px-6 py-2 sticky top-0 z-10">
                                         {isLicitacao ? (
                                             <>
                                                 <div className="md:col-span-2 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 whitespace-nowrap">
@@ -871,7 +873,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                 <div className={`${isCompras ? 'md:col-span-3' : 'md:col-span-2'} text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-center whitespace-nowrap`}>Ações</div>
                                             </>
                                         )}
-                                    </div>
+                                     </div>
 
                                 <div className="divide-y divide-slate-100">
                                     {filteredOrders.map((order) => {
@@ -889,11 +891,11 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                         return (
                                             <div
                                                 key={order.id}
-                                                className="grid grid-cols-1 desktop:grid-cols-12 gap-4 px-8 py-5 hover:bg-slate-50/80 transition-colors items-center"
+                                                className="grid grid-cols-1 desktop:grid-cols-12 gap-3 px-4 sm:px-6 py-1.5 desktop:py-2 hover:bg-slate-50/80 transition-colors items-center"
                                             >
                                                 {isLicitacao ? (
                                                     <>
-                                                        <div className="md:col-span-2 flex flex-col justify-center gap-1">
+                                                        <div className="md:col-span-2 flex flex-col justify-center gap-0.5">
                                                             {(() => {
                                                                 const limitDate = new Date(2026, 6, 13, 23, 59, 59);
                                                                 const isClickableProtocol = (isAdmin || isLicitacaoUser) && new Date() <= limitDate;
@@ -906,15 +908,15 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                                                 setAuxPhaseForProtocol(null);
                                                                             }
                                                                         }}
-                                                                        className={`font-mono text-[10px] font-bold px-2 py-1.5 rounded border w-fit transition-all ${isClickableProtocol ? 'text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border-indigo-200 cursor-pointer active:scale-95' : 'text-indigo-600 bg-indigo-50/50 border-indigo-100/50'}`}
+                                                                        className={`font-mono text-[10px] font-bold px-2 py-0.5 rounded border w-fit transition-all ${isClickableProtocol ? 'text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border-indigo-200 cursor-pointer active:scale-95' : 'text-indigo-600 bg-indigo-50/50 border-indigo-100/50'}`}
                                                                         title={isClickableProtocol ? "Clique para editar o protocolo (Disponível até 13/07/2026)" : undefined}
                                                                     >
                                                                         {order.protocol || '---'}
                                                                     </span>
                                                                 );
                                                             })()}
-                                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
-                                                                <Calendar className="w-3 h-3" />
+                                                            <span className="text-[9px] font-medium text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                                                                <Calendar className="w-2.5 h-2.5" />
                                                                 {new Date(order.createdAt).toLocaleDateString('pt-BR')}
                                                             </span>
                                                         </div>
@@ -936,14 +938,14 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                                 setHoveredTooltip(null);
                                                             }}
                                                         >
-                                                            <span className="text-xs font-bold text-slate-600 line-clamp-2">
+                                                            <span className="text-xs font-bold text-slate-600 line-clamp-1">
                                                                 {(content as any)?.objeto || content?.description || <span className="italic text-slate-400">Objeto não especificado</span>}
                                                             </span>
                                                         </div>
                                                         <div className="md:col-span-2 flex flex-col justify-center pr-4">
                                                             <span className="text-xs font-bold text-slate-700 truncate">{content?.requesterName || order.userName || 'Sem Solicitante'}</span>
-                                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate flex items-center gap-1 mt-0.5">
-                                                                <Network className="w-3 h-3" /> {content?.requesterSector || order.requestingSector || 'Sem Setor'}
+                                                            <span className="text-[9px] font-medium text-slate-400 uppercase tracking-wider truncate flex items-center gap-1">
+                                                                <Network className="w-2.5 h-2.5" /> {content?.requesterSector || order.requestingSector || 'Sem Setor'}
                                                             </span>
                                                         </div>
                                                         <div className="md:col-span-2 flex flex-col justify-center gap-1 relative group cursor-pointer" onClick={() => (isLicitacaoUser || isAdmin) && setLicitacaoPhaseOrder(order)}>
@@ -981,8 +983,8 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                                 if (isGreen) colorClass = 'bg-emerald-50 text-emerald-700 border border-emerald-100';
 
                                                                 return (
-                                                                    <span className={`inline-flex items-center w-fit gap-1 px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider ${colorClass}`} title={titleText}>
-                                                                        <Info className="w-3 h-3" /> 
+                                                                    <span className={`inline-flex items-center w-fit gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${colorClass}`} title={titleText}>
+                                                                        <Info className="w-2.5 h-2.5" /> 
                                                                         {labelText}
                                                                     </span>
                                                                 );
@@ -1007,12 +1009,11 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
 
                                                             if (isAllChecked) {
                                                                 return (
-                                                                    <div className="md:col-span-2 flex flex-col justify-center px-4">
-                                                                        <div className="flex flex-col items-center justify-center py-1 px-2 rounded-xl border bg-slate-50 border-slate-200 shadow-sm">
-                                                                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-600 py-1">
-                                                                                Concluído
-                                                                            </span>
-                                                                        </div>
+                                                                    <div className="md:col-span-2 flex items-center justify-center">
+                                                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200">
+                                                                            <CheckCircle2 className="w-3 h-3 text-slate-500" />
+                                                                            Concluído
+                                                                        </span>
                                                                     </div>
                                                                 );
                                                             }
@@ -1020,79 +1021,63 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                             if (!isLate) {
                                                                 const isWarning = daysLeft <= 15;
                                                                 return (
-                                                                    <div className="md:col-span-2 flex flex-col justify-center px-4">
-                                                                        <div className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl border ${isWarning ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'} shadow-sm`}>
-                                                                            <span className={`text-base font-black leading-none ${isWarning ? 'text-amber-600' : 'text-emerald-600'}`}>
-                                                                                {daysLeft}
-                                                                            </span>
-                                                                            <span className={`text-[7px] font-black uppercase mt-1 tracking-wider ${isWarning ? 'text-amber-500' : 'text-emerald-500'}`}>
-                                                                                Dias Restantes
-                                                                            </span>
-                                                                        </div>
+                                                                    <div className="md:col-span-2 flex items-center justify-center">
+                                                                        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border shadow-xs ${isWarning ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
+                                                                            <Clock className={`w-3 h-3 ${isWarning ? 'text-amber-600' : 'text-emerald-600'}`} />
+                                                                            <span className="font-mono text-xs font-bold">{daysLeft}</span>
+                                                                            <span className="text-[8px]">dias restantes</span>
+                                                                        </span>
                                                                     </div>
                                                                 );
                                                             }
 
                                                             if (isLate && !isFinalized) {
                                                                 return (
-                                                                    <div className="md:col-span-2 flex flex-col justify-center px-4">
-                                                                        <div className="group flex flex-col items-center justify-center py-1 px-2 rounded-xl border shadow-sm bg-rose-50 border-rose-200 cursor-help">
-                                                                            <div className="flex flex-col items-center justify-center py-1 group-hover:hidden">
-                                                                                <span className="text-[10px] font-black uppercase tracking-widest text-rose-600">
-                                                                                    Vencido
-                                                                                </span>
-                                                                            </div>
-                                                                            <div className="hidden flex-col items-center group-hover:flex">
-                                                                                <span className="text-base font-black leading-none text-rose-600">
-                                                                                    {daysElapsed}
-                                                                                </span>
-                                                                                <span className="text-[7px] font-black uppercase mt-1 tracking-wider text-rose-500">
-                                                                                    Dias Corridos
-                                                                                </span>
-                                                                            </div>
-                                                                        </div>
+                                                                    <div className="md:col-span-2 flex items-center justify-center">
+                                                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-rose-50 text-rose-700 border border-rose-200 shadow-xs" title={`${daysElapsed} dias corridos`}>
+                                                                            <AlertTriangle className="w-3 h-3 text-rose-600" />
+                                                                            <span className="font-mono text-xs font-bold">{daysElapsed}d</span>
+                                                                            <span className="text-[8px]">vencido</span>
+                                                                        </span>
                                                                     </div>
                                                                 );
                                                             }
 
                                                             return (
-                                                                <div className="md:col-span-2 flex flex-col justify-center px-4">
-                                                                    <div className="flex flex-col items-center justify-center py-1 px-2 rounded-xl border shadow-sm bg-slate-50 border-slate-200">
-                                                                        <span className="text-base font-black leading-none text-slate-500">
-                                                                            {daysElapsed}
-                                                                        </span>
-                                                                        <span className="text-[7px] font-black uppercase mt-1 tracking-wider text-slate-400">
-                                                                            Dias Corridos
-                                                                        </span>
-                                                                    </div>
+                                                                <div className="md:col-span-2 flex items-center justify-center">
+                                                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200">
+                                                                        <Clock className="w-3 h-3 text-slate-400" />
+                                                                        <span className="font-mono text-xs font-bold">{daysElapsed}</span>
+                                                                        <span className="text-[8px]">dias corridos</span>
+                                                                    </span>
                                                                 </div>
                                                             );
                                                         })()}
-                                                        <div className="md:col-span-1 flex items-center justify-center gap-1">
+                                                        <div className="md:col-span-1 flex items-center justify-center gap-0.5">
                                                             <button
                                                                 onClick={() => onViewOrder?.(order)}
-                                                                className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all shadow-sm group"
+                                                                className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all shadow-xs group"
                                                                 title="Visualizar Processo"
                                                             >
-                                                                <Eye className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                                                                <Eye className="w-4 h-4 group-hover:scale-110 transition-transform" />
                                                             </button>
                                                             <button
                                                                 onClick={() => handleDownload(order)}
                                                                 disabled={downloadingId === order.id}
-                                                                className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all shadow-sm group"
+                                                                className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all shadow-xs group"
                                                                 title="Download PDF do Pedido"
                                                             >
-                                                                {downloadingId === order.id ? <Loader2 className="w-5 h-5 animate-spin" /> : <FileDown className="w-5 h-5 group-hover:scale-110 transition-transform" />}
+                                                                {downloadingId === order.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4 group-hover:scale-110 transition-transform" />}
                                                             </button>
                                                             {(order.documentSnapshot?.content as any)?.finalDocumentUrl && (
                                                                 <a
                                                                     href={(order.documentSnapshot?.content as any)?.finalDocumentUrl}
                                                                     target="_blank"
                                                                     rel="noreferrer"
-                                                                    className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all shadow-sm group"
+                                                                    className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all shadow-xs group"
                                                                     title="Baixar Documento Final"
                                                                 >
-                                                                    <Download className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                                                                    <Download className="w-4 h-4 group-hover:scale-110 transition-transform" />
                                                                 </a>
                                                             )}
                                                             <button
@@ -1106,9 +1091,9 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                                         setConfirmModal({ ...confirmModal, isOpen: false });
                                                                     }
                                                                 })}
-                                                                className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all shadow-sm group" title="Excluir"
+                                                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all shadow-xs group" title="Excluir"
                                                             >
-                                                                <Trash2 className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                                                                <Trash2 className="w-4 h-4 group-hover:scale-110 transition-transform" />
                                                             </button>
                                                         </div>
                                                     </>

@@ -1976,11 +1976,11 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
   };
 
   return (
-    <div className="flex-1 h-full w-full bg-slate-100/50 backdrop-blur-sm font-sans flex items-center justify-center p-4 desktop:p-8 overflow-hidden animate-fade-in">
-      <div className="w-full max-w-7xl bg-white rounded-[2.5rem] shadow-[0_25px_70px_-15px_rgba(0,0,0,0.15)] border border-slate-200 overflow-hidden animate-slide-up flex flex-col h-full max-h-full">
+    <div className="flex-1 h-full w-full bg-slate-100/50 backdrop-blur-sm font-sans flex items-center justify-center p-1 sm:p-2 overflow-hidden animate-fade-in">
+      <div className="w-full max-w-[99%] mx-auto bg-white rounded-2xl sm:rounded-3xl shadow-[0_15px_50px_-15px_rgba(0,0,0,0.12)] border border-slate-200 overflow-hidden animate-slide-up flex flex-col h-full max-h-full">
         
-        <div className="p-4 border-b border-slate-100 shrink-0 bg-white transition-all">
-          <div className="flex flex-col desktop:flex-row desktop:items-center justify-between gap-4">
+        <div className="py-2.5 px-4 sm:px-6 border-b border-slate-100 shrink-0 bg-white transition-all">
+          <div className="flex flex-col desktop:flex-row desktop:items-center justify-between gap-3">
             <div className="flex items-center gap-4 flex-1 min-w-0">
               <div className="contents">
                 <button
@@ -2006,21 +2006,21 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   placeholder="Buscar por destino, motivo, pessoa..."
-                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 font-medium focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all pl-9 pr-3 py-2 text-xs"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 font-medium focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all pl-9 pr-3 py-1.5 text-xs"
                 />
                 <Search className="absolute top-1/2 -translate-y-1/2 text-slate-400 left-3 w-3.5 h-3.5" />
               </div>
               <button
                 onClick={() => fetchEventos(false)}
                 disabled={isLoading}
-                className="flex items-center gap-2 px-4 py-2 bg-slate-50 border border-slate-200 rounded-2xl text-slate-600 hover:text-indigo-600 hover:border-indigo-200 transition-all font-bold text-[10px] uppercase tracking-widest whitespace-nowrap active:scale-95 shadow-sm disabled:opacity-50"
+                className="flex items-center gap-2 px-3.5 py-1.5 bg-slate-50 border border-slate-200 rounded-2xl text-slate-600 hover:text-indigo-600 hover:border-indigo-200 transition-all font-bold text-[10px] uppercase tracking-widest whitespace-nowrap active:scale-95 shadow-sm disabled:opacity-50"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
                 Atualizar
               </button>
               <button
                 onClick={() => setShowReportModal(true)}
-                className="p-2 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-2xl hover:bg-indigo-600 hover:text-white transition-all shadow-sm flex items-center gap-2 font-bold text-[10px] uppercase tracking-widest active:scale-95 shrink-0"
+                className="p-1.5 px-3 bg-indigo-50 text-indigo-600 border border-indigo-100 rounded-2xl hover:bg-indigo-600 hover:text-white transition-all shadow-sm flex items-center gap-2 font-bold text-[10px] uppercase tracking-widest active:scale-95 shrink-0"
                 title="Exportar Relatório"
               >
                 <FileDown className="w-3.5 h-3.5" />
@@ -2054,7 +2054,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
             </div>
           ) : (
             <div className="min-w-full">
-              <div className="border-b border-slate-100 bg-slate-50 hidden desktop:grid desktop:grid-cols-12 gap-3 px-6 py-3 sticky top-0 z-10">
+              <div className="border-b border-slate-100 bg-slate-50 hidden desktop:grid desktop:grid-cols-12 gap-3 px-5 py-2.5 sticky top-0 z-10">
                 <div className="desktop:col-span-1 text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-center gap-1.5 whitespace-nowrap">
                   <Calendar className="w-3 h-3" /> Data
                 </div>
@@ -2119,7 +2119,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                   }
 
                   return (
-                    <div key={evento.id} className="mx-4 my-3 p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:border-indigo-100 desktop:mx-0 desktop:my-0 desktop:rounded-none desktop:bg-transparent desktop:border-0 desktop:border-b desktop:border-slate-100 desktop:shadow-none desktop:px-6 desktop:py-3 flex flex-col desktop:grid desktop:grid-cols-12 gap-4 hover:bg-slate-50/80 transition-all duration-200 items-stretch desktop:items-center">
+                    <div key={evento.id} className="mx-4 my-3 p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:border-indigo-100 desktop:mx-0 desktop:my-0 desktop:rounded-none desktop:bg-transparent desktop:border-0 desktop:border-b desktop:border-slate-100 desktop:shadow-none desktop:px-5 desktop:py-2 flex flex-col desktop:grid desktop:grid-cols-12 gap-3 hover:bg-slate-50/80 transition-all duration-200 items-stretch desktop:items-center">
                       <div className="desktop:col-span-1 flex items-center justify-between desktop:justify-center gap-3 pb-2 desktop:pb-0 border-b border-slate-100 desktop:border-b-0 shrink-0">
                         <div className="flex items-center gap-2.5">
                           <div className="w-9 h-9 bg-slate-50 rounded-xl border border-slate-150 flex flex-col items-center justify-center shadow-xs shrink-0">
