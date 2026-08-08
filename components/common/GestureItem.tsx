@@ -89,6 +89,7 @@ export const GestureItem: React.FC<GestureItemProps> = ({
             },
         }
     );
+    const { onDrag: _onDrag, ...gestureProps } = bind() as any;
 
     return (
         <div className={`relative overflow-hidden ${className}`}>
@@ -113,7 +114,7 @@ export const GestureItem: React.FC<GestureItemProps> = ({
             )}
 
             <motion.div
-                {...bind()}
+                {...gestureProps}
                 style={{ x, touchAction: 'pan-y' }} // pan-y explicitly allows vertical scroll
                 className="w-full h-full relative z-10 bg-white"
                 whileTap={{ scale: 0.98 }}

@@ -170,6 +170,7 @@ export interface ContentData {
   finalDocumentUrl?: string;
   finalDocumentName?: string;
   licitacaoStages?: any[];
+  licitacaoActiveDraft?: any;
   itens?: any[];
   objeto?: string;
 }

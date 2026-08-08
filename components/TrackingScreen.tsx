@@ -492,14 +492,12 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
 
     const licitacaoFasesMap = {
         'preparatoria': { label: 'Preparatória', desc: 'está realizando planejamento, estudo técnico e definição do objeto e edital.' },
+        'objeto_cotacao': { label: 'Objeto e Cotação', desc: 'está especificando o objeto e realizando a cotação de preços.' },
         'propostas': { label: 'Propostas/lances', desc: 'as empresas estão enviando preços/ofertas.' },
-        'autuacao': { label: 'Autuação', desc: 'Abertura formal do processo licitatório, com a numeração, registro, documentação e início oficial à tramitação do processo.' },
-        'divulgacao': { label: 'Divulgação do edital', desc: 'está publicando para dar publicidade.' },
-        'julgamento': { label: 'Julgamento', desc: 'está fazendo análise e classificação das propostas.' },
-        'habilitacao': { label: 'Habilitação', desc: 'está verificando a documentação da vencedora.' },
+        'autuacao_divulgacao': { label: 'Autuação e Divulgação', desc: 'Abertura formal do processo e publicação do edital.' },
+        'julgamento_habilitacao': { label: 'Julgamento e Habilitação', desc: 'está fazendo análise das propostas e verificação da documentação.' },
         'recursos': { label: 'Recursos', desc: 'está abrindo prazo para contestação.' },
-        'homologacao': { label: 'Homologação', desc: 'a autoridade está aprovando o resultado.' },
-        'adjudicacao': { label: 'Adjudicação', desc: 'está atribuindo o objeto ao vencedor.' },
+        'homologacao_adjudicacao': { label: 'Homologação e Adjudicação', desc: 'está aprovando o resultado e atribuindo o objeto ao vencedor.' },
         'finalizado': { label: 'Finalizado', desc: 'Conclusão do processo licitatório.' }
     };
 
@@ -2152,12 +2150,13 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                         const cfg = licitacaoFasesMap[key];
                                         const currentPhase = (licitacaoPhaseOrder.documentSnapshot?.content as any)?.fase;
                                         const isActive = currentPhase === key;
+                                        const k = key as string;
                                         
                                         let isBlocked = false;
                                         if (!currentPhase) {
-                                            isBlocked = key !== 'preparatoria';
+                                            isBlocked = k !== 'preparatoria';
                                         } else if (currentPhase === 'preparatoria') {
-                                            isBlocked = key !== 'propostas' && key !== 'autuacao' && key !== 'preparatoria';
+                                            isBlocked = k !== 'objeto_cotacao' && k !== 'propostas' && k !== 'autuacao_divulgacao' && k !== 'preparatoria';
                                         }
 
                                         const isDisabled = isActive || isBlocked;
@@ -2167,25 +2166,25 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                 key={key}
                                                 disabled={isDisabled}
                                                 onClick={() => {
-                                                    if (key === 'finalizado') {
+                                                    if (k === 'finalizado') {
                                                         const checkin = (licitacaoPhaseOrder.documentSnapshot?.content as any)?.checkin_finalizado || {};
                                                         setFinalizadoCheckin({
                                                             assinados: !!checkin.assinados,
                                                             publicado: !!checkin.publicado,
                                                             pasta: !!checkin.pasta
                                                         });
-                                                    } else if (key === 'autuacao' || key === 'propostas') {
+                                                    } else if (k === 'autuacao_divulgacao' || k === 'propostas') {
                                                         if (!licitacaoPhaseOrder.protocol || licitacaoPhaseOrder.protocol.startsWith('LIC-')) {
-                                                            setAuxPhaseForProtocol(key);
+                                                            setAuxPhaseForProtocol(k);
                                                             setNewProtocolValue(licitacaoPhaseOrder.protocol || '');
                                                             setProtocolEditOrder(licitacaoPhaseOrder);
                                                             setLicitacaoPhaseOrder(null);
                                                         } else {
-                                                            onUpdateLicitacaoPhase?.(licitacaoPhaseOrder.id, key);
+                                                            onUpdateLicitacaoPhase?.(licitacaoPhaseOrder.id, k);
                                                             setLicitacaoPhaseOrder(null);
                                                         }
                                                     } else {
-                                                        onUpdateLicitacaoPhase?.(licitacaoPhaseOrder.id, key);
+                                                        onUpdateLicitacaoPhase?.(licitacaoPhaseOrder.id, k);
                                                         setLicitacaoPhaseOrder(null);
                                                     }
                                                 }}

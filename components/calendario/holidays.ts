@@ -1,4 +1,4 @@
-import { CalendarEvent } from './Calendario';
+import { CalendarEvent } from '../../services/calendarService';
 
 /**
  * Funções focadas em calcular Feriados Nacionais e do Estado de Minas Gerais (MG)

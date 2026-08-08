@@ -112,6 +112,7 @@ import { OficiosHistory } from './components/oficios/OficiosHistory';
 import { LicitacaoDashboard } from './components/licitacao/LicitacaoDashboard';
 import { LicitacaoWizard } from './components/licitacao/LicitacaoWizard';
 import { LicitacaoList } from './components/licitacao/LicitacaoList';
+import { LicitacaoKanban } from './components/licitacao/LicitacaoKanban';
 import { useLicitacaoProcesses, useUpdateLicitacaoProcess } from './hooks/useLicitacaoModule';
 import { remoteAccessService } from './services/remoteAccessService';
 import { startGlobalLocationTracking, stopGlobalLocationTracking } from './services/locationTrackingService';
@@ -177,6 +178,8 @@ const VIEW_TO_PATH: Record<string, string> = {
   'licitacao': '/Licitação',
   'licitacao:new': '/Licitação/NovoPedido',
   'licitacao:details': '/Licitação/MeusProcessos',
+  'licitacao:kanban': '/Licitação/Kanban',
+  'licitacao:kanban-view': '/Licitação/Kanban/view',
   'consultas': '/Consultas',
   'consultas:novo-agendamento': '/Consultas/NovoAgendamento',
   'consultas:novo-agendamento-paciente': '/Consultas/NovoAgendamento/Paciente',
@@ -268,7 +271,7 @@ const mapLicitacaoProcessToOrder = (process: any): Order => {
 
 const App: React.FC = () => {
   // State controlling the active module view
-  const [currentView, setCurrentView] = useState<'login' | 'home' | 'admin' | 'tracking' | 'editor' | 'vehicle-scheduling' | 'abastecimento' | 'agricultura' | 'obras' | 'order-details' | 'tasks-dashboard' | 'purchase-inventory' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'diarias-novo-evento' | 'diarias-lancamentos' | 'diarias-gestores' | 'diarias-viajar' | 'licitacao' | 'licitacao:new' | 'licitacao:view' | 'licitacao:details' | 'licitacao-all' | 'licitacao-screening' | 'consultas' | 'farmacia' | 'upload'>('login');
+  const [currentView, setCurrentView] = useState<'login' | 'home' | 'admin' | 'tracking' | 'editor' | 'vehicle-scheduling' | 'abastecimento' | 'agricultura' | 'obras' | 'order-details' | 'tasks-dashboard' | 'purchase-inventory' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'diarias-novo-evento' | 'diarias-lancamentos' | 'diarias-gestores' | 'diarias-viajar' | 'licitacao' | 'licitacao:new' | 'licitacao:view' | 'licitacao:details' | 'licitacao:kanban' | 'licitacao:kanban-view' | 'licitacao-all' | 'licitacao-screening' | 'consultas' | 'farmacia' | 'upload'>('login');
   const [remoteAccessState, setRemoteAccessState] = useState<any>(null);
 
   useEffect(() => {
@@ -1130,6 +1133,12 @@ const App: React.FC = () => {
       } else if (path.startsWith('/upload')) {
         setCurrentView('upload');
         return;
+      } else if (path.includes('/licitacao/kanban/view') || path.includes('/licitação/kanban/view') || path.includes('/licitacao\\kanban\\view') || path.includes('/licitação\\kanban\\view')) {
+        setCurrentView('licitacao:kanban-view');
+        return;
+      } else if (path.includes('/licitacao/kanban') || path.includes('/licitação/kanban') || path.includes('/licitacao\\kanban') || path.includes('/licitação\\kanban')) {
+        setCurrentView('licitacao:kanban');
+        return;
       }
 
       const matchedEntry = Object.entries(PATH_TO_STATE).find(
@@ -1151,6 +1160,8 @@ const App: React.FC = () => {
         } else if (state.view === 'licitacao-details') {
           setCurrentView('order-details');
           setActiveBlock('licitacao');
+        } else if (state.view === 'licitacao' && state.sub) {
+          setCurrentView(`licitacao:${state.sub}` as any);
         } else {
           setCurrentView(state.view as any);
         }
@@ -4551,7 +4562,11 @@ const App: React.FC = () => {
               <LicitacaoDashboard
                 onNavigate={(view) => {
                   setCurrentView(view as any);
-                  const path = view === 'licitacao:new' ? '/Licitação/NovoPedido' : '/Licitação/MeusProcessos';
+                  let path = '/Licitação';
+                  if (view === 'licitacao:new') path = '/Licitação/NovoPedido';
+                  else if (view === 'licitacao:details') path = '/Licitação/MeusProcessos';
+                  else if (view === 'licitacao:kanban') path = '/Licitação/Kanban';
+                  else if (view === 'licitacao:kanban-view') path = '/Licitação/Kanban/view';
                   window.history.pushState({}, '', path);
                 }}
                 onBack={() => {
@@ -4620,6 +4635,17 @@ const App: React.FC = () => {
                 sectors={sectors}
                 onUpdateLicitacaoPhase={handleUpdateLicitacaoPhase}
                 onUpdateLicitacaoProtocol={handleUpdateLicitacaoProtocol}
+              />
+            )}
+
+            {(currentView === 'licitacao:kanban' || currentView === 'licitacao:kanban-view') && (
+              <LicitacaoKanban
+                currentUser={currentUser || ({ id: 'view-user', name: 'Modo Sala', username: 'sala', role: 'viewer', sector: '', permissions: [] } as any)}
+                isViewOnly={currentView === 'licitacao:kanban-view'}
+                onBack={() => {
+                  setCurrentView('licitacao');
+                  window.history.pushState({}, '', '/Licitação');
+                }}
               />
             )}
 
