@@ -1114,7 +1114,10 @@ const App: React.FC = () => {
   // --- PERSISTENT ROUTING LOGIC ---
   useEffect(() => {
     const restoreStateFromUrl = () => {
-      const rawPath = window.location.pathname;
+      let rawPath = window.location.pathname;
+      try {
+        rawPath = decodeURIComponent(rawPath);
+      } catch (e) {}
       const path = rawPath.replace(/\/$/, '').toLowerCase() || '/';
 
       // Look up path case-insensitively and ignoring trailing slash
@@ -1142,7 +1145,11 @@ const App: React.FC = () => {
       }
 
       const matchedEntry = Object.entries(PATH_TO_STATE).find(
-        ([key]) => key.replace(/\/$/, '').toLowerCase() === path
+        ([key]) => {
+          let normKey = key;
+          try { normKey = decodeURIComponent(key); } catch (e) {}
+          return normKey.replace(/\/$/, '').toLowerCase() === path;
+        }
       );
       const state = matchedEntry ? matchedEntry[1] : null;
 
@@ -1202,11 +1209,7 @@ const App: React.FC = () => {
           setIsAdminSidebarOpen(false);
         }
         else if (state.view === 'tarefas') {
-          if (state.sub === 'dashboard') setCurrentView('tarefas:dashboard' as any); // Wait, View is tasks-dashboard in mapping?
-          // checking VIEW_TO_PATH: 'tasks-dashboard': '/Tarefas/MinhasTarefas'
-          // So if path is /Tarefas/MinhasTarefas, state.view is 'tasks-dashboard'.
-          // setCurrentView('tasks-dashboard') logic needs to be valid.
-          // My generic casting `as any` handles it, but let's verify allowed values for currentView.
+          if (state.sub === 'dashboard') setCurrentView('tarefas:dashboard' as any);
         }
         else if (state.view === 'rh') {
           setAppState(prev => ({ ...prev, view: state.sub }));
@@ -1226,17 +1229,18 @@ const App: React.FC = () => {
         }
 
       } else if (path !== '/' && path !== '/Login') {
-        // Fallback for unknown paths? Maybe redirect to home or stay on login?
-        // For now, do nothing prevents loop.
+        // Fallback for unknown paths
       }
     };
 
-    // Restore only after auth is ready and user is logged in
-    if (!authLoading && currentUser) {
+    // Restore state from URL once auth is ready (supports public TV views like /Licitação/Kanban/view)
+    if (!authLoading) {
       restoreStateFromUrl();
-      import('./services/notificationService').then(({ notificationService }) => {
-        notificationService.requestBrowserPermission();
-      }).catch(e => console.warn(e));
+      if (currentUser) {
+        import('./services/notificationService').then(({ notificationService }) => {
+          notificationService.requestBrowserPermission();
+        }).catch(e => console.warn(e));
+      }
     }
 
     // Listen for Back/Forward only after mount
@@ -1357,8 +1361,15 @@ const App: React.FC = () => {
     };
 
     const expectedPath = VIEW_TO_PATH[stateKey];
-    if (expectedPath && window.location.pathname !== expectedPath) {
-      window.history.pushState(null, '', expectedPath);
+    if (expectedPath) {
+      let currentPath = '';
+      try { currentPath = decodeURIComponent(window.location.pathname); } catch (e) { currentPath = window.location.pathname; }
+      let targetPath = '';
+      try { targetPath = decodeURIComponent(expectedPath); } catch (e) { targetPath = expectedPath; }
+
+      if (currentPath.replace(/\/$/, '').toLowerCase() !== targetPath.replace(/\/$/, '').toLowerCase()) {
+        window.history.pushState(null, '', expectedPath);
+      }
     }
 
     // Auto-refresh on route change (Debounced to prevent timeout floods)
