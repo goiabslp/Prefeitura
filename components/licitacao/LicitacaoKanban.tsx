@@ -21,6 +21,45 @@ interface LicitacaoKanbanProps {
     isViewOnly?: boolean;
 }
 
+const ColumnScrollContainer: React.FC<{
+    children: React.ReactNode;
+    className?: string;
+}> = ({ children, className }) => {
+    const containerRef = useRef<HTMLDivElement>(null);
+    const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+    const handleScroll = () => {
+        if (timerRef.current) {
+            clearTimeout(timerRef.current);
+        }
+
+        const el = containerRef.current;
+        if (el && el.scrollTop > 5) {
+            timerRef.current = setTimeout(() => {
+                if (containerRef.current) {
+                    containerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+                }
+            }, 15000); // 15 segundos
+        }
+    };
+
+    useEffect(() => {
+        return () => {
+            if (timerRef.current) clearTimeout(timerRef.current);
+        };
+    }, []);
+
+    return (
+        <div
+            ref={containerRef}
+            onScroll={handleScroll}
+            className={className}
+        >
+            {children}
+        </div>
+    );
+};
+
 export interface PhaseConfig {
     id: string;
     label: string;
@@ -726,14 +765,14 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                 </div>
             </header>
 
-            <div className={`flex-1 min-h-0 flex flex-col ${isViewOnly ? 'w-full h-full p-1.5 md:p-3 2xl:p-4 overflow-x-auto xl:overflow-hidden' : 'overflow-x-auto p-4 md:p-6 scrollbar-thin scrollbar-thumb-slate-300'}`}>
+            <div className={`flex-1 min-h-0 flex flex-col ${isViewOnly ? 'w-full h-full p-1.5 md:p-3 2xl:p-4 overflow-hidden' : 'overflow-x-auto p-4 md:p-6 scrollbar-thin scrollbar-thumb-slate-300'}`}>
                 {isLoading ? (
                     <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-3">
                         <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
                         <p className="font-bold text-sm">Carregando quadro Kanban...</p>
                     </div>
                 ) : (
-                    <div className={`h-full min-h-0 ${isViewOnly ? 'flex xl:grid xl:grid-cols-5 gap-2 md:gap-3 2xl:gap-4 w-full items-stretch overflow-x-auto xl:overflow-hidden min-w-max xl:min-w-0' : 'flex gap-4 min-w-max items-start'}`}>
+                    <div className={`h-full min-h-0 ${isViewOnly ? 'grid grid-cols-5 gap-2 md:gap-3 2xl:gap-4 w-full h-full items-stretch overflow-hidden min-w-0' : 'flex gap-4 min-w-max items-start'}`}>
                         {LICITACAO_PHASES.map((phase, idx) => {
                             const columnProcesses = processesByPhase[phase.id] || [];
                             const IconComponent = phase.icon;
@@ -751,7 +790,7 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                                             ? 'ring-4 ring-amber-400 border-amber-400 bg-amber-500/10 shadow-2xl scale-[1.01] z-20 animate-pulse'
                                             : `${phase.columnBg} ${phase.borderTopColor} border-t-4 border-slate-200/90 shadow-xs`
                                     } ${
-                                        isViewOnly ? 'w-[145px] sm:w-[170px] md:w-[200px] xl:w-full min-w-0' : 'w-[320px] max-h-full'
+                                        isViewOnly ? 'w-full min-w-0 h-full max-h-full flex-1' : 'w-[320px] max-h-full'
                                     } ${isOver ? 'ring-2 ring-indigo-500 ring-offset-2 bg-indigo-50/50' : ''}`}
                                 >
                                     <div className={`border-b rounded-t-xl flex items-center justify-between sticky top-0 z-10 text-white shadow-xs ${
@@ -827,7 +866,7 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                                         </div>
                                     </div>
 
-                                    <div className="p-1.5 md:p-2 2xl:p-3 flex-1 overflow-y-auto space-y-1.5 2xl:space-y-2.5 min-h-0 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                                    <ColumnScrollContainer className="p-1.5 md:p-2 2xl:p-3 flex-1 overflow-y-auto space-y-1.5 2xl:space-y-2.5 min-h-0 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                                         {columnProcesses.length === 0 ? (
                                             <div className="h-20 2xl:h-28 border-2 border-dashed border-slate-200/80 rounded-xl flex flex-col items-center justify-center text-slate-400 p-2 text-center">
                                                 <p className="text-[10px] 2xl:text-xs font-medium">Nenhum processo</p>
@@ -981,7 +1020,7 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                                                 );
                                             })
                                         )}
-                                    </div>
+                                    </ColumnScrollContainer>
                                 </div>
                             );
                         })}
