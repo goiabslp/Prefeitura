@@ -13,6 +13,7 @@ import { useLicitacaoProcesses, useUpdateLicitacaoProcess } from '../../hooks/us
 import { LicitacaoWizard } from './LicitacaoWizard';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { supabase } from '../../services/supabaseClient';
 
 interface LicitacaoKanbanProps {
     currentUser: User;
@@ -140,24 +141,43 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
     });
 
     useEffect(() => {
-        const handleSync = () => {
+        const handleSync = (payloadData?: any) => {
             try {
-                const saved = localStorage.getItem('licitacao_prioridade_visual');
-                const parsed = saved ? JSON.parse(saved) : null;
+                const saved = payloadData !== undefined 
+                    ? payloadData 
+                    : (localStorage.getItem('licitacao_prioridade_visual') ? JSON.parse(localStorage.getItem('licitacao_prioridade_visual')!) : null);
                 setIsTransitioning(true);
-                setActivePriority(parsed);
+                setActivePriority(saved);
                 setTimeout(() => setIsTransitioning(false), 2000);
             } catch (e) {
                 console.error('Erro ao sincronizar prioridade visual:', e);
             }
         };
 
-        window.addEventListener('storage', handleSync);
-        window.addEventListener('licitacao-priority-updated', handleSync);
+        const handleLocalEvent = () => handleSync();
+        window.addEventListener('storage', handleLocalEvent);
+        window.addEventListener('licitacao-priority-updated', handleLocalEvent);
+
+        // Supabase Realtime Broadcast Channel para transmitir prioridade para todas as TVs e dispositivos conectados
+        const channel = supabase.channel('licitacao_kanban_priority')
+            .on('broadcast', { event: 'licitacao-priority-updated' }, (data) => {
+                if (data.payload !== undefined) {
+                    try {
+                        if (data.payload) {
+                            localStorage.setItem('licitacao_prioridade_visual', JSON.stringify(data.payload));
+                        } else {
+                            localStorage.removeItem('licitacao_prioridade_visual');
+                        }
+                    } catch (e) {}
+                    handleSync(data.payload);
+                }
+            })
+            .subscribe();
 
         return () => {
-            window.removeEventListener('storage', handleSync);
-            window.removeEventListener('licitacao-priority-updated', handleSync);
+            window.removeEventListener('storage', handleLocalEvent);
+            window.removeEventListener('licitacao-priority-updated', handleLocalEvent);
+            supabase.removeChannel(channel);
         };
     }, []);
 
@@ -169,10 +189,22 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
             ...(type === 'process' ? { processId: id } : { phaseId: id }),
             timestamp: Date.now()
         };
-        localStorage.setItem('licitacao_prioridade_visual', JSON.stringify(payload));
+        try {
+            localStorage.setItem('licitacao_prioridade_visual', JSON.stringify(payload));
+        } catch (e) {}
+
+        setActivePriority(payload);
         window.dispatchEvent(new CustomEvent('licitacao-priority-updated'));
         setOpenPhaseMenu(null);
         setOpenCardMenu(null);
+
+        // Dispara transmissão via Supabase Broadcast para sincronizar em tempo real com todas as TVs (/Licitação/Kanban/view)
+        const channel = supabase.channel('licitacao_kanban_priority');
+        channel.send({
+            type: 'broadcast',
+            event: 'licitacao-priority-updated',
+            payload
+        });
 
         if (!isViewOnly) {
             setShowPriorityToast(true);
@@ -181,8 +213,22 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
     };
 
     const handleClearPriority = () => {
-        localStorage.removeItem('licitacao_prioridade_visual');
+        try {
+            localStorage.removeItem('licitacao_prioridade_visual');
+        } catch (e) {}
+
+        setActivePriority(null);
         window.dispatchEvent(new CustomEvent('licitacao-priority-updated'));
+        setOpenPhaseMenu(null);
+        setOpenCardMenu(null);
+
+        // Transmite o sinal de exclusão de prioridade para limpar a TV
+        const channel = supabase.channel('licitacao_kanban_priority');
+        channel.send({
+            type: 'broadcast',
+            event: 'licitacao-priority-updated',
+            payload: null
+        });
     };
 
     const availableSectors = useMemo(() => {
@@ -640,6 +686,7 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                             const columnProcesses = processesByPhase[phase.id] || [];
                             const IconComponent = phase.icon;
                             const isOver = dragOverColumn === phase.id;
+                            const isPriorityPhase = activePriority?.type === 'phase' && activePriority?.phaseId === phase.id;
 
                             return (
                                 <div
@@ -647,25 +694,41 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                                     onDragOver={(e) => handleDragOver(e, phase.id)}
                                     onDragLeave={handleDragLeave}
                                     onDrop={(e) => handleDrop(e, phase.id)}
-                                    className={`flex flex-col h-full min-h-0 overflow-hidden rounded-2xl border border-slate-200/90 shadow-xs transition-all duration-200 ${phase.columnBg} ${phase.borderTopColor} border-t-4 ${
+                                    className={`flex flex-col h-full min-h-0 overflow-hidden rounded-2xl border transition-all duration-300 ${
+                                        isPriorityPhase
+                                            ? 'ring-4 ring-amber-400 border-amber-400 bg-amber-500/10 shadow-2xl scale-[1.01] z-20 animate-pulse'
+                                            : `${phase.columnBg} ${phase.borderTopColor} border-t-4 border-slate-200/90 shadow-xs`
+                                    } ${
                                         isViewOnly ? 'w-[145px] sm:w-[170px] md:w-[200px] xl:w-full min-w-0' : 'w-[320px] max-h-full'
                                     } ${isOver ? 'ring-2 ring-indigo-500 ring-offset-2 bg-indigo-50/50' : ''}`}
                                 >
-                                    <div className={`border-b border-slate-700/60 bg-slate-900 backdrop-blur-md rounded-t-xl flex items-center justify-between sticky top-0 z-10 text-white shadow-xs ${
+                                    <div className={`border-b rounded-t-xl flex items-center justify-between sticky top-0 z-10 text-white shadow-xs ${
+                                        isPriorityPhase
+                                            ? 'bg-gradient-to-r from-amber-600 via-amber-500 to-amber-600 border-amber-400'
+                                            : 'bg-slate-900 border-slate-700/60'
+                                    } ${
                                         isViewOnly ? 'min-h-[50px] 2xl:min-h-[60px] py-1 px-1.5 2xl:px-2' : 'h-[58px] min-h-[58px] px-2.5 md:px-3'
                                     }`}>
                                         <div className="flex items-center gap-1 2xl:gap-1.5 min-w-0 flex-1 py-0.5">
-                                            <div className={`p-1 rounded-lg border shrink-0 ${phase.badgeColor}`}>
+                                            <div className={`p-1 rounded-lg border shrink-0 ${isPriorityPhase ? 'bg-amber-400 text-amber-950 border-amber-300' : phase.badgeColor}`}>
                                                 <IconComponent className="w-3 h-3 2xl:w-3.5 2xl:h-3.5" />
                                             </div>
                                             <div className="min-w-0 flex-1 flex flex-col justify-center">
-                                                <h3 className="font-extrabold text-white text-[9px] xl:text-[10px] 2xl:text-[11.5px] 3xl:text-xs tracking-tight leading-[1.15] whitespace-normal break-normal [word-break:normal] [overflow-wrap:normal] hyphens-none drop-shadow-xs">
-                                                    {phase.label}
-                                                </h3>
+                                                <div className="flex items-center gap-1">
+                                                    <h3 className="font-extrabold text-white text-[9px] xl:text-[10px] 2xl:text-[11.5px] 3xl:text-xs tracking-tight leading-[1.15] whitespace-normal break-normal [word-break:normal] [overflow-wrap:normal] hyphens-none drop-shadow-xs">
+                                                        {phase.label}
+                                                    </h3>
+                                                </div>
                                             </div>
                                         </div>
 
                                         <div className="flex items-center gap-1 relative shrink-0">
+                                            {isPriorityPhase && (
+                                                <span className="px-1.5 py-0.5 rounded-full text-[8px] 2xl:text-[9px] font-black bg-amber-300 text-amber-950 flex items-center gap-0.5 shadow-md animate-bounce">
+                                                    <Zap className="w-2.5 h-2.5 fill-amber-950 text-amber-950" /> DESTAQUE
+                                                </span>
+                                            )}
+
                                             <span className="px-1.5 py-0.5 rounded-full text-[9px] 2xl:text-[10px] font-black bg-slate-800 text-slate-100 border border-slate-700 shadow-inner">
                                                 {columnProcesses.length}
                                             </span>
@@ -683,17 +746,30 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                                             </button>
 
                                             {openPhaseMenu === phase.id && (
-                                                <div className="absolute right-0 top-7 z-50 w-44 bg-white border border-slate-200 shadow-xl rounded-xl p-1 text-slate-800 animate-in fade-in zoom-in-95">
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            triggerVisualPriority('phase', phase.id);
-                                                        }}
-                                                        className="w-full text-left px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 rounded-lg flex items-center gap-2 cursor-pointer transition-colors"
-                                                    >
-                                                        <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
-                                                        Prioridade Visual
-                                                    </button>
+                                                <div className="absolute right-0 top-7 z-50 w-48 bg-white border border-slate-200 shadow-xl rounded-xl p-1 text-slate-800 animate-in fade-in zoom-in-95">
+                                                    {isPriorityPhase ? (
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleClearPriority();
+                                                            }}
+                                                            className="w-full text-left px-2.5 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-lg flex items-center gap-2 cursor-pointer transition-colors"
+                                                        >
+                                                            <X className="w-3.5 h-3.5" />
+                                                            Remover Destaque TV
+                                                        </button>
+                                                    ) : (
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                triggerVisualPriority('phase', phase.id);
+                                                            }}
+                                                            className="w-full text-left px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-amber-50 hover:text-amber-700 rounded-lg flex items-center gap-2 cursor-pointer transition-colors"
+                                                        >
+                                                            <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                                                            Prioridade Visual (TV)
+                                                        </button>
+                                                    )}
                                                 </div>
                                             )}
                                         </div>
@@ -706,12 +782,24 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                                             </div>
                                         ) : (
                                             columnProcesses.map((process) => {
+                                                const isPriorityProcess = activePriority?.type === 'process' && activePriority?.processId === process.id;
+
                                                 if (isViewOnly) {
                                                     return (
                                                         <div
                                                             key={process.id}
-                                                            className="group bg-white rounded-xl p-1.5 2xl:p-2.5 border border-slate-200/80 shadow-2xs transition-all duration-200 flex flex-col gap-1 2xl:gap-1.5 items-stretch cursor-default relative"
+                                                            className={`group rounded-xl p-1.5 2xl:p-2.5 border transition-all duration-300 flex flex-col gap-1 2xl:gap-1.5 items-stretch cursor-default relative ${
+                                                                isPriorityProcess
+                                                                    ? 'ring-4 ring-amber-400 border-amber-400 bg-amber-50/90 shadow-2xl scale-[1.03] z-30 animate-pulse'
+                                                                    : 'bg-white border-slate-200/80 shadow-2xs'
+                                                            }`}
                                                         >
+                                                            {isPriorityProcess && (
+                                                                <div className="bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 px-2 py-0.5 rounded-md text-[8px] 2xl:text-[9px] font-black flex items-center justify-center gap-1 shadow-xs uppercase tracking-wider animate-bounce">
+                                                                    <Zap className="w-2.5 h-2.5 fill-slate-950 text-slate-950" /> Prioridade de Sala
+                                                                </div>
+                                                            )}
+
                                                             <div className="flex items-center justify-between gap-1">
                                                                 <span className="font-mono text-[10px] xl:text-[11px] 2xl:text-xs font-extrabold text-indigo-700 bg-indigo-50 px-1 py-0.5 2xl:px-2 2xl:py-1 rounded-md border border-indigo-100/80 flex-1 text-center whitespace-nowrap overflow-visible">
                                                                     #{process.protocolo || process.id.slice(0, 8)}
@@ -730,17 +818,30 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                                                                 </button>
 
                                                                 {openCardMenu === process.id && (
-                                                                    <div className="absolute right-1 top-7 z-50 w-44 bg-white border border-slate-200 shadow-xl rounded-xl p-1 text-slate-800 animate-in fade-in zoom-in-95">
-                                                                        <button
-                                                                            onClick={(e) => {
-                                                                                e.stopPropagation();
-                                                                                triggerVisualPriority('process', process.id);
-                                                                            }}
-                                                                            className="w-full text-left px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 rounded-lg flex items-center gap-2 cursor-pointer transition-colors"
-                                                                        >
-                                                                            <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
-                                                                            Prioridade Visual
-                                                                        </button>
+                                                                    <div className="absolute right-1 top-7 z-50 w-48 bg-white border border-slate-200 shadow-xl rounded-xl p-1 text-slate-800 animate-in fade-in zoom-in-95">
+                                                                        {isPriorityProcess ? (
+                                                                            <button
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    handleClearPriority();
+                                                                                }}
+                                                                                className="w-full text-left px-2.5 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-lg flex items-center gap-2 cursor-pointer transition-colors"
+                                                                            >
+                                                                                <X className="w-3.5 h-3.5" />
+                                                                                Remover Destaque TV
+                                                                            </button>
+                                                                        ) : (
+                                                                            <button
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    triggerVisualPriority('process', process.id);
+                                                                                }}
+                                                                                className="w-full text-left px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-amber-50 hover:text-amber-700 rounded-lg flex items-center gap-2 cursor-pointer transition-colors"
+                                                                            >
+                                                                                <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                                                                                Prioridade Visual (TV)
+                                                                            </button>
+                                                                        )}
                                                                     </div>
                                                                 )}
                                                             </div>
@@ -759,8 +860,18 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                                                         draggable={isCanManage}
                                                         onDragStart={(e) => handleDragStart(e, process.id)}
                                                         onClick={() => setSelectedProcessForDetails(process)}
-                                                        className="group bg-white rounded-xl p-2.5 border border-slate-200/80 shadow-2xs hover:shadow-md transition-all duration-200 cursor-pointer relative overflow-hidden flex flex-col gap-1.5 active:scale-[0.99]"
+                                                        className={`group rounded-xl p-2.5 border transition-all duration-200 cursor-pointer relative overflow-hidden flex flex-col gap-1.5 active:scale-[0.99] ${
+                                                            isPriorityProcess
+                                                                ? 'ring-4 ring-amber-400 border-amber-400 bg-amber-50/90 shadow-xl z-20'
+                                                                : 'bg-white border-slate-200/80 shadow-2xs hover:shadow-md'
+                                                        }`}
                                                     >
+                                                        {isPriorityProcess && (
+                                                            <div className="bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 px-2.5 py-0.5 rounded-md text-[9px] font-black flex items-center justify-center gap-1 shadow-xs uppercase tracking-wider">
+                                                                <Zap className="w-3 h-3 fill-slate-950 text-slate-950" /> Prioridade Transmitida para a Sala
+                                                            </div>
+                                                        )}
+
                                                         <div className="flex items-center justify-between relative">
                                                             <span className="font-mono text-xs font-bold text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-100/80 truncate">
                                                                 #{process.protocolo || process.id.slice(0, 8)}
@@ -779,17 +890,30 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                                                             </button>
 
                                                             {openCardMenu === process.id && (
-                                                                <div className="absolute right-0 top-7 z-50 w-44 bg-white border border-slate-200 shadow-xl rounded-xl p-1 text-slate-800 animate-in fade-in zoom-in-95">
-                                                                    <button
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            triggerVisualPriority('process', process.id);
-                                                                        }}
-                                                                        className="w-full text-left px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 rounded-lg flex items-center gap-2 cursor-pointer transition-colors"
-                                                                    >
-                                                                        <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
-                                                                        Prioridade Visual
-                                                                    </button>
+                                                                <div className="absolute right-0 top-7 z-50 w-48 bg-white border border-slate-200 shadow-xl rounded-xl p-1 text-slate-800 animate-in fade-in zoom-in-95">
+                                                                    {isPriorityProcess ? (
+                                                                        <button
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                handleClearPriority();
+                                                                            }}
+                                                                            className="w-full text-left px-2.5 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-lg flex items-center gap-2 cursor-pointer transition-colors"
+                                                                        >
+                                                                            <X className="w-3.5 h-3.5" />
+                                                                            Remover Destaque TV
+                                                                        </button>
+                                                                    ) : (
+                                                                        <button
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                triggerVisualPriority('process', process.id);
+                                                                            }}
+                                                                            className="w-full text-left px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-amber-50 hover:text-amber-700 rounded-lg flex items-center gap-2 cursor-pointer transition-colors"
+                                                                        >
+                                                                            <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                                                                            Prioridade Visual (TV)
+                                                                        </button>
+                                                                    )}
                                                                 </div>
                                                             )}
                                                         </div>
