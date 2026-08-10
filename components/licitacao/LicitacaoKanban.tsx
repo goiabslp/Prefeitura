@@ -576,66 +576,66 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                 </div>
             )}
 
-            <header className="bg-white border-b border-slate-200 px-6 py-3.5 shadow-xs shrink-0 z-20">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                    <div className="flex items-center gap-4">
+            <header className="bg-white border-b border-slate-200 px-3 md:px-6 py-2.5 md:py-3.5 shadow-xs shrink-0 z-20">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 md:gap-3">
+                    <div className="flex items-center gap-3 md:gap-4">
                         <button
                             onClick={onBack}
-                            className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 flex items-center justify-center text-slate-600 transition-all shadow-xs group cursor-pointer"
+                            className="w-9 h-9 md:w-10 md:h-10 rounded-2xl bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 flex items-center justify-center text-slate-600 transition-all shadow-xs group cursor-pointer shrink-0"
                             title="Voltar ao menu"
                         >
-                            <ArrowLeft className="w-5 h-5 group-hover:-translate-x-0.5 transition-transform" />
+                            <ArrowLeft className="w-4 h-4 md:w-5 md:h-5 group-hover:-translate-x-0.5 transition-transform" />
                         </button>
-                        <div>
-                            <div className="flex items-center gap-2.5">
-                                <h1 className="text-2xl 2xl:text-3xl 3xl:text-4xl font-black text-slate-800 tracking-tight">Kanban de Licitações</h1>
+                        <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <h1 className="text-lg md:text-2xl 2xl:text-3xl 3xl:text-4xl font-black text-slate-800 tracking-tight truncate">Kanban de Licitações</h1>
                                 {isViewOnly ? (
-                                    <span className="px-3 py-1 2xl:px-4 2xl:py-1.5 rounded-full text-xs 2xl:text-sm 3xl:text-base font-black bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1.5 animate-pulse">
-                                        <Tv className="w-3.5 h-3.5 2xl:w-4.5 2xl:h-4.5 text-emerald-600" />
+                                    <span className="px-2.5 py-0.5 2xl:px-4 2xl:py-1.5 rounded-full text-[10px] md:text-xs 2xl:text-sm font-black bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1.5 animate-pulse shrink-0">
+                                        <Tv className="w-3 h-3 2xl:w-4 2xl:h-4 text-emerald-600" />
                                         MODO VIEW (SALA)
                                     </span>
                                 ) : (
-                                    <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-100 text-indigo-700 border border-indigo-200 flex items-center gap-1">
+                                    <span className="px-2.5 py-0.5 rounded-full text-[10px] md:text-xs font-bold bg-indigo-100 text-indigo-700 border border-indigo-200 flex items-center gap-1 shrink-0">
                                         <Sparkles className="w-3 h-3 text-indigo-600" />
                                         Acompanhamento Visual
                                     </span>
                                 )}
                             </div>
-                            <p className="text-xs 2xl:text-sm 3xl:text-base font-medium text-slate-500 mt-0.5">
+                            <p className="text-[11px] md:text-xs 2xl:text-sm font-medium text-slate-500 mt-0.5 truncate">
                                 {isViewOnly ? 'Exibição contínua em tempo real para telas e monitores de sala' : 'Gerencie e acompanhe a evolução dos processos pelas fases do edital'}
                             </p>
                         </div>
                     </div>
 
                     <div className="flex items-center gap-2 2xl:gap-3 overflow-x-auto pb-1 md:pb-0 shrink-0">
-                        <div className="bg-slate-50 border border-slate-200/80 px-3.5 py-1.5 2xl:px-4 2xl:py-2 rounded-xl text-center">
-                            <span className="text-[10px] 2xl:text-xs 3xl:text-sm font-extrabold uppercase text-slate-400 block tracking-wider">Total</span>
-                            <span className="text-base 2xl:text-xl 3xl:text-2xl font-black text-slate-800">{stats.total}</span>
+                        <div className="bg-slate-50 border border-slate-200/80 px-3 py-1 2xl:px-4 2xl:py-2 rounded-xl text-center min-w-[65px]">
+                            <span className="text-[9px] 2xl:text-xs font-extrabold uppercase text-slate-400 block tracking-wider">Total</span>
+                            <span className="text-sm 2xl:text-xl font-black text-slate-800">{stats.total}</span>
                         </div>
-                        <div className="bg-amber-50 border border-amber-200/80 px-3.5 py-1.5 2xl:px-4 2xl:py-2 rounded-xl text-center">
-                            <span className="text-[10px] 2xl:text-xs 3xl:text-sm font-extrabold uppercase text-amber-600/80 block tracking-wider">Em Andamento</span>
-                            <span className="text-base 2xl:text-xl 3xl:text-2xl font-black text-amber-700">{stats.emAndamento}</span>
+                        <div className="bg-amber-50 border border-amber-200/80 px-3 py-1 2xl:px-4 2xl:py-2 rounded-xl text-center min-w-[65px]">
+                            <span className="text-[9px] 2xl:text-xs font-extrabold uppercase text-amber-600/80 block tracking-wider">Em Andamento</span>
+                            <span className="text-sm 2xl:text-xl font-black text-amber-700">{stats.emAndamento}</span>
                         </div>
-                        <div className="bg-rose-50 border border-rose-200/80 px-3.5 py-1.5 2xl:px-4 2xl:py-2 rounded-xl text-center">
-                            <span className="text-[10px] 2xl:text-xs 3xl:text-sm font-extrabold uppercase text-rose-600/80 block tracking-wider">Urgentes</span>
-                            <span className="text-base 2xl:text-xl 3xl:text-2xl font-black text-rose-700">{stats.urgentes}</span>
+                        <div className="bg-rose-50 border border-rose-200/80 px-3 py-1 2xl:px-4 2xl:py-2 rounded-xl text-center min-w-[65px]">
+                            <span className="text-[9px] 2xl:text-xs font-extrabold uppercase text-rose-600/80 block tracking-wider">Urgentes</span>
+                            <span className="text-sm 2xl:text-xl font-black text-rose-700">{stats.urgentes}</span>
                         </div>
-                        <div className="bg-emerald-50 border border-emerald-200/80 px-3.5 py-1.5 2xl:px-4 2xl:py-2 rounded-xl text-center">
-                            <span className="text-[10px] 2xl:text-xs 3xl:text-sm font-extrabold uppercase text-emerald-600/80 block tracking-wider">Finalizados</span>
-                            <span className="text-base 2xl:text-xl 3xl:text-2xl font-black text-emerald-700">{stats.finalizados}</span>
+                        <div className="bg-emerald-50 border border-emerald-200/80 px-3 py-1 2xl:px-4 2xl:py-2 rounded-xl text-center min-w-[65px]">
+                            <span className="text-[9px] 2xl:text-xs font-extrabold uppercase text-emerald-600/80 block tracking-wider">Finalizados</span>
+                            <span className="text-sm 2xl:text-xl font-black text-emerald-700">{stats.finalizados}</span>
                         </div>
                     </div>
                 </div>
             </header>
 
-            <div className={`flex-1 min-h-0 flex flex-col ${isViewOnly ? 'w-full h-full p-2 md:p-3 2xl:p-4 overflow-hidden' : 'overflow-x-auto p-4 md:p-6 scrollbar-thin scrollbar-thumb-slate-300'}`}>
+            <div className={`flex-1 min-h-0 flex flex-col ${isViewOnly ? 'w-full h-full p-1.5 md:p-3 2xl:p-4 overflow-x-auto xl:overflow-hidden' : 'overflow-x-auto p-4 md:p-6 scrollbar-thin scrollbar-thumb-slate-300'}`}>
                 {isLoading ? (
                     <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-3">
                         <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
                         <p className="font-bold text-sm">Carregando quadro Kanban...</p>
                     </div>
                 ) : (
-                    <div className={`h-full min-h-0 ${isViewOnly ? 'grid grid-cols-9 gap-2 2xl:gap-3.5 w-full items-stretch overflow-hidden' : 'flex gap-4 min-w-max items-start'}`}>
+                    <div className={`h-full min-h-0 ${isViewOnly ? 'flex xl:grid xl:grid-cols-9 gap-1.5 md:gap-2 2xl:gap-3 w-full items-stretch overflow-x-auto xl:overflow-hidden min-w-max xl:min-w-0' : 'flex gap-4 min-w-max items-start'}`}>
                         {LICITACAO_PHASES.map((phase, idx) => {
                             const columnProcesses = processesByPhase[phase.id] || [];
                             const IconComponent = phase.icon;
@@ -648,25 +648,25 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                                     onDragLeave={handleDragLeave}
                                     onDrop={(e) => handleDrop(e, phase.id)}
                                     className={`flex flex-col h-full min-h-0 overflow-hidden rounded-2xl border border-slate-200/90 shadow-xs transition-all duration-200 ${phase.columnBg} ${phase.borderTopColor} border-t-4 ${
-                                        isViewOnly ? 'w-full min-w-0' : 'w-[320px] max-h-full'
+                                        isViewOnly ? 'w-[145px] sm:w-[170px] md:w-[200px] xl:w-full min-w-0' : 'w-[320px] max-h-full'
                                     } ${isOver ? 'ring-2 ring-indigo-500 ring-offset-2 bg-indigo-50/50' : ''}`}
                                 >
                                     <div className={`border-b border-slate-700/60 bg-slate-900 backdrop-blur-md rounded-t-xl flex items-center justify-between sticky top-0 z-10 text-white shadow-xs ${
-                                        isViewOnly ? 'h-[54px] min-h-[54px] 2xl:h-[62px] 2xl:min-h-[62px] px-1.5 2xl:px-2.5' : 'h-[58px] min-h-[58px] px-2.5 md:px-3'
+                                        isViewOnly ? 'min-h-[50px] 2xl:min-h-[60px] py-1 px-1.5 2xl:px-2' : 'h-[58px] min-h-[58px] px-2.5 md:px-3'
                                     }`}>
-                                        <div className="flex items-center gap-1 2xl:gap-1.5 min-w-0 flex-1 h-full py-1">
+                                        <div className="flex items-center gap-1 2xl:gap-1.5 min-w-0 flex-1 py-0.5">
                                             <div className={`p-1 rounded-lg border shrink-0 ${phase.badgeColor}`}>
-                                                <IconComponent className="w-3 h-3 2xl:w-4 2xl:h-4" />
+                                                <IconComponent className="w-3 h-3 2xl:w-3.5 2xl:h-3.5" />
                                             </div>
                                             <div className="min-w-0 flex-1 flex flex-col justify-center">
-                                                <h3 className="font-extrabold text-white text-[10px] xl:text-[11px] 2xl:text-xs tracking-tight leading-[1.15] whitespace-normal break-words drop-shadow-xs">
+                                                <h3 className="font-extrabold text-white text-[9px] xl:text-[10px] 2xl:text-[11.5px] 3xl:text-xs tracking-tight leading-[1.15] whitespace-normal break-normal [word-break:normal] [overflow-wrap:normal] hyphens-none drop-shadow-xs">
                                                     {phase.label}
                                                 </h3>
                                             </div>
                                         </div>
 
                                         <div className="flex items-center gap-1 relative shrink-0">
-                                            <span className="px-1.5 py-0.5 2xl:px-2 rounded-full text-[10px] 2xl:text-[11px] font-black bg-slate-800 text-slate-100 border border-slate-700 shadow-inner">
+                                            <span className="px-1.5 py-0.5 rounded-full text-[9px] 2xl:text-[10px] font-black bg-slate-800 text-slate-100 border border-slate-700 shadow-inner">
                                                 {columnProcesses.length}
                                             </span>
 
@@ -676,7 +676,7 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                                                     setOpenPhaseMenu(openPhaseMenu === phase.id ? null : phase.id);
                                                     setOpenCardMenu(null);
                                                 }}
-                                                className="w-6 h-6 rounded-md hover:bg-slate-800 flex items-center justify-center text-slate-400 hover:text-white transition-colors cursor-pointer"
+                                                className="w-5 h-5 rounded hover:bg-slate-800 flex items-center justify-center text-slate-400 hover:text-white transition-colors cursor-pointer"
                                                 title="Opções da Fase"
                                             >
                                                 <MoreHorizontal className="w-3.5 h-3.5" />
