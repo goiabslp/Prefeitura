@@ -10,6 +10,7 @@ import {
 import { User } from '../../types';
 import { LicitacaoProcesso } from '../../types/licitacao';
 import { useLicitacaoProcesses, useUpdateLicitacaoProcess } from '../../hooks/useLicitacaoModule';
+import { fetchObjetoResumidoMap } from '../../services/licitacaoService';
 import { LicitacaoWizard } from './LicitacaoWizard';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -145,15 +146,36 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
         }
     });
 
+    const [objetoResumidoMap, setObjetoResumidoMap] = useState<Record<string, string>>(() => {
+        try {
+            const saved = localStorage.getItem('licitacao_objeto_resumido_map');
+            return saved ? JSON.parse(saved) : {};
+        } catch {
+            return {};
+        }
+    });
+
+    useEffect(() => {
+        const loadMap = async () => {
+            const map = await fetchObjetoResumidoMap();
+            setObjetoResumidoMap(prev => JSON.stringify(prev) === JSON.stringify(map) ? prev : map);
+        };
+        loadMap();
+        const mapInterval = setInterval(loadMap, 3000);
+        return () => clearInterval(mapInterval);
+    }, []);
+
     useEffect(() => {
         const handleSync = (payloadData?: any) => {
             try {
                 const saved = payloadData !== undefined 
                     ? payloadData 
                     : (localStorage.getItem('licitacao_prioridade_visual') ? JSON.parse(localStorage.getItem('licitacao_prioridade_visual')!) : null);
-                setIsTransitioning(true);
-                setActivePriority(saved);
-                setTimeout(() => setIsTransitioning(false), 2000);
+                
+                setActivePriority(prev => {
+                    if (JSON.stringify(prev) === JSON.stringify(saved)) return prev;
+                    return saved;
+                });
             } catch (e) {
                 console.error('Erro ao sincronizar prioridade visual:', e);
             }
@@ -178,7 +200,11 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                     } else {
                         try { localStorage.removeItem('licitacao_prioridade_visual'); } catch (e) {}
                     }
-                    setActivePriority(dbPriority);
+
+                    setActivePriority(prev => {
+                        if (JSON.stringify(prev) === JSON.stringify(dbPriority)) return prev;
+                        return dbPriority;
+                    });
                 }
             } catch (e) {
                 console.warn('Erro ao carregar prioridade do banco:', e);
@@ -607,18 +633,51 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
             const phaseObj = LICITACAO_PHASES.find(p => p.id === activePriority.phaseId) || LICITACAO_PHASES[0];
             const phaseProcesses = processesByPhase[phaseObj.id] || [];
             const PhaseIcon = phaseObj.icon;
+            const processCount = phaseProcesses.length;
+
+            let gridLayout = 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3';
+            let cardPadding = 'p-4 2xl:p-5';
+            let titleSize = 'text-sm md:text-base xl:text-lg 2xl:text-xl';
+            let cardGap = 'gap-3 md:gap-4';
+
+            if (processCount > 12) {
+                gridLayout = 'grid-cols-2 md:grid-cols-4 lg:grid-cols-5';
+                cardPadding = 'p-2.5 2xl:p-3.5';
+                titleSize = 'text-xs md:text-sm xl:text-base';
+                cardGap = 'gap-2';
+            } else if (processCount > 8) {
+                gridLayout = 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4';
+                cardPadding = 'p-3 2xl:p-4';
+                titleSize = 'text-xs md:text-sm xl:text-base';
+                cardGap = 'gap-2.5 md:gap-3';
+            } else if (processCount > 4) {
+                gridLayout = 'grid-cols-2 md:grid-cols-3';
+                cardPadding = 'p-3.5 2xl:p-4.5';
+                titleSize = 'text-sm md:text-base xl:text-lg';
+                cardGap = 'gap-3 md:gap-4';
+            } else if (processCount > 1) {
+                gridLayout = 'grid-cols-1 md:grid-cols-2';
+                cardPadding = 'p-5 2xl:p-6';
+                titleSize = 'text-base md:text-lg xl:text-xl';
+                cardGap = 'gap-4 md:gap-6';
+            } else {
+                gridLayout = 'grid-cols-1';
+                cardPadding = 'p-6 2xl:p-8';
+                titleSize = 'text-lg md:text-xl xl:text-2xl';
+                cardGap = 'gap-6';
+            }
 
             return (
                 <div className={`flex-1 flex flex-col bg-[#F8FAFC] text-slate-900 h-full overflow-hidden relative z-30 transition-all duration-[2000ms] ease-in-out ${
                     isTransitioning ? 'opacity-0 scale-95 filter blur-sm' : 'opacity-100 scale-100 filter blur-0'
                 }`}>
-                    <header className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between shadow-xs shrink-0 z-20">
+                    <header className="bg-white border-b border-slate-200 px-4 md:px-6 py-2.5 md:py-3 flex items-center justify-between shadow-xs shrink-0 z-20">
                         <div className="flex items-center gap-3">
-                            <span className="px-4 py-1.5 rounded-full text-xs 2xl:text-sm font-black bg-amber-50 text-amber-800 border border-amber-300 flex items-center gap-2 animate-pulse">
+                            <span className="px-3.5 py-1 rounded-full text-xs 2xl:text-sm font-black bg-amber-50 text-amber-800 border border-amber-300 flex items-center gap-2">
                                 <Zap className="w-4 h-4 text-amber-500 fill-amber-500" />
                                 FASE EM PRIORIDADE VISUAL DA SALA
                             </span>
-                            <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                            <h2 className="text-base md:text-xl font-bold text-slate-800 flex items-center gap-2">
                                 <PhaseIcon className="w-5 h-5 text-indigo-600" />
                                 {phaseObj.label}
                             </h2>
@@ -626,34 +685,36 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
 
                         <button
                             onClick={handleClearPriority}
-                            className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-rose-50 hover:text-rose-600 text-slate-700 text-xs 2xl:text-sm font-bold flex items-center gap-2 border border-slate-200 transition-all cursor-pointer shadow-xs"
+                            className="px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-rose-50 hover:text-rose-600 text-slate-700 text-xs 2xl:text-sm font-bold flex items-center gap-2 border border-slate-200 transition-all cursor-pointer shadow-xs"
                         >
                             <X className="w-4 h-4 text-slate-500" />
                             Fechar Prioridade
                         </button>
                     </header>
 
-                    <div className="flex-1 overflow-y-auto p-6 md:p-10 space-y-4 max-w-7xl mx-auto w-full">
-                        <p className="text-sm text-slate-500 font-medium">
-                            Exibindo todos os <strong>{phaseProcesses.length}</strong> processos em andamento nesta fase:
+                    <div className="flex-1 min-h-0 flex flex-col p-3 md:p-5 2xl:p-6 overflow-hidden w-full max-w-[1920px] mx-auto">
+                        <p className="text-xs md:text-sm text-slate-500 font-semibold mb-2 md:mb-3 shrink-0">
+                            Exibindo todos os <strong className="text-indigo-600 font-black">{phaseProcesses.length}</strong> processos em andamento nesta fase:
                         </p>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <div className={`grid ${gridLayout} ${cardGap} flex-1 min-h-0 h-full w-full items-stretch overflow-hidden`}>
                             {phaseProcesses.map(proc => (
-                                <div key={proc.id} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-md flex flex-col gap-3">
-                                    <div className="flex items-center justify-between">
-                                        <span className="font-mono text-sm font-bold text-indigo-700 bg-indigo-50 px-3 py-1 rounded-lg border border-indigo-200">
-                                            #{proc.protocolo || proc.id.slice(0, 8)}
-                                        </span>
-                                        <span className="text-xs font-bold text-amber-800 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200 flex items-center gap-1">
-                                            <Clock className="w-3.5 h-3.5 text-amber-600" />
-                                            {getDaysElapsed(proc.criado_em)}
-                                        </span>
+                                <div key={proc.id} className={`bg-white border border-slate-200/90 rounded-2xl ${cardPadding} shadow-xs hover:shadow-md transition-all flex flex-col justify-between h-full min-h-0 overflow-hidden`}>
+                                    <div className="flex flex-col gap-2 min-h-0">
+                                        <div className="flex items-center justify-between gap-2 shrink-0">
+                                            <span className="font-sans text-xs md:text-sm font-black text-blue-700 uppercase bg-blue-50 px-2.5 py-0.5 md:py-1 rounded-lg border border-blue-200/90 truncate shadow-2xs" title={`Protocolo: #${proc.protocolo}`}>
+                                                {objetoResumidoMap[proc.id] || proc.objeto_resumido || `#${proc.protocolo || proc.id.slice(0, 8)}`}
+                                            </span>
+                                            <span className="text-[11px] md:text-xs font-extrabold text-amber-800 bg-amber-50 px-2 py-0.5 md:py-1 rounded-lg border border-amber-200/80 flex items-center gap-1 shrink-0">
+                                                <Clock className="w-3.5 h-3.5 text-amber-600" />
+                                                {getDaysElapsed(proc.criado_em)}
+                                            </span>
+                                        </div>
+                                        <h4 className={`font-black text-slate-900 ${titleSize} line-clamp-3 leading-snug`}>{proc.finalidade}</h4>
                                     </div>
-                                    <h4 className="font-bold text-slate-900 text-base line-clamp-2">{proc.finalidade}</h4>
-                                    <div className="text-xs text-slate-500 border-t border-slate-100 pt-3 flex justify-between items-center">
-                                        <span className="font-semibold text-slate-700">{proc.solicitante_nome}</span>
-                                        <span className="text-indigo-600 font-medium">{proc.solicitante_setor}</span>
+                                    <div className="text-xs text-slate-500 border-t border-slate-100 pt-2 md:pt-2.5 flex justify-between items-center shrink-0 mt-2">
+                                        <span className="font-bold text-slate-700 truncate mr-2">{proc.solicitante_nome}</span>
+                                        <span className="text-indigo-600 font-semibold truncate shrink-0">{proc.solicitante_setor}</span>
                                     </div>
                                 </div>
                             ))}
@@ -765,6 +826,30 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                 </div>
             </header>
 
+            {activePriority && !isViewOnly && (
+                <div className="bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 text-slate-950 px-4 py-2 border-b border-amber-300 shadow-xs flex items-center justify-between z-20 shrink-0 animate-in fade-in slide-in-from-top-2 duration-300">
+                    <div className="flex items-center gap-2.5">
+                        <span className="w-6 h-6 rounded-full bg-amber-950 text-amber-300 flex items-center justify-center shrink-0">
+                            <Zap className="w-3.5 h-3.5 fill-amber-300" />
+                        </span>
+                        <div className="text-xs md:text-sm font-bold">
+                            <span>Transmissão Visual em Tempo Real (TV) Ativa: </span>
+                            <span className="font-black underline underline-offset-2">
+                                {activePriority.type === 'process' ? `Processo em Destaque` : `Fase em Destaque`}
+                            </span>
+                        </div>
+                    </div>
+                    <button
+                        onClick={handleClearPriority}
+                        className="bg-slate-950 hover:bg-slate-900 text-amber-300 hover:text-white px-3 py-1 rounded-xl text-xs font-black flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95 shrink-0"
+                        title="Desativar Transmissão e Voltar ao Kanban Geral na TV"
+                    >
+                        <X className="w-4 h-4 text-rose-400" />
+                        Desativar Prioridade Visual
+                    </button>
+                </div>
+            )}
+
             <div className={`flex-1 min-h-0 flex flex-col ${isViewOnly ? 'w-full h-full p-1.5 md:p-3 2xl:p-4 overflow-hidden' : 'overflow-x-auto p-4 md:p-6 scrollbar-thin scrollbar-thumb-slate-300'}`}>
                 {isLoading ? (
                     <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-3">
@@ -787,7 +872,7 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                                     onDrop={(e) => handleDrop(e, phase.id)}
                                     className={`flex flex-col h-full min-h-0 overflow-hidden rounded-2xl border transition-all duration-300 ${
                                         isPriorityPhase
-                                            ? 'ring-4 ring-amber-400 border-amber-400 bg-amber-500/10 shadow-2xl scale-[1.01] z-20 animate-pulse'
+                                            ? 'ring-4 ring-amber-400 border-amber-400 bg-amber-500/10 shadow-[0_0_30px_rgba(251,191,36,0.35)] scale-[1.01] z-20'
                                             : `${phase.columnBg} ${phase.borderTopColor} border-t-4 border-slate-200/90 shadow-xs`
                                     } ${
                                         isViewOnly ? 'w-full min-w-0 h-full max-h-full flex-1' : 'w-[320px] max-h-full'
@@ -881,7 +966,7 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                                                             key={process.id}
                                                             className={`group rounded-xl p-1.5 2xl:p-2.5 border transition-all duration-300 flex flex-col gap-1 2xl:gap-1.5 items-stretch cursor-default relative ${
                                                                 isPriorityProcess
-                                                                    ? 'ring-4 ring-amber-400 border-amber-400 bg-amber-50/90 shadow-2xl scale-[1.03] z-30 animate-pulse'
+                                                                    ? 'ring-4 ring-amber-400 border-amber-400 bg-amber-50/90 shadow-[0_0_20px_rgba(251,191,36,0.4)] scale-[1.02] z-30'
                                                                     : 'bg-white border-slate-200/80 shadow-2xs'
                                                             }`}
                                                         >
@@ -892,8 +977,8 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                                                             )}
 
                                                             <div className="flex items-center justify-between gap-1">
-                                                                <span className="font-mono text-[10px] xl:text-[11px] 2xl:text-xs font-extrabold text-indigo-700 bg-indigo-50 px-1 py-0.5 2xl:px-2 2xl:py-1 rounded-md border border-indigo-100/80 flex-1 text-center whitespace-nowrap overflow-visible">
-                                                                    #{process.protocolo || process.id.slice(0, 8)}
+                                                                <span className="font-sans text-[11px] xl:text-xs 2xl:text-sm font-black text-blue-700 uppercase bg-blue-50 px-1.5 py-0.5 2xl:px-2 2xl:py-1 rounded-md border border-blue-200/90 flex-1 text-center truncate shadow-2xs" title={`Protocolo: #${process.protocolo}`}>
+                                                                    {objetoResumidoMap[process.id] || process.objeto_resumido || `#${process.protocolo || process.id.slice(0, 8)}`}
                                                                 </span>
 
                                                                 <button
@@ -953,19 +1038,32 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                                                         onClick={() => setSelectedProcessForDetails(process)}
                                                         className={`group rounded-xl p-2.5 border transition-all duration-200 cursor-pointer relative overflow-hidden flex flex-col gap-1.5 active:scale-[0.99] ${
                                                             isPriorityProcess
-                                                                ? 'ring-4 ring-amber-400 border-amber-400 bg-amber-50/90 shadow-xl z-20'
+                                                                ? 'ring-4 ring-amber-400 border-amber-400 bg-amber-50 shadow-[0_0_20px_rgba(251,191,36,0.4)] scale-[1.02] z-20'
                                                                 : 'bg-white border-slate-200/80 shadow-2xs hover:shadow-md'
                                                         }`}
                                                     >
                                                         {isPriorityProcess && (
-                                                            <div className="bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 px-2.5 py-0.5 rounded-md text-[9px] font-black flex items-center justify-center gap-1 shadow-xs uppercase tracking-wider">
-                                                                <Zap className="w-3 h-3 fill-slate-950 text-slate-950" /> Prioridade Transmitida para a Sala
+                                                            <div className="bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 px-2 py-1 rounded-lg text-[10px] font-black flex items-center justify-between shadow-xs uppercase tracking-wider">
+                                                                <span className="flex items-center gap-1">
+                                                                    <Zap className="w-3.5 h-3.5 fill-slate-950 text-slate-950 shrink-0" />
+                                                                    Na Sala (TV)
+                                                                </span>
+                                                                <button
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        handleClearPriority();
+                                                                    }}
+                                                                    className="bg-slate-950 hover:bg-slate-900 text-rose-400 hover:text-white px-2 py-0.5 rounded-md text-[10px] font-black flex items-center gap-1 transition-all cursor-pointer shadow-xs shrink-0 active:scale-95"
+                                                                    title="Desativar Visualização na Sala"
+                                                                >
+                                                                    <X className="w-3 h-3 text-rose-400" /> Desativar
+                                                                </button>
                                                             </div>
                                                         )}
 
                                                         <div className="flex items-center justify-between relative">
-                                                            <span className="font-mono text-xs font-bold text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-100/80 truncate">
-                                                                #{process.protocolo || process.id.slice(0, 8)}
+                                                            <span className="font-sans text-xs sm:text-sm font-black text-blue-700 uppercase bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200/90 truncate shadow-2xs" title={`Protocolo: #${process.protocolo}`}>
+                                                                {objetoResumidoMap[process.id] || process.objeto_resumido || `#${process.protocolo || process.id.slice(0, 8)}`}
                                                             </span>
 
                                                             <button

@@ -103,13 +103,15 @@ export const ComprasStepWizard: React.FC<ComprasStepWizardProps> = ({
 
     // Check Global Completion for "Finalizar" button
     const isAllMandatoryCompleted = useMemo(() => {
-        return !!(
-            content.title && content.title.length >= 100 && content.requesterName && content.priority && // Step 1
-            content.purchaseItems && content.purchaseItems.length > 0 && // Step 2
-            content.body && content.body.length >= 400 && // Step 3
-            content.resolucaoDescricao && (content.resolucaoDescricao === 'N/A' || content.resolucaoNumero) && // Step 6
-            content.signatureName // Step 7
-        );
+        const hasTitle = !!(content.title && content.title.trim().length > 0);
+        const hasRequester = !!(content.requesterName && content.requesterName.trim().length > 0);
+        const hasPriority = !!content.priority;
+        const hasItems = !!(content.purchaseItems && content.purchaseItems.length > 0);
+        const hasBody = !!(content.body && content.body.trim().length > 0);
+        const hasOrigem = !!(content.resolucaoDescricao && (content.resolucaoDescricao === 'N/A' || content.resolucaoNumero));
+        const hasSignature = !!(content.signatureName || content.digitalSignature?.enabled);
+
+        return hasTitle && hasRequester && hasPriority && hasItems && hasBody && hasOrigem && hasSignature;
     }, [content]);
 
 

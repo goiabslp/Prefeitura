@@ -1247,41 +1247,46 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
               </div>
 
               {/* FINALIZATION BUTTON - Only visible after signing */}
-              <div className="mt-8 flex justify-center">
-                <button
-                  disabled={isSubmitting || isLoading || !canFinish}
-                  onClick={async () => {
-                    if (!isSubmitting && canFinish && onFinish) {
-                      setIsSubmitting(true);
-                      try {
-                        await onFinish();
-                      } catch (error) {
-                        console.error("Finalização falhou:", error);
-                      } finally {
-                        setIsSubmitting(false);
-                      }
-                    }
-                  }}
-                  className={`
-                     flex items-center gap-3 px-8 py-4 font-bold rounded-2xl shadow-xl transition-all w-full sm:w-auto justify-center
-                     ${isSubmitting || !canFinish ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none' : 'bg-slate-900 text-white hover:bg-slate-800 shadow-slate-900/20 active:scale-95 animate-bounce-short'}
-                   `}
-                >
-                  {isSubmitting ? (
-                    <>
-                      <div className="w-5 h-5 border-2 border-slate-500 border-t-transparent rounded-full animate-spin" />
-                      <span className="text-sm uppercase tracking-widest">Processando...</span>
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle2 className="w-5 h-5" />
-                      <span className="text-sm uppercase tracking-widest">
-                        {canFinish ? 'Concluir Pedido' : 'Preencha os campos obrigatórios'}
-                      </span>
-                    </>
-                  )}
-                </button>
-              </div>
+              {(() => {
+                const effectiveCanFinish = canFinish || isSigned || !!content.digitalSignature?.enabled;
+                return (
+                  <div className="mt-8 flex justify-center">
+                    <button
+                      disabled={isSubmitting || isLoading || !effectiveCanFinish}
+                      onClick={async () => {
+                        if (!isSubmitting && effectiveCanFinish && onFinish) {
+                          setIsSubmitting(true);
+                          try {
+                            await onFinish();
+                          } catch (error) {
+                            console.error("Finalização falhou:", error);
+                          } finally {
+                            setIsSubmitting(false);
+                          }
+                        }
+                      }}
+                      className={`
+                         flex items-center gap-3 px-8 py-4 font-bold rounded-2xl shadow-xl transition-all w-full sm:w-auto justify-center
+                         ${isSubmitting || !effectiveCanFinish ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none' : 'bg-slate-900 text-white hover:bg-slate-800 shadow-slate-900/20 active:scale-95 animate-bounce-short'}
+                       `}
+                    >
+                      {isSubmitting ? (
+                        <>
+                          <div className="w-5 h-5 border-2 border-slate-500 border-t-transparent rounded-full animate-spin" />
+                          <span className="text-sm uppercase tracking-widest">Processando...</span>
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="w-5 h-5" />
+                          <span className="text-sm uppercase tracking-widest">
+                            {effectiveCanFinish ? 'Concluir Pedido' : 'Preencha os campos obrigatórios'}
+                          </span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                );
+              })()}
             </div>
           ) : (
             /* Not Signed Yet - Unified Ready View */

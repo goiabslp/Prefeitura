@@ -21,6 +21,8 @@ import { usePurchaseOrders, usePurchaseOrder, useInfinitePurchaseOrders, useUpda
 import { useServiceRequests, useServiceRequest, useInfiniteServiceRequests } from '../hooks/useServiceRequests';
 import { DiariasReportModal } from './diarias/DiariasReportModal';
 import { polishMotivoWithAI } from '../services/geminiService';
+import { supabase } from '../services/supabaseClient';
+import { saveObjetoResumidoMap, fetchObjetoResumidoMap } from '../services/licitacaoService';
 
 
 const HashIcon = ({ className }: { className?: string }) => (
@@ -89,7 +91,71 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
     const [protocolEditOrder, setProtocolEditOrder] = useState<Order | null>(null);
     const [newProtocolValue, setNewProtocolValue] = useState('');
     const [auxPhaseForProtocol, setAuxPhaseForProtocol] = useState<string | null>(null);
+    const [editingObjetoResumidoId, setEditingObjetoResumidoId] = useState<string | null>(null);
+    const [editingObjetoResumidoValue, setEditingObjetoResumidoValue] = useState<string>('');
+    const [isSavingObjetoResumido, setIsSavingObjetoResumido] = useState<boolean>(false);
+    const [objetoResumidoMap, setObjetoResumidoMap] = useState<Record<string, string>>(() => {
+        try {
+            const saved = localStorage.getItem('licitacao_objeto_resumido_map');
+            return saved ? JSON.parse(saved) : {};
+        } catch {
+            return {};
+        }
+    });
     const statusDropdownRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const loadMap = async () => {
+            const map = await fetchObjetoResumidoMap();
+            setObjetoResumidoMap(prev => JSON.stringify(prev) === JSON.stringify(map) ? prev : map);
+        };
+        loadMap();
+        const interval = setInterval(loadMap, 3000);
+
+        const channel = supabase.channel('licitacao_kanban_priority')
+            .on('broadcast', { event: 'licitacao-objeto-resumido-updated' }, (payload: any) => {
+                if (payload.payload) {
+                    setObjetoResumidoMap(payload.payload);
+                }
+            })
+            .subscribe();
+
+        return () => {
+            clearInterval(interval);
+            supabase.removeChannel(channel);
+        };
+    }, []);
+
+    const handleSaveObjetoResumido = async (orderId: string, value: string) => {
+        setIsSavingObjetoResumido(true);
+        try {
+            const trimmed = value.trim();
+            const updatedMap = await saveObjetoResumidoMap(orderId, trimmed);
+            setObjetoResumidoMap(updatedMap);
+
+            // Atualizacao otimista local
+            setLocalOptimisticUpdates(prev => ({
+                ...prev,
+                [orderId]: {
+                    ...prev[orderId],
+                    documentSnapshot: {
+                        ...(prev[orderId]?.documentSnapshot || {}),
+                        content: {
+                            ...(prev[orderId]?.documentSnapshot?.content || {}),
+                            objeto_resumido: trimmed
+                        }
+                    } as any
+                }
+            }));
+
+            queryClient.invalidateQueries();
+            setEditingObjetoResumidoId(null);
+        } catch (err) {
+            console.error('Erro ao salvar objeto resumido:', err);
+        } finally {
+            setIsSavingObjetoResumido(false);
+        }
+    };
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -918,28 +984,97 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                                 {new Date(order.createdAt).toLocaleDateString('pt-BR')}
                                                             </span>
                                                         </div>
-                                                        <div 
-                                                            className="md:col-span-2 pr-4 flex items-center cursor-help"
-                                                            onMouseEnter={(e) => {
-                                                                const text = order.title || (order.documentSnapshot?.content as any)?.objeto;
-                                                                if (text) {
-                                                                    const rect = e.currentTarget.getBoundingClientRect();
-                                                                    setHoveredTooltip({
-                                                                        text,
-                                                                        type: 'licitacao',
-                                                                        x: rect.left + rect.width / 2,
-                                                                        y: rect.top - 8
-                                                                    });
-                                                                }
-                                                            }}
-                                                            onMouseLeave={() => {
-                                                                setHoveredTooltip(null);
-                                                            }}
-                                                        >
-                                                            <span className="text-xs font-bold text-slate-600 line-clamp-1">
-                                                                {(content as any)?.objeto || content?.description || <span className="italic text-slate-400">Objeto não especificado</span>}
-                                                            </span>
-                                                        </div>
+                                                        {(() => {
+                                                            const isLicitacaoOrAdmin = isLicitacaoUser || isAdmin;
+                                                            const currentResumido = objetoResumidoMap[order.id] !== undefined
+                                                                ? objetoResumidoMap[order.id]
+                                                                : ((localOptimisticUpdates[order.id]?.documentSnapshot?.content as any)?.objeto_resumido !== undefined
+                                                                    ? (localOptimisticUpdates[order.id]?.documentSnapshot?.content as any)?.objeto_resumido
+                                                                    : ((content as any)?.objeto_resumido || (order as any).objeto_resumido || ''));
+
+                                                            if (editingObjetoResumidoId === order.id) {
+                                                                return (
+                                                                    <div className="md:col-span-2 pr-2 flex items-center gap-1">
+                                                                        <input
+                                                                            type="text"
+                                                                            autoFocus
+                                                                            placeholder="Digite o título resumido..."
+                                                                            value={editingObjetoResumidoValue}
+                                                                            onChange={(e) => setEditingObjetoResumidoValue(e.target.value)}
+                                                                            onKeyDown={(e) => {
+                                                                                if (e.key === 'Enter') handleSaveObjetoResumido(order.id, editingObjetoResumidoValue);
+                                                                                if (e.key === 'Escape') setEditingObjetoResumidoId(null);
+                                                                            }}
+                                                                            className="w-full text-xs font-bold text-slate-800 bg-white border border-indigo-300 rounded px-2 py-1 outline-none focus:ring-2 focus:ring-indigo-500"
+                                                                        />
+                                                                        <button
+                                                                            onClick={() => handleSaveObjetoResumido(order.id, editingObjetoResumidoValue)}
+                                                                            disabled={isSavingObjetoResumido}
+                                                                            className="p-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white transition-colors cursor-pointer shrink-0"
+                                                                            title="Salvar"
+                                                                        >
+                                                                            {isSavingObjetoResumido ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => setEditingObjetoResumidoId(null)}
+                                                                            className="p-1 rounded bg-slate-200 hover:bg-slate-300 text-slate-600 transition-colors cursor-pointer shrink-0"
+                                                                            title="Cancelar"
+                                                                        >
+                                                                            <X className="w-3.5 h-3.5" />
+                                                                        </button>
+                                                                    </div>
+                                                                );
+                                                            }
+
+                                                            const realObjetoText = order.title || (content as any)?.objeto || content?.description;
+
+                                                            return (
+                                                                <div 
+                                                                    className={`md:col-span-2 pr-4 flex items-center gap-1.5 ${isLicitacaoOrAdmin ? 'cursor-pointer group/resumido' : ''}`}
+                                                                    onClick={() => {
+                                                                        if (isLicitacaoOrAdmin) {
+                                                                            setEditingObjetoResumidoId(order.id);
+                                                                            setEditingObjetoResumidoValue(currentResumido || '');
+                                                                        }
+                                                                    }}
+                                                                    onMouseEnter={(e) => {
+                                                                        if (realObjetoText) {
+                                                                            const rect = e.currentTarget.getBoundingClientRect();
+                                                                            setHoveredTooltip({
+                                                                                text: `Objeto Real: ${realObjetoText}`,
+                                                                                type: 'licitacao',
+                                                                                x: rect.left + rect.width / 2,
+                                                                                y: rect.top - 8
+                                                                            });
+                                                                        }
+                                                                    }}
+                                                                    onMouseLeave={() => {
+                                                                        setHoveredTooltip(null);
+                                                                    }}
+                                                                    title={realObjetoText ? `Objeto Real do Pedido:\n${realObjetoText}${isLicitacaoOrAdmin ? '\n\n(Clique para editar o título resumido)' : ''}` : undefined}
+                                                                >
+                                                                    {currentResumido ? (
+                                                                        <span className="text-xs font-black text-slate-800 uppercase line-clamp-1 flex-1">
+                                                                            {currentResumido}
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="text-[11px] font-medium italic text-slate-400 flex items-center gap-1 flex-1">
+                                                                            {isLicitacaoOrAdmin ? (
+                                                                                <>
+                                                                                    <Edit2 className="w-3 h-3 text-indigo-400 group-hover/resumido:scale-110 transition-transform shrink-0" />
+                                                                                    <span className="group-hover/resumido:text-indigo-600 transition-colors truncate">Em branco (Clique para preencher)</span>
+                                                                                </>
+                                                                            ) : (
+                                                                                '---'
+                                                                            )}
+                                                                        </span>
+                                                                    )}
+                                                                    {isLicitacaoOrAdmin && currentResumido && (
+                                                                        <Edit2 className="w-3 h-3 text-slate-300 group-hover/resumido:text-indigo-600 opacity-0 group-hover/resumido:opacity-100 transition-all shrink-0" />
+                                                                    )}
+                                                                </div>
+                                                            );
+                                                        })()}
                                                         <div className="md:col-span-2 flex flex-col justify-center pr-4">
                                                             <span className="text-xs font-bold text-slate-700 truncate">{content?.requesterName || order.userName || 'Sem Solicitante'}</span>
                                                             <span className="text-[9px] font-medium text-slate-400 uppercase tracking-wider truncate flex items-center gap-1">

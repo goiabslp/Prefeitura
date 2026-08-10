@@ -51,6 +51,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
 }) => {
   const isAdmin = currentUser.role === 'admin';
   const isNotHome = currentView !== 'home';
+  const isKanbanViewOnly = currentView === 'licitacao:kanban-view' || (typeof window !== 'undefined' && decodeURIComponent(window.location.pathname).includes('/Kanban/view'));
 
   const isFormScreen = () => {
     if (currentView === 'editor') return true; 
@@ -250,23 +251,27 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
             )}
           </button>
 
-          <div className="h-6 w-px bg-slate-200 hidden desktop:block"></div>
+          {!isKanbanViewOnly && (
+            <>
+              <div className="h-6 w-px bg-slate-200 hidden desktop:block"></div>
 
-          <div className="hidden desktop:flex flex-col">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] leading-none mb-1">Tela Atual</span>
-            <span className="text-sm font-bold text-slate-900 tracking-tight">{getModuleTitle()}</span>
-          </div>
+              <div className="hidden desktop:flex flex-col">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] leading-none mb-1">Tela Atual</span>
+                <span className="text-sm font-bold text-slate-900 tracking-tight">{getModuleTitle()}</span>
+              </div>
 
-          {systemUpdateCountdown !== null && systemUpdateCountdown > 0 && (
-            <div className="flex items-center gap-2.5 px-3.5 py-1.5 bg-emerald-50 border border-emerald-200 rounded-xl animate-pulse-glow shadow-lg shadow-emerald-500/10 ring-4 ring-emerald-500/5">
-              <div className="flex items-center justify-center w-7 h-7 bg-emerald-500 rounded-lg shadow-inner">
-                <Settings className="w-3.5 h-3.5 text-white animate-spin-slow" />
-              </div>
-              <div className="flex flex-col">
-                <span className="text-[9px] font-black text-emerald-600 uppercase tracking-widest leading-none mb-0.5">SISTEMA ATUALIZA EM</span>
-                <span className="text-sm font-black text-emerald-900 tabular-nums leading-none">{systemUpdateCountdown}<span className="text-[10px] ml-0.5 text-emerald-400">seg</span></span>
-              </div>
-            </div>
+              {systemUpdateCountdown !== null && systemUpdateCountdown > 0 && (
+                <div className="flex items-center gap-2.5 px-3.5 py-1.5 bg-emerald-50 border border-emerald-200 rounded-xl animate-pulse-glow shadow-lg shadow-emerald-500/10 ring-4 ring-emerald-500/5">
+                  <div className="flex items-center justify-center w-7 h-7 bg-emerald-500 rounded-lg shadow-inner">
+                    <Settings className="w-3.5 h-3.5 text-white animate-spin-slow" />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[9px] font-black text-emerald-600 uppercase tracking-widest leading-none mb-0.5">SISTEMA ATUALIZA EM</span>
+                    <span className="text-sm font-black text-emerald-900 tabular-nums leading-none">{systemUpdateCountdown}<span className="text-[10px] ml-0.5 text-emerald-400">seg</span></span>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
 
@@ -297,110 +302,112 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
         }
       `}} />
 
-        {/* Lado Direito: Ações e Perfil */}
-        <div className="flex items-center gap-2 md:gap-4">
+        {/* Lado Direito: Ações e Perfil (Oculto no Modo TV) */}
+        {!isKanbanViewOnly && (
+          <div className="flex items-center gap-2 md:gap-4">
 
-          {/* Usuários Online - Desktop apenas */}
-          <div className="hidden md:flex items-center">
-            <OnlineUsers currentUser={currentUser} />
-          </div>
-
-          {/* REFRESH BUTTON - Desktop apenas */}
-          <button
-            onClick={() => {
-              if (isFormScreen()) {
-                const confirmed = window.confirm("Você está em uma tela de preenchimento. Atualizar a página agora buscará dados do servidor e pode descartar o que você não salvou. Tem certeza que deseja atualizar?");
-                if (!confirmed) return;
-              }
-              handleSmartRefresh();
-            }}
-            disabled={isRefreshing}
-            className={`hidden md:flex p-2 rounded-xl transition-all active:scale-95 group relative
-              ${isRefreshing ? 'bg-indigo-50 text-indigo-600' : 'text-slate-400 hover:bg-slate-50 hover:text-indigo-600'}
-              ${isFormScreen() ? 'opacity-50 cursor-help text-slate-300' : ''}
-            `}
-            title={isFormScreen() ? "Atualização cautelosa em formulário (pode causar perda de dados)" : "Atualizar Dados"}
-          >
-            <RefreshCw className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`} />
-          </button>
-
-          <div className="h-8 w-px bg-slate-200 mx-1 hidden desktop:block"></div>
-
-          {isNotHome && (
-            <button
-              onClick={onGoHome}
-              className="hidden md:flex items-center gap-2 px-4 py-2 text-slate-600 hover:text-indigo-600 hover:bg-slate-50 text-xs font-bold rounded-xl transition-all active:scale-95"
-            >
-              <Home className="w-4 h-4" />
-              <span className="hidden desktop:inline">Início</span>
-            </button>
-          )}
-
-          {/* 2FA Status - Desktop apenas */}
-          <div className="hidden md:block">
-            <TwoFactorStatus />
-          </div>
-
-          {/* Notification Center - Desktop apenas */}
-          <div className="hidden md:block">
-            <NotificationBell />
-          </div>
-
-          {/* Profile Dropdown - Desktop apenas */}
-          <div className="hidden md:flex items-center gap-3 pl-2">
-            <div className="hidden lg:flex flex-col items-end">
-              <span className="text-xs font-bold text-slate-900 leading-none">{currentUser.name.split(' ')[0]}</span>
-              <span className="text-[10px] font-medium text-slate-500 mt-0.5">{currentUser.jobTitle || 'Usuário'}</span>
+            {/* Usuários Online - Desktop apenas */}
+            <div className="hidden md:flex items-center">
+              <OnlineUsers currentUser={currentUser} />
             </div>
 
-            <div className="relative group">
-              <button className="flex items-center gap-1 p-1 rounded-xl hover:bg-slate-100 transition-colors">
-                <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-sm font-black shadow-sm ${currentUser.role === 'admin' ? 'bg-indigo-600 text-white' :
-                  (currentUser.role === 'compras' || currentUser.role === 'licitacao') ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600'
-                  }`}>
-                  {currentUser.name.charAt(0)}
-                </div>
-                <ChevronDown className="w-4 h-4 text-slate-400" />
-              </button>
+            {/* REFRESH BUTTON - Desktop apenas */}
+            <button
+              onClick={() => {
+                if (isFormScreen()) {
+                  const confirmed = window.confirm("Você está em uma tela de preenchimento. Atualizar a página agora buscará dados do servidor e pode descartar o que você não salvou. Tem certeza que deseja atualizar?");
+                  if (!confirmed) return;
+                }
+                handleSmartRefresh();
+              }}
+              disabled={isRefreshing}
+              className={`hidden md:flex p-2 rounded-xl transition-all active:scale-95 group relative
+                ${isRefreshing ? 'bg-indigo-50 text-indigo-600' : 'text-slate-400 hover:bg-slate-50 hover:text-indigo-600'}
+                ${isFormScreen() ? 'opacity-50 cursor-help text-slate-300' : ''}
+              `}
+              title={isFormScreen() ? "Atualização cautelosa em formulário (pode causar perda de dados)" : "Atualizar Dados"}
+            >
+              <RefreshCw className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`} />
+            </button>
 
-              <div className="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-2xl border border-slate-100 py-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 transform origin-top-right">
-                <div className="px-4 py-2 mb-2 border-b border-slate-50">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nível: {currentUser.role}</p>
+            <div className="h-8 w-px bg-slate-200 mx-1 hidden desktop:block"></div>
+
+            {isNotHome && (
+              <button
+                onClick={onGoHome}
+                className="hidden md:flex items-center gap-2 px-4 py-2 text-slate-600 hover:text-indigo-600 hover:bg-slate-50 text-xs font-bold rounded-xl transition-all active:scale-95"
+              >
+                <Home className="w-4 h-4" />
+                <span className="hidden desktop:inline">Início</span>
+              </button>
+            )}
+
+            {/* 2FA Status - Desktop apenas */}
+            <div className="hidden md:block">
+              <TwoFactorStatus />
+            </div>
+
+            {/* Notification Center - Desktop apenas */}
+            <div className="hidden md:block">
+              <NotificationBell />
+            </div>
+
+            {/* Profile Dropdown - Desktop apenas */}
+            <div className="hidden md:flex items-center gap-3 pl-2">
+              <div className="hidden lg:flex flex-col items-end">
+                <span className="text-xs font-bold text-slate-900 leading-none">{currentUser.name.split(' ')[0]}</span>
+                <span className="text-[10px] font-medium text-slate-500 mt-0.5">{currentUser.jobTitle || 'Usuário'}</span>
+              </div>
+
+              <div className="relative group">
+                <button className="flex items-center gap-1 p-1 rounded-xl hover:bg-slate-100 transition-colors">
+                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-sm font-black shadow-sm ${currentUser.role === 'admin' ? 'bg-indigo-600 text-white' :
+                    (currentUser.role === 'compras' || currentUser.role === 'licitacao') ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600'
+                    }`}>
+                    {currentUser.name.charAt(0)}
+                  </div>
+                  <ChevronDown className="w-4 h-4 text-slate-400" />
+                </button>
+
+                <div className="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-2xl border border-slate-100 py-2 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 transform origin-top-right">
+                  <div className="px-4 py-2 mb-2 border-b border-slate-50">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nível: {currentUser.role}</p>
+                  </div>
+                  <button
+                    onClick={() => onOpenAdmin('users')}
+                    className="w-full flex items-center gap-3 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-indigo-600 transition-colors"
+                  >
+                    <UserIcon className="w-4 h-4" />
+                    Meu Perfil
+                  </button>
+                  <button
+                    onClick={() => onOpenAdmin('2fa')}
+                    className="w-full flex items-center gap-3 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-indigo-600 transition-colors"
+                  >
+                    <ShieldCheck className="w-4 h-4" />
+                    Autenticador 2FA
+                  </button>
+                  <button
+                    onClick={onLogout}
+                    className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-500 hover:bg-red-50 transition-colors"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Sair
+                  </button>
                 </div>
-                <button
-                  onClick={() => onOpenAdmin('users')}
-                  className="w-full flex items-center gap-3 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-indigo-600 transition-colors"
-                >
-                  <UserIcon className="w-4 h-4" />
-                  Meu Perfil
-                </button>
-                <button
-                  onClick={() => onOpenAdmin('2fa')}
-                  className="w-full flex items-center gap-3 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-indigo-600 transition-colors"
-                >
-                  <ShieldCheck className="w-4 h-4" />
-                  Autenticador 2FA
-                </button>
-                <button
-                  onClick={onLogout}
-                  className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-500 hover:bg-red-50 transition-colors"
-                >
-                  <LogOut className="w-4 h-4" />
-                  Sair
-                </button>
               </div>
             </div>
-          </div>
 
-          {/* Botão de Configurações - Visível no mobile e no desktop */}
-          <button
-            onClick={() => onOpenAdmin(null)}
-            className="p-2 rounded-xl text-slate-500 hover:bg-slate-50 hover:text-indigo-600 transition-all active:scale-95 group"
-            title="Configurações"
-          >
-            <Settings className="w-5 h-5 text-slate-600 group-hover:text-indigo-600 transition-colors" />
-          </button>
-        </div>
+            {/* Botão de Configurações - Visível no mobile e no desktop */}
+            <button
+              onClick={() => onOpenAdmin(null)}
+              className="p-2 rounded-xl text-slate-500 hover:bg-slate-50 hover:text-indigo-600 transition-all active:scale-95 group"
+              title="Configurações"
+            >
+              <Settings className="w-5 h-5 text-slate-600 group-hover:text-indigo-600 transition-colors" />
+            </button>
+          </div>
+        )}
       </div>
     </header>
   );

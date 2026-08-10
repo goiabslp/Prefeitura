@@ -11,6 +11,7 @@ export interface LicitacaoProcesso {
     id: string;
     protocolo: string;
     finalidade: string;
+    objeto_resumido?: string;
     prioridade: 'Urgente' | 'Normal';
     solicitante_nome: string;
     solicitante_cargo: string;

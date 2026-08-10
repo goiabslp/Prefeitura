@@ -244,9 +244,11 @@ const mapLicitacaoProcessToOrder = (process: any): Order => {
     userName: process.solicitante_nome,
     blockType: 'licitacao',
     documentos: process.documentos || process.licitacao_documentos || [],
+    objeto_resumido: process.objeto_resumido,
     documentSnapshot: {
       content: {
         objeto: process.finalidade,
+        objeto_resumido: process.objeto_resumido,
         prioridade: process.prioridade,
         requesterName: process.solicitante_nome,
         requesterRole: process.solicitante_cargo,

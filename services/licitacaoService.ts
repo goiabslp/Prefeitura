@@ -377,3 +377,105 @@ export const getAllLicitacaoProcesses = async (): Promise<any[]> => {
     return getLicitacaoProcesses() as any;
 };
 
+// Funcoes de persistencia global para o Objeto Resumido (Titulo Manual)
+export const saveObjetoResumidoMap = async (processId: string, text: string): Promise<Record<string, string>> => {
+    const trimmed = text.trim();
+    let updatedMap: Record<string, string> = {};
+
+    try {
+        const { data } = await supabase
+            .from('organization_settings')
+            .select('ui_config')
+            .eq('id', 'global_config')
+            .single();
+
+        const currentUi = data?.ui_config || {};
+        const currentMap = currentUi.objeto_resumido_map || {};
+
+        if (trimmed) {
+            updatedMap = { ...currentMap, [processId]: trimmed };
+        } else {
+            updatedMap = { ...currentMap };
+            delete updatedMap[processId];
+        }
+
+        await supabase
+            .from('organization_settings')
+            .upsert({
+                id: 'global_config',
+                ui_config: {
+                    ...currentUi,
+                    objeto_resumido_map: updatedMap
+                }
+            });
+
+        try {
+            localStorage.setItem('licitacao_objeto_resumido_map', JSON.stringify(updatedMap));
+        } catch (e) {}
+
+        const channel = supabase.channel('licitacao_kanban_priority');
+        channel.send({
+            type: 'broadcast',
+            event: 'licitacao-objeto-resumido-updated',
+            payload: updatedMap
+        });
+    } catch (e) {
+        console.warn('Erro ao salvar objeto_resumido em organization_settings:', e);
+    }
+
+    // Tentar tambem atualizar as tabelas do banco se as colunas existirem
+    try {
+        await supabase
+            .from('licitacao_processos')
+            .update({ objeto_resumido: trimmed } as any)
+            .eq('id', processId);
+    } catch (e) {}
+
+    try {
+        const { data: orderData } = await supabase
+            .from('purchase_orders')
+            .select('document_snapshot')
+            .eq('id', processId)
+            .maybeSingle();
+
+        if (orderData?.document_snapshot) {
+            const updatedSnapshot = {
+                ...orderData.document_snapshot,
+                content: {
+                    ...(orderData.document_snapshot.content || {}),
+                    objeto_resumido: trimmed
+                }
+            };
+            await supabase
+                .from('purchase_orders')
+                .update({ document_snapshot: updatedSnapshot })
+                .eq('id', processId);
+        }
+    } catch (e) {}
+
+    return updatedMap;
+};
+
+export const fetchObjetoResumidoMap = async (): Promise<Record<string, string>> => {
+    try {
+        const { data } = await supabase
+            .from('organization_settings')
+            .select('ui_config')
+            .eq('id', 'global_config')
+            .single();
+
+        const map = data?.ui_config?.objeto_resumido_map || {};
+        try {
+            localStorage.setItem('licitacao_objeto_resumido_map', JSON.stringify(map));
+        } catch (e) {}
+        return map;
+    } catch (e) {
+        try {
+            const saved = localStorage.getItem('licitacao_objeto_resumido_map');
+            return saved ? JSON.parse(saved) : {};
+        } catch {
+            return {};
+        }
+    }
+};
+
