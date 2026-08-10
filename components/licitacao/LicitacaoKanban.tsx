@@ -411,11 +411,14 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
 
     const stats = useMemo(() => {
         const total = filteredProcesses.length;
-        const urgentes = filteredProcesses.filter(p => p.prioridade === 'Urgente').length;
-        const finalizados = filteredProcesses.filter(p => p.fase === 'contrato_ata' || p.fase === 'finalizado' || p.status === 'Concluído').length;
-        const emAndamento = total - finalizados;
+        const emAndamento = (processesByPhase['objeto_cotacao']?.length || 0) +
+                            (processesByPhase['edital']?.length || 0) +
+                            (processesByPhase['sessao']?.length || 0);
+        const finalizados = processesByPhase['contrato_ata']?.length || 0;
+        const urgentes = filteredProcesses.filter(p => p.prioridade === 'Urgente' || (p.prioridade as string) === 'Alta' || (p.prioridade as string) === 'Urgência').length;
+
         return { total, urgentes, emAndamento, finalizados };
-    }, [filteredProcesses]);
+    }, [filteredProcesses, processesByPhase]);
 
     const handleMovePhase = async (processId: string, newPhaseId: string) => {
         try {
@@ -774,57 +777,52 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                 </div>
             )}
 
-            <header className="bg-white border-b border-slate-200 px-3 md:px-6 py-2.5 md:py-3.5 shadow-xs shrink-0 z-20">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 md:gap-3">
-                    <div className="flex items-center gap-3 md:gap-4">
-                        <button
-                            onClick={onBack}
-                            className="w-9 h-9 md:w-10 md:h-10 rounded-2xl bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 flex items-center justify-center text-slate-600 transition-all shadow-xs group cursor-pointer shrink-0"
-                            title="Voltar ao menu"
-                        >
-                            <ArrowLeft className="w-4 h-4 md:w-5 md:h-5 group-hover:-translate-x-0.5 transition-transform" />
-                        </button>
-                        <div className="min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                                <h1 className="text-lg md:text-2xl 2xl:text-3xl 3xl:text-4xl font-black text-slate-800 tracking-tight truncate">Kanban de Licitações</h1>
-                                {isViewOnly ? (
-                                    <span className="px-2.5 py-0.5 2xl:px-4 2xl:py-1.5 rounded-full text-[10px] md:text-xs 2xl:text-sm font-black bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1.5 animate-pulse shrink-0">
-                                        <Tv className="w-3 h-3 2xl:w-4 2xl:h-4 text-emerald-600" />
-                                        MODO VIEW (SALA)
-                                    </span>
-                                ) : (
+            {!isViewOnly && (
+                <header className="bg-white border-b border-slate-200 px-3 md:px-6 py-2.5 md:py-3.5 shadow-xs shrink-0 z-20">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 md:gap-3">
+                        <div className="flex items-center gap-3 md:gap-4">
+                            <button
+                                onClick={onBack}
+                                className="w-9 h-9 md:w-10 md:h-10 rounded-2xl bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 flex items-center justify-center text-slate-600 transition-all shadow-xs group cursor-pointer shrink-0"
+                                title="Voltar ao menu"
+                            >
+                                <ArrowLeft className="w-4 h-4 md:w-5 md:h-5 group-hover:-translate-x-0.5 transition-transform" />
+                            </button>
+                            <div className="min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <h1 className="text-lg md:text-2xl 2xl:text-3xl 3xl:text-4xl font-black text-slate-800 tracking-tight truncate">Kanban de Licitações</h1>
                                     <span className="px-2.5 py-0.5 rounded-full text-[10px] md:text-xs font-bold bg-indigo-100 text-indigo-700 border border-indigo-200 flex items-center gap-1 shrink-0">
                                         <Sparkles className="w-3 h-3 text-indigo-600" />
                                         Acompanhamento Visual
                                     </span>
-                                )}
+                                </div>
+                                <p className="text-[11px] md:text-xs 2xl:text-sm font-medium text-slate-500 mt-0.5 truncate">
+                                    Gerencie e acompanhe a evolução dos processos pelas fases do edital
+                                </p>
                             </div>
-                            <p className="text-[11px] md:text-xs 2xl:text-sm font-medium text-slate-500 mt-0.5 truncate">
-                                {isViewOnly ? 'Exibição contínua em tempo real para telas e monitores de sala' : 'Gerencie e acompanhe a evolução dos processos pelas fases do edital'}
-                            </p>
                         </div>
-                    </div>
 
-                    <div className="flex items-center gap-2 2xl:gap-3 overflow-x-auto pb-1 md:pb-0 shrink-0">
-                        <div className="bg-slate-50 border border-slate-200/80 px-3 py-1 2xl:px-4 2xl:py-2 rounded-xl text-center min-w-[65px]">
-                            <span className="text-[9px] 2xl:text-xs font-extrabold uppercase text-slate-400 block tracking-wider">Total</span>
-                            <span className="text-sm 2xl:text-xl font-black text-slate-800">{stats.total}</span>
-                        </div>
-                        <div className="bg-amber-50 border border-amber-200/80 px-3 py-1 2xl:px-4 2xl:py-2 rounded-xl text-center min-w-[65px]">
-                            <span className="text-[9px] 2xl:text-xs font-extrabold uppercase text-amber-600/80 block tracking-wider">Em Andamento</span>
-                            <span className="text-sm 2xl:text-xl font-black text-amber-700">{stats.emAndamento}</span>
-                        </div>
-                        <div className="bg-rose-50 border border-rose-200/80 px-3 py-1 2xl:px-4 2xl:py-2 rounded-xl text-center min-w-[65px]">
-                            <span className="text-[9px] 2xl:text-xs font-extrabold uppercase text-rose-600/80 block tracking-wider">Urgentes</span>
-                            <span className="text-sm 2xl:text-xl font-black text-rose-700">{stats.urgentes}</span>
-                        </div>
-                        <div className="bg-emerald-50 border border-emerald-200/80 px-3 py-1 2xl:px-4 2xl:py-2 rounded-xl text-center min-w-[65px]">
-                            <span className="text-[9px] 2xl:text-xs font-extrabold uppercase text-emerald-600/80 block tracking-wider">Finalizados</span>
-                            <span className="text-sm 2xl:text-xl font-black text-emerald-700">{stats.finalizados}</span>
+                        <div className="flex items-center gap-2 2xl:gap-3 overflow-x-auto pb-1 md:pb-0 shrink-0">
+                            <div className="bg-slate-50 border border-slate-200/80 px-3 py-1 2xl:px-4 2xl:py-2 rounded-xl text-center min-w-[65px]">
+                                <span className="text-[9px] 2xl:text-xs font-extrabold uppercase text-slate-400 block tracking-wider">Total</span>
+                                <span className="text-sm 2xl:text-xl font-black text-slate-800">{stats.total}</span>
+                            </div>
+                            <div className="bg-amber-50 border border-amber-200/80 px-3 py-1 2xl:px-4 2xl:py-2 rounded-xl text-center min-w-[65px]">
+                                <span className="text-[9px] 2xl:text-xs font-extrabold uppercase text-amber-600/80 block tracking-wider">Em Andamento</span>
+                                <span className="text-sm 2xl:text-xl font-black text-amber-700">{stats.emAndamento}</span>
+                            </div>
+                            <div className="bg-rose-50 border border-rose-200/80 px-3 py-1 2xl:px-4 2xl:py-2 rounded-xl text-center min-w-[65px]">
+                                <span className="text-[9px] 2xl:text-xs font-extrabold uppercase text-rose-600/80 block tracking-wider">Urgentes</span>
+                                <span className="text-sm 2xl:text-xl font-black text-rose-700">{stats.urgentes}</span>
+                            </div>
+                            <div className="bg-emerald-50 border border-emerald-200/80 px-3 py-1 2xl:px-4 2xl:py-2 rounded-xl text-center min-w-[65px]">
+                                <span className="text-[9px] 2xl:text-xs font-extrabold uppercase text-emerald-600/80 block tracking-wider">Finalizados</span>
+                                <span className="text-sm 2xl:text-xl font-black text-emerald-700">{stats.finalizados}</span>
+                            </div>
                         </div>
                     </div>
-                </div>
-            </header>
+                </header>
+            )}
 
             {activePriority && !isViewOnly && (
                 <div className="bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 text-slate-950 px-4 py-2 border-b border-amber-300 shadow-xs flex items-center justify-between z-20 shrink-0 animate-in fade-in slide-in-from-top-2 duration-300">

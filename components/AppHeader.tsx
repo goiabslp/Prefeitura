@@ -11,7 +11,8 @@ import {
   Bell,
   MessageCircle,
   ShieldCheck,
-  ShieldOff
+  ShieldOff,
+  Tv
 } from 'lucide-react';
 import { User, UIConfig, BlockType } from '../types';
 import { useNotification } from '../contexts/NotificationContext';
@@ -21,6 +22,7 @@ import { SyncIndicator } from './SyncIndicator';
 import { OnlineUsers } from './OnlineUsers';
 import { useState } from 'react';
 import { getCachedImage, IMAGE_KEYS } from '../services/cacheService';
+import { useLicitacaoProcesses } from '../hooks/useLicitacaoModule';
 
 interface AppHeaderProps {
   currentUser: User;
@@ -52,6 +54,54 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   const isAdmin = currentUser.role === 'admin';
   const isNotHome = currentView !== 'home';
   const isKanbanViewOnly = currentView === 'licitacao:kanban-view' || (typeof window !== 'undefined' && decodeURIComponent(window.location.pathname).includes('/Kanban/view'));
+
+  const { data: licitacaoProcessesData } = useLicitacaoProcesses();
+
+  const kanbanStats = React.useMemo(() => {
+    if (!licitacaoProcessesData) return { total: 0, emAndamento: 0, urgentes: 0, finalizados: 0 };
+    const total = licitacaoProcessesData.length;
+    let emAndamento = 0;
+    let finalizados = 0;
+    let urgentes = 0;
+
+    licitacaoProcessesData.forEach(p => {
+      const rawPhase = p.fase ? p.fase.toLowerCase().trim() : 'pendente';
+      let targetPhase = 'pendente';
+
+      if (rawPhase === 'preparatoria' || rawPhase === 'objeto_cotacao' || rawPhase === 'cotacao' || rawPhase === 'pesquisa_precos') {
+        targetPhase = 'objeto_cotacao';
+      } else if (rawPhase === 'autuacao_divulgacao' || rawPhase === 'autuacao' || rawPhase === 'divulgacao' || rawPhase === 'edital') {
+        targetPhase = 'edital';
+      } else if (
+        rawPhase === 'propostas' || 
+        rawPhase === 'julgamento_habilitacao' || 
+        rawPhase === 'julgamento' || 
+        rawPhase === 'habilitacao' || 
+        rawPhase === 'recursos' || 
+        rawPhase === 'homologacao_adjudicacao' || 
+        rawPhase === 'homologacao' || 
+        rawPhase === 'adjudicacao' || 
+        rawPhase === 'sessao' || 
+        rawPhase === 'lances'
+      ) {
+        targetPhase = 'sessao';
+      } else if (rawPhase === 'contrato_ata' || rawPhase === 'finalizado' || rawPhase === 'concluido' || rawPhase === 'contrato' || rawPhase === 'ata') {
+        targetPhase = 'contrato_ata';
+      }
+
+      if (targetPhase === 'objeto_cotacao' || targetPhase === 'edital' || targetPhase === 'sessao') {
+        emAndamento++;
+      } else if (targetPhase === 'contrato_ata') {
+        finalizados++;
+      }
+
+      if (p.prioridade === 'Urgente' || (p.prioridade as string) === 'Alta' || (p.prioridade as string) === 'Urgência') {
+        urgentes++;
+      }
+    });
+
+    return { total, emAndamento, urgentes, finalizados };
+  }, [licitacaoProcessesData]);
 
   const isFormScreen = () => {
     if (currentView === 'editor') return true; 
@@ -251,6 +301,27 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
             )}
           </button>
 
+          {isKanbanViewOnly && (
+            <>
+              <div className="h-7 w-px bg-slate-200"></div>
+
+              <div className="flex flex-col">
+                <div className="flex items-center gap-2.5">
+                  <h1 className="text-base xl:text-lg font-black text-slate-900 leading-none tracking-tight">
+                    Kanban de Licitações
+                  </h1>
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] md:text-xs font-black bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1.5 animate-pulse shrink-0">
+                    <Tv className="w-3 h-3 text-emerald-600" />
+                    MODO VIEW (SALA)
+                  </span>
+                </div>
+                <p className="text-[11px] font-medium text-slate-500 mt-1 leading-none">
+                  Exibição contínua em tempo real para telas e monitores de sala
+                </p>
+              </div>
+            </>
+          )}
+
           {!isKanbanViewOnly && (
             <>
               <div className="h-6 w-px bg-slate-200 hidden desktop:block"></div>
@@ -301,6 +372,28 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
           animation: spin-slow 8s linear infinite;
         }
       `}} />
+
+        {/* Lado Direito: Pílulas de Contagem no Modo TV */}
+        {isKanbanViewOnly && (
+          <div className="flex items-center gap-2.5 shrink-0">
+            <div className="bg-slate-50 border border-slate-200/80 px-3.5 py-1 rounded-xl text-center flex items-center gap-2 shadow-2xs">
+              <span className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">Total</span>
+              <span className="text-sm font-black text-slate-800">{kanbanStats.total}</span>
+            </div>
+            <div className="bg-amber-50 border border-amber-200/80 px-3.5 py-1 rounded-xl text-center flex items-center gap-2 shadow-2xs">
+              <span className="text-[10px] font-extrabold uppercase text-amber-600/80 tracking-wider">Em Andamento</span>
+              <span className="text-sm font-black text-amber-700">{kanbanStats.emAndamento}</span>
+            </div>
+            <div className="bg-rose-50 border border-rose-200/80 px-3.5 py-1 rounded-xl text-center flex items-center gap-2 shadow-2xs">
+              <span className="text-[10px] font-extrabold uppercase text-rose-600/80 tracking-wider">Urgentes</span>
+              <span className="text-sm font-black text-rose-700">{kanbanStats.urgentes}</span>
+            </div>
+            <div className="bg-emerald-50 border border-emerald-200/80 px-3.5 py-1 rounded-xl text-center flex items-center gap-2 shadow-2xs">
+              <span className="text-[10px] font-extrabold uppercase text-emerald-600/80 tracking-wider">Finalizados</span>
+              <span className="text-sm font-black text-emerald-700">{kanbanStats.finalizados}</span>
+            </div>
+          </div>
+        )}
 
         {/* Lado Direito: Ações e Perfil (Oculto no Modo TV) */}
         {!isKanbanViewOnly && (
