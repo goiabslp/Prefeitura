@@ -338,6 +338,24 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
 
     const filteredProcesses = useMemo(() => {
         return processes.filter(process => {
+            const st = (process.status || '').toString().trim().toLowerCase();
+            const isEmAprovacaoOrRejeitado = 
+                st === 'em aprovação' ||
+                st === 'em aprovacao' ||
+                st === 'rascunho' ||
+                st === 'aguardando assinatura' ||
+                st === 'pending' ||
+                st === 'awaiting_approval' ||
+                st === 'payment_account' ||
+                st === 'awaiting_ficha' ||
+                st === 'rejeitado' ||
+                st === 'rejected';
+
+            // Processos com status "Em Aprovação" ou "Rejeitado" NUNCA devem aparecer no Kanban nem na visão TV
+            if (isEmAprovacaoOrRejeitado) {
+                return false;
+            }
+
             const term = searchTerm.toLowerCase().trim();
             const matchesSearch = !term || 
                 process.finalidade?.toLowerCase().includes(term) ||
@@ -356,11 +374,6 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
             const isAdmin = currentUser.role === 'admin';
 
             let hasPermission = isViewOnly || isAdmin || isLicitacaoUser || isCreator || isSameSector;
-            if (!isViewOnly && isLicitacaoUser && !isAdmin && !isCreator && !isSameSector) {
-                if (process.status !== 'Concluído') {
-                    hasPermission = false;
-                }
-            }
 
             return matchesSearch && matchesPriority && matchesSector && hasPermission;
         });
@@ -373,6 +386,24 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
         });
 
         filteredProcesses.forEach(process => {
+            const st = (process.status || '').toString().trim().toLowerCase();
+            const isEmAprovacaoOrRejeitado = 
+                st === 'em aprovação' ||
+                st === 'em aprovacao' ||
+                st === 'rascunho' ||
+                st === 'aguardando assinatura' ||
+                st === 'pending' ||
+                st === 'awaiting_approval' ||
+                st === 'payment_account' ||
+                st === 'awaiting_ficha' ||
+                st === 'rejeitado' ||
+                st === 'rejected';
+
+            // Garante que NENHUM processo Em Aprovação ou Rejeitado seja alocado para a coluna Pendente ou qualquer outra
+            if (isEmAprovacaoOrRejeitado) {
+                return;
+            }
+
             const rawPhase = process.fase ? process.fase.toLowerCase().trim() : 'pendente';
             let targetPhase = 'pendente';
 
@@ -401,8 +432,6 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
 
             if (grouped[targetPhase]) {
                 grouped[targetPhase].push(process);
-            } else {
-                grouped['pendente'].push(process);
             }
         });
 

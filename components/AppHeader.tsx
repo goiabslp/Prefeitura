@@ -59,12 +59,30 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
 
   const kanbanStats = React.useMemo(() => {
     if (!licitacaoProcessesData) return { total: 0, emAndamento: 0, urgentes: 0, finalizados: 0 };
-    const total = licitacaoProcessesData.length;
+    
+    // Filtrar processos válidos (ignorando Em Aprovação e Rejeitados)
+    const validProcesses = licitacaoProcessesData.filter(p => {
+      const st = (p.status || '').toString().trim().toLowerCase();
+      const isEmAprovacaoOrRejeitado = 
+        st === 'em aprovação' ||
+        st === 'em aprovacao' ||
+        st === 'rascunho' ||
+        st === 'aguardando assinatura' ||
+        st === 'pending' ||
+        st === 'awaiting_approval' ||
+        st === 'payment_account' ||
+        st === 'awaiting_ficha' ||
+        st === 'rejeitado' ||
+        st === 'rejected';
+      return !isEmAprovacaoOrRejeitado;
+    });
+
+    const total = validProcesses.length;
     let emAndamento = 0;
     let finalizados = 0;
     let urgentes = 0;
 
-    licitacaoProcessesData.forEach(p => {
+    validProcesses.forEach(p => {
       const rawPhase = p.fase ? p.fase.toLowerCase().trim() : 'pendente';
       let targetPhase = 'pendente';
 

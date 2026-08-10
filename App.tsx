@@ -220,7 +220,8 @@ const PATH_TO_STATE: Record<string, any> = Object.fromEntries(
 const mapLicitacaoProcessToOrder = (process: any): Order => {
   let mappedStatus: any = 'pending';
   if (process.status === 'Rascunho') mappedStatus = 'pending';
-  else if (process.status === 'Aguardando Assinatura' || process.status === 'Assinado') mappedStatus = 'awaiting_approval';
+  else if (process.status === 'Aguardando Assinatura') mappedStatus = 'awaiting_approval';
+  else if (process.status === 'Assinado') mappedStatus = 'approved';
   else if (process.status === 'Em Análise') mappedStatus = 'in_progress';
   else if (process.status === 'Concluído' || process.status === 'completed') mappedStatus = 'completed';
   else if (process.status === 'Rejeitado' || process.status === 'rejected') mappedStatus = 'rejected';

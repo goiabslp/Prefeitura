@@ -31,8 +31,18 @@ export const LicitacaoList: React.FC<LicitacaoListProps> = ({ currentUser, onBac
         let hasPermission = isAdmin || isLicitacaoUser || isCreator || isSameSector;
         
         if (isLicitacaoUser && !isAdmin && !isCreator && !isSameSector) {
-            // Usuários do setor de Licitação (não admins) só vêem pedidos concluídos dos outros
-            if (process.status !== 'Concluído') {
+            const st = (process.status || '').toString().trim().toLowerCase();
+            const isEmAprovacaoOrRejeitado = 
+                st === 'em aprovação' ||
+                st === 'em aprovacao' ||
+                st === 'rascunho' ||
+                st === 'aguardando assinatura' ||
+                st === 'pending' ||
+                st === 'awaiting_approval' ||
+                st === 'rejeitado' ||
+                st === 'rejected';
+
+            if (isEmAprovacaoOrRejeitado) {
                 hasPermission = false;
             }
         }

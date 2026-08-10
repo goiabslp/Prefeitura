@@ -451,13 +451,30 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
 
         // LICITACAO: Filter Logic for "Processos"
         if (isLicitacao) {
-            const isCreator = order.userId === currentUser.id;
+            const isCreator = order.userId === currentUser.id || order.userName === currentUser.name;
             const orderSector = order.documentSnapshot?.content?.requesterSector || order.requestingSector || '';
             const userSector = currentUser.sector || '';
             const isSameSector = userSector !== '' && orderSector.trim().toLowerCase() === userSector.trim().toLowerCase();
+            
+            // Para a equipe de Licitação (role === 'licitacao'):
+            // Processos com status "Em Aprovação" ou "Rejeitado" não devem aparecer para a equipe de licitação
             if (isLicitacaoUser && !isAdmin && !isCreator && !isSameSector) {
-                // Usuários do setor de Licitação (não admins) só vêem pedidos aprovados dos outros
-                if (order.status !== 'approved' && order.status !== 'completed') return false;
+                const st = (order.status || '').toString().trim().toLowerCase();
+                const isEmAprovacaoOrRejeitado = 
+                    st === 'pending' ||
+                    st === 'awaiting_approval' ||
+                    st === 'payment_account' ||
+                    st === 'awaiting_ficha' ||
+                    st === 'em aprovação' ||
+                    st === 'em aprovacao' ||
+                    st === 'rascunho' ||
+                    st === 'aguardando assinatura' ||
+                    st === 'rejected' ||
+                    st === 'rejeitado';
+
+                if (isEmAprovacaoOrRejeitado) {
+                    return false;
+                }
             }
         }
 
@@ -1053,17 +1070,16 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                                         if (realObjetoText) {
                                                                             const rect = e.currentTarget.getBoundingClientRect();
                                                                             setHoveredTooltip({
-                                                                                text: `Objeto Real: ${realObjetoText}`,
+                                                                                text: realObjetoText,
                                                                                 type: 'licitacao',
                                                                                 x: rect.left + rect.width / 2,
-                                                                                y: rect.top - 8
+                                                                                y: rect.top - 12
                                                                             });
                                                                         }
                                                                     }}
                                                                     onMouseLeave={() => {
                                                                         setHoveredTooltip(null);
                                                                     }}
-                                                                    title={realObjetoText ? `Objeto Real do Pedido:\n${realObjetoText}${isLicitacaoOrAdmin ? '\n\n(Clique para editar o título resumido)' : ''}` : undefined}
                                                                 >
                                                                     {currentResumido ? (
                                                                         <span className="text-xs font-black text-slate-800 uppercase line-clamp-1 flex-1">
