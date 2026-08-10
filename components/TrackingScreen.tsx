@@ -557,14 +557,26 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
     };
 
     const licitacaoFasesMap = {
-        'preparatoria': { label: 'Preparatória', desc: 'está realizando planejamento, estudo técnico e definição do objeto e edital.' },
-        'objeto_cotacao': { label: 'Objeto e Cotação', desc: 'está especificando o objeto e realizando a cotação de preços.' },
-        'propostas': { label: 'Propostas/lances', desc: 'as empresas estão enviando preços/ofertas.' },
-        'autuacao_divulgacao': { label: 'Autuação e Divulgação', desc: 'Abertura formal do processo e publicação do edital.' },
-        'julgamento_habilitacao': { label: 'Julgamento e Habilitação', desc: 'está fazendo análise das propostas e verificação da documentação.' },
-        'recursos': { label: 'Recursos', desc: 'está abrindo prazo para contestação.' },
-        'homologacao_adjudicacao': { label: 'Homologação e Adjudicação', desc: 'está aprovando o resultado e atribuindo o objeto ao vencedor.' },
-        'finalizado': { label: 'Finalizado', desc: 'Conclusão do processo licitatório.' }
+        'pendente': { label: 'Pendente', desc: 'Processos em triagem ou aguardando análise inicial.' },
+        'objeto_cotacao': { label: 'Objeto e Cotação', desc: 'Elaboração de TR, ETP, Pesquisa de Preços e Cotação.' },
+        'edital': { label: 'Edital', desc: 'Autuação oficial e publicação do edital.' },
+        'sessao': { label: 'Sessão', desc: 'Propostas, Lances, Julgamento, Habilitação, Recursos e Homologação.' },
+        'contrato_ata': { label: 'Contrato / ATA', desc: 'Processo concluído, contrato assinado ou ata registrada.' }
+    };
+
+    const getNormalizedLicitacaoPhaseKey = (fase?: string): keyof typeof licitacaoFasesMap => {
+        if (!fase) return 'pendente';
+        const raw = fase.toLowerCase().trim();
+        if (raw === 'pendente' || raw === 'sem_fase' || raw === 'inicial' || raw === 'triagem') return 'pendente';
+        if (raw === 'preparatoria' || raw === 'objeto_cotacao' || raw === 'cotacao' || raw === 'pesquisa_precos') return 'objeto_cotacao';
+        if (raw === 'autuacao_divulgacao' || raw === 'autuacao' || raw === 'divulgacao' || raw === 'edital') return 'edital';
+        if (
+            raw === 'propostas' || raw === 'julgamento_habilitacao' || raw === 'julgamento' ||
+            raw === 'habilitacao' || raw === 'recursos' || raw === 'homologacao_adjudicacao' ||
+            raw === 'homologacao' || raw === 'adjudicacao' || raw === 'sessao' || raw === 'lances'
+        ) return 'sessao';
+        if (raw === 'contrato_ata' || raw === 'finalizado' || raw === 'concluido' || raw === 'contrato' || raw === 'ata') return 'contrato_ata';
+        return 'pendente';
     };
 
     const PurchaseStatusSelector = ({ order }: { order: Order }) => {
@@ -1083,14 +1095,14 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                         </div>
                                                         <div className="md:col-span-2 flex flex-col justify-center gap-1 relative group cursor-pointer" onClick={() => (isLicitacaoUser || isAdmin) && setLicitacaoPhaseOrder(order)}>
                                                             {(() => {
-                                                                const faseKey = ((content as any)?.fase) as keyof typeof licitacaoFasesMap;
-                                                                const cfg = licitacaoFasesMap[faseKey];
+                                                                const rawFase = ((content as any)?.fase) || (order as any)?.fase;
+                                                                const normalizedKey = getNormalizedLicitacaoPhaseKey(rawFase);
+                                                                const cfg = licitacaoFasesMap[normalizedKey] || licitacaoFasesMap['pendente'];
                                                                 let isRed = false;
-                                                                let isGreen = false;
-                                                                let titleText = cfg?.desc || 'Fase não definida';
-                                                                let labelText = cfg?.label || 'Sem Fase';
+                                                                let titleText = cfg.desc;
+                                                                let labelText = cfg.label;
 
-                                                                if (faseKey === 'finalizado') {
+                                                                if (normalizedKey === 'contrato_ata') {
                                                                     const checkin = (content as any)?.checkin_finalizado || {};
                                                                     const isAssinado = !!checkin.assinados;
                                                                     const isPublicado = !!checkin.publicado;
@@ -1105,15 +1117,18 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                                         if (!isPasta) missing.push("Pasta Concluída");
                                                                         titleText = `Pendências:\n- ${missing.join('\n- ')}`;
                                                                     } else {
-                                                                        isGreen = true;
-                                                                        labelText = 'Concluído';
-                                                                        titleText = 'Processo finalizado e concluído.';
+                                                                        labelText = 'Contrato / ATA';
+                                                                        titleText = 'Processo concluído, contrato assinado ou ata registrada.';
                                                                     }
                                                                 }
                                                                 
-                                                                let colorClass = cfg ? 'bg-indigo-50 text-indigo-700 border border-indigo-100' : 'bg-slate-50 text-slate-500 border border-slate-200';
+                                                                let colorClass = 'bg-slate-100 text-slate-700 border border-slate-200';
+                                                                if (normalizedKey === 'objeto_cotacao') colorClass = 'bg-indigo-50 text-indigo-700 border border-indigo-200';
+                                                                if (normalizedKey === 'edital') colorClass = 'bg-blue-50 text-blue-700 border border-blue-200';
+                                                                if (normalizedKey === 'sessao') colorClass = 'bg-amber-50 text-amber-700 border border-amber-200';
+                                                                if (normalizedKey === 'contrato_ata') colorClass = 'bg-emerald-50 text-emerald-700 border border-emerald-200';
+
                                                                 if (isRed) colorClass = 'bg-rose-50 text-rose-700 border border-rose-100';
-                                                                if (isGreen) colorClass = 'bg-emerald-50 text-emerald-700 border border-emerald-100';
 
                                                                 return (
                                                                     <span className={`inline-flex items-center w-fit gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${colorClass}`} title={titleText}>
@@ -1128,7 +1143,8 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                         </div>
                                                         {(() => {
                                                             const checkin = (content as any)?.checkin_finalizado || {};
-                                                            const isFaseFinalizado = (content as any)?.fase === 'finalizado';
+                                                            const rawFase = ((content as any)?.fase) || (order as any)?.fase;
+                                                            const isFaseFinalizado = getNormalizedLicitacaoPhaseKey(rawFase) === 'contrato_ata';
                                                             const isAllChecked = isFaseFinalizado && !!checkin.assinados && !!checkin.publicado && !!checkin.pasta;
                                                             const isFinalized = order.status === 'completed' || order.status === 'approved' || isAllChecked;
                                                             const stripTime = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -2283,32 +2299,26 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     {(Object.keys(licitacaoFasesMap) as Array<keyof typeof licitacaoFasesMap>).map((key) => {
                                         const cfg = licitacaoFasesMap[key];
-                                        const currentPhase = (licitacaoPhaseOrder.documentSnapshot?.content as any)?.fase;
+                                        const rawCurrent = (licitacaoPhaseOrder.documentSnapshot?.content as any)?.fase || (licitacaoPhaseOrder as any)?.fase;
+                                        const currentPhase = getNormalizedLicitacaoPhaseKey(rawCurrent);
                                         const isActive = currentPhase === key;
                                         const k = key as string;
                                         
-                                        let isBlocked = false;
-                                        if (!currentPhase) {
-                                            isBlocked = k !== 'preparatoria';
-                                        } else if (currentPhase === 'preparatoria') {
-                                            isBlocked = k !== 'objeto_cotacao' && k !== 'propostas' && k !== 'autuacao_divulgacao' && k !== 'preparatoria';
-                                        }
-
-                                        const isDisabled = isActive || isBlocked;
+                                        const isDisabled = isActive;
 
                                         return (
                                             <button
                                                 key={key}
                                                 disabled={isDisabled}
                                                 onClick={() => {
-                                                    if (k === 'finalizado') {
+                                                    if (k === 'contrato_ata') {
                                                         const checkin = (licitacaoPhaseOrder.documentSnapshot?.content as any)?.checkin_finalizado || {};
                                                         setFinalizadoCheckin({
                                                             assinados: !!checkin.assinados,
                                                             publicado: !!checkin.publicado,
                                                             pasta: !!checkin.pasta
                                                         });
-                                                    } else if (k === 'autuacao_divulgacao' || k === 'propostas') {
+                                                    } else if (k === 'edital' || k === 'sessao') {
                                                         if (!licitacaoPhaseOrder.protocol || licitacaoPhaseOrder.protocol.startsWith('LIC-')) {
                                                             setAuxPhaseForProtocol(k);
                                                             setNewProtocolValue(licitacaoPhaseOrder.protocol || '');
@@ -2323,17 +2333,17 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                         setLicitacaoPhaseOrder(null);
                                                     }
                                                 }}
-                                                className={`group flex items-start gap-4 p-5 rounded-[1.5rem] border-2 text-left transition-all ${isDisabled ? '' : 'active:scale-[0.98]'} ${isActive ? 'bg-indigo-50 border-indigo-200' : isBlocked ? 'bg-slate-50/50 border-slate-100 opacity-60 cursor-not-allowed' : 'bg-white border-slate-100 hover:border-indigo-200 hover:shadow-md'}`}
+                                                className={`group flex items-start gap-4 p-5 rounded-[1.5rem] border-2 text-left transition-all ${isDisabled ? 'bg-indigo-50/50 border-indigo-200 cursor-not-allowed' : 'bg-white border-slate-100 hover:border-indigo-200 hover:shadow-md active:scale-[0.98]'}`}
                                             >
-                                                <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 transition-colors ${isActive ? 'bg-indigo-600 text-white' : isBlocked ? 'bg-slate-200 text-slate-400' : 'bg-slate-50 text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-600'}`}>
-                                                    {isBlocked ? <Lock className="w-5 h-5" /> : <Info className="w-6 h-6" />}
+                                                <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 transition-colors ${isActive ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-600'}`}>
+                                                    <Info className="w-6 h-6" />
                                                 </div>
                                                 <div className="flex flex-col gap-1">
                                                     <div className="flex items-center gap-2">
-                                                        <span className={`font-black text-[10px] uppercase tracking-widest ${isActive ? 'text-indigo-900' : isBlocked ? 'text-slate-400' : 'text-slate-700'}`}>{cfg.label}</span>
+                                                        <span className={`font-black text-xs uppercase tracking-widest ${isActive ? 'text-indigo-900' : 'text-slate-700'}`}>{cfg.label}</span>
                                                         {isActive && <span className="px-2 py-0.5 rounded-full bg-indigo-200/50 text-indigo-700 text-[8px] font-black uppercase">Atual</span>}
                                                     </div>
-                                                    <span className={`text-[10px] font-bold leading-relaxed ${isActive ? 'text-indigo-600/70' : isBlocked ? 'text-slate-400/60' : 'text-slate-400'}`}>{cfg.desc}</span>
+                                                    <span className={`text-[10px] font-bold leading-relaxed ${isActive ? 'text-indigo-600/70' : 'text-slate-400'}`}>{cfg.desc}</span>
                                                 </div>
                                             </button>
                                         );
@@ -2347,7 +2357,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                         <button onClick={() => setFinalizadoCheckin(null)} className="px-8 py-3 bg-white text-slate-400 font-black text-xs uppercase tracking-[0.2em] rounded-xl border border-slate-200 hover:bg-slate-100 transition-all">Voltar</button>
                                         <button 
                                             onClick={() => {
-                                                onUpdateLicitacaoPhase?.(licitacaoPhaseOrder.id, 'finalizado', { checkin_finalizado: finalizadoCheckin });
+                                                onUpdateLicitacaoPhase?.(licitacaoPhaseOrder.id, 'contrato_ata', { checkin_finalizado: finalizadoCheckin });
                                                 setFinalizadoCheckin(null);
                                                 setLicitacaoPhaseOrder(null);
                                             }}

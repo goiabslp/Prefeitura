@@ -428,7 +428,7 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
             if (newPhaseId === 'contrato_ata' || newPhaseId === 'finalizado') {
                 statusUpdate = 'Concluído';
             } else {
-                statusUpdate = 'Em Andamento';
+                statusUpdate = 'Em Análise';
             }
 
             await updateMutation.mutateAsync({
@@ -705,7 +705,7 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                                 <div key={proc.id} className={`bg-white border border-slate-200/90 rounded-2xl ${cardPadding} shadow-xs hover:shadow-md transition-all flex flex-col justify-between h-full min-h-0 overflow-hidden`}>
                                     <div className="flex flex-col gap-2 min-h-0">
                                         <div className="flex items-center justify-between gap-2 shrink-0">
-                                            <span className="font-sans text-xs md:text-sm font-black text-blue-700 uppercase bg-blue-50 px-2.5 py-0.5 md:py-1 rounded-lg border border-blue-200/90 truncate shadow-2xs" title={`Protocolo: #${proc.protocolo}`}>
+                                            <span className="font-sans text-xs md:text-sm font-black text-blue-700 uppercase bg-blue-50 px-2.5 py-0.5 md:py-1 rounded-lg border border-blue-200/90 line-clamp-2 break-words leading-tight shadow-2xs" title={`Protocolo: #${proc.protocolo}`}>
                                                 {objetoResumidoMap[proc.id] || proc.objeto_resumido || `#${proc.protocolo || proc.id.slice(0, 8)}`}
                                             </span>
                                             <span className="text-[11px] md:text-xs font-extrabold text-amber-800 bg-amber-50 px-2 py-0.5 md:py-1 rounded-lg border border-amber-200/80 flex items-center gap-1 shrink-0">
@@ -975,7 +975,7 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                                                             )}
 
                                                             <div className="flex items-center justify-between gap-1">
-                                                                <span className="font-sans text-[11px] xl:text-xs 2xl:text-sm font-black text-blue-700 uppercase bg-blue-50 px-1.5 py-0.5 2xl:px-2 2xl:py-1 rounded-md border border-blue-200/90 flex-1 text-center truncate shadow-2xs" title={`Protocolo: #${process.protocolo}`}>
+                                                                <span className="font-sans text-[11px] xl:text-xs 2xl:text-sm font-black text-blue-700 uppercase bg-blue-50 px-1.5 py-0.5 2xl:px-2 2xl:py-1 rounded-md border border-blue-200/90 flex-1 text-center line-clamp-2 break-words leading-tight shadow-2xs" title={`Protocolo: #${process.protocolo}`}>
                                                                     {objetoResumidoMap[process.id] || process.objeto_resumido || `#${process.protocolo || process.id.slice(0, 8)}`}
                                                                 </span>
 
@@ -1060,7 +1060,7 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                                                         )}
 
                                                         <div className="flex items-center justify-between relative">
-                                                            <span className="font-sans text-xs sm:text-sm font-black text-blue-700 uppercase bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200/90 truncate shadow-2xs" title={`Protocolo: #${process.protocolo}`}>
+                                                            <span className="font-sans text-xs sm:text-sm font-black text-blue-700 uppercase bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200/90 line-clamp-2 break-words leading-tight shadow-2xs" title={`Protocolo: #${process.protocolo}`}>
                                                                 {objetoResumidoMap[process.id] || process.objeto_resumido || `#${process.protocolo || process.id.slice(0, 8)}`}
                                                             </span>
 
