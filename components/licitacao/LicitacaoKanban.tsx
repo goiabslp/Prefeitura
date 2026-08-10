@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
     ArrowLeft, Search, Filter, Calendar, AlertTriangle, CheckCircle2, 
     FileText, User as UserIcon, Building2, ChevronRight, ChevronLeft, 
@@ -131,6 +131,8 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
     const [openCardMenu, setOpenCardMenu] = useState<string | null>(null);
     const [isTransitioning, setIsTransitioning] = useState(false);
 
+    const channelRef = useRef<any>(null);
+
     const [activePriority, setActivePriority] = useState<{ type: 'process' | 'phase'; processId?: string; phaseId?: string; timestamp: number } | null>(() => {
         try {
             const saved = localStorage.getItem('licitacao_prioridade_visual');
@@ -158,7 +160,30 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
         window.addEventListener('storage', handleLocalEvent);
         window.addEventListener('licitacao-priority-updated', handleLocalEvent);
 
-        // Supabase Realtime Broadcast Channel para transmitir prioridade para todas as TVs e dispositivos conectados
+        // 1. Busca prioridade inicial do banco para TVs que abrirem direto via link
+        const fetchDbPriority = async () => {
+            try {
+                const { data } = await supabase
+                    .from('organization_settings')
+                    .select('ui_config')
+                    .eq('id', 'global_config')
+                    .single();
+                if (data?.ui_config && data.ui_config.licitacao_prioridade_visual !== undefined) {
+                    const dbPriority = data.ui_config.licitacao_prioridade_visual;
+                    if (dbPriority) {
+                        try { localStorage.setItem('licitacao_prioridade_visual', JSON.stringify(dbPriority)); } catch (e) {}
+                    } else {
+                        try { localStorage.removeItem('licitacao_prioridade_visual'); } catch (e) {}
+                    }
+                    setActivePriority(dbPriority);
+                }
+            } catch (e) {
+                console.warn('Erro ao carregar prioridade do banco:', e);
+            }
+        };
+        fetchDbPriority();
+
+        // 2. Supabase Realtime Channel para Broadcast instantâneo e Postgres Changes
         const channel = supabase.channel('licitacao_kanban_priority')
             .on('broadcast', { event: 'licitacao-priority-updated' }, (data) => {
                 if (data.payload !== undefined) {
@@ -172,16 +197,51 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                     handleSync(data.payload);
                 }
             })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'organization_settings', filter: 'id=eq.global_config' }, (payload: any) => {
+                const newUi = payload.new?.ui_config;
+                if (newUi && newUi.licitacao_prioridade_visual !== undefined) {
+                    const dbPriority = newUi.licitacao_prioridade_visual;
+                    try {
+                        if (dbPriority) localStorage.setItem('licitacao_prioridade_visual', JSON.stringify(dbPriority));
+                        else localStorage.removeItem('licitacao_prioridade_visual');
+                    } catch (e) {}
+                    handleSync(dbPriority);
+                }
+            })
             .subscribe();
+
+        channelRef.current = channel;
 
         return () => {
             window.removeEventListener('storage', handleLocalEvent);
             window.removeEventListener('licitacao-priority-updated', handleLocalEvent);
             supabase.removeChannel(channel);
+            channelRef.current = null;
         };
     }, []);
 
     const [showPriorityToast, setShowPriorityToast] = useState(false);
+
+    const persistPriorityToDb = async (payload: any) => {
+        try {
+            const { data: orgData } = await supabase
+                .from('organization_settings')
+                .select('ui_config')
+                .eq('id', 'global_config')
+                .single();
+            const currentUiConfig = orgData?.ui_config || {};
+            const updatedUiConfig = {
+                ...currentUiConfig,
+                licitacao_prioridade_visual: payload
+            };
+            await supabase
+                .from('organization_settings')
+                .update({ ui_config: updatedUiConfig, updated_at: new Date().toISOString() })
+                .eq('id', 'global_config');
+        } catch (e) {
+            console.warn('Erro ao persistir prioridade visual no Supabase:', e);
+        }
+    };
 
     const triggerVisualPriority = (type: 'process' | 'phase', id: string) => {
         const payload = {
@@ -198,13 +258,17 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
         setOpenPhaseMenu(null);
         setOpenCardMenu(null);
 
-        // Dispara transmissão via Supabase Broadcast para sincronizar em tempo real com todas as TVs (/Licitação/Kanban/view)
-        const channel = supabase.channel('licitacao_kanban_priority');
-        channel.send({
-            type: 'broadcast',
-            event: 'licitacao-priority-updated',
-            payload
-        });
+        // Dispara via canal ativo do Supabase Realtime
+        if (channelRef.current) {
+            channelRef.current.send({
+                type: 'broadcast',
+                event: 'licitacao-priority-updated',
+                payload
+            });
+        }
+
+        // Persiste no banco Supabase para qualquer TV que abrir via link direto
+        persistPriorityToDb(payload);
 
         if (!isViewOnly) {
             setShowPriorityToast(true);
@@ -222,13 +286,15 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
         setOpenPhaseMenu(null);
         setOpenCardMenu(null);
 
-        // Transmite o sinal de exclusão de prioridade para limpar a TV
-        const channel = supabase.channel('licitacao_kanban_priority');
-        channel.send({
-            type: 'broadcast',
-            event: 'licitacao-priority-updated',
-            payload: null
-        });
+        if (channelRef.current) {
+            channelRef.current.send({
+                type: 'broadcast',
+                event: 'licitacao-priority-updated',
+                payload: null
+            });
+        }
+
+        persistPriorityToDb(null);
     };
 
     const availableSectors = useMemo(() => {
