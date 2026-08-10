@@ -1007,8 +1007,8 @@ const App: React.FC = () => {
       activeChannels.push(tasksChannel);
     }
 
-    // Licitacao Channel
-    if (isModuleActive('parent_licitacao') && activeBlock === 'licitacao') {
+    // Licitacao Channel (subscrição também para telas de TV e links públicos)
+    if ((isModuleActive('parent_licitacao') && activeBlock === 'licitacao') || (currentView && String(currentView).startsWith('licitacao:'))) {
       const licitacaoChannel = supabase.channel('public:licitacao_processos')
         .on(
           'postgres_changes',

@@ -182,6 +182,7 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
             }
         };
         fetchDbPriority();
+        const pollInterval = setInterval(fetchDbPriority, 2500);
 
         // 2. Supabase Realtime Channel para Broadcast instantâneo e Postgres Changes
         const channel = supabase.channel('licitacao_kanban_priority')
@@ -213,6 +214,7 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
         channelRef.current = channel;
 
         return () => {
+            clearInterval(pollInterval);
             window.removeEventListener('storage', handleLocalEvent);
             window.removeEventListener('licitacao-priority-updated', handleLocalEvent);
             supabase.removeChannel(channel);

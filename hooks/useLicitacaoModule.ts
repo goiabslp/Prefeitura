@@ -14,7 +14,9 @@ export const licitacaoKeys = {
 export const useLicitacaoProcesses = () => {
     return useQuery({
         queryKey: licitacaoKeys.lists(),
-        queryFn: licitacaoService.getLicitacaoProcesses
+        queryFn: licitacaoService.getLicitacaoProcesses,
+        refetchInterval: 3000,
+        refetchOnWindowFocus: true
     });
 };
 
