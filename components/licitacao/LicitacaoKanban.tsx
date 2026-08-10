@@ -33,81 +33,45 @@ export interface PhaseConfig {
 
 export const LICITACAO_PHASES: PhaseConfig[] = [
     {
-        id: 'sem_fase',
-        label: 'Em Triagem / Inicial',
-        description: 'Processos recém-criados aguardando definição de fase',
+        id: 'pendente',
+        label: 'Pendente',
+        description: 'Processos em triagem ou aguardando análise inicial',
         badgeColor: 'bg-slate-100 text-slate-700 border-slate-200',
         borderTopColor: 'border-t-slate-400',
         columnBg: 'bg-slate-50/70',
         icon: Layers
     },
     {
-        id: 'preparatoria',
-        label: 'Preparatória',
-        description: 'Elaboração de TR, ETP, Pesquisa de Preços e Minuta de Edital',
+        id: 'objeto_cotacao',
+        label: 'Objeto e Cotação',
+        description: 'Elaboração de TR, ETP, Pesquisa de Preços e Cotação',
         badgeColor: 'bg-indigo-100 text-indigo-700 border-indigo-200',
         borderTopColor: 'border-t-indigo-500',
         columnBg: 'bg-indigo-50/40',
-        icon: FileText
-    },
-    {
-        id: 'objeto_cotacao',
-        label: 'Objeto e Cotação',
-        description: 'Definição detalhada do objeto e cotação de preços',
-        badgeColor: 'bg-purple-100 text-purple-700 border-purple-200',
-        borderTopColor: 'border-t-purple-500',
-        columnBg: 'bg-purple-50/40',
         icon: Tag
     },
     {
-        id: 'autuacao_divulgacao',
-        label: 'Autuação e Divulgação',
-        description: 'Registro oficial do processo e publicação do edital',
+        id: 'edital',
+        label: 'Edital',
+        description: 'Autuação oficial e publicação do edital',
         badgeColor: 'bg-blue-100 text-blue-700 border-blue-200',
         borderTopColor: 'border-t-blue-500',
         columnBg: 'bg-blue-50/40',
         icon: Megaphone
     },
     {
-        id: 'propostas',
-        label: 'Propostas / Lances',
-        description: 'Recebimento de propostas e disputa de lances',
+        id: 'sessao',
+        label: 'Sessão',
+        description: 'Propostas, Lances, Julgamento, Habilitação, Recursos e Homologação',
         badgeColor: 'bg-amber-100 text-amber-700 border-amber-200',
         borderTopColor: 'border-t-amber-500',
         columnBg: 'bg-amber-50/40',
-        icon: Tag
-    },
-    {
-        id: 'julgamento_habilitacao',
-        label: 'Julgamento e Habilitação',
-        description: 'Análise das propostas, lances e documentos de habilitação',
-        badgeColor: 'bg-violet-100 text-violet-700 border-violet-200',
-        borderTopColor: 'border-t-violet-500',
-        columnBg: 'bg-violet-50/40',
         icon: Scale
     },
     {
-        id: 'recursos',
-        label: 'Recursos',
-        description: 'Prazo recursal e análise de impugnações/recursos',
-        badgeColor: 'bg-orange-100 text-orange-700 border-orange-200',
-        borderTopColor: 'border-t-orange-500',
-        columnBg: 'bg-orange-50/40',
-        icon: AlertCircle
-    },
-    {
-        id: 'homologacao_adjudicacao',
-        label: 'Homologação e Adjudicação',
-        description: 'Homologação do resultado e adjudicação do objeto',
-        badgeColor: 'bg-teal-100 text-teal-700 border-teal-200',
-        borderTopColor: 'border-t-teal-500',
-        columnBg: 'bg-teal-50/40',
-        icon: Award
-    },
-    {
-        id: 'finalizado',
-        label: 'Finalizado',
-        description: 'Processo concluído e assinado',
+        id: 'contrato_ata',
+        label: 'Contrato / ATA',
+        description: 'Processo concluído, contrato assinado ou ata registrada',
         badgeColor: 'bg-emerald-100 text-emerald-700 border-emerald-200',
         borderTopColor: 'border-t-emerald-500',
         columnBg: 'bg-emerald-50/40',
@@ -344,18 +308,36 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
         });
 
         filteredProcesses.forEach(process => {
-            let currentPhase = process.fase ? process.fase.toLowerCase() : 'sem_fase';
-            if (currentPhase === 'autuacao' || currentPhase === 'divulgacao') {
-                currentPhase = 'autuacao_divulgacao';
-            } else if (currentPhase === 'julgamento' || currentPhase === 'habilitacao') {
-                currentPhase = 'julgamento_habilitacao';
-            } else if (currentPhase === 'homologacao' || currentPhase === 'adjudicacao') {
-                currentPhase = 'homologacao_adjudicacao';
+            const rawPhase = process.fase ? process.fase.toLowerCase().trim() : 'pendente';
+            let targetPhase = 'pendente';
+
+            if (rawPhase === 'pendente' || rawPhase === 'sem_fase' || rawPhase === 'inicial' || rawPhase === 'triagem') {
+                targetPhase = 'pendente';
+            } else if (rawPhase === 'preparatoria' || rawPhase === 'objeto_cotacao' || rawPhase === 'cotacao' || rawPhase === 'pesquisa_precos') {
+                targetPhase = 'objeto_cotacao';
+            } else if (rawPhase === 'autuacao_divulgacao' || rawPhase === 'autuacao' || rawPhase === 'divulgacao' || rawPhase === 'edital') {
+                targetPhase = 'edital';
+            } else if (
+                rawPhase === 'propostas' || 
+                rawPhase === 'julgamento_habilitacao' || 
+                rawPhase === 'julgamento' || 
+                rawPhase === 'habilitacao' || 
+                rawPhase === 'recursos' || 
+                rawPhase === 'homologacao_adjudicacao' || 
+                rawPhase === 'homologacao' || 
+                rawPhase === 'adjudicacao' || 
+                rawPhase === 'sessao' || 
+                rawPhase === 'lances'
+            ) {
+                targetPhase = 'sessao';
+            } else if (rawPhase === 'contrato_ata' || rawPhase === 'finalizado' || rawPhase === 'concluido' || rawPhase === 'contrato' || rawPhase === 'ata') {
+                targetPhase = 'contrato_ata';
             }
-            if (grouped[currentPhase]) {
-                grouped[currentPhase].push(process);
+
+            if (grouped[targetPhase]) {
+                grouped[targetPhase].push(process);
             } else {
-                grouped['sem_fase'].push(process);
+                grouped['pendente'].push(process);
             }
         });
 
@@ -365,18 +347,20 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
     const stats = useMemo(() => {
         const total = filteredProcesses.length;
         const urgentes = filteredProcesses.filter(p => p.prioridade === 'Urgente').length;
-        const finalizados = filteredProcesses.filter(p => p.fase === 'finalizado' || p.status === 'Concluído').length;
+        const finalizados = filteredProcesses.filter(p => p.fase === 'contrato_ata' || p.fase === 'finalizado' || p.status === 'Concluído').length;
         const emAndamento = total - finalizados;
         return { total, urgentes, emAndamento, finalizados };
     }, [filteredProcesses]);
 
     const handleMovePhase = async (processId: string, newPhaseId: string) => {
         try {
-            const phaseValue = newPhaseId === 'sem_fase' ? null : newPhaseId;
+            const phaseValue = newPhaseId;
             let statusUpdate: any = undefined;
 
-            if (newPhaseId === 'finalizado') {
+            if (newPhaseId === 'contrato_ata' || newPhaseId === 'finalizado') {
                 statusUpdate = 'Concluído';
+            } else {
+                statusUpdate = 'Em Andamento';
             }
 
             await updateMutation.mutateAsync({
@@ -749,7 +733,7 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                         <p className="font-bold text-sm">Carregando quadro Kanban...</p>
                     </div>
                 ) : (
-                    <div className={`h-full min-h-0 ${isViewOnly ? 'flex xl:grid xl:grid-cols-9 gap-1.5 md:gap-2 2xl:gap-3 w-full items-stretch overflow-x-auto xl:overflow-hidden min-w-max xl:min-w-0' : 'flex gap-4 min-w-max items-start'}`}>
+                    <div className={`h-full min-h-0 ${isViewOnly ? 'flex xl:grid xl:grid-cols-5 gap-2 md:gap-3 2xl:gap-4 w-full items-stretch overflow-x-auto xl:overflow-hidden min-w-max xl:min-w-0' : 'flex gap-4 min-w-max items-start'}`}>
                         {LICITACAO_PHASES.map((phase, idx) => {
                             const columnProcesses = processesByPhase[phase.id] || [];
                             const IconComponent = phase.icon;
@@ -775,29 +759,29 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                                             ? 'bg-gradient-to-r from-amber-600 via-amber-500 to-amber-600 border-amber-400'
                                             : 'bg-slate-900 border-slate-700/60'
                                     } ${
-                                        isViewOnly ? 'min-h-[50px] 2xl:min-h-[60px] py-1 px-1.5 2xl:px-2' : 'h-[58px] min-h-[58px] px-2.5 md:px-3'
+                                        isViewOnly ? 'min-h-[58px] xl:min-h-[64px] 2xl:min-h-[72px] py-1.5 px-2 xl:px-3' : 'h-[60px] min-h-[60px] px-3 md:px-4'
                                     }`}>
-                                        <div className="flex items-center gap-1 2xl:gap-1.5 min-w-0 flex-1 py-0.5">
-                                            <div className={`p-1 rounded-lg border shrink-0 ${isPriorityPhase ? 'bg-amber-400 text-amber-950 border-amber-300' : phase.badgeColor}`}>
-                                                <IconComponent className="w-3 h-3 2xl:w-3.5 2xl:h-3.5" />
+                                        <div className="flex items-center gap-1.5 xl:gap-2.5 min-w-0 flex-1 py-0.5">
+                                            <div className={`p-1.5 xl:p-2 rounded-xl border shrink-0 ${isPriorityPhase ? 'bg-amber-400 text-amber-950 border-amber-300' : phase.badgeColor}`}>
+                                                <IconComponent className="w-4 h-4 xl:w-5 xl:h-5 2xl:w-6 2xl:h-6" />
                                             </div>
                                             <div className="min-w-0 flex-1 flex flex-col justify-center">
                                                 <div className="flex items-center gap-1">
-                                                    <h3 className="font-extrabold text-white text-[9px] xl:text-[10px] 2xl:text-[11.5px] 3xl:text-xs tracking-tight leading-[1.15] whitespace-normal break-normal [word-break:normal] [overflow-wrap:normal] hyphens-none drop-shadow-xs">
+                                                    <h3 className="font-black text-white text-xs sm:text-sm xl:text-base 2xl:text-lg 3xl:text-xl tracking-tight leading-tight whitespace-normal break-normal [word-break:normal] [overflow-wrap:normal] hyphens-none drop-shadow-sm">
                                                         {phase.label}
                                                     </h3>
                                                 </div>
                                             </div>
                                         </div>
 
-                                        <div className="flex items-center gap-1 relative shrink-0">
+                                        <div className="flex items-center gap-1.5 relative shrink-0">
                                             {isPriorityPhase && (
-                                                <span className="px-1.5 py-0.5 rounded-full text-[8px] 2xl:text-[9px] font-black bg-amber-300 text-amber-950 flex items-center gap-0.5 shadow-md animate-bounce">
-                                                    <Zap className="w-2.5 h-2.5 fill-amber-950 text-amber-950" /> DESTAQUE
+                                                <span className="px-2 py-0.5 rounded-full text-[9px] xl:text-[10px] 2xl:text-xs font-black bg-amber-300 text-amber-950 flex items-center gap-0.5 shadow-md animate-bounce">
+                                                    <Zap className="w-3 h-3 fill-amber-950 text-amber-950" /> DESTAQUE
                                                 </span>
                                             )}
 
-                                            <span className="px-1.5 py-0.5 rounded-full text-[9px] 2xl:text-[10px] font-black bg-slate-800 text-slate-100 border border-slate-700 shadow-inner">
+                                            <span className="px-2 py-0.5 rounded-full text-xs xl:text-sm 2xl:text-base font-black bg-slate-800 text-slate-100 border border-slate-700 shadow-inner min-w-[24px] text-center">
                                                 {columnProcesses.length}
                                             </span>
 
@@ -807,7 +791,7 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                                                     setOpenPhaseMenu(openPhaseMenu === phase.id ? null : phase.id);
                                                     setOpenCardMenu(null);
                                                 }}
-                                                className="w-5 h-5 rounded hover:bg-slate-800 flex items-center justify-center text-slate-400 hover:text-white transition-colors cursor-pointer"
+                                                className="w-6 h-6 xl:w-7 xl:h-7 rounded-lg hover:bg-slate-800 flex items-center justify-center text-slate-400 hover:text-white transition-colors cursor-pointer"
                                                 title="Opções da Fase"
                                             >
                                                 <MoreHorizontal className="w-3.5 h-3.5" />
