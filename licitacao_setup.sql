@@ -20,6 +20,9 @@ CREATE TABLE IF NOT EXISTS public.licitacao_processos (
 -- Garantir colunas adicionais caso a tabela já existisse previamente
 ALTER TABLE public.licitacao_processos ADD COLUMN IF NOT EXISTS fase TEXT;
 ALTER TABLE public.licitacao_processos ADD COLUMN IF NOT EXISTS checkin_finalizado JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE public.licitacao_processos ADD COLUMN IF NOT EXISTS aprovado_em TIMESTAMP WITH TIME ZONE;
+ALTER TABLE public.licitacao_processos ADD COLUMN IF NOT EXISTS enviado_kanban_em TIMESTAMP WITH TIME ZONE;
+ALTER TABLE public.licitacao_processos ADD COLUMN IF NOT EXISTS apresentado_animacao BOOLEAN DEFAULT FALSE;
 ALTER TABLE public.licitacao_processos DROP CONSTRAINT IF EXISTS licitacao_processos_status_check;
 ALTER TABLE public.licitacao_processos ADD CONSTRAINT licitacao_processos_status_check CHECK (status IN ('Rascunho', 'Aguardando Assinatura', 'Assinado', 'Em Análise', 'Concluído', 'Finalizado', 'Rejeitado'));
 

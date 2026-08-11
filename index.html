@@ -74,8 +74,17 @@
       }
     }
 
+    @keyframes progressShrink {
+      from { width: 100%; }
+      to { width: 0%; }
+    }
+
     .animate-queue-pulse {
       animation: queueBorderPulse 2s ease-in-out infinite;
+    }
+
+    .animate-progress-shrink {
+      animation: progressShrink 7s linear forwards;
     }
 
     ::-webkit-scrollbar {

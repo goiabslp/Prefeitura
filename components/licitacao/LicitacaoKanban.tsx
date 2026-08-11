@@ -5,7 +5,7 @@ import {
     Sparkles, Gavel, ArrowRightLeft, Eye, Clock, ShieldAlert,
     Paperclip, Package, Tag, Scale, Landmark, Megaphone, CheckSquare,
     AlertCircle, Award, FileCheck, Layers, Tv, MoreHorizontal, MoreVertical,
-    Zap, X, Maximize2, Radio, Check, RefreshCw, Flame
+    Zap, X, Maximize2, Radio, Check, RefreshCw, Flame, Volume2, Music, Upload
 } from 'lucide-react';
 import { User } from '../../types';
 import { LicitacaoProcesso } from '../../types/licitacao';
@@ -164,6 +164,179 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
         }
     });
 
+    const [newApprovedModalProcess, setNewApprovedModalProcess] = useState<{
+        id: string;
+        protocolo: string;
+        solicitante_nome: string;
+        solicitante_setor: string;
+        objeto_resumido: string;
+        aprovado_em?: string;
+    } | null>(null);
+
+    const [announcedProcessIds, setAnnouncedProcessIds] = useState<string[]>(() => {
+        try {
+            const saved = localStorage.getItem('licitacao_announced_process_ids');
+            return saved ? JSON.parse(saved) : [];
+        } catch {
+            return [];
+        }
+    });
+
+    const handleDismissNewProcessModal = async () => {
+        if (!newApprovedModalProcess) return;
+        const processId = newApprovedModalProcess.id;
+        
+        const updated = Array.from(new Set([...announcedProcessIds, processId]));
+        setAnnouncedProcessIds(updated);
+        try {
+            localStorage.setItem('licitacao_announced_process_ids', JSON.stringify(updated));
+        } catch (e) {}
+
+        setNewApprovedModalProcess(null);
+
+        try {
+            await updateMutation.mutateAsync({
+                id: processId,
+                updates: { apresentado_animacao: true }
+            });
+        } catch (err) {
+            console.warn('Erro ao atualizar apresentado_animacao no banco:', err);
+        }
+    };
+
+    const playWebAudioChime = () => {
+        try {
+            const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+            if (!AudioContextClass) return;
+            const ctx = new AudioContextClass();
+            const now = ctx.currentTime;
+
+            const osc1 = ctx.createOscillator();
+            const gain1 = ctx.createGain();
+            osc1.type = 'sine';
+            osc1.frequency.setValueAtTime(523.25, now);
+            gain1.gain.setValueAtTime(0.2, now);
+            gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.8);
+            osc1.connect(gain1);
+            gain1.connect(ctx.destination);
+
+            const osc2 = ctx.createOscillator();
+            const gain2 = ctx.createGain();
+            osc2.type = 'sine';
+            osc2.frequency.setValueAtTime(659.25, now + 0.12);
+            gain2.gain.setValueAtTime(0.25, now + 0.12);
+            gain2.gain.exponentialRampToValueAtTime(0.001, now + 1.2);
+            osc2.connect(gain2);
+            gain2.connect(ctx.destination);
+
+            const osc3 = ctx.createOscillator();
+            const gain3 = ctx.createGain();
+            osc3.type = 'sine';
+            osc3.frequency.setValueAtTime(783.99, now + 0.24);
+            gain3.gain.setValueAtTime(0.3, now + 0.24);
+            gain3.gain.exponentialRampToValueAtTime(0.001, now + 1.5);
+            osc3.connect(gain3);
+            gain3.connect(ctx.destination);
+
+            osc1.start(now);
+            osc1.stop(now + 0.8);
+            osc2.start(now + 0.12);
+            osc2.stop(now + 1.2);
+            osc3.start(now + 0.24);
+            osc3.stop(now + 1.5);
+        } catch (e) {
+            console.warn('Erro no sintetizador de áudio:', e);
+        }
+    };
+
+    const [customSoundUrl, setCustomSoundUrl] = useState<string | null>(() => {
+        try {
+            return localStorage.getItem('licitacao_custom_sound_mp3');
+        } catch {
+            return null;
+        }
+    });
+
+    const audioFileInputRef = useRef<HTMLInputElement>(null);
+
+    const handleAudioFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        if (!file.type.includes('audio') && !file.name.endsWith('.mp3')) {
+            alert('Por favor, selecione um arquivo de áudio no formato MP3.');
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const dataUrl = event.target?.result as string;
+            if (dataUrl) {
+                setCustomSoundUrl(dataUrl);
+                try {
+                    localStorage.setItem('licitacao_custom_sound_mp3', dataUrl);
+                } catch (err) {
+                    console.warn('Arquivo MP3 grande demais para localStorage local:', err);
+                }
+
+                // Reproduzir amostra de teste imediatamente
+                try {
+                    const sampleAudio = new Audio(dataUrl);
+                    sampleAudio.volume = 0.8;
+                    sampleAudio.play();
+                } catch (e) {}
+
+                // Persistir no organization_settings do Supabase para reproduzir em todos os monitores e telas
+                try {
+                    supabase
+                        .from('organization_settings')
+                        .select('ui_config')
+                        .eq('id', 'global_config')
+                        .single()
+                        .then(({ data }) => {
+                            const cur = data?.ui_config || {};
+                            supabase
+                                .from('organization_settings')
+                                .update({
+                                    ui_config: { ...cur, licitacao_custom_sound_mp3: dataUrl },
+                                    updated_at: new Date().toISOString()
+                                })
+                                .eq('id', 'global_config');
+                        });
+                } catch (e) {}
+            }
+        };
+        reader.readAsDataURL(file);
+    };
+
+    const playNotificationChimeSound = () => {
+        try {
+            const soundSource = customSoundUrl || '/sounds/novo_processo.mp3';
+            const audio = new Audio(soundSource);
+            audio.volume = 0.8;
+            audio.play().catch(() => {
+                const fallbackAudio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+                fallbackAudio.volume = 0.7;
+                fallbackAudio.play().catch(() => {
+                    playWebAudioChime();
+                });
+            });
+        } catch {
+            playWebAudioChime();
+        }
+    };
+
+    useEffect(() => {
+        if (!newApprovedModalProcess) return;
+
+        playNotificationChimeSound();
+
+        const timer = setTimeout(() => {
+            handleDismissNewProcessModal();
+        }, 7000);
+        return () => clearTimeout(timer);
+    }, [newApprovedModalProcess]);
+
     const checkIsQueuePriority = (process: LicitacaoProcesso) => {
         if (!process) return false;
         if (removedQueuePriorityIds.includes(process.id)) return false;
@@ -306,9 +479,62 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                     handleQueueSync(data.payload);
                 }
             })
+            .on('broadcast', { event: 'new-licitacao-process-approved' }, (data) => {
+                if (data.payload && data.payload.id) {
+                    const payload = data.payload;
+                    if (!announcedProcessIds.includes(payload.id)) {
+                        setNewApprovedModalProcess({
+                            id: payload.id,
+                            protocolo: payload.protocolo || payload.id.slice(0, 8),
+                            solicitante_nome: payload.solicitante_nome || 'Não informado',
+                            solicitante_setor: payload.solicitante_setor || 'Não informado',
+                            objeto_resumido: payload.objeto_resumido || 'Processo de Licitação',
+                            aprovado_em: payload.aprovado_em
+                        });
+                    }
+                }
+            })
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'licitacao_processos' }, (payload: any) => {
+                const updated = payload.new;
+                if (updated && updated.status) {
+                    const isApprovedStatus = updated.status !== 'Rascunho' && updated.status !== 'Aguardando Assinatura' && updated.status !== 'Rejeitado' && updated.status !== 'Finalizado';
+                    if (isApprovedStatus && updated.apresentado_animacao === false && !announcedProcessIds.includes(updated.id)) {
+                        setNewApprovedModalProcess({
+                            id: updated.id,
+                            protocolo: updated.protocolo || updated.id.slice(0, 8),
+                            solicitante_nome: updated.solicitante_nome || 'Não informado',
+                            solicitante_setor: updated.solicitante_setor || 'Não informado',
+                            objeto_resumido: updated.objeto_resumido || updated.finalidade || 'Processo de Licitação',
+                            aprovado_em: updated.aprovado_em || updated.atualizado_em
+                        });
+                    }
+                }
+            })
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'licitacao_processos' }, (payload: any) => {
+                const inserted = payload.new;
+                if (inserted && inserted.status) {
+                    const isApprovedStatus = inserted.status !== 'Rascunho' && inserted.status !== 'Aguardando Assinatura' && inserted.status !== 'Rejeitado' && inserted.status !== 'Finalizado';
+                    if (isApprovedStatus && inserted.apresentado_animacao === false && !announcedProcessIds.includes(inserted.id)) {
+                        setNewApprovedModalProcess({
+                            id: inserted.id,
+                            protocolo: inserted.protocolo || inserted.id.slice(0, 8),
+                            solicitante_nome: inserted.solicitante_nome || 'Não informado',
+                            solicitante_setor: inserted.solicitante_setor || 'Não informado',
+                            objeto_resumido: inserted.objeto_resumido || inserted.finalidade || 'Processo de Licitação',
+                            aprovado_em: inserted.aprovado_em || inserted.criado_em
+                        });
+                    }
+                }
+            })
             .on('postgres_changes', { event: '*', schema: 'public', table: 'organization_settings', filter: 'id=eq.global_config' }, (payload: any) => {
                 const newUi = payload.new?.ui_config;
                 if (newUi) {
+                    if (newUi.latest_approved_licitacao_process) {
+                        const latest = newUi.latest_approved_licitacao_process;
+                        if (latest && latest.id && !announcedProcessIds.includes(latest.id)) {
+                            setNewApprovedModalProcess(latest);
+                        }
+                    }
                     if (newUi.licitacao_prioridade_visual !== undefined) {
                         const dbPriority = newUi.licitacao_prioridade_visual;
                         try {
@@ -1022,6 +1248,22 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                                 <span className="text-[9px] 2xl:text-xs font-extrabold uppercase text-emerald-600/80 block tracking-wider">Finalizados</span>
                                 <span className="text-sm 2xl:text-xl font-black text-emerald-700">{stats.finalizados}</span>
                             </div>
+
+                            <button
+                                onClick={() => audioFileInputRef.current?.click()}
+                                className="bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 px-3 py-1.5 2xl:px-4 2xl:py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs shrink-0"
+                                title="Enviar ou alterar arquivo de áudio MP3 personalizado"
+                            >
+                                <Volume2 className="w-4 h-4 text-indigo-600 shrink-0" />
+                                <span className="hidden sm:inline">{customSoundUrl ? 'Toque MP3 Ativo' : 'Enviar MP3'}</span>
+                            </button>
+                            <input
+                                type="file"
+                                ref={audioFileInputRef}
+                                accept="audio/mp3,audio/*"
+                                onChange={handleAudioFileUpload}
+                                className="hidden"
+                            />
                         </div>
                     </div>
                 </header>
@@ -1377,6 +1619,109 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                         })}
                     </div>
                 )}
+            {/* Modal de Animação para Novo Processo Aprovado */}
+            {newApprovedModalProcess && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-300">
+                    <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 border-2 border-indigo-500/80 shadow-[0_0_80px_rgba(99,102,241,0.55)] rounded-3xl p-6 sm:p-8 max-w-lg w-full relative overflow-hidden animate-in zoom-in-95 duration-300 text-white">
+                        {/* Efeitos de Luz em Segundo Plano */}
+                        <div className="absolute -right-16 -top-16 w-48 h-48 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none animate-pulse" />
+                        <div className="absolute -left-16 -bottom-16 w-48 h-48 bg-amber-500/20 rounded-full blur-3xl pointer-events-none" />
+
+                        {/* Cabeçalho do Anúncio */}
+                        <div className="flex items-center gap-3.5 mb-5 relative z-10">
+                            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-400 to-amber-200 text-amber-950 flex items-center justify-center font-bold shadow-lg shadow-amber-500/30 shrink-0 animate-bounce">
+                                <Sparkles className="w-6 h-6 fill-amber-950 text-amber-950" />
+                            </div>
+                            <div>
+                                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-indigo-500/30 text-indigo-300 border border-indigo-400/30 uppercase tracking-widest block w-fit mb-1">
+                                    Notificação em Tempo Real
+                                </span>
+                                <h2 className="text-xl sm:text-2xl font-black text-white leading-tight tracking-tight">
+                                    🎉 Novo processo cadastrado!
+                                </h2>
+                            </div>
+                        </div>
+
+                        <p className="text-slate-300 text-xs sm:text-sm font-medium mb-5 relative z-10 leading-relaxed">
+                            Um novo processo foi aprovado e adicionado automaticamente ao Kanban.
+                        </p>
+
+                        {/* Dados Principais do Processo */}
+                        <div className="bg-slate-800/80 border border-indigo-500/30 rounded-2xl p-4 sm:p-5 space-y-3 relative z-10 backdrop-blur-sm shadow-inner">
+                            <div className="flex items-center justify-between border-b border-slate-700/80 pb-2.5">
+                                <span className="text-[11px] font-extrabold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                                    <Tag className="w-3.5 h-3.5 text-amber-400" />
+                                    Protocolo
+                                </span>
+                                <span className="text-sm font-black text-white bg-slate-900/90 px-2.5 py-0.5 rounded-lg border border-slate-700 font-mono shadow-xs">
+                                    #{newApprovedModalProcess.protocolo}
+                                </span>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                                <div className="bg-slate-900/60 p-2.5 rounded-xl border border-slate-700/50">
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1 mb-1">
+                                        <Landmark className="w-3 h-3 text-indigo-400" /> Setor
+                                    </span>
+                                    <span className="font-bold text-slate-100 block truncate text-xs">
+                                        {newApprovedModalProcess.solicitante_setor}
+                                    </span>
+                                </div>
+
+                                <div className="bg-slate-900/60 p-2.5 rounded-xl border border-slate-700/50">
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1 mb-1">
+                                        <UserIcon className="w-3 h-3 text-indigo-400" /> Responsável
+                                    </span>
+                                    <span className="font-bold text-slate-100 block truncate text-xs">
+                                        {newApprovedModalProcess.solicitante_nome}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div className="bg-slate-900/60 p-3 rounded-xl border border-slate-700/50">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1 mb-1">
+                                    <FileText className="w-3.5 h-3.5 text-indigo-400" /> Objeto / Finalidade
+                                </span>
+                                <p className="font-bold text-indigo-200 text-xs sm:text-sm line-clamp-3 leading-snug">
+                                    {objetoResumidoMap[newApprovedModalProcess.id] || newApprovedModalProcess.objeto_resumido}
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Barra de Progresso + Botões */}
+                        <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-3 relative z-10">
+                            <div className="w-full sm:w-auto flex-1 bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                                <div className="bg-gradient-to-r from-indigo-500 to-amber-400 h-full animate-progress-shrink" />
+                            </div>
+
+                            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                                <button
+                                    onClick={playNotificationChimeSound}
+                                    className="bg-slate-800 hover:bg-slate-700 text-amber-300 hover:text-white p-2.5 rounded-xl text-xs font-bold flex items-center justify-center border border-slate-700 transition-all cursor-pointer shadow-xs shrink-0"
+                                    title="Ouvir teste do toque MP3"
+                                >
+                                    <Volume2 className="w-4 h-4 text-amber-400" />
+                                </button>
+                                <button
+                                    onClick={() => audioFileInputRef.current?.click()}
+                                    className="bg-slate-800 hover:bg-slate-700 text-indigo-300 hover:text-white px-3 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 border border-slate-700 transition-all cursor-pointer shadow-xs shrink-0"
+                                    title="Carregar seu arquivo de áudio MP3 personalizado"
+                                >
+                                    <Upload className="w-3.5 h-3.5 text-indigo-400" />
+                                    <span className="hidden sm:inline">MP3</span>
+                                </button>
+                                <button
+                                    onClick={handleDismissNewProcessModal}
+                                    className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs px-5 py-2.5 rounded-xl transition-all shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 cursor-pointer active:scale-95 shrink-0"
+                                >
+                                    <CheckCircle2 className="w-4 h-4" />
+                                    Entendi / Ver no Kanban
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
             </div>
         </div>
     );

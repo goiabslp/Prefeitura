@@ -22,6 +22,9 @@ export interface LicitacaoProcesso {
     atualizado_em: string;
     fase?: string;
     checkin_finalizado?: any;
+    aprovado_em?: string;
+    enviado_kanban_em?: string;
+    apresentado_animacao?: boolean;
     resolucao_descricao?: string;
     resolucao_numero?: string;
     ficha_orcamentaria?: string;
