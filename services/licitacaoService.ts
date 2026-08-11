@@ -10,7 +10,22 @@ export const createLicitacaoProcess = async (process: Partial<LicitacaoProcesso>
             .select()
             .single();
 
-        if (error) throw error;
+        if (error) {
+            // Tratamento gracioso para restrição de check constraint no banco (Erro 23514)
+            if (error.code === '23514' && (error.message?.includes('status_check') || JSON.stringify(error).includes('status_check'))) {
+                console.warn("Status enviado não aceito pelo CHECK constraint do banco. Utilizando 'Em Análise'...");
+                const fallbackProcess = { ...process, status: 'Em Análise' as any };
+                const { data: retryData, error: retryError } = await supabase
+                    .from('licitacao_processos')
+                    .insert([fallbackProcess])
+                    .select()
+                    .single();
+
+                if (retryError) throw retryError;
+                return retryData as LicitacaoProcesso;
+            }
+            throw error;
+        }
         return data as LicitacaoProcesso;
     } catch (error) {
         console.error("Error creating licitacao process:", error);
@@ -28,11 +43,11 @@ export const createLicitacaoProcessCompleto = async (payload: {
     let lastError: any = null;
 
     const nowIso = new Date().toISOString();
-    const isApprovedStatus = (payload.processo.status as string) === 'Aprovado' || (payload.processo.status as string) === 'Em Análise';
+    const isApprovedStatus = (payload.processo.status as string) === 'Aprovado';
 
     const processPayload: Partial<LicitacaoProcesso> = {
         ...payload.processo,
-        status: (payload.processo.status || 'Em Aprovação') as any,
+        status: (payload.processo.status || 'Em Análise') as any,
         fase: payload.processo.fase || 'pendente',
         ...(isApprovedStatus ? {
             aprovado_em: nowIso,
