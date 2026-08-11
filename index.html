@@ -63,6 +63,21 @@
     }
   </script>
   <style>
+    @keyframes queueBorderPulse {
+      0%, 100% {
+        border-color: rgba(168, 85, 247, 0.95);
+        box-shadow: 0 0 12px rgba(168, 85, 247, 0.45);
+      }
+      50% {
+        border-color: rgba(168, 85, 247, 0.35);
+        box-shadow: 0 0 4px rgba(168, 85, 247, 0.15);
+      }
+    }
+
+    .animate-queue-pulse {
+      animation: queueBorderPulse 2s ease-in-out infinite;
+    }
+
     ::-webkit-scrollbar {
       width: 6px;
       height: 6px;

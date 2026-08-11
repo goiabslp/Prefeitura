@@ -5,7 +5,7 @@ import {
     Sparkles, Gavel, ArrowRightLeft, Eye, Clock, ShieldAlert,
     Paperclip, Package, Tag, Scale, Landmark, Megaphone, CheckSquare,
     AlertCircle, Award, FileCheck, Layers, Tv, MoreHorizontal, MoreVertical,
-    Zap, X, Maximize2, Radio, Check, RefreshCw
+    Zap, X, Maximize2, Radio, Check, RefreshCw, Flame
 } from 'lucide-react';
 import { User } from '../../types';
 import { LicitacaoProcesso } from '../../types/licitacao';
@@ -146,6 +146,30 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
         }
     });
 
+    const [queuePriorityIds, setQueuePriorityIds] = useState<string[]>(() => {
+        try {
+            const saved = localStorage.getItem('licitacao_queue_priority_ids');
+            return saved ? JSON.parse(saved) : [];
+        } catch {
+            return [];
+        }
+    });
+
+    const [removedQueuePriorityIds, setRemovedQueuePriorityIds] = useState<string[]>(() => {
+        try {
+            const saved = localStorage.getItem('licitacao_removed_queue_priority_ids');
+            return saved ? JSON.parse(saved) : [];
+        } catch {
+            return [];
+        }
+    });
+
+    const checkIsQueuePriority = (process: LicitacaoProcesso) => {
+        if (!process) return false;
+        if (removedQueuePriorityIds.includes(process.id)) return false;
+        return queuePriorityIds.includes(process.id) || process.prioridade === 'Urgente' || (process.prioridade as string) === 'Alta';
+    };
+
     const [objetoResumidoMap, setObjetoResumidoMap] = useState<Record<string, string>>(() => {
         try {
             const saved = localStorage.getItem('licitacao_objeto_resumido_map');
@@ -181,11 +205,36 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
             }
         };
 
+        const handleQueueSync = (payloadData?: any) => {
+            try {
+                let queueData = payloadData?.queue !== undefined ? payloadData.queue : payloadData;
+                let removedData = payloadData?.removed !== undefined ? payloadData.removed : undefined;
+
+                if (queueData === undefined) {
+                    const savedQ = localStorage.getItem('licitacao_queue_priority_ids');
+                    queueData = savedQ ? JSON.parse(savedQ) : [];
+                }
+                if (removedData === undefined) {
+                    const savedR = localStorage.getItem('licitacao_removed_queue_priority_ids');
+                    removedData = savedR ? JSON.parse(savedR) : [];
+                }
+
+                setQueuePriorityIds(prev => JSON.stringify(prev) === JSON.stringify(queueData) ? prev : (queueData || []));
+                setRemovedQueuePriorityIds(prev => JSON.stringify(prev) === JSON.stringify(removedData) ? prev : (removedData || []));
+            } catch (e) {
+                console.error('Erro ao sincronizar prioridade da fila:', e);
+            }
+        };
+
         const handleLocalEvent = () => handleSync();
+        const handleQueueLocalEvent = () => handleQueueSync();
+
         window.addEventListener('storage', handleLocalEvent);
         window.addEventListener('licitacao-priority-updated', handleLocalEvent);
+        window.addEventListener('storage', handleQueueLocalEvent);
+        window.addEventListener('licitacao-queue-priority-updated', handleQueueLocalEvent);
 
-        // 1. Busca prioridade inicial do banco para TVs que abrirem direto via link
+        // 1. Busca prioridades iniciais do banco
         const fetchDbPriority = async () => {
             try {
                 const { data } = await supabase
@@ -193,18 +242,37 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                     .select('ui_config')
                     .eq('id', 'global_config')
                     .single();
-                if (data?.ui_config && data.ui_config.licitacao_prioridade_visual !== undefined) {
-                    const dbPriority = data.ui_config.licitacao_prioridade_visual;
-                    if (dbPriority) {
-                        try { localStorage.setItem('licitacao_prioridade_visual', JSON.stringify(dbPriority)); } catch (e) {}
-                    } else {
-                        try { localStorage.removeItem('licitacao_prioridade_visual'); } catch (e) {}
+                if (data?.ui_config) {
+                    if (data.ui_config.licitacao_prioridade_visual !== undefined) {
+                        const dbPriority = data.ui_config.licitacao_prioridade_visual;
+                        if (dbPriority) {
+                            try { localStorage.setItem('licitacao_prioridade_visual', JSON.stringify(dbPriority)); } catch (e) {}
+                        } else {
+                            try { localStorage.removeItem('licitacao_prioridade_visual'); } catch (e) {}
+                        }
+                        setActivePriority(prev => {
+                            if (JSON.stringify(prev) === JSON.stringify(dbPriority)) return prev;
+                            return dbPriority;
+                        });
                     }
 
-                    setActivePriority(prev => {
-                        if (JSON.stringify(prev) === JSON.stringify(dbPriority)) return prev;
-                        return dbPriority;
-                    });
+                    if (data.ui_config.licitacao_queue_priority_ids !== undefined) {
+                        const dbQueue = data.ui_config.licitacao_queue_priority_ids || [];
+                        try { localStorage.setItem('licitacao_queue_priority_ids', JSON.stringify(dbQueue)); } catch (e) {}
+                        setQueuePriorityIds(prev => {
+                            if (JSON.stringify(prev) === JSON.stringify(dbQueue)) return prev;
+                            return dbQueue;
+                        });
+                    }
+
+                    if (data.ui_config.licitacao_removed_queue_priority_ids !== undefined) {
+                        const dbRemoved = data.ui_config.licitacao_removed_queue_priority_ids || [];
+                        try { localStorage.setItem('licitacao_removed_queue_priority_ids', JSON.stringify(dbRemoved)); } catch (e) {}
+                        setRemovedQueuePriorityIds(prev => {
+                            if (JSON.stringify(prev) === JSON.stringify(dbRemoved)) return prev;
+                            return dbRemoved;
+                        });
+                    }
                 }
             } catch (e) {
                 console.warn('Erro ao carregar prioridade do banco:', e);
@@ -227,15 +295,37 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                     handleSync(data.payload);
                 }
             })
+            .on('broadcast', { event: 'licitacao-queue-priority-updated' }, (data) => {
+                if (data.payload !== undefined) {
+                    try {
+                        const q = data.payload?.queue !== undefined ? data.payload.queue : data.payload;
+                        const r = data.payload?.removed !== undefined ? data.payload.removed : [];
+                        localStorage.setItem('licitacao_queue_priority_ids', JSON.stringify(q));
+                        localStorage.setItem('licitacao_removed_queue_priority_ids', JSON.stringify(r));
+                    } catch (e) {}
+                    handleQueueSync(data.payload);
+                }
+            })
             .on('postgres_changes', { event: '*', schema: 'public', table: 'organization_settings', filter: 'id=eq.global_config' }, (payload: any) => {
                 const newUi = payload.new?.ui_config;
-                if (newUi && newUi.licitacao_prioridade_visual !== undefined) {
-                    const dbPriority = newUi.licitacao_prioridade_visual;
-                    try {
-                        if (dbPriority) localStorage.setItem('licitacao_prioridade_visual', JSON.stringify(dbPriority));
-                        else localStorage.removeItem('licitacao_prioridade_visual');
-                    } catch (e) {}
-                    handleSync(dbPriority);
+                if (newUi) {
+                    if (newUi.licitacao_prioridade_visual !== undefined) {
+                        const dbPriority = newUi.licitacao_prioridade_visual;
+                        try {
+                            if (dbPriority) localStorage.setItem('licitacao_prioridade_visual', JSON.stringify(dbPriority));
+                            else localStorage.removeItem('licitacao_prioridade_visual');
+                        } catch (e) {}
+                        handleSync(dbPriority);
+                    }
+                    if (newUi.licitacao_queue_priority_ids !== undefined || newUi.licitacao_removed_queue_priority_ids !== undefined) {
+                        const dbQueue = newUi.licitacao_queue_priority_ids || [];
+                        const dbRemoved = newUi.licitacao_removed_queue_priority_ids || [];
+                        try {
+                            localStorage.setItem('licitacao_queue_priority_ids', JSON.stringify(dbQueue));
+                            localStorage.setItem('licitacao_removed_queue_priority_ids', JSON.stringify(dbRemoved));
+                        } catch (e) {}
+                        handleQueueSync({ queue: dbQueue, removed: dbRemoved });
+                    }
                 }
             })
             .subscribe();
@@ -246,10 +336,80 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
             clearInterval(pollInterval);
             window.removeEventListener('storage', handleLocalEvent);
             window.removeEventListener('licitacao-priority-updated', handleLocalEvent);
+            window.removeEventListener('storage', handleQueueLocalEvent);
+            window.removeEventListener('licitacao-queue-priority-updated', handleQueueLocalEvent);
             supabase.removeChannel(channel);
             channelRef.current = null;
         };
     }, []);
+
+    const toggleQueuePriority = async (processId: string) => {
+        const targetProcess = processes.find(p => p.id === processId);
+        const isCurrentlyPriority = targetProcess 
+            ? checkIsQueuePriority(targetProcess)
+            : ((queuePriorityIds.includes(processId) || processes.find(p => p.id === processId)?.prioridade === 'Urgente') && !removedQueuePriorityIds.includes(processId));
+
+        let updatedQueue: string[];
+        let updatedRemoved: string[];
+
+        if (isCurrentlyPriority) {
+            updatedQueue = queuePriorityIds.filter(id => id !== processId);
+            updatedRemoved = Array.from(new Set([...removedQueuePriorityIds, processId]));
+        } else {
+            updatedQueue = Array.from(new Set([...queuePriorityIds, processId]));
+            updatedRemoved = removedQueuePriorityIds.filter(id => id !== processId);
+        }
+
+        setQueuePriorityIds(updatedQueue);
+        setRemovedQueuePriorityIds(updatedRemoved);
+
+        try {
+            localStorage.setItem('licitacao_queue_priority_ids', JSON.stringify(updatedQueue));
+            localStorage.setItem('licitacao_removed_queue_priority_ids', JSON.stringify(updatedRemoved));
+        } catch (e) {}
+
+        window.dispatchEvent(new CustomEvent('licitacao-queue-priority-updated'));
+        setOpenCardMenu(null);
+
+        if (channelRef.current) {
+            channelRef.current.send({
+                type: 'broadcast',
+                event: 'licitacao-queue-priority-updated',
+                payload: { queue: updatedQueue, removed: updatedRemoved }
+            });
+        }
+
+        try {
+            await updateMutation.mutateAsync({
+                id: processId,
+                updates: {
+                    prioridade: isCurrentlyPriority ? 'Normal' : 'Urgente'
+                }
+            });
+        } catch (err) {
+            console.warn('Erro ao atualizar prioridade no processo:', err);
+        }
+
+        try {
+            const { data: orgData } = await supabase
+                .from('organization_settings')
+                .select('ui_config')
+                .eq('id', 'global_config')
+                .single();
+            const currentUiConfig = orgData?.ui_config || {};
+            const updatedUiConfig = {
+                ...currentUiConfig,
+                licitacao_queue_priority_ids: updatedQueue,
+                licitacao_removed_queue_priority_ids: updatedRemoved
+            };
+            await supabase
+                .from('organization_settings')
+                .update({ ui_config: updatedUiConfig, updated_at: new Date().toISOString() })
+                .eq('id', 'global_config');
+        } catch (e) {
+            console.warn('Erro ao salvar prioridade da fila no Supabase:', e);
+        }
+    };
 
     const [showPriorityToast, setShowPriorityToast] = useState(false);
 
@@ -439,8 +599,18 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
             }
         });
 
+        Object.keys(grouped).forEach(phaseKey => {
+            grouped[phaseKey].sort((a, b) => {
+                const isPrioA = checkIsQueuePriority(a);
+                const isPrioB = checkIsQueuePriority(b);
+                if (isPrioA && !isPrioB) return -1;
+                if (!isPrioA && isPrioB) return 1;
+                return new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime();
+            });
+        });
+
         return grouped;
-    }, [filteredProcesses]);
+    }, [filteredProcesses, queuePriorityIds, removedQueuePriorityIds]);
 
     const stats = useMemo(() => {
         const total = filteredProcesses.length;
@@ -981,36 +1151,159 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                                             )}
                                         </div>
                                     </div>
-
                                     <ColumnScrollContainer className="p-1.5 md:p-2 2xl:p-3 flex-1 overflow-y-auto space-y-1.5 2xl:space-y-2.5 min-h-0 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                                         {columnProcesses.length === 0 ? (
                                             <div className="h-20 2xl:h-28 border-2 border-dashed border-slate-200/80 rounded-xl flex flex-col items-center justify-center text-slate-400 p-2 text-center">
                                                 <p className="text-[10px] 2xl:text-xs font-medium">Nenhum processo</p>
                                             </div>
                                         ) : (
-                                            columnProcesses.map((process) => {
-                                                const isPriorityProcess = activePriority?.type === 'process' && activePriority?.processId === process.id;
+                                            columnProcesses
+                                                .sort((a, b) => {
+                                                    const aPrior = checkIsQueuePriority(a);
+                                                    const bPrior = checkIsQueuePriority(b);
+                                                    return aPrior === bPrior ? 0 : aPrior ? -1 : 1;
+                                                })
+                                                .map((process) => {
+                                                    const isPriorityProcess = activePriority?.type === 'process' && activePriority?.processId === process.id;
+                                                    const isQueuePriority = checkIsQueuePriority(process);
 
-                                                if (isViewOnly) {
+                                                    if (isViewOnly) {
+                                                        let cardStyleClasses = 'bg-white border-slate-200/80 shadow-2xs';
+                                                        if (isPriorityProcess) {
+                                                            cardStyleClasses = 'ring-4 ring-amber-400 border-amber-400 bg-amber-50/90 shadow-[0_0_20px_rgba(251,191,36,0.4)] scale-[1.02] z-30';
+                                                        } else if (isQueuePriority) {
+                                                            cardStyleClasses = 'border-2 border-purple-500 bg-gradient-to-br from-purple-50/90 via-indigo-50/80 to-purple-50/90 animate-queue-pulse z-20';
+                                                        }
+
+                                                        return (
+                                                            <div
+                                                                key={process.id}
+                                                                className={`group rounded-xl p-1.5 2xl:p-2 border transition-all duration-300 flex flex-col gap-1 2xl:gap-1.5 items-stretch cursor-default relative ${cardStyleClasses}`}
+                                                            >
+                                                                {isPriorityProcess && (
+                                                                    <div className="bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 px-2 py-0.5 rounded-md text-[8px] 2xl:text-[9px] font-black flex items-center justify-center gap-1 shadow-xs uppercase tracking-wider animate-bounce">
+                                                                        <Zap className="w-2.5 h-2.5 fill-slate-950 text-slate-950" /> Prioridade de Sala
+                                                                    </div>
+                                                                )}
+
+                                                                <div className="flex items-center justify-between gap-1">
+                                                                    <div className="flex items-center gap-1 flex-wrap">
+                                                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] xl:text-[10px] 2xl:text-[11px] font-extrabold text-amber-800 bg-amber-50 border border-amber-200/80 rounded-md shrink-0 shadow-2xs">
+                                                                            <Clock className="w-2.5 h-2.5 2xl:w-3 2xl:h-3 text-amber-600 shrink-0" />
+                                                                            <span className="whitespace-nowrap">{getDaysElapsed(process.criado_em)}</span>
+                                                                        </span>
+                                                                        {isQueuePriority && !isPriorityProcess && (
+                                                                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[8px] xl:text-[9px] 2xl:text-[10px] font-black text-purple-800 bg-purple-100/90 border border-purple-300/90 rounded-md shrink-0 uppercase tracking-wider shadow-2xs">
+                                                                                <Flame className="w-2.5 h-2.5 text-purple-600 fill-purple-600 shrink-0" />
+                                                                                Prioridade
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+
+                                                                    <button
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            setOpenCardMenu(openCardMenu === process.id ? null : process.id);
+                                                                            setOpenPhaseMenu(null);
+                                                                        }}
+                                                                        className="w-5 h-5 rounded hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-700 transition-colors cursor-pointer shrink-0"
+                                                                        title="Opções do Card"
+                                                                    >
+                                                                        <MoreHorizontal className="w-3 h-3" />
+                                                                    </button>
+
+                                                                    {openCardMenu === process.id && (
+                                                                        <div className="absolute right-1 top-7 z-50 w-48 bg-white border border-slate-200 shadow-xl rounded-xl p-1 text-slate-800 animate-in fade-in zoom-in-95">
+                                                                            <button
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    toggleQueuePriority(process.id);
+                                                                                }}
+                                                                                className={`w-full text-left px-2.5 py-1.5 text-xs font-bold rounded-lg flex items-center gap-2 cursor-pointer transition-colors ${
+                                                                                    isQueuePriority ? 'text-purple-700 bg-purple-50 hover:bg-purple-100' : 'text-slate-700 hover:bg-purple-50 hover:text-purple-700'
+                                                                                }`}
+                                                                            >
+                                                                                <Flame className={`w-3.5 h-3.5 ${isQueuePriority ? 'text-purple-600 fill-purple-600' : 'text-purple-500'}`} />
+                                                                                {isQueuePriority ? 'Remover Prioridade' : 'Prioridade'}
+                                                                            </button>
+
+                                                                            {isPriorityProcess ? (
+                                                                                <button
+                                                                                    onClick={(e) => {
+                                                                                        e.stopPropagation();
+                                                                                        handleClearPriority();
+                                                                                    }}
+                                                                                    className="w-full text-left px-2.5 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-lg flex items-center gap-2 cursor-pointer transition-colors mt-0.5"
+                                                                                >
+                                                                                    <X className="w-3.5 h-3.5" />
+                                                                                    Remover Destaque TV
+                                                                                </button>
+                                                                            ) : (
+                                                                                <button
+                                                                                    onClick={(e) => {
+                                                                                        e.stopPropagation();
+                                                                                        triggerVisualPriority('process', process.id);
+                                                                                    }}
+                                                                                    className="w-full text-left px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-amber-50 hover:text-amber-700 rounded-lg flex items-center gap-2 cursor-pointer transition-colors mt-0.5"
+                                                                                >
+                                                                                    <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                                                                                    Prioridade Visual (TV)
+                                                                                </button>
+                                                                            )}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+
+                                                                <span className="font-sans text-[11px] xl:text-xs 2xl:text-sm font-black text-blue-700 uppercase bg-blue-50 px-1.5 py-1 2xl:px-2 rounded-md border border-blue-200/90 w-full text-center line-clamp-2 break-words leading-tight shadow-2xs" title={`Protocolo: #${process.protocolo}`}>
+                                                                    {objetoResumidoMap[process.id] || process.objeto_resumido || `#${process.protocolo || process.id.slice(0, 8)}`}
+                                                                </span>
+                                                            </div>
+                                                        );
+                                                    }
+
+                                                    let regularCardClasses = 'bg-white border-slate-200/80 shadow-2xs hover:shadow-md';
+                                                    if (isPriorityProcess) {
+                                                        regularCardClasses = 'ring-4 ring-amber-400 border-amber-400 bg-amber-50 shadow-[0_0_20px_rgba(251,191,36,0.4)] scale-[1.02] z-20';
+                                                    } else if (isQueuePriority) {
+                                                        regularCardClasses = 'border-2 border-purple-500 bg-gradient-to-br from-purple-50/90 via-indigo-50/80 to-purple-50/90 animate-queue-pulse z-10';
+                                                    }
+
                                                     return (
                                                         <div
                                                             key={process.id}
-                                                            className={`group rounded-xl p-1.5 2xl:p-2 border transition-all duration-300 flex flex-col gap-1 2xl:gap-1.5 items-stretch cursor-default relative ${
-                                                                isPriorityProcess
-                                                                    ? 'ring-4 ring-amber-400 border-amber-400 bg-amber-50/90 shadow-[0_0_20px_rgba(251,191,36,0.4)] scale-[1.02] z-30'
-                                                                    : 'bg-white border-slate-200/80 shadow-2xs'
-                                                            }`}
+                                                            draggable={isCanManage}
+                                                            onDragStart={(e) => handleDragStart(e, process.id)}
+                                                            onClick={() => setSelectedProcessForDetails(process)}
+                                                            className={`group rounded-xl p-2.5 border transition-all duration-200 cursor-pointer relative overflow-hidden flex flex-col gap-1.5 active:scale-[0.99] ${regularCardClasses}`}
                                                         >
                                                             {isPriorityProcess && (
-                                                                <div className="bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 px-2 py-0.5 rounded-md text-[8px] 2xl:text-[9px] font-black flex items-center justify-center gap-1 shadow-xs uppercase tracking-wider animate-bounce">
-                                                                    <Zap className="w-2.5 h-2.5 fill-slate-950 text-slate-950" /> Prioridade de Sala
+                                                                <div className="bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 px-2 py-1 rounded-lg text-[10px] font-black flex items-center justify-between shadow-xs uppercase tracking-wider">
+                                                                    <span className="flex items-center gap-1">
+                                                                        <Zap className="w-3.5 h-3.5 fill-slate-950 text-slate-950 shrink-0" />
+                                                                        Na Sala (TV)
+                                                                    </span>
+                                                                    <button
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            handleClearPriority();
+                                                                        }}
+                                                                        className="bg-slate-950 hover:bg-slate-900 text-rose-400 hover:text-white px-2 py-0.5 rounded-md text-[10px] font-black flex items-center gap-1 transition-all cursor-pointer shadow-xs shrink-0 active:scale-95"
+                                                                        title="Desativar Visualização na Sala"
+                                                                    >
+                                                                        <X className="w-3 h-3 text-rose-400" /> Desativar
+                                                                    </button>
                                                                 </div>
                                                             )}
 
-                                                            <div className="flex items-center justify-between gap-1">
-                                                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] xl:text-[10px] 2xl:text-[11px] font-extrabold text-amber-800 bg-amber-50 border border-amber-200/80 rounded-md shrink-0 shadow-2xs">
-                                                                    <Clock className="w-2.5 h-2.5 2xl:w-3 2xl:h-3 text-amber-600 shrink-0" />
-                                                                    <span className="whitespace-nowrap">{getDaysElapsed(process.criado_em)}</span>
+                                                            {isQueuePriority && !isPriorityProcess && (
+                                                                <div className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-2 py-0.5 rounded-md text-[9px] font-black flex items-center gap-1 shadow-2xs uppercase tracking-wider w-fit">
+                                                                    <Flame className="w-3 h-3 fill-white text-white shrink-0" /> Prioridade
+                                                                </div>
+                                                            )}
+
+                                                            <div className="flex items-center justify-between relative">
+                                                                <span className="font-sans text-xs sm:text-sm font-black text-blue-700 uppercase bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200/90 line-clamp-2 break-words leading-tight shadow-2xs" title={`Protocolo: #${process.protocolo}`}>
+                                                                    {objetoResumidoMap[process.id] || process.objeto_resumido || `#${process.protocolo || process.id.slice(0, 8)}`}
                                                                 </span>
 
                                                                 <button
@@ -1019,21 +1312,34 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                                                                         setOpenCardMenu(openCardMenu === process.id ? null : process.id);
                                                                         setOpenPhaseMenu(null);
                                                                     }}
-                                                                    className="w-5 h-5 rounded hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-700 transition-colors cursor-pointer shrink-0"
-                                                                    title="Opções do Card"
+                                                                    className="w-6 h-6 rounded-md hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-700 transition-colors cursor-pointer shrink-0"
+                                                                    title="Opções do Processo"
                                                                 >
-                                                                    <MoreHorizontal className="w-3 h-3" />
+                                                                    <MoreHorizontal className="w-3.5 h-3.5" />
                                                                 </button>
 
                                                                 {openCardMenu === process.id && (
-                                                                    <div className="absolute right-1 top-7 z-50 w-48 bg-white border border-slate-200 shadow-xl rounded-xl p-1 text-slate-800 animate-in fade-in zoom-in-95">
+                                                                    <div className="absolute right-0 top-7 z-50 w-48 bg-white border border-slate-200 shadow-xl rounded-xl p-1 text-slate-800 animate-in fade-in zoom-in-95">
+                                                                        <button
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                toggleQueuePriority(process.id);
+                                                                            }}
+                                                                            className={`w-full text-left px-2.5 py-1.5 text-xs font-bold rounded-lg flex items-center gap-2 cursor-pointer transition-colors ${
+                                                                                isQueuePriority ? 'text-purple-700 bg-purple-50 hover:bg-purple-100' : 'text-slate-700 hover:bg-purple-50 hover:text-purple-700'
+                                                                            }`}
+                                                                        >
+                                                                            <Flame className={`w-3.5 h-3.5 ${isQueuePriority ? 'text-purple-600 fill-purple-600' : 'text-purple-500'}`} />
+                                                                            {isQueuePriority ? 'Remover Prioridade Fila' : 'Prioridade Fila'}
+                                                                        </button>
+
                                                                         {isPriorityProcess ? (
                                                                             <button
                                                                                 onClick={(e) => {
                                                                                     e.stopPropagation();
                                                                                     handleClearPriority();
                                                                                 }}
-                                                                                className="w-full text-left px-2.5 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-lg flex items-center gap-2 cursor-pointer transition-colors"
+                                                                                className="w-full text-left px-2.5 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-lg flex items-center gap-2 cursor-pointer transition-colors mt-0.5"
                                                                             >
                                                                                 <X className="w-3.5 h-3.5" />
                                                                                 Remover Destaque TV
@@ -1044,7 +1350,7 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                                                                                     e.stopPropagation();
                                                                                     triggerVisualPriority('process', process.id);
                                                                                 }}
-                                                                                className="w-full text-left px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-amber-50 hover:text-amber-700 rounded-lg flex items-center gap-2 cursor-pointer transition-colors"
+                                                                                className="w-full text-left px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-amber-50 hover:text-amber-700 rounded-lg flex items-center gap-2 cursor-pointer transition-colors mt-0.5"
                                                                             >
                                                                                 <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
                                                                                 Prioridade Visual (TV)
@@ -1054,100 +1360,16 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                                                                 )}
                                                             </div>
 
-                                                            <span className="font-sans text-[11px] xl:text-xs 2xl:text-sm font-black text-blue-700 uppercase bg-blue-50 px-1.5 py-1 2xl:px-2 rounded-md border border-blue-200/90 w-full text-center line-clamp-2 break-words leading-tight shadow-2xs" title={`Protocolo: #${process.protocolo}`}>
-                                                                {objetoResumidoMap[process.id] || process.objeto_resumido || `#${process.protocolo || process.id.slice(0, 8)}`}
-                                                            </span>
+                                                            <div className="flex items-center gap-1.5 text-xs text-slate-600 bg-slate-50/80 p-1.5 rounded-lg border border-slate-100">
+                                                                <UserIcon className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                                                <div className="truncate text-[11px]">
+                                                                    <span className="font-bold text-slate-800 block truncate leading-tight">{process.solicitante_nome}</span>
+                                                                    <span className="text-slate-500 font-medium block truncate text-[10px] leading-tight mt-0.5">{process.solicitante_setor}</span>
+                                                                </div>
+                                                            </div>
                                                         </div>
                                                     );
-                                                }
-
-                                                return (
-                                                    <div
-                                                        key={process.id}
-                                                        draggable={isCanManage}
-                                                        onDragStart={(e) => handleDragStart(e, process.id)}
-                                                        onClick={() => setSelectedProcessForDetails(process)}
-                                                        className={`group rounded-xl p-2.5 border transition-all duration-200 cursor-pointer relative overflow-hidden flex flex-col gap-1.5 active:scale-[0.99] ${
-                                                            isPriorityProcess
-                                                                ? 'ring-4 ring-amber-400 border-amber-400 bg-amber-50 shadow-[0_0_20px_rgba(251,191,36,0.4)] scale-[1.02] z-20'
-                                                                : 'bg-white border-slate-200/80 shadow-2xs hover:shadow-md'
-                                                        }`}
-                                                    >
-                                                        {isPriorityProcess && (
-                                                            <div className="bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 px-2 py-1 rounded-lg text-[10px] font-black flex items-center justify-between shadow-xs uppercase tracking-wider">
-                                                                <span className="flex items-center gap-1">
-                                                                    <Zap className="w-3.5 h-3.5 fill-slate-950 text-slate-950 shrink-0" />
-                                                                    Na Sala (TV)
-                                                                </span>
-                                                                <button
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        handleClearPriority();
-                                                                    }}
-                                                                    className="bg-slate-950 hover:bg-slate-900 text-rose-400 hover:text-white px-2 py-0.5 rounded-md text-[10px] font-black flex items-center gap-1 transition-all cursor-pointer shadow-xs shrink-0 active:scale-95"
-                                                                    title="Desativar Visualização na Sala"
-                                                                >
-                                                                    <X className="w-3 h-3 text-rose-400" /> Desativar
-                                                                </button>
-                                                            </div>
-                                                        )}
-
-                                                        <div className="flex items-center justify-between relative">
-                                                            <span className="font-sans text-xs sm:text-sm font-black text-blue-700 uppercase bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200/90 line-clamp-2 break-words leading-tight shadow-2xs" title={`Protocolo: #${process.protocolo}`}>
-                                                                {objetoResumidoMap[process.id] || process.objeto_resumido || `#${process.protocolo || process.id.slice(0, 8)}`}
-                                                            </span>
-
-                                                            <button
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    setOpenCardMenu(openCardMenu === process.id ? null : process.id);
-                                                                    setOpenPhaseMenu(null);
-                                                                }}
-                                                                className="w-6 h-6 rounded-md hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
-                                                                title="Opções do Processo"
-                                                            >
-                                                                <MoreHorizontal className="w-3.5 h-3.5" />
-                                                            </button>
-
-                                                            {openCardMenu === process.id && (
-                                                                <div className="absolute right-0 top-7 z-50 w-48 bg-white border border-slate-200 shadow-xl rounded-xl p-1 text-slate-800 animate-in fade-in zoom-in-95">
-                                                                    {isPriorityProcess ? (
-                                                                        <button
-                                                                            onClick={(e) => {
-                                                                                e.stopPropagation();
-                                                                                handleClearPriority();
-                                                                            }}
-                                                                            className="w-full text-left px-2.5 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-lg flex items-center gap-2 cursor-pointer transition-colors"
-                                                                        >
-                                                                            <X className="w-3.5 h-3.5" />
-                                                                            Remover Destaque TV
-                                                                        </button>
-                                                                    ) : (
-                                                                        <button
-                                                                            onClick={(e) => {
-                                                                                e.stopPropagation();
-                                                                                triggerVisualPriority('process', process.id);
-                                                                            }}
-                                                                            className="w-full text-left px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-amber-50 hover:text-amber-700 rounded-lg flex items-center gap-2 cursor-pointer transition-colors"
-                                                                        >
-                                                                            <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
-                                                                            Prioridade Visual (TV)
-                                                                        </button>
-                                                                    )}
-                                                                </div>
-                                                            )}
-                                                        </div>
-
-                                                        <div className="flex items-center gap-1.5 text-xs text-slate-600 bg-slate-50/80 p-1.5 rounded-lg border border-slate-100">
-                                                            <UserIcon className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                                                            <div className="truncate text-[11px]">
-                                                                <span className="font-bold text-slate-800 block truncate leading-tight">{process.solicitante_nome}</span>
-                                                                <span className="text-slate-500 font-medium block truncate text-[10px] leading-tight mt-0.5">{process.solicitante_setor}</span>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })
+                                                })
                                         )}
                                     </ColumnScrollContainer>
                                 </div>
