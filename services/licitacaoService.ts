@@ -117,7 +117,10 @@ export const updateLicitacaoProcess = async (id: string, updates: Partial<Licita
             throw error;
         }
         return data as LicitacaoProcesso;
-    } catch (error) {
+    } catch (error: any) {
+        if (error?.code === '23514' && error?.message?.includes('licitacao_processos_status_check')) {
+            console.error("Erro 23514: A restrição CHECK do banco no Supabase precisa ser atualizada para aceitar o status 'Finalizado'. Execute o script SQL no Supabase Editor.");
+        }
         console.error("Error updating licitacao process:", error);
         throw error;
     }

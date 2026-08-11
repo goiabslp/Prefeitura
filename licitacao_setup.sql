@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS public.licitacao_processos (
     solicitante_nome TEXT NOT NULL,
     solicitante_cargo TEXT NOT NULL,
     solicitante_setor TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'Rascunho' CHECK (status IN ('Rascunho', 'Aguardando Assinatura', 'Assinado', 'Em Análise', 'Concluído', 'Rejeitado')),
+    status TEXT NOT NULL DEFAULT 'Rascunho' CHECK (status IN ('Rascunho', 'Aguardando Assinatura', 'Assinado', 'Em Análise', 'Concluído', 'Finalizado', 'Rejeitado')),
     criado_por UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     criado_em TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     atualizado_em TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
@@ -20,6 +20,8 @@ CREATE TABLE IF NOT EXISTS public.licitacao_processos (
 -- Garantir colunas adicionais caso a tabela já existisse previamente
 ALTER TABLE public.licitacao_processos ADD COLUMN IF NOT EXISTS fase TEXT;
 ALTER TABLE public.licitacao_processos ADD COLUMN IF NOT EXISTS checkin_finalizado JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE public.licitacao_processos DROP CONSTRAINT IF EXISTS licitacao_processos_status_check;
+ALTER TABLE public.licitacao_processos ADD CONSTRAINT licitacao_processos_status_check CHECK (status IN ('Rascunho', 'Aguardando Assinatura', 'Assinado', 'Em Análise', 'Concluído', 'Finalizado', 'Rejeitado'));
 
 -- Tabela: licitacao_itens
 CREATE TABLE IF NOT EXISTS public.licitacao_itens (
