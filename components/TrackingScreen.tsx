@@ -387,7 +387,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
 
     const isAdmin = currentUser.role === 'admin';
     const isComprasUser = currentUser.role === 'compras';
-    const isLicitacaoUser = currentUser.role === 'licitacao';
+    const isLicitacaoUser = currentUser.role === 'licitacao' || (currentUser.permissions as string[])?.includes('parent_licitacao_processos') || (currentUser.permissions as string[])?.includes('parent_licitacao') || (currentUser.permissions as string[])?.includes('licitacao') || currentUser.sector?.toLowerCase().includes('licitação') || currentUser.sector?.toLowerCase().includes('licitacao');
     const isCompras = activeBlock === 'compras';
 
     const getStatusBadge = (status: Order['status']) => {
@@ -1156,7 +1156,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                                 );
                                                             })()}
                                                         </div>
-                                                        <div className="md:col-span-1 flex items-center justify-start cursor-pointer" onClick={() => isAdmin && setStatusSelectionOrder(order)}>
+                                                        <div className={`md:col-span-1 flex items-center justify-start ${(isAdmin || isLicitacaoUser) ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}`} onClick={() => (isAdmin || isLicitacaoUser) && setStatusSelectionOrder(order)} title={(isAdmin || isLicitacaoUser) ? 'Clique para alterar o status do processo' : undefined}>
                                                             {getStatusBadge(order.status)}
                                                         </div>
                                                         {(() => {
