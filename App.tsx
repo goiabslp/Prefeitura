@@ -175,11 +175,11 @@ const VIEW_TO_PATH: Record<string, string> = {
   'marketing': '/Marketing',
   'marketing:new': '/Marketing/Novo',
   'marketing:details': '/Marketing/Detalhes',
-  'licitacao': '/Licitação',
-  'licitacao:new': '/Licitação/NovoPedido',
-  'licitacao:details': '/Licitação/MeusProcessos',
-  'licitacao:kanban': '/Licitação/Kanban',
-  'licitacao:kanban-view': '/Licitação/Kanban/view',
+  'licitacao': '/Licitacao',
+  'licitacao:new': '/Licitacao/NovoPedido',
+  'licitacao:details': '/Licitacao/MeusProcessos',
+  'licitacao:kanban': '/Licitacao/Kanban',
+  'licitacao:kanban-view': '/Licitacao/Kanban/view',
   'consultas': '/Consultas',
   'consultas:novo-agendamento': '/Consultas/NovoAgendamento',
   'consultas:novo-agendamento-paciente': '/Consultas/NovoAgendamento/Paciente',
@@ -1236,7 +1236,7 @@ const App: React.FC = () => {
       }
     };
 
-    // Restore state from URL once auth is ready (supports public TV views like /Licitação/Kanban/view)
+    // Restore state from URL once auth is ready (supports public TV views like /Licitacao/Kanban/view)
     if (!authLoading) {
       restoreStateFromUrl();
       if (currentUser) {
@@ -4340,7 +4340,7 @@ const App: React.FC = () => {
                   if (block === 'licitacao') {
                     setCurrentView('licitacao');
                     setActiveBlock(null);
-                    window.history.pushState({}, '', '/Licitação');
+                    window.history.pushState({}, '', '/Licitacao');
                     return;
                   }
                   setActiveBlock(block);
@@ -4576,11 +4576,11 @@ const App: React.FC = () => {
               <LicitacaoDashboard
                 onNavigate={(view) => {
                   setCurrentView(view as any);
-                  let path = '/Licitação';
-                  if (view === 'licitacao:new') path = '/Licitação/NovoPedido';
-                  else if (view === 'licitacao:details') path = '/Licitação/MeusProcessos';
-                  else if (view === 'licitacao:kanban') path = '/Licitação/Kanban';
-                  else if (view === 'licitacao:kanban-view') path = '/Licitação/Kanban/view';
+                  let path = '/Licitacao';
+                  if (view === 'licitacao:new') path = '/Licitacao/NovoPedido';
+                  else if (view === 'licitacao:details') path = '/Licitacao/MeusProcessos';
+                  else if (view === 'licitacao:kanban') path = '/Licitacao/Kanban';
+                  else if (view === 'licitacao:kanban-view') path = '/Licitacao/Kanban/view';
                   window.history.pushState({}, '', path);
                 }}
                 onBack={() => {
@@ -4596,7 +4596,7 @@ const App: React.FC = () => {
                 currentUser={currentUser!}
                 onBack={() => {
                   setCurrentView('licitacao');
-                  window.history.pushState({}, '', '/Licitação');
+                  window.history.pushState({}, '', '/Licitacao');
                 }}
               />
             )}
@@ -4608,7 +4608,7 @@ const App: React.FC = () => {
                 readOnly={true}
                 onBack={() => {
                   setCurrentView('licitacao');
-                  window.history.pushState({}, '', '/Licitação/MeusProcessos');
+                  window.history.pushState({}, '', '/Licitacao/MeusProcessos');
                 }}
               />
             )}
@@ -4617,7 +4617,7 @@ const App: React.FC = () => {
               <TrackingScreen
                 onBack={() => {
                   setCurrentView('licitacao');
-                  window.history.pushState({}, '', '/Licitação');
+                  window.history.pushState({}, '', '/Licitacao');
                 }}
                 currentUser={currentUser}
                 activeBlock="licitacao"
@@ -4658,7 +4658,7 @@ const App: React.FC = () => {
                 isViewOnly={currentView === 'licitacao:kanban-view'}
                 onBack={() => {
                   setCurrentView('licitacao');
-                  window.history.pushState({}, '', '/Licitação');
+                  window.history.pushState({}, '', '/Licitacao');
                 }}
               />
             )}

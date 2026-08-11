@@ -801,7 +801,7 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                     <Zap className="w-5 h-5 text-amber-400 fill-amber-400 animate-bounce shrink-0" />
                     <div>
                         <h5 className="font-bold text-xs">Prioridade Visual Transmitida!</h5>
-                        <p className="text-[11px] text-slate-300">Exibindo agora na tela da sala (/Licitação/Kanban/view)</p>
+                        <p className="text-[11px] text-slate-300">Exibindo agora na tela da sala (/Licitacao/Kanban/view)</p>
                     </div>
                 </div>
             )}
