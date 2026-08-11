@@ -18,6 +18,7 @@ import { supabase } from '../../services/supabaseClient';
 
 interface LicitacaoKanbanProps {
     currentUser: User;
+    users?: User[];
     onBack: () => void;
     isViewOnly?: boolean;
 }
@@ -119,7 +120,7 @@ export const LICITACAO_PHASES: PhaseConfig[] = [
     }
 ];
 
-export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, onBack, isViewOnly = false }) => {
+export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, users: usersProp = [], onBack, isViewOnly = false }) => {
     const { data: processes = [], isLoading } = useLicitacaoProcesses();
     const updateMutation = useUpdateLicitacaoProcess();
 
@@ -137,14 +138,9 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
 
     const channelRef = useRef<any>(null);
 
-    const [activePriority, setActivePriority] = useState<{ type: 'process' | 'phase'; processId?: string; phaseId?: string; timestamp: number } | null>(() => {
-        try {
-            const saved = localStorage.getItem('licitacao_prioridade_visual');
-            return saved ? JSON.parse(saved) : null;
-        } catch {
-            return null;
-        }
-    });
+    const [activePriority, setActivePriority] = useState<{ type: 'process' | 'phase'; processId?: string; phaseId?: string; timestamp: number } | null>(null);
+    const [showPriorityToast, setShowPriorityToast] = useState(false);
+    const [priorityToastText, setPriorityToastText] = useState('');
 
     const [queuePriorityIds, setQueuePriorityIds] = useState<string[]>(() => {
         try {
@@ -163,6 +159,124 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
             return [];
         }
     });
+
+    const [processAssignments, setProcessAssignments] = useState<Record<string, { userId: string; userName: string }>>(() => {
+        try {
+            const saved = localStorage.getItem('licitacao_process_assignments');
+            return saved ? JSON.parse(saved) : {};
+        } catch {
+            return {};
+        }
+    });
+
+    const [allUsers, setAllUsers] = useState<User[]>([]);
+
+    useEffect(() => {
+        const fetchUsers = async () => {
+            try {
+                const { data } = await supabase.from('users').select('*');
+                if (data && data.length > 0) {
+                    setAllUsers(data as User[]);
+                }
+            } catch (e) {
+                console.warn('Erro ao carregar usuários:', e);
+            }
+        };
+        fetchUsers();
+    }, []);
+
+    const licitacaoUsers = useMemo(() => {
+        const combinedMap = new Map<string, User>();
+        if (usersProp) {
+            usersProp.forEach(u => { if (u && u.name) combinedMap.set(u.id || u.name, u); });
+        }
+        if (allUsers) {
+            allUsers.forEach(u => { if (u && u.name) combinedMap.set(u.id || u.name, u); });
+        }
+        if (currentUser && currentUser.id && currentUser.name) {
+            combinedMap.set(currentUser.id, currentUser);
+        }
+        const list = Array.from(combinedMap.values());
+        return list.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    }, [allUsers, usersProp, currentUser]);
+
+    const handleAssignUser = async (processId: string, userId: string, userName: string) => {
+        const updated = {
+            ...processAssignments,
+            [processId]: { userId, userName }
+        };
+        setProcessAssignments(updated);
+        try {
+            localStorage.setItem('licitacao_process_assignments', JSON.stringify(updated));
+        } catch (e) {}
+
+        if (channelRef.current) {
+            channelRef.current.send({
+                type: 'broadcast',
+                event: 'licitacao-assignment-updated',
+                payload: updated
+            });
+        }
+
+        try {
+            const { data: orgData } = await supabase
+                .from('organization_settings')
+                .select('ui_config')
+                .eq('id', 'global_config')
+                .single();
+            const currentUi = orgData?.ui_config || {};
+            await supabase
+                .from('organization_settings')
+                .update({
+                    ui_config: { ...currentUi, licitacao_process_assignments: updated },
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', 'global_config');
+        } catch (e) {
+            console.warn('Erro ao persistir atribuição:', e);
+        }
+    };
+
+    const [selectedProcessId, setSelectedProcessId] = useState<string | null>(() => {
+        if (typeof window !== 'undefined') {
+            const path = window.location.pathname;
+            const match = path.match(/\/Licitacao\/Kanban\/([^\/]+)/i);
+            if (match && match[1] && match[1].toLowerCase() !== 'view') {
+                return match[1];
+            }
+        }
+        return null;
+    });
+
+    useEffect(() => {
+        const handlePopState = () => {
+            if (typeof window !== 'undefined') {
+                const path = window.location.pathname;
+                const match = path.match(/\/Licitacao\/Kanban\/([^\/]+)/i);
+                if (match && match[1] && match[1].toLowerCase() !== 'view') {
+                    setSelectedProcessId(match[1]);
+                } else {
+                    setSelectedProcessId(null);
+                }
+            }
+        };
+        window.addEventListener('popstate', handlePopState);
+        return () => window.removeEventListener('popstate', handlePopState);
+    }, []);
+
+    const handleOpenProcessItemPage = (processId: string) => {
+        setSelectedProcessId(processId);
+        if (typeof window !== 'undefined') {
+            window.history.pushState({}, '', `/Licitacao/Kanban/${processId}`);
+        }
+    };
+
+    const handleCloseProcessItemPage = () => {
+        setSelectedProcessId(null);
+        if (typeof window !== 'undefined') {
+            window.history.pushState({}, '', '/Licitacao/Kanban');
+        }
+    };
 
     const [newApprovedModalProcess, setNewApprovedModalProcess] = useState<{
         id: string;
@@ -476,7 +590,7 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
         window.addEventListener('licitacao-queue-priority-updated', handleQueueLocalEvent);
         window.addEventListener('licitacao-new-process-approved', handleNewApprovedLocalEvent);
 
-        // 1. Busca prioridades iniciais e evento de aprovação em tempo real do banco
+        // 1. Busca prioridades de fila iniciais do banco
         const fetchDbPriority = async () => {
             try {
                 const { data } = await supabase
@@ -485,27 +599,6 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                     .eq('id', 'global_config')
                     .single();
                 if (data?.ui_config) {
-                    if (data.ui_config.latest_approved_licitacao_process) {
-                        const latest = data.ui_config.latest_approved_licitacao_process;
-                        const approvalTs = latest.approval_timestamp || (latest.aprovado_em ? new Date(latest.aprovado_em).getTime() : 0);
-                        if (approvalTs > lastProcessedApprovalTimeRef.current) {
-                            triggerModalForProcess(latest);
-                        }
-                    }
-
-                    if (data.ui_config.licitacao_prioridade_visual !== undefined) {
-                        const dbPriority = data.ui_config.licitacao_prioridade_visual;
-                        if (dbPriority) {
-                            try { localStorage.setItem('licitacao_prioridade_visual', JSON.stringify(dbPriority)); } catch (e) {}
-                        } else {
-                            try { localStorage.removeItem('licitacao_prioridade_visual'); } catch (e) {}
-                        }
-                        setActivePriority(prev => {
-                            if (JSON.stringify(prev) === JSON.stringify(dbPriority)) return prev;
-                            return dbPriority;
-                        });
-                    }
-
                     if (data.ui_config.licitacao_queue_priority_ids !== undefined) {
                         const dbQueue = data.ui_config.licitacao_queue_priority_ids || [];
                         try { localStorage.setItem('licitacao_queue_priority_ids', JSON.stringify(dbQueue)); } catch (e) {}
@@ -523,13 +616,21 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                             return dbRemoved;
                         });
                     }
+
+                    if (data.ui_config.licitacao_process_assignments !== undefined) {
+                        const dbAssign = data.ui_config.licitacao_process_assignments || {};
+                        try { localStorage.setItem('licitacao_process_assignments', JSON.stringify(dbAssign)); } catch (e) {}
+                        setProcessAssignments(prev => {
+                            if (JSON.stringify(prev) === JSON.stringify(dbAssign)) return prev;
+                            return dbAssign;
+                        });
+                    }
                 }
             } catch (e) {
                 console.warn('Erro ao carregar prioridade do banco:', e);
             }
         };
         fetchDbPriority();
-        const pollingInterval = setInterval(fetchDbPriority, 1500);
 
         // 2. Supabase Realtime Channel para Broadcast instantâneo e Postgres Changes (self: true para escutar própria aba)
         const channel = supabase.channel('licitacao_kanban_priority', { config: { broadcast: { self: true } } })
@@ -556,6 +657,12 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                     handleQueueSync(data.payload);
                 }
             })
+            .on('broadcast', { event: 'licitacao-assignment-updated' }, (data) => {
+                if (data.payload !== undefined) {
+                    try { localStorage.setItem('licitacao_process_assignments', JSON.stringify(data.payload)); } catch (e) {}
+                    setProcessAssignments(data.payload);
+                }
+            })
             .on('broadcast', { event: 'new-licitacao-process-approved' }, (data) => {
                 if (data.payload && data.payload.id) {
                     triggerModalForProcess(data.payload);
@@ -576,21 +683,6 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
             .on('postgres_changes', { event: '*', schema: 'public', table: 'organization_settings', filter: 'id=eq.global_config' }, (payload: any) => {
                 const newUi = payload.new?.ui_config;
                 if (newUi) {
-                    if (newUi.latest_approved_licitacao_process) {
-                        const latest = newUi.latest_approved_licitacao_process;
-                        const approvalTs = latest.approval_timestamp || (latest.aprovado_em ? new Date(latest.aprovado_em).getTime() : 0);
-                        if (approvalTs > lastProcessedApprovalTimeRef.current) {
-                            triggerModalForProcess(latest);
-                        }
-                    }
-                    if (newUi.licitacao_prioridade_visual !== undefined) {
-                        const dbPriority = newUi.licitacao_prioridade_visual;
-                        try {
-                            if (dbPriority) localStorage.setItem('licitacao_prioridade_visual', JSON.stringify(dbPriority));
-                            else localStorage.removeItem('licitacao_prioridade_visual');
-                        } catch (e) {}
-                        handleSync(dbPriority);
-                    }
                     if (newUi.licitacao_queue_priority_ids !== undefined || newUi.licitacao_removed_queue_priority_ids !== undefined) {
                         const dbQueue = newUi.licitacao_queue_priority_ids || [];
                         const dbRemoved = newUi.licitacao_removed_queue_priority_ids || [];
@@ -618,7 +710,6 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
         channelRef.current = channel;
 
         return () => {
-            clearInterval(pollingInterval);
             if (bc) {
                 try { bc.close(); } catch (e) {}
             }
@@ -710,8 +801,6 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
             console.warn('Erro ao salvar prioridade da fila no Supabase:', e);
         }
     };
-
-    const [showPriorityToast, setShowPriorityToast] = useState(false);
 
     const persistPriorityToDb = async (payload: any) => {
         try {
@@ -950,15 +1039,19 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
     const isCanManage = !isViewOnly && (currentUser.role === 'admin' || currentUser.role === 'licitacao' || currentUser.permissions?.includes('parent_licitacao_processos'));
 
     const getDaysElapsed = (createdAtStr?: string) => {
-        if (!createdAtStr) return '0 dias';
+        if (!createdAtStr) return '0 DIAS';
         const createdDate = new Date(createdAtStr);
-        if (isNaN(createdDate.getTime())) return '0 dias';
+        if (isNaN(createdDate.getTime())) return '0 DIAS';
+        
         const now = new Date();
-        const diffTime = Math.max(0, now.getTime() - createdDate.getTime());
-        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-        if (diffDays === 0) return 'Hoje';
-        if (diffDays === 1) return '1 dia';
-        return `${diffDays} dias`;
+        const cDate = new Date(createdDate.getFullYear(), createdDate.getMonth(), createdDate.getDate());
+        const tDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        
+        const diffTime = Math.max(0, tDate.getTime() - cDate.getTime());
+        const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+        
+        if (diffDays === 1) return '1 DIA';
+        return `${diffDays} DIAS`;
     };
 
     if (isViewOnly && activePriority) {
@@ -1206,6 +1299,212 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
         }
     }
 
+    if (selectedProcessId) {
+        const selectedProcess = processes.find(p => p.id === selectedProcessId);
+        if (!selectedProcess) {
+            return (
+                <div className="flex-1 flex flex-col items-center justify-center p-8 bg-[#F8FAFC] h-full">
+                    <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mb-3"></div>
+                    <p className="font-bold text-slate-600 text-sm">Carregando detalhes do processo...</p>
+                    <button
+                        onClick={handleCloseProcessItemPage}
+                        className="mt-4 px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-xl text-xs"
+                    >
+                        Voltar ao Kanban
+                    </button>
+                </div>
+            );
+        }
+
+        const assigned = processAssignments[selectedProcess.id];
+        const currentPhaseObj = LICITACAO_PHASES.find(p => p.id === (selectedProcess.fase || 'pendente')) || LICITACAO_PHASES[0];
+        const PhaseIcon = currentPhaseObj.icon;
+
+        return (
+            <div className="flex-1 flex flex-col font-sans bg-[#F8FAFC] h-full overflow-hidden relative z-10 animate-fade-in">
+                {/* Header da Página do Item (/Licitacao/Kanban/[id]) */}
+                <header className="bg-white border-b border-slate-200 px-4 md:px-8 py-3.5 shadow-xs shrink-0 z-20">
+                    <div className="max-w-6xl mx-auto flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-4">
+                            <button
+                                onClick={handleCloseProcessItemPage}
+                                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 flex items-center justify-center text-slate-600 transition-all shadow-xs group cursor-pointer shrink-0"
+                                title="Voltar ao Kanban"
+                            >
+                                <ArrowLeft className="w-5 h-5 group-hover:-translate-x-0.5 transition-transform" />
+                            </button>
+                            <div>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-xs font-black uppercase tracking-wider text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200">
+                                        Protocolo #{selectedProcess.protocolo || selectedProcess.id.slice(0, 8)}
+                                    </span>
+                                    <span className="text-xs font-extrabold text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200">
+                                        <Clock className="w-3 h-3 inline mr-1" />
+                                        {getDaysElapsed(selectedProcess.criado_em)}
+                                    </span>
+                                </div>
+                                <h1 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight mt-1">
+                                    Detalhes da Demanda no Kanban
+                                </h1>
+                            </div>
+                        </div>
+
+                        <button
+                            onClick={() => setSelectedProcessForDetails(selectedProcess)}
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-sm active:scale-95 shrink-0"
+                        >
+                            <Eye className="w-4 h-4" />
+                            Ver Documento Completo
+                        </button>
+                    </div>
+                </header>
+
+                {/* Conteúdo Principal da Página do Item */}
+                <div className="flex-1 overflow-y-auto p-4 md:p-8">
+                    <div className="max-w-6xl mx-auto space-y-6">
+                        
+                        {/* CARD 1: TÍTULO RESUMIDO E STATUS ATUAL */}
+                        <div className="bg-white border border-slate-200/90 rounded-2xl p-6 shadow-sm space-y-4">
+                            <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                                <span className="text-xs font-black uppercase text-slate-400 tracking-wider">
+                                    Título Resumido do Processo
+                                </span>
+                                <div className="flex items-center gap-2">
+                                    <div className={`p-1.5 px-3 rounded-xl border ${currentPhaseObj.badgeColor} flex items-center gap-2 text-xs font-black shadow-2xs`}>
+                                        <PhaseIcon className="w-4 h-4" />
+                                        <span>Status Atual: {currentPhaseObj.label}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <h2 className="text-xl md:text-2xl font-black text-blue-700 uppercase leading-snug bg-blue-50/70 p-4.5 rounded-xl border border-blue-200/90 shadow-2xs">
+                                {objetoResumidoMap[selectedProcess.id] || selectedProcess.objeto_resumido || `#${selectedProcess.protocolo || selectedProcess.id.slice(0, 8)}`}
+                            </h2>
+                        </div>
+
+                        {/* CARD 2: DEFINIR USUÁRIO RESPONSÁVEL COM SELECT MODERNO E BONITO */}
+                        <div className="bg-gradient-to-br from-indigo-900 via-slate-900 to-indigo-950 text-white rounded-2xl p-6 shadow-lg border border-indigo-500/40 relative overflow-hidden">
+                            <div className="relative z-10 space-y-4">
+                                <div className="flex items-center gap-3 border-b border-indigo-500/30 pb-3">
+                                    <div className="w-10 h-10 rounded-xl bg-indigo-500/20 text-indigo-300 flex items-center justify-center border border-indigo-400/30">
+                                        <UserIcon className="w-5 h-5" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-lg font-black text-white">
+                                            Definir Usuário Responsável (Com a Demanda)
+                                        </h3>
+                                        <p className="text-xs text-indigo-200/80">
+                                            Selecione o membro da equipe de Licitação atribuído para conduzir este processo.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {/* SELECT MODERNO PARA USUÁRIOS DO TIPO LICITAÇÃO */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center pt-2">
+                                    <div className="space-y-1.5">
+                                        <label className="text-xs font-black uppercase text-indigo-300 tracking-wider block">
+                                            Selecione o Usuário (Licitação)
+                                        </label>
+                                        <div className="relative">
+                                            <select
+                                                value={assigned?.userId || ''}
+                                                onChange={(e) => {
+                                                    const val = e.target.value;
+                                                    if (!val) {
+                                                        handleAssignUser(selectedProcess.id, '', '');
+                                                    } else {
+                                                        const targetU = licitacaoUsers.find(u => u.id === val);
+                                                        if (targetU) {
+                                                            handleAssignUser(selectedProcess.id, targetU.id, targetU.name);
+                                                        }
+                                                    }
+                                                }}
+                                                className="w-full bg-slate-950/90 border-2 border-indigo-400/50 hover:border-indigo-400 focus:border-amber-400 text-white rounded-xl px-4 py-3 text-sm font-bold shadow-inner outline-none transition-all cursor-pointer appearance-none pr-10"
+                                            >
+                                                <option value="" className="bg-slate-900 text-slate-400">-- Nenhum usuário atribuído --</option>
+                                                {licitacaoUsers.map(u => (
+                                                    <option key={u.id} value={u.id} className="bg-slate-900 text-white font-medium py-1">
+                                                        {u.name} ({u.jobTitle || u.role || 'Licitação'})
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            <ChevronRight className="w-5 h-5 text-indigo-400 absolute right-3 top-1/2 -translate-y-1/2 rotate-90 pointer-events-none" />
+                                        </div>
+                                    </div>
+
+                                    {/* STATUS DE ATRIBUIÇÃO ATUAL */}
+                                    <div className="bg-slate-950/60 border border-indigo-500/30 rounded-xl p-3.5 flex items-center gap-3">
+                                        {assigned?.userName ? (
+                                            <>
+                                                <div className="w-10 h-10 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-black flex items-center justify-center text-sm shadow-md shrink-0 uppercase">
+                                                    {assigned.userName.trim().slice(0, 2)}
+                                                </div>
+                                                <div className="min-w-0 flex-1">
+                                                    <span className="text-[10px] font-black uppercase text-emerald-400 tracking-wider block">
+                                                        Demanda Atribuída a
+                                                    </span>
+                                                    <span className="text-sm font-black text-white block truncate">
+                                                        {assigned.userName}
+                                                    </span>
+                                                </div>
+                                                <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2.5 py-1 rounded-full text-xs font-black shrink-0">
+                                                    Ativo
+                                                </span>
+                                            </>
+                                        ) : (
+                                            <div className="text-slate-400 text-xs font-medium flex items-center gap-2">
+                                                <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+                                                <span>Nenhum usuário definido com esta demanda ainda.</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* CARD 3: OBJETO COMPLETO, SOLICITANTE E SETOR */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            {/* OBJETO COMPLETO */}
+                            <div className="md:col-span-2 bg-white border border-slate-200/90 rounded-2xl p-6 shadow-sm space-y-3">
+                                <div className="flex items-center gap-2 text-slate-500 border-b border-slate-100 pb-3">
+                                    <FileText className="w-4 h-4 text-indigo-600" />
+                                    <span className="text-xs font-black uppercase tracking-wider text-slate-700">Objeto Detalhado / Finalidade</span>
+                                </div>
+                                <p className="text-slate-800 text-sm md:text-base font-medium leading-relaxed whitespace-pre-line">
+                                    {selectedProcess.finalidade || 'Nenhuma finalidade descrita.'}
+                                </p>
+                            </div>
+
+                            {/* SOLICITANTE & SETOR */}
+                            <div className="bg-white border border-slate-200/90 rounded-2xl p-6 shadow-sm space-y-4">
+                                <div className="flex items-center gap-2 text-slate-500 border-b border-slate-100 pb-3">
+                                    <Landmark className="w-4 h-4 text-indigo-600" />
+                                    <span className="text-xs font-black uppercase tracking-wider text-slate-700">Solicitante & Setor</span>
+                                </div>
+
+                                <div className="space-y-3">
+                                    <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+                                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">Solicitante</span>
+                                        <span className="text-sm font-black text-slate-800 block mt-0.5">{selectedProcess.solicitante_nome}</span>
+                                        {selectedProcess.solicitante_cargo && (
+                                            <span className="text-xs font-medium text-slate-500 block mt-0.5">{selectedProcess.solicitante_cargo}</span>
+                                        )}
+                                    </div>
+
+                                    <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+                                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">Setor Solicitante</span>
+                                        <span className="text-sm font-black text-indigo-700 block mt-0.5">{selectedProcess.solicitante_setor}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     if (selectedProcessForDetails) {
         return (
             <LicitacaoWizard
@@ -1342,14 +1641,14 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                 </div>
             )}
 
-            <div className={`flex-1 min-h-0 flex flex-col ${isViewOnly ? 'w-full h-full p-1.5 md:p-3 2xl:p-4 overflow-hidden' : 'overflow-x-auto p-4 md:p-6 scrollbar-thin scrollbar-thumb-slate-300'}`}>
+            <div className="flex-1 min-h-0 flex flex-col w-full h-full p-1.5 md:p-2 xl:p-2.5 2xl:p-3 overflow-hidden">
                 {isLoading ? (
                     <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-3">
                         <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
                         <p className="font-bold text-sm">Carregando quadro Kanban...</p>
                     </div>
                 ) : (
-                    <div className={`h-full min-h-0 ${isViewOnly ? 'grid grid-cols-5 gap-2 md:gap-3 2xl:gap-4 w-full h-full items-stretch overflow-hidden min-w-0' : 'flex gap-4 min-w-max items-start'}`}>
+                    <div className="h-full min-h-0 grid grid-cols-5 gap-1.5 md:gap-2 xl:gap-2.5 2xl:gap-3 w-full h-full items-stretch overflow-hidden min-w-0 flex-1">
                         {LICITACAO_PHASES.map((phase, idx) => {
                             const columnProcesses = processesByPhase[phase.id] || [];
                             const IconComponent = phase.icon;
@@ -1362,56 +1661,54 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                                     onDragOver={(e) => handleDragOver(e, phase.id)}
                                     onDragLeave={handleDragLeave}
                                     onDrop={(e) => handleDrop(e, phase.id)}
-                                    className={`flex flex-col h-full min-h-0 overflow-hidden rounded-2xl border transition-all duration-300 ${
+                                    className={`flex flex-col h-full min-h-0 overflow-hidden rounded-xl xl:rounded-2xl border transition-all duration-300 w-full min-w-0 flex-1 max-h-full ${
                                         isPriorityPhase
                                             ? 'ring-4 ring-amber-400 border-amber-400 bg-amber-500/10 shadow-[0_0_30px_rgba(251,191,36,0.35)] scale-[1.01] z-20'
                                             : `${phase.columnBg} ${phase.borderTopColor} border-t-4 border-slate-200/90 shadow-xs`
-                                    } ${
-                                        isViewOnly ? 'w-full min-w-0 h-full max-h-full flex-1' : 'w-[320px] max-h-full'
                                     } ${isOver ? 'ring-2 ring-indigo-500 ring-offset-2 bg-indigo-50/50' : ''}`}
                                 >
-                                    <div className={`border-b rounded-t-xl flex items-center justify-between sticky top-0 z-10 text-white shadow-xs ${
+                                    <div className={`border-b rounded-t-xl flex items-center justify-between sticky top-0 z-10 text-white shadow-xs min-h-[42px] md:min-h-[46px] xl:min-h-[50px] 2xl:min-h-[56px] py-1 px-2 xl:px-2.5 ${
                                         isPriorityPhase
                                             ? 'bg-gradient-to-r from-amber-600 via-amber-500 to-amber-600 border-amber-400'
                                             : 'bg-slate-900 border-slate-700/60'
-                                    } ${
-                                        isViewOnly ? 'min-h-[58px] xl:min-h-[64px] 2xl:min-h-[72px] py-1.5 px-2 xl:px-3' : 'h-[60px] min-h-[60px] px-3 md:px-4'
                                     }`}>
-                                        <div className="flex items-center gap-1.5 xl:gap-2.5 min-w-0 flex-1 py-0.5">
-                                            <div className={`p-1.5 xl:p-2 rounded-xl border shrink-0 ${isPriorityPhase ? 'bg-amber-400 text-amber-950 border-amber-300' : phase.badgeColor}`}>
-                                                <IconComponent className="w-4 h-4 xl:w-5 xl:h-5 2xl:w-6 2xl:h-6" />
+                                        <div className="flex items-center gap-1.5 xl:gap-2 min-w-0 flex-1 py-0.5">
+                                            <div className={`p-1 xl:p-1.5 2xl:p-2 rounded-lg border shrink-0 ${isPriorityPhase ? 'bg-amber-400 text-amber-950 border-amber-300' : phase.badgeColor}`}>
+                                                <IconComponent className="w-3.5 h-3.5 xl:w-4 xl:h-4 2xl:w-5 2xl:h-5" />
                                             </div>
                                             <div className="min-w-0 flex-1 flex flex-col justify-center">
                                                 <div className="flex items-center gap-1">
-                                                    <h3 className="font-black text-white text-xs sm:text-sm xl:text-base 2xl:text-lg 3xl:text-xl tracking-tight leading-tight whitespace-normal break-normal [word-break:normal] [overflow-wrap:normal] hyphens-none drop-shadow-sm">
+                                                    <h3 className="font-black text-white text-xs xl:text-sm 2xl:text-base tracking-tight leading-tight whitespace-normal break-normal [word-break:normal] [overflow-wrap:normal] hyphens-none drop-shadow-sm">
                                                         {phase.label}
                                                     </h3>
                                                 </div>
                                             </div>
                                         </div>
 
-                                        <div className="flex items-center gap-1.5 relative shrink-0">
+                                        <div className="flex items-center gap-1 xl:gap-1.5 relative shrink-0">
                                             {isPriorityPhase && (
-                                                <span className="px-2 py-0.5 rounded-full text-[9px] xl:text-[10px] 2xl:text-xs font-black bg-amber-300 text-amber-950 flex items-center gap-0.5 shadow-md animate-bounce">
-                                                    <Zap className="w-3 h-3 fill-amber-950 text-amber-950" /> DESTAQUE
+                                                <span className="px-1.5 py-0.5 rounded-full text-[8px] xl:text-[9px] 2xl:text-xs font-black bg-amber-300 text-amber-950 flex items-center gap-0.5 shadow-md animate-bounce">
+                                                    <Zap className="w-2.5 h-2.5 xl:w-3 xl:h-3 fill-amber-950 text-amber-950" /> DESTAQUE
                                                 </span>
                                             )}
 
-                                            <span className="px-2 py-0.5 rounded-full text-xs xl:text-sm 2xl:text-base font-black bg-slate-800 text-slate-100 border border-slate-700 shadow-inner min-w-[24px] text-center">
+                                            <span className="px-1.5 py-0.5 xl:px-2 xl:py-0.5 rounded-full text-xs xl:text-sm font-black bg-slate-800 text-slate-100 border border-slate-700 shadow-inner min-w-[20px] xl:min-w-[24px] text-center">
                                                 {columnProcesses.length}
                                             </span>
 
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    setOpenPhaseMenu(openPhaseMenu === phase.id ? null : phase.id);
-                                                    setOpenCardMenu(null);
-                                                }}
-                                                className="w-6 h-6 xl:w-7 xl:h-7 rounded-lg hover:bg-slate-800 flex items-center justify-center text-slate-400 hover:text-white transition-colors cursor-pointer"
-                                                title="Opções da Fase"
-                                            >
-                                                <MoreHorizontal className="w-3.5 h-3.5" />
-                                            </button>
+                                            {!isViewOnly && (
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setOpenPhaseMenu(openPhaseMenu === phase.id ? null : phase.id);
+                                                        setOpenCardMenu(null);
+                                                    }}
+                                                    className="w-5 h-5 xl:w-6 xl:h-6 rounded-md hover:bg-slate-800 flex items-center justify-center text-slate-400 hover:text-white transition-colors cursor-pointer"
+                                                    title="Opções da Fase"
+                                                >
+                                                    <MoreHorizontal className="w-3.5 h-3.5" />
+                                                </button>
+                                            )}
 
                                             {openPhaseMenu === phase.id && (
                                                 <div className="absolute right-0 top-7 z-50 w-48 bg-white border border-slate-200 shadow-xl rounded-xl p-1 text-slate-800 animate-in fade-in zoom-in-95">
@@ -1442,10 +1739,12 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                                             )}
                                         </div>
                                     </div>
-                                    <ColumnScrollContainer className="p-1.5 md:p-2 2xl:p-3 flex-1 overflow-y-auto space-y-1.5 2xl:space-y-2.5 min-h-0 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                                    <ColumnScrollContainer className="p-1 md:p-1.5 xl:p-2 2xl:p-2.5 flex-1 overflow-y-auto space-y-1 md:space-y-1.5 xl:space-y-2 2xl:space-y-2.5 min-h-0 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                                         {columnProcesses.length === 0 ? (
-                                            <div className="h-20 2xl:h-28 border-2 border-dashed border-slate-200/80 rounded-xl flex flex-col items-center justify-center text-slate-400 p-2 text-center">
-                                                <p className="text-[10px] 2xl:text-xs font-medium">Nenhum processo</p>
+                                            <div className="h-full min-h-[100px] flex flex-col items-center justify-center text-slate-400 p-3 border-2 border-dashed border-slate-200/60 rounded-xl bg-white/40">
+                                                <Layers className="w-6 h-6 opacity-30 mb-1 stroke-[1.5]" />
+                                                <span className="text-[11px] font-bold text-slate-400">Nenhum processo</span>
+                                                <span className="text-[9px] text-slate-400">nesta etapa</span>
                                             </div>
                                         ) : (
                                             columnProcesses
@@ -1458,105 +1757,11 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                                                     const isPriorityProcess = activePriority?.type === 'process' && activePriority?.processId === process.id;
                                                     const isQueuePriority = checkIsQueuePriority(process);
 
-                                                    if (isViewOnly) {
-                                                        let cardStyleClasses = 'bg-white border-slate-200/80 shadow-2xs';
-                                                        if (isPriorityProcess) {
-                                                            cardStyleClasses = 'ring-4 ring-amber-400 border-amber-400 bg-amber-50/90 shadow-[0_0_20px_rgba(251,191,36,0.4)] scale-[1.02] z-30';
-                                                        } else if (isQueuePriority) {
-                                                            cardStyleClasses = 'border-2 border-purple-500 bg-gradient-to-br from-purple-50/90 via-indigo-50/80 to-purple-50/90 animate-queue-pulse z-20';
-                                                        }
-
-                                                        return (
-                                                            <div
-                                                                key={process.id}
-                                                                className={`group rounded-xl p-1.5 2xl:p-2 border transition-all duration-300 flex flex-col gap-1 2xl:gap-1.5 items-stretch cursor-default relative ${cardStyleClasses}`}
-                                                            >
-                                                                {isPriorityProcess && (
-                                                                    <div className="bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 px-2 py-0.5 rounded-md text-[8px] 2xl:text-[9px] font-black flex items-center justify-center gap-1 shadow-xs uppercase tracking-wider animate-bounce">
-                                                                        <Zap className="w-2.5 h-2.5 fill-slate-950 text-slate-950" /> Prioridade de Sala
-                                                                    </div>
-                                                                )}
-
-                                                                <div className="flex items-center justify-between gap-1">
-                                                                    <div className="flex items-center gap-1 flex-wrap">
-                                                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] xl:text-[10px] 2xl:text-[11px] font-extrabold text-amber-800 bg-amber-50 border border-amber-200/80 rounded-md shrink-0 shadow-2xs">
-                                                                            <Clock className="w-2.5 h-2.5 2xl:w-3 2xl:h-3 text-amber-600 shrink-0" />
-                                                                            <span className="whitespace-nowrap">{getDaysElapsed(process.criado_em)}</span>
-                                                                        </span>
-                                                                        {isQueuePriority && !isPriorityProcess && (
-                                                                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[8px] xl:text-[9px] 2xl:text-[10px] font-black text-purple-800 bg-purple-100/90 border border-purple-300/90 rounded-md shrink-0 uppercase tracking-wider shadow-2xs">
-                                                                                <Flame className="w-2.5 h-2.5 text-purple-600 fill-purple-600 shrink-0" />
-                                                                                Prioridade
-                                                                            </span>
-                                                                        )}
-                                                                    </div>
-
-                                                                    <button
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            setOpenCardMenu(openCardMenu === process.id ? null : process.id);
-                                                                            setOpenPhaseMenu(null);
-                                                                        }}
-                                                                        className="w-5 h-5 rounded hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-700 transition-colors cursor-pointer shrink-0"
-                                                                        title="Opções do Card"
-                                                                    >
-                                                                        <MoreHorizontal className="w-3 h-3" />
-                                                                    </button>
-
-                                                                    {openCardMenu === process.id && (
-                                                                        <div className="absolute right-1 top-7 z-50 w-48 bg-white border border-slate-200 shadow-xl rounded-xl p-1 text-slate-800 animate-in fade-in zoom-in-95">
-                                                                            <button
-                                                                                onClick={(e) => {
-                                                                                    e.stopPropagation();
-                                                                                    toggleQueuePriority(process.id);
-                                                                                }}
-                                                                                className={`w-full text-left px-2.5 py-1.5 text-xs font-bold rounded-lg flex items-center gap-2 cursor-pointer transition-colors ${
-                                                                                    isQueuePriority ? 'text-purple-700 bg-purple-50 hover:bg-purple-100' : 'text-slate-700 hover:bg-purple-50 hover:text-purple-700'
-                                                                                }`}
-                                                                            >
-                                                                                <Flame className={`w-3.5 h-3.5 ${isQueuePriority ? 'text-purple-600 fill-purple-600' : 'text-purple-500'}`} />
-                                                                                {isQueuePriority ? 'Remover Prioridade' : 'Prioridade'}
-                                                                            </button>
-
-                                                                            {isPriorityProcess ? (
-                                                                                <button
-                                                                                    onClick={(e) => {
-                                                                                        e.stopPropagation();
-                                                                                        handleClearPriority();
-                                                                                    }}
-                                                                                    className="w-full text-left px-2.5 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-lg flex items-center gap-2 cursor-pointer transition-colors mt-0.5"
-                                                                                >
-                                                                                    <X className="w-3.5 h-3.5" />
-                                                                                    Remover Destaque TV
-                                                                                </button>
-                                                                            ) : (
-                                                                                <button
-                                                                                    onClick={(e) => {
-                                                                                        e.stopPropagation();
-                                                                                        triggerVisualPriority('process', process.id);
-                                                                                    }}
-                                                                                    className="w-full text-left px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-amber-50 hover:text-amber-700 rounded-lg flex items-center gap-2 cursor-pointer transition-colors mt-0.5"
-                                                                                >
-                                                                                    <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
-                                                                                    Prioridade Visual (TV)
-                                                                                </button>
-                                                                            )}
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-
-                                                                <span className="font-sans text-[11px] xl:text-xs 2xl:text-sm font-black text-blue-700 uppercase bg-blue-50 px-1.5 py-1 2xl:px-2 rounded-md border border-blue-200/90 w-full text-center line-clamp-2 break-words leading-tight shadow-2xs" title={`Protocolo: #${process.protocolo}`}>
-                                                                    {objetoResumidoMap[process.id] || process.objeto_resumido || `#${process.protocolo || process.id.slice(0, 8)}`}
-                                                                </span>
-                                                            </div>
-                                                        );
-                                                    }
-
                                                     let regularCardClasses = 'bg-white border-slate-200/80 shadow-2xs hover:shadow-md';
                                                     if (isPriorityProcess) {
-                                                        regularCardClasses = 'ring-4 ring-amber-400 border-amber-400 bg-amber-50 shadow-[0_0_20px_rgba(251,191,36,0.4)] scale-[1.02] z-20';
+                                                        regularCardClasses = 'ring-4 ring-amber-400 border-amber-400 bg-amber-50 shadow-[0_0_20px_rgba(251,191,36,0.4)] scale-[1.01] z-20';
                                                     } else if (isQueuePriority) {
-                                                        regularCardClasses = 'border-2 border-purple-500 bg-gradient-to-br from-purple-50/90 via-indigo-50/80 to-purple-50/90 animate-queue-pulse z-10';
+                                                        regularCardClasses = 'border-2 border-red-500 bg-gradient-to-br from-red-500/10 via-amber-500/10 to-rose-500/10 ring-2 ring-red-500/30 shadow-[0_0_20px_rgba(239,68,68,0.3)] animate-queue-pulse z-10';
                                                     }
 
                                                     return (
@@ -1564,52 +1769,73 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                                                             key={process.id}
                                                             draggable={isCanManage}
                                                             onDragStart={(e) => handleDragStart(e, process.id)}
-                                                            onClick={() => setSelectedProcessForDetails(process)}
-                                                            className={`group rounded-xl p-2.5 border transition-all duration-200 cursor-pointer relative overflow-hidden flex flex-col gap-1.5 active:scale-[0.99] ${regularCardClasses}`}
+                                                            onClick={() => handleOpenProcessItemPage(process.id)}
+                                                            className={`group rounded-xl p-2 xl:p-2.5 2xl:p-3 border transition-all duration-200 cursor-pointer relative overflow-hidden flex flex-col gap-1 xl:gap-1.5 active:scale-[0.99] ${regularCardClasses}`}
                                                         >
                                                             {isPriorityProcess && (
-                                                                <div className="bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 px-2 py-1 rounded-lg text-[10px] font-black flex items-center justify-between shadow-xs uppercase tracking-wider">
+                                                                <div className="bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 px-1.5 py-0.5 rounded-md text-[9px] xl:text-[10px] font-black flex items-center justify-between shadow-xs uppercase tracking-wider">
                                                                     <span className="flex items-center gap-1">
-                                                                        <Zap className="w-3.5 h-3.5 fill-slate-950 text-slate-950 shrink-0" />
+                                                                        <Zap className="w-3 h-3 fill-slate-950 text-slate-950 shrink-0" />
                                                                         Na Sala (TV)
                                                                     </span>
-                                                                    <button
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            handleClearPriority();
-                                                                        }}
-                                                                        className="bg-slate-950 hover:bg-slate-900 text-rose-400 hover:text-white px-2 py-0.5 rounded-md text-[10px] font-black flex items-center gap-1 transition-all cursor-pointer shadow-xs shrink-0 active:scale-95"
-                                                                        title="Desativar Visualização na Sala"
-                                                                    >
-                                                                        <X className="w-3 h-3 text-rose-400" /> Desativar
-                                                                    </button>
+                                                                    {!isViewOnly && (
+                                                                        <button
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                handleClearPriority();
+                                                                            }}
+                                                                            className="bg-slate-950 hover:bg-slate-900 text-rose-400 hover:text-white px-1.5 py-0.5 rounded text-[9px] font-black flex items-center gap-0.5 transition-all cursor-pointer shadow-xs shrink-0 active:scale-95"
+                                                                            title="Desativar Visualização na Sala"
+                                                                        >
+                                                                            <X className="w-2.5 h-2.5 text-rose-400" /> Desativar
+                                                                        </button>
+                                                                    )}
                                                                 </div>
                                                             )}
 
-                                                            {isQueuePriority && !isPriorityProcess && (
-                                                                <div className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-2 py-0.5 rounded-md text-[9px] font-black flex items-center gap-1 shadow-2xs uppercase tracking-wider w-fit">
-                                                                    <Flame className="w-3 h-3 fill-white text-white shrink-0" /> Prioridade
+                                                            <div className="flex items-center gap-1 xl:gap-1.5 flex-wrap">
+                                                                {isQueuePriority && !isPriorityProcess && (
+                                                                    <div className="bg-gradient-to-r from-red-600 via-rose-600 to-amber-500 text-white px-1.5 py-0.5 rounded text-[8px] xl:text-[9px] 2xl:text-xs font-black flex items-center gap-1 shadow-md shadow-red-500/30 uppercase tracking-wider w-fit border border-red-400/40 animate-pulse">
+                                                                        <Flame className="w-2.5 h-2.5 xl:w-3 xl:h-3 fill-yellow-300 text-yellow-300 shrink-0 animate-bounce" /> PRIORIDADE
+                                                                    </div>
+                                                                )}
+                                                                <div className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-1.5 py-0.5 rounded text-[8px] xl:text-[9px] 2xl:text-xs font-black flex items-center gap-1 shadow-2xs uppercase tracking-wider w-fit" title="Dias corridos desde a criação">
+                                                                    <Clock className="w-2.5 h-2.5 xl:w-3 xl:h-3 text-white shrink-0" />
+                                                                    <span>{getDaysElapsed(process.criado_em)}</span>
                                                                 </div>
-                                                            )}
+                                                                {(() => {
+                                                                    const assignedUser = processAssignments[process.id];
+                                                                    const firstName = assignedUser?.userName ? assignedUser.userName.trim().split(' ')[0] : '';
+                                                                    if (!firstName) return null;
+                                                                    return (
+                                                                        <div className="bg-gradient-to-r from-emerald-600 to-teal-600 text-white px-1.5 py-0.5 rounded text-[8px] xl:text-[9px] 2xl:text-xs font-black flex items-center gap-1 shadow-2xs uppercase tracking-wider w-fit" title={`Demanda com: ${assignedUser.userName}`}>
+                                                                            <UserIcon className="w-2.5 h-2.5 xl:w-3 xl:h-3 text-white shrink-0" />
+                                                                            <span>{firstName}</span>
+                                                                        </div>
+                                                                    );
+                                                                })()}
+                                                            </div>
 
-                                                            <div className="flex items-center justify-between relative">
-                                                                <span className="font-sans text-xs sm:text-sm font-black text-blue-700 uppercase bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200/90 line-clamp-2 break-words leading-tight shadow-2xs" title={`Protocolo: #${process.protocolo}`}>
+                                                            <div className="flex items-start justify-between gap-1 relative w-full">
+                                                                <span className="font-sans text-[11px] sm:text-xs xl:text-sm 2xl:text-base font-black text-blue-700 uppercase bg-blue-50 px-2 py-0.5 xl:px-2.5 xl:py-1 rounded-md border border-blue-200/90 line-clamp-2 break-normal [word-break:normal] [overflow-wrap:normal] leading-tight shadow-2xs flex-1" title={`Protocolo: #${process.protocolo}`}>
                                                                     {objetoResumidoMap[process.id] || process.objeto_resumido || `#${process.protocolo || process.id.slice(0, 8)}`}
                                                                 </span>
 
-                                                                <button
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        setOpenCardMenu(openCardMenu === process.id ? null : process.id);
-                                                                        setOpenPhaseMenu(null);
-                                                                    }}
-                                                                    className="w-6 h-6 rounded-md hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-700 transition-colors cursor-pointer shrink-0"
-                                                                    title="Opções do Processo"
-                                                                >
-                                                                    <MoreHorizontal className="w-3.5 h-3.5" />
-                                                                </button>
+                                                                {!isViewOnly && (
+                                                                    <button
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            setOpenCardMenu(openCardMenu === process.id ? null : process.id);
+                                                                            setOpenPhaseMenu(null);
+                                                                        }}
+                                                                        className="w-5 h-5 xl:w-6 xl:h-6 rounded-md hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-700 transition-colors cursor-pointer shrink-0 mt-0.5"
+                                                                        title="Opções do Processo"
+                                                                    >
+                                                                        <MoreHorizontal className="w-3.5 h-3.5" />
+                                                                    </button>
+                                                                )}
 
-                                                                {openCardMenu === process.id && (
+                                                                {openCardMenu === process.id && !isViewOnly && (
                                                                     <div className="absolute right-0 top-7 z-50 w-48 bg-white border border-slate-200 shadow-xl rounded-xl p-1 text-slate-800 animate-in fade-in zoom-in-95">
                                                                         <button
                                                                             onClick={(e) => {
@@ -1617,10 +1843,10 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                                                                                 toggleQueuePriority(process.id);
                                                                             }}
                                                                             className={`w-full text-left px-2.5 py-1.5 text-xs font-bold rounded-lg flex items-center gap-2 cursor-pointer transition-colors ${
-                                                                                isQueuePriority ? 'text-purple-700 bg-purple-50 hover:bg-purple-100' : 'text-slate-700 hover:bg-purple-50 hover:text-purple-700'
+                                                                                isQueuePriority ? 'text-red-700 bg-red-50 hover:bg-red-100' : 'text-slate-700 hover:bg-red-50 hover:text-red-700'
                                                                             }`}
                                                                         >
-                                                                            <Flame className={`w-3.5 h-3.5 ${isQueuePriority ? 'text-purple-600 fill-purple-600' : 'text-purple-500'}`} />
+                                                                            <Flame className={`w-3.5 h-3.5 ${isQueuePriority ? 'text-red-600 fill-red-600' : 'text-red-500'}`} />
                                                                             {isQueuePriority ? 'Remover Prioridade Fila' : 'Prioridade Fila'}
                                                                         </button>
 
@@ -1651,11 +1877,11 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                                                                 )}
                                                             </div>
 
-                                                            <div className="flex items-center gap-1.5 text-xs text-slate-600 bg-slate-50/80 p-1.5 rounded-lg border border-slate-100">
-                                                                <UserIcon className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                                                                <div className="truncate text-[11px]">
-                                                                    <span className="font-bold text-slate-800 block truncate leading-tight">{process.solicitante_nome}</span>
-                                                                    <span className="text-slate-500 font-medium block truncate text-[10px] leading-tight mt-0.5">{process.solicitante_setor}</span>
+                                                            <div className="flex items-start gap-1 xl:gap-1.5 text-xs text-slate-600 bg-slate-50/80 p-1 xl:p-1.5 rounded-md border border-slate-100 mt-0.5">
+                                                                <UserIcon className="w-3 h-3 xl:w-3.5 xl:h-3.5 text-slate-400 shrink-0 mt-0.5" />
+                                                                <div className="min-w-0 flex-1 text-[10px] xl:text-[11px] 2xl:text-xs">
+                                                                    <span className="font-bold text-slate-800 block break-words leading-tight">{process.solicitante_nome}</span>
+                                                                    <span className="text-slate-500 font-medium block break-words text-[9px] xl:text-[10px] 2xl:text-[11px] leading-tight mt-0.5">{process.solicitante_setor}</span>
                                                                 </div>
                                                             </div>
                                                         </div>

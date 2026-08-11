@@ -4720,6 +4720,7 @@ const App: React.FC = () => {
             {(currentView === 'licitacao:kanban' || currentView === 'licitacao:kanban-view') && (
               <LicitacaoKanban
                 currentUser={currentUser || ({ id: 'view-user', name: 'Modo Sala', username: 'sala', role: 'viewer', sector: '', permissions: [] } as any)}
+                users={users}
                 isViewOnly={currentView === 'licitacao:kanban-view'}
                 onBack={() => {
                   setCurrentView('licitacao');
