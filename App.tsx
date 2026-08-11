@@ -218,14 +218,16 @@ const PATH_TO_STATE: Record<string, any> = Object.fromEntries(
 );
 
 const mapLicitacaoProcessToOrder = (process: any): Order => {
-  let mappedStatus: any = 'pending';
+  const isApproved = process.status === 'Aprovado' || process.status === 'approved' || process.status === 'Assinado' || !!process.aprovado_em;
+
+  let mappedStatus: any = 'awaiting_approval';
   if (process.status === 'Rascunho') mappedStatus = 'pending';
   else if (process.status === 'Aguardando Assinatura') mappedStatus = 'awaiting_approval';
-  else if (process.status === 'Assinado') mappedStatus = 'approved';
-  else if (process.status === 'Em Análise') mappedStatus = 'in_progress';
+  else if (isApproved) mappedStatus = 'approved';
   else if (process.status === 'Concluído' || process.status === 'completed') mappedStatus = 'completed';
   else if (process.status === 'Finalizado' || process.status === 'finalized') mappedStatus = 'finalized';
   else if (process.status === 'Rejeitado' || process.status === 'rejected') mappedStatus = 'rejected';
+  else mappedStatus = 'awaiting_approval';
 
   const sig = process.assinatura || (process.licitacao_assinaturas && process.licitacao_assinaturas.length > 0 ? process.licitacao_assinaturas[0] : null);
   const digitalSignature = sig ? {
@@ -4661,30 +4663,32 @@ const App: React.FC = () => {
                   if (!targetOrder) return;
                   const isLicitacao = activeBlock === 'licitacao' || currentView.startsWith('licitacao') || (targetOrder as any).blockType === 'licitacao' || (targetOrder as any).orderType === 'licitacao' || String((targetOrder as any).protocol || (targetOrder as any).protocolo || '').startsWith('LIC-') || mappedLicitacaoOrders.some(o => o.id === targetOrder.id);
                   if (isLicitacao) {
-                    let mappedBackendStatus: any = status;
+                    const isApprovedRequested = status === 'approved' || status === 'completed' || (status as string) === 'Aprovado';
+                    let mappedBackendStatus: any = 'Em Análise';
                     if (status === 'pending') mappedBackendStatus = 'Rascunho';
-                    else if (status === 'awaiting_approval') mappedBackendStatus = 'Aguardando Assinatura';
-                    else if (status === 'in_progress' || status === 'approved' || status === 'completed') mappedBackendStatus = 'Em Análise';
+                    else if (status === 'awaiting_approval') mappedBackendStatus = 'Em Análise';
+                    else if (isApprovedRequested) mappedBackendStatus = 'Em Análise';
                     else if (status === 'finalized') mappedBackendStatus = 'Finalizado';
                     else if (status === 'rejected') mappedBackendStatus = 'Rejeitado';
 
-                    const isNowApproved = mappedBackendStatus !== 'Rascunho' && mappedBackendStatus !== 'Aguardando Assinatura' && mappedBackendStatus !== 'Rejeitado' && mappedBackendStatus !== 'Finalizado';
                     const nowIso = new Date().toISOString();
-
                     const updatesObj: any = {
                       status: mappedBackendStatus as any,
                     };
 
-                    if (isNowApproved) {
+                    if (isApprovedRequested) {
                       updatesObj.fase = (targetOrder as any).fase || 'pendente';
                       updatesObj.aprovado_em = nowIso;
                       updatesObj.enviado_kanban_em = nowIso;
                       updatesObj.apresentado_animacao = false;
+                    } else if (status === 'awaiting_approval' || status === 'pending') {
+                      updatesObj.aprovado_em = null;
+                      updatesObj.enviado_kanban_em = null;
                     }
 
                     await updateLicitacaoProcessMutation.mutateAsync({ id: targetOrder.id, updates: updatesObj });
 
-                    if (isNowApproved) {
+                    if (isApprovedRequested) {
                       try {
                         const tOrder = targetOrder as any;
                         const approvedProcessInfo = {
@@ -5029,30 +5033,32 @@ const App: React.FC = () => {
                   if (!targetOrder) return;
                   const isLicitacao = activeBlock === 'licitacao' || currentView.startsWith('licitacao') || (targetOrder as any).blockType === 'licitacao' || (targetOrder as any).orderType === 'licitacao' || String((targetOrder as any).protocol || (targetOrder as any).protocolo || '').startsWith('LIC-') || mappedLicitacaoOrders.some(o => o.id === targetOrder.id);
                   if (isLicitacao) {
-                    let mappedBackendStatus: any = status;
+                    const isApprovedRequested = status === 'approved' || status === 'completed' || (status as string) === 'Aprovado';
+                    let mappedBackendStatus: any = 'Em Análise';
                     if (status === 'pending') mappedBackendStatus = 'Rascunho';
-                    else if (status === 'awaiting_approval') mappedBackendStatus = 'Aguardando Assinatura';
-                    else if (status === 'in_progress' || status === 'approved' || status === 'completed') mappedBackendStatus = 'Em Análise';
+                    else if (status === 'awaiting_approval') mappedBackendStatus = 'Em Análise';
+                    else if (isApprovedRequested) mappedBackendStatus = 'Em Análise';
                     else if (status === 'finalized') mappedBackendStatus = 'Finalizado';
                     else if (status === 'rejected') mappedBackendStatus = 'Rejeitado';
 
-                    const isNowApproved = mappedBackendStatus !== 'Rascunho' && mappedBackendStatus !== 'Aguardando Assinatura' && mappedBackendStatus !== 'Rejeitado' && mappedBackendStatus !== 'Finalizado';
                     const nowIso = new Date().toISOString();
-
                     const updatesObj: any = {
                       status: mappedBackendStatus as any,
                     };
 
-                    if (isNowApproved) {
+                    if (isApprovedRequested) {
                       updatesObj.fase = (targetOrder as any).fase || 'pendente';
                       updatesObj.aprovado_em = nowIso;
                       updatesObj.enviado_kanban_em = nowIso;
                       updatesObj.apresentado_animacao = false;
+                    } else if (status === 'awaiting_approval' || status === 'pending') {
+                      updatesObj.aprovado_em = null;
+                      updatesObj.enviado_kanban_em = null;
                     }
 
                     await updateLicitacaoProcessMutation.mutateAsync({ id: targetOrder.id, updates: updatesObj });
 
-                    if (isNowApproved) {
+                    if (isApprovedRequested) {
                       try {
                         const tOrder = targetOrder as any;
                         const approvedProcessInfo = {

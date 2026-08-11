@@ -390,9 +390,10 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
     const isLicitacaoUser = currentUser.role === 'licitacao' || (currentUser.permissions as string[])?.includes('parent_licitacao_processos') || (currentUser.permissions as string[])?.includes('parent_licitacao') || (currentUser.permissions as string[])?.includes('licitacao') || currentUser.sector?.toLowerCase().includes('licitação') || currentUser.sector?.toLowerCase().includes('licitacao');
     const isCompras = activeBlock === 'compras';
 
-    const getStatusBadge = (status: Order['status'] | string) => {
+    const getStatusBadge = (status: Order['status'] | string, orderObj?: any) => {
         const normStatus = String(status || '').toLowerCase().trim();
-        if (normStatus === 'approved' || normStatus === 'aprovado') {
+        const isApproved = normStatus === 'approved' || normStatus === 'aprovado' || (orderObj && !!orderObj.aprovado_em);
+        if (isApproved) {
             return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-100 text-[9px] font-black uppercase tracking-wider"><CheckCircle2 className="w-3 h-3" /> Aprovado</span>;
         }
         if (normStatus === 'finalized' || normStatus === 'finalizado') {
@@ -667,7 +668,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                 onClick={handleClick}
                 className={`transition-all ${(isAdmin && order.status !== 'rejected') ? 'cursor-pointer hover:scale-105 active:scale-95' : 'cursor-default'}`}
             >
-                {getStatusBadge(order.status)}
+                {getStatusBadge(order.status, order)}
             </button>
         );
     };
@@ -1156,7 +1157,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                             })()}
                                                         </div>
                                                         <div className={`md:col-span-1 flex items-center justify-start ${(isAdmin || isLicitacaoUser) ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}`} onClick={() => (isAdmin || isLicitacaoUser) && setStatusSelectionOrder(order)} title={(isAdmin || isLicitacaoUser) ? 'Clique para alterar o status do processo' : undefined}>
-                                                            {getStatusBadge(order.status)}
+                                                            {getStatusBadge(order.status, order)}
                                                         </div>
                                                         {(() => {
                                                             const checkin = (content as any)?.checkin_finalizado || {};
@@ -1917,13 +1918,25 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                         { key: 'rejected', label: 'Rejeitado', icon: XCircle, color: 'text-rose-600 bg-rose-50 border-rose-100' }
                                                     ].map((cfg) => {
                                                         const currentSt = statusSelectionOrder.status;
-                                                        const isActive = currentSt === cfg.key || (cfg.key === 'approved' && (currentSt === 'approved' || (currentSt as string) === 'completed' || (currentSt as string) === 'in_progress' || (currentSt as string) === 'Em Análise'));
+                                                        const isApprovedInOrder = currentSt === 'approved' || (currentSt as string) === 'aprovado' || !!(statusSelectionOrder as any).aprovado_em;
+                                                        const isActive = currentSt === cfg.key || (
+                                                            cfg.key === 'approved' ? isApprovedInOrder : (
+                                                                cfg.key === 'awaiting_approval' ? (!isApprovedInOrder && currentSt !== 'finalized' && currentSt !== 'rejected') : false
+                                                            )
+                                                        );
                                                         return (
                                                             <button
                                                                 key={cfg.key}
                                                                 onClick={() => {
                                                                     const id = statusSelectionOrder.id;
-                                                                    setLocalOptimisticUpdates(prev => ({ ...prev, [id]: { status: cfg.key as any } }));
+                                                                    const isAppr = cfg.key === 'approved';
+                                                                    setLocalOptimisticUpdates(prev => ({
+                                                                        ...prev,
+                                                                        [id]: {
+                                                                            status: cfg.key as any,
+                                                                            aprovado_em: isAppr ? new Date().toISOString() : null
+                                                                        }
+                                                                    }));
                                                                     setSuccessOrderId(id);
 
                                                                     onUpdateOrderStatus?.(statusSelectionOrder, cfg.key as any, `Alteração de Status via Painel Admin por ${currentUser.name}`);
