@@ -479,7 +479,9 @@ export const saveLicitacaoProcess = async (process: any): Promise<any> => {
     else if (process.status === 'finalized') dbStatus = 'Finalizado';
     else if (process.status === 'rejected') dbStatus = 'Rejeitado';
 
-    const isNowApproved = dbStatus !== 'Rascunho' && dbStatus !== 'Aguardando Assinatura' && dbStatus !== 'Rejeitado' && dbStatus !== 'Finalizado';
+    // Apenas status explicitamente 'approved' deve marcar como aprovado
+    // 'Em Análise' é o status padrão de novos processos e NÃO deve ser tratado como aprovação
+    const isNowApproved = process.status === 'approved' || dbStatus === 'Aprovado';
     const nowIso = new Date().toISOString();
 
     const sanitizedProcess: any = {
