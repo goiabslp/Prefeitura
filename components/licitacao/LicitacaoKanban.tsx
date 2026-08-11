@@ -182,6 +182,8 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
         }
     });
 
+    const loadedTimestampRef = useRef<number>(Date.now());
+    const lastProcessedApprovalTimeRef = useRef<number>(Date.now());
     const sessionDismissedRef = useRef<Set<string>>(new Set());
     const activeModalProcessIdRef = useRef<string | null>(null);
 
@@ -189,7 +191,23 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
         if (!procData || !procData.id) return;
         const procId = procData.id;
 
-        // Se já está exibindo este modal ou se já foi dispensado nesta sessão, ignora 100%
+        if (!procData.aprovado_em) return;
+
+        const approvedTime = new Date(procData.aprovado_em).getTime();
+        const now = Date.now();
+        const ageInMs = now - approvedTime;
+
+        // Se a aprovação foi há mais de 30 segundos ou no futuro descalibrado, ignora
+        if (ageInMs > 30000 || ageInMs < -10000) {
+            return;
+        }
+
+        // Se esta tela foi carregada DEPOIS que o processo já estava aprovado (tolerância 3s), ignora para não rodar no F5
+        if (approvedTime < loadedTimestampRef.current - 3000) {
+            return;
+        }
+
+        // Se já está exibindo este modal ou se já foi dispensado nesta sessão/dispositivo, ignora 100%
         if (activeModalProcessIdRef.current === procId) return;
         if (sessionDismissedRef.current.has(procId)) return;
         if (announcedProcessIds.includes(procId)) return;
@@ -197,7 +215,7 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
             if (sessionStorage.getItem(`licitacao_dismissed_${procId}`)) return;
         } catch (e) {}
 
-        // Trava imediatamente contra múltiplos disparos simultâneos
+        // Trava imediatamente contra múltiplos disparos simultâneos neste dispositivo
         activeModalProcessIdRef.current = procId;
 
         // Toca o som exatamente UMA VEZ no momento da ativacao
@@ -235,9 +253,7 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                 id: processId,
                 updates: { apresentado_animacao: true }
             });
-        } catch (err) {
-            console.warn('Erro ao atualizar apresentado_animacao no banco:', err);
-        }
+        } catch (err) {}
     };
 
     const playWebAudioChime = () => {
@@ -460,7 +476,7 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
         window.addEventListener('licitacao-queue-priority-updated', handleQueueLocalEvent);
         window.addEventListener('licitacao-new-process-approved', handleNewApprovedLocalEvent);
 
-        // 1. Busca prioridades iniciais e processo aprovado mais recente do banco
+        // 1. Busca prioridades iniciais e evento de aprovação em tempo real do banco
         const fetchDbPriority = async () => {
             try {
                 const { data } = await supabase
@@ -470,7 +486,11 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                     .single();
                 if (data?.ui_config) {
                     if (data.ui_config.latest_approved_licitacao_process) {
-                        triggerModalForProcess(data.ui_config.latest_approved_licitacao_process);
+                        const latest = data.ui_config.latest_approved_licitacao_process;
+                        const approvalTs = latest.approval_timestamp || (latest.aprovado_em ? new Date(latest.aprovado_em).getTime() : 0);
+                        if (approvalTs > lastProcessedApprovalTimeRef.current) {
+                            triggerModalForProcess(latest);
+                        }
                     }
 
                     if (data.ui_config.licitacao_prioridade_visual !== undefined) {
@@ -509,7 +529,7 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
             }
         };
         fetchDbPriority();
-        const pollingInterval = setInterval(fetchDbPriority, 2000);
+        const pollingInterval = setInterval(fetchDbPriority, 1500);
 
         // 2. Supabase Realtime Channel para Broadcast instantâneo e Postgres Changes (self: true para escutar própria aba)
         const channel = supabase.channel('licitacao_kanban_priority', { config: { broadcast: { self: true } } })
@@ -543,13 +563,13 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
             })
             .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'licitacao_processos' }, (payload: any) => {
                 const updated = payload.new;
-                if (updated && updated.aprovado_em && !updated.apresentado_animacao) {
+                if (updated && updated.aprovado_em) {
                     triggerModalForProcess(updated);
                 }
             })
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'licitacao_processos' }, (payload: any) => {
                 const inserted = payload.new;
-                if (inserted && inserted.aprovado_em && !inserted.apresentado_animacao) {
+                if (inserted && inserted.aprovado_em) {
                     triggerModalForProcess(inserted);
                 }
             })
@@ -557,7 +577,11 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                 const newUi = payload.new?.ui_config;
                 if (newUi) {
                     if (newUi.latest_approved_licitacao_process) {
-                        triggerModalForProcess(newUi.latest_approved_licitacao_process);
+                        const latest = newUi.latest_approved_licitacao_process;
+                        const approvalTs = latest.approval_timestamp || (latest.aprovado_em ? new Date(latest.aprovado_em).getTime() : 0);
+                        if (approvalTs > lastProcessedApprovalTimeRef.current) {
+                            triggerModalForProcess(latest);
+                        }
                     }
                     if (newUi.licitacao_prioridade_visual !== undefined) {
                         const dbPriority = newUi.licitacao_prioridade_visual;
@@ -607,6 +631,17 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
             channelRef.current = null;
         };
     }, []);
+
+    // Monitora constantemente atualizações da lista de processos para disparar a vinheta em tempo real em todas as telas
+    useEffect(() => {
+        if (processes && processes.length > 0) {
+            processes.forEach(proc => {
+                if (proc.aprovado_em) {
+                    triggerModalForProcess(proc);
+                }
+            });
+        }
+    }, [processes]);
 
     const toggleQueuePriority = async (processId: string) => {
         const targetProcess = processes.find(p => p.id === processId);

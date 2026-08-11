@@ -64,7 +64,7 @@ export const createLicitacaoProcessCompleto = async (payload: {
                 ...processPayload,
                 protocolo
             });
-            
+
             if (!processo) throw new Error("Failed to create process");
 
             // 2. Create items
@@ -110,10 +110,10 @@ export const createLicitacaoProcessCompleto = async (payload: {
             return processo;
         } catch (error: any) {
             lastError = error;
-            
+
             // Check if error is unique constraint violation for protocol (PostgreSQL code 23505)
             const isDuplicateKey = error && (
-                error.code === '23505' || 
+                error.code === '23505' ||
                 (error.message && error.message.includes('unique constraint') && error.message.includes('protocolo'))
             );
 
@@ -139,13 +139,13 @@ export const broadcastLicitacaoApproval = (approvedProcessInfo: any) => {
     if (typeof window !== 'undefined') {
         try {
             window.dispatchEvent(new CustomEvent('licitacao-new-process-approved', { detail: approvedProcessInfo }));
-        } catch (e) {}
+        } catch (e) { }
 
         try {
             const bc = new BroadcastChannel('licitacao_kanban_channel');
             bc.postMessage({ type: 'new-licitacao-process-approved', payload: approvedProcessInfo });
             setTimeout(() => bc.close(), 1000);
-        } catch (e) {}
+        } catch (e) { }
     }
 
     // 2. Supabase Realtime Broadcast no canal fixo escutado por todos os dispositivos, TVs e telas
@@ -159,11 +159,11 @@ export const broadcastLicitacaoApproval = (approvedProcessInfo: any) => {
                     payload: approvedProcessInfo
                 });
                 setTimeout(() => {
-                    try { supabase.removeChannel(channel); } catch (e) {}
+                    try { supabase.removeChannel(channel); } catch (e) { }
                 }, 3000);
             }
         });
-    } catch (e) {}
+    } catch (e) { }
 
     // 3. Atualizar a global_config no Supabase para polling de retaguarda
     try {
@@ -186,7 +186,7 @@ export const broadcastLicitacaoApproval = (approvedProcessInfo: any) => {
                     })
                     .eq('id', 'global_config');
             });
-    } catch (e) {}
+    } catch (e) { }
 };
 
 export const updateLicitacaoProcess = async (id: string, updates: Partial<LicitacaoProcesso>): Promise<LicitacaoProcesso | null> => {
@@ -370,7 +370,7 @@ export const signLicitacaoProcess = async (assinatura: Partial<LicitacaoAssinatu
             .single();
 
         if (error) throw error;
-        
+
         // Atualiza status do processo como "Em Análise" (Aguardando Aprovação do Administrador)
         await updateLicitacaoProcess(assinatura.processo_id!, { status: 'Em Análise' as any });
 
@@ -458,9 +458,9 @@ export const generateLicitacaoProtocol = async (): Promise<string> => {
             .like('protocolo', `LIC-%/${year}`)
             .order('protocolo', { ascending: false })
             .limit(100);
-            
+
         if (error) throw error;
-        
+
         let maxNumber = 0;
         if (data && data.length > 0) {
             data.forEach(row => {
@@ -473,7 +473,7 @@ export const generateLicitacaoProtocol = async (): Promise<string> => {
                 }
             });
         }
-        
+
         // Se maxNumber for 0 mas tivermos dados ou se preferirmos um backup duplo,
         // podemos usar count apenas se não encontramos nenhum protocolo formatado
         if (maxNumber === 0) {
@@ -481,12 +481,12 @@ export const generateLicitacaoProtocol = async (): Promise<string> => {
                 .from('licitacao_processos')
                 .select('*', { count: 'exact', head: true })
                 .gte('criado_em', `${year}-01-01T00:00:00Z`);
-                
+
             if (!countError && count !== null) {
                 maxNumber = count;
             }
         }
-        
+
         const nextNumber = maxNumber + 1;
         return `LIC-${nextNumber.toString().padStart(4, '0')}/${year}`;
     } catch (error) {
@@ -619,7 +619,7 @@ export const saveObjetoResumidoMap = async (processId: string, text: string): Pr
 
         try {
             localStorage.setItem('licitacao_objeto_resumido_map', JSON.stringify(updatedMap));
-        } catch (e) {}
+        } catch (e) { }
 
         const channel = supabase.channel('licitacao_kanban_priority');
         channel.send({
@@ -637,7 +637,7 @@ export const saveObjetoResumidoMap = async (processId: string, text: string): Pr
             .from('licitacao_processos')
             .update({ objeto_resumido: trimmed } as any)
             .eq('id', processId);
-    } catch (e) {}
+    } catch (e) { }
 
     try {
         const { data: orderData } = await supabase
@@ -659,7 +659,7 @@ export const saveObjetoResumidoMap = async (processId: string, text: string): Pr
                 .update({ document_snapshot: updatedSnapshot })
                 .eq('id', processId);
         }
-    } catch (e) {}
+    } catch (e) { }
 
     return updatedMap;
 };
@@ -675,7 +675,7 @@ export const fetchObjetoResumidoMap = async (): Promise<Record<string, string>> 
         const map = data?.ui_config?.objeto_resumido_map || {};
         try {
             localStorage.setItem('licitacao_objeto_resumido_map', JSON.stringify(map));
-        } catch (e) {}
+        } catch (e) { }
         return map;
     } catch (e) {
         try {
