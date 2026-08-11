@@ -1303,12 +1303,12 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, u
         const selectedProcess = processes.find(p => p.id === selectedProcessId);
         if (!selectedProcess) {
             return (
-                <div className="flex-1 flex flex-col items-center justify-center p-8 bg-[#F8FAFC] h-full">
+                <div className="flex-1 flex flex-col items-center justify-center p-8 bg-[#F8FAFC] h-full min-h-0">
                     <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mb-3"></div>
                     <p className="font-bold text-slate-600 text-sm">Carregando detalhes do processo...</p>
                     <button
                         onClick={handleCloseProcessItemPage}
-                        className="mt-4 px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-xl text-xs"
+                        className="mt-4 px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-xl text-xs cursor-pointer"
                     >
                         Voltar ao Kanban
                     </button>
@@ -1321,29 +1321,29 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, u
         const PhaseIcon = currentPhaseObj.icon;
 
         return (
-            <div className="flex-1 flex flex-col font-sans bg-[#F8FAFC] h-full overflow-hidden relative z-10 animate-fade-in">
-                {/* Header da Página do Item (/Licitacao/Kanban/[id]) */}
-                <header className="bg-white border-b border-slate-200 px-4 md:px-8 py-3.5 shadow-xs shrink-0 z-20">
-                    <div className="max-w-6xl mx-auto flex items-center justify-between gap-4">
-                        <div className="flex items-center gap-4">
+            <div className="flex-1 min-h-0 h-full w-full flex flex-col font-sans bg-[#F8FAFC] overflow-hidden relative z-10 animate-fade-in">
+                {/* Header Compacto 100% Viewport */}
+                <header className="bg-white border-b border-slate-200 px-3 md:px-6 py-2.5 shadow-xs shrink-0 z-20">
+                    <div className="w-full flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
                             <button
                                 onClick={handleCloseProcessItemPage}
-                                className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 flex items-center justify-center text-slate-600 transition-all shadow-xs group cursor-pointer shrink-0"
+                                className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 flex items-center justify-center text-slate-600 transition-all shadow-2xs group cursor-pointer shrink-0"
                                 title="Voltar ao Kanban"
                             >
-                                <ArrowLeft className="w-5 h-5 group-hover:-translate-x-0.5 transition-transform" />
+                                <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
                             </button>
-                            <div>
+                            <div className="min-w-0">
                                 <div className="flex items-center gap-2 flex-wrap">
-                                    <span className="text-xs font-black uppercase tracking-wider text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200">
+                                    <span className="text-[10px] xl:text-xs font-black uppercase tracking-wider text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-200">
                                         Protocolo #{selectedProcess.protocolo || selectedProcess.id.slice(0, 8)}
                                     </span>
-                                    <span className="text-xs font-extrabold text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200">
+                                    <span className="text-[10px] xl:text-xs font-extrabold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
                                         <Clock className="w-3 h-3 inline mr-1" />
                                         {getDaysElapsed(selectedProcess.criado_em)}
                                     </span>
                                 </div>
-                                <h1 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight mt-1">
+                                <h1 className="text-base md:text-lg xl:text-xl font-black text-slate-900 tracking-tight leading-tight truncate mt-0.5">
                                     Detalhes da Demanda no Kanban
                                 </h1>
                             </div>
@@ -1351,150 +1351,191 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, u
 
                         <button
                             onClick={() => setSelectedProcessForDetails(selectedProcess)}
-                            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-sm active:scale-95 shrink-0"
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 xl:px-4 xl:py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95 shrink-0"
                         >
-                            <Eye className="w-4 h-4" />
+                            <Eye className="w-3.5 h-3.5 xl:w-4 xl:h-4" />
                             Ver Documento Completo
                         </button>
                     </div>
                 </header>
 
-                {/* Conteúdo Principal da Página do Item */}
-                <div className="flex-1 overflow-y-auto p-4 md:p-8">
-                    <div className="max-w-6xl mx-auto space-y-6">
+                {/* Conteúdo Principal 100% Viewport (Grid 12 Colunas Responsivo) */}
+                <div className="flex-1 min-h-0 w-full p-2.5 md:p-3.5 xl:p-4 overflow-hidden flex flex-col">
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-2.5 md:gap-3 xl:gap-4 flex-1 min-h-0 h-full items-stretch">
                         
-                        {/* CARD 1: TÍTULO RESUMIDO E STATUS ATUAL */}
-                        <div className="bg-white border border-slate-200/90 rounded-2xl p-6 shadow-sm space-y-4">
-                            <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-4">
-                                <span className="text-xs font-black uppercase text-slate-400 tracking-wider">
-                                    Título Resumido do Processo
-                                </span>
-                                <div className="flex items-center gap-2">
-                                    <div className={`p-1.5 px-3 rounded-xl border ${currentPhaseObj.badgeColor} flex items-center gap-2 text-xs font-black shadow-2xs`}>
-                                        <PhaseIcon className="w-4 h-4" />
-                                        <span>Status Atual: {currentPhaseObj.label}</span>
+                        {/* COLUNA ESQUERDA (8 DE 12 COLUNAS) */}
+                        <div className="lg:col-span-7 xl:col-span-8 flex flex-col gap-2.5 md:gap-3 xl:gap-3.5 flex-1 min-h-0 overflow-hidden">
+                            
+                            {/* CARD 1: TÍTULO RESUMIDO E STATUS ATUAL */}
+                            <div className="bg-white border border-slate-200/90 rounded-xl p-3 xl:p-4 shadow-2xs space-y-2 shrink-0">
+                                <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                                    <span className="text-[10px] xl:text-xs font-black uppercase text-slate-400 tracking-wider">
+                                        Título Resumido do Processo
+                                    </span>
+                                    <div className={`p-1 px-2.5 rounded-lg border ${currentPhaseObj.badgeColor} flex items-center gap-1.5 text-[10px] xl:text-xs font-black shadow-2xs`}>
+                                        <PhaseIcon className="w-3.5 h-3.5" />
+                                        <span>Status: {currentPhaseObj.label}</span>
                                     </div>
                                 </div>
+
+                                <h2 className="text-sm md:text-base xl:text-lg 2xl:text-xl font-black text-blue-700 uppercase leading-snug bg-blue-50/70 p-2.5 xl:p-3 rounded-lg border border-blue-200/90 shadow-2xs line-clamp-2">
+                                    {objetoResumidoMap[selectedProcess.id] || selectedProcess.objeto_resumido || `#${selectedProcess.protocolo || selectedProcess.id.slice(0, 8)}`}
+                                </h2>
                             </div>
 
-                            <h2 className="text-xl md:text-2xl font-black text-blue-700 uppercase leading-snug bg-blue-50/70 p-4.5 rounded-xl border border-blue-200/90 shadow-2xs">
-                                {objetoResumidoMap[selectedProcess.id] || selectedProcess.objeto_resumido || `#${selectedProcess.protocolo || selectedProcess.id.slice(0, 8)}`}
-                            </h2>
-                        </div>
-
-                        {/* CARD 2: DEFINIR USUÁRIO RESPONSÁVEL COM SELECT MODERNO E BONITO */}
-                        <div className="bg-gradient-to-br from-indigo-900 via-slate-900 to-indigo-950 text-white rounded-2xl p-6 shadow-lg border border-indigo-500/40 relative overflow-hidden">
-                            <div className="relative z-10 space-y-4">
-                                <div className="flex items-center gap-3 border-b border-indigo-500/30 pb-3">
-                                    <div className="w-10 h-10 rounded-xl bg-indigo-500/20 text-indigo-300 flex items-center justify-center border border-indigo-400/30">
-                                        <UserIcon className="w-5 h-5" />
-                                    </div>
-                                    <div>
-                                        <h3 className="text-lg font-black text-white">
-                                            Definir Usuário Responsável (Com a Demanda)
-                                        </h3>
-                                        <p className="text-xs text-indigo-200/80">
-                                            Selecione o membro da equipe de Licitação atribuído para conduzir este processo.
-                                        </p>
-                                    </div>
-                                </div>
-
-                                {/* SELECT MODERNO PARA USUÁRIOS DO TIPO LICITAÇÃO */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center pt-2">
-                                    <div className="space-y-1.5">
-                                        <label className="text-xs font-black uppercase text-indigo-300 tracking-wider block">
-                                            Selecione o Usuário (Licitação)
-                                        </label>
-                                        <div className="relative">
-                                            <select
-                                                value={assigned?.userId || ''}
-                                                onChange={(e) => {
-                                                    const val = e.target.value;
-                                                    if (!val) {
-                                                        handleAssignUser(selectedProcess.id, '', '');
-                                                    } else {
-                                                        const targetU = licitacaoUsers.find(u => u.id === val);
-                                                        if (targetU) {
-                                                            handleAssignUser(selectedProcess.id, targetU.id, targetU.name);
-                                                        }
-                                                    }
-                                                }}
-                                                className="w-full bg-slate-950/90 border-2 border-indigo-400/50 hover:border-indigo-400 focus:border-amber-400 text-white rounded-xl px-4 py-3 text-sm font-bold shadow-inner outline-none transition-all cursor-pointer appearance-none pr-10"
-                                            >
-                                                <option value="" className="bg-slate-900 text-slate-400">-- Nenhum usuário atribuído --</option>
-                                                {licitacaoUsers.map(u => (
-                                                    <option key={u.id} value={u.id} className="bg-slate-900 text-white font-medium py-1">
-                                                        {u.name} ({u.jobTitle || u.role || 'Licitação'})
-                                                    </option>
-                                                ))}
-                                            </select>
-                                            <ChevronRight className="w-5 h-5 text-indigo-400 absolute right-3 top-1/2 -translate-y-1/2 rotate-90 pointer-events-none" />
+                            {/* CARD 2: DEFINIR USUÁRIO RESPONSÁVEL COM SELECT MODERNO */}
+                            <div className="bg-gradient-to-br from-indigo-900 via-slate-900 to-indigo-950 text-white rounded-xl p-3 xl:p-4 shadow-md border border-indigo-500/40 relative overflow-hidden shrink-0">
+                                <div className="relative z-10 space-y-2">
+                                    <div className="flex items-center gap-2 border-b border-indigo-500/30 pb-2">
+                                        <div className="w-7 h-7 rounded-lg bg-indigo-500/20 text-indigo-300 flex items-center justify-center border border-indigo-400/30">
+                                            <UserIcon className="w-4 h-4" />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-xs xl:text-sm font-black text-white">
+                                                Definir Usuário Responsável (Com a Demanda)
+                                            </h3>
+                                            <p className="text-[10px] text-indigo-200/80">
+                                                Selecione o membro da equipe atribuído para conduzir este processo.
+                                            </p>
                                         </div>
                                     </div>
 
-                                    {/* STATUS DE ATRIBUIÇÃO ATUAL */}
-                                    <div className="bg-slate-950/60 border border-indigo-500/30 rounded-xl p-3.5 flex items-center gap-3">
-                                        {assigned?.userName ? (
-                                            <>
-                                                <div className="w-10 h-10 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-black flex items-center justify-center text-sm shadow-md shrink-0 uppercase">
-                                                    {assigned.userName.trim().slice(0, 2)}
-                                                </div>
-                                                <div className="min-w-0 flex-1">
-                                                    <span className="text-[10px] font-black uppercase text-emerald-400 tracking-wider block">
-                                                        Demanda Atribuída a
-                                                    </span>
-                                                    <span className="text-sm font-black text-white block truncate">
-                                                        {assigned.userName}
-                                                    </span>
-                                                </div>
-                                                <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2.5 py-1 rounded-full text-xs font-black shrink-0">
-                                                    Ativo
-                                                </span>
-                                            </>
-                                        ) : (
-                                            <div className="text-slate-400 text-xs font-medium flex items-center gap-2">
-                                                <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
-                                                <span>Nenhum usuário definido com esta demanda ainda.</span>
+                                    {/* SELECT MODERNO PARA USUÁRIOS */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 items-center pt-1">
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black uppercase text-indigo-300 tracking-wider block">
+                                                Selecione o Usuário
+                                            </label>
+                                            <div className="relative">
+                                                <select
+                                                    value={assigned?.userId || ''}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value;
+                                                        if (!val) {
+                                                            handleAssignUser(selectedProcess.id, '', '');
+                                                        } else {
+                                                            const targetU = licitacaoUsers.find(u => u.id === val);
+                                                            if (targetU) {
+                                                                handleAssignUser(selectedProcess.id, targetU.id, targetU.name);
+                                                            }
+                                                        }
+                                                    }}
+                                                    className="w-full bg-slate-950/90 border-2 border-indigo-400/50 hover:border-indigo-400 focus:border-amber-400 text-white rounded-lg px-3 py-2 text-xs font-bold shadow-inner outline-none transition-all cursor-pointer appearance-none pr-8"
+                                                >
+                                                    <option value="" className="bg-slate-900 text-slate-400">-- Nenhum usuário atribuído --</option>
+                                                    {licitacaoUsers.map(u => (
+                                                        <option key={u.id} value={u.id} className="bg-slate-900 text-white font-medium py-1">
+                                                            {u.name} ({u.jobTitle || u.role || 'Licitação'})
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                                <ChevronRight className="w-4 h-4 text-indigo-400 absolute right-2.5 top-1/2 -translate-y-1/2 rotate-90 pointer-events-none" />
                                             </div>
-                                        )}
+                                        </div>
+
+                                        {/* STATUS DE ATRIBUIÇÃO ATUAL */}
+                                        <div className="bg-slate-950/60 border border-indigo-500/30 rounded-lg p-2.5 flex items-center gap-2.5">
+                                            {assigned?.userName ? (
+                                                <>
+                                                    <div className="w-8 h-8 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-black flex items-center justify-center text-xs shadow-md shrink-0 uppercase">
+                                                        {assigned.userName.trim().slice(0, 2)}
+                                                    </div>
+                                                    <div className="min-w-0 flex-1">
+                                                        <span className="text-[9px] font-black uppercase text-emerald-400 tracking-wider block">
+                                                            Demanda Com
+                                                        </span>
+                                                        <span className="text-xs font-black text-white block truncate">
+                                                            {assigned.userName}
+                                                        </span>
+                                                    </div>
+                                                    <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full text-[10px] font-black shrink-0">
+                                                        Ativo
+                                                    </span>
+                                                </>
+                                            ) : (
+                                                <div className="text-slate-400 text-[11px] font-medium flex items-center gap-1.5">
+                                                    <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                                                    <span>Nenhum usuário definido com esta demanda.</span>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
+                                </div>
+                            </div>
+
+                            {/* CARD 3: OBJETO DETALHADO / FINALIDADE (SCROLLABLE SE FOR LONGO) */}
+                            <div className="bg-white border border-slate-200/90 rounded-xl p-3.5 xl:p-4 shadow-2xs flex-1 min-h-0 flex flex-col overflow-hidden">
+                                <div className="flex items-center gap-2 text-slate-500 border-b border-slate-100 pb-2 shrink-0">
+                                    <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                                    <span className="text-[10px] xl:text-xs font-black uppercase tracking-wider text-slate-700">Objeto Detalhado / Finalidade</span>
+                                </div>
+                                <div className="flex-1 min-h-0 overflow-y-auto mt-2 text-slate-800 text-xs md:text-sm font-medium leading-relaxed whitespace-pre-line pr-1 custom-scrollbar">
+                                    {selectedProcess.finalidade || 'Nenhuma finalidade descrita.'}
                                 </div>
                             </div>
                         </div>
 
-                        {/* CARD 3: OBJETO COMPLETO, SOLICITANTE E SETOR */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            {/* OBJETO COMPLETO */}
-                            <div className="md:col-span-2 bg-white border border-slate-200/90 rounded-2xl p-6 shadow-sm space-y-3">
-                                <div className="flex items-center gap-2 text-slate-500 border-b border-slate-100 pb-3">
-                                    <FileText className="w-4 h-4 text-indigo-600" />
-                                    <span className="text-xs font-black uppercase tracking-wider text-slate-700">Objeto Detalhado / Finalidade</span>
-                                </div>
-                                <p className="text-slate-800 text-sm md:text-base font-medium leading-relaxed whitespace-pre-line">
-                                    {selectedProcess.finalidade || 'Nenhuma finalidade descrita.'}
-                                </p>
-                            </div>
-
+                        {/* COLUNA DIREITA (4 DE 12 COLUNAS) */}
+                        <div className="lg:col-span-5 xl:col-span-4 flex flex-col gap-2.5 md:gap-3 xl:gap-3.5 flex-1 min-h-0 overflow-hidden">
+                            
                             {/* SOLICITANTE & SETOR */}
-                            <div className="bg-white border border-slate-200/90 rounded-2xl p-6 shadow-sm space-y-4">
-                                <div className="flex items-center gap-2 text-slate-500 border-b border-slate-100 pb-3">
-                                    <Landmark className="w-4 h-4 text-indigo-600" />
-                                    <span className="text-xs font-black uppercase tracking-wider text-slate-700">Solicitante & Setor</span>
+                            <div className="bg-white border border-slate-200/90 rounded-xl p-3.5 xl:p-4 shadow-2xs space-y-2.5 shrink-0">
+                                <div className="flex items-center gap-2 text-slate-500 border-b border-slate-100 pb-2">
+                                    <Landmark className="w-3.5 h-3.5 text-indigo-600" />
+                                    <span className="text-[10px] xl:text-xs font-black uppercase tracking-wider text-slate-700">Solicitante & Setor</span>
                                 </div>
 
-                                <div className="space-y-3">
-                                    <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
-                                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">Solicitante</span>
-                                        <span className="text-sm font-black text-slate-800 block mt-0.5">{selectedProcess.solicitante_nome}</span>
+                                <div className="space-y-2">
+                                    <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                                        <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider block">Solicitante</span>
+                                        <span className="text-xs font-black text-slate-800 block mt-0.5 truncate">{selectedProcess.solicitante_nome}</span>
                                         {selectedProcess.solicitante_cargo && (
-                                            <span className="text-xs font-medium text-slate-500 block mt-0.5">{selectedProcess.solicitante_cargo}</span>
+                                            <span className="text-[10px] font-medium text-slate-500 block truncate mt-0.5">{selectedProcess.solicitante_cargo}</span>
                                         )}
                                     </div>
 
-                                    <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100">
-                                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">Setor Solicitante</span>
-                                        <span className="text-sm font-black text-indigo-700 block mt-0.5">{selectedProcess.solicitante_setor}</span>
+                                    <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                                        <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider block">Setor Solicitante</span>
+                                        <span className="text-xs font-black text-indigo-700 block mt-0.5 truncate">{selectedProcess.solicitante_setor}</span>
                                     </div>
+                                </div>
+                            </div>
+
+                            {/* INFORMAÇÕES ADICIONAIS DO PROCESSO */}
+                            <div className="bg-white border border-slate-200/90 rounded-xl p-3.5 xl:p-4 shadow-2xs flex-1 min-h-0 overflow-y-auto space-y-2.5 custom-scrollbar">
+                                <div className="flex items-center gap-2 text-slate-500 border-b border-slate-100 pb-2">
+                                    <Tag className="w-3.5 h-3.5 text-indigo-600" />
+                                    <span className="text-[10px] xl:text-xs font-black uppercase tracking-wider text-slate-700">Resumo do Processo</span>
+                                </div>
+
+                                <div className="space-y-2 text-xs">
+                                    <div className="flex justify-between items-center bg-slate-50 p-2 rounded-lg border border-slate-100">
+                                        <span className="text-slate-500 font-bold text-[11px]">Prioridade</span>
+                                        <span className="font-extrabold text-xs text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+                                            {selectedProcess.prioridade || 'Normal'}
+                                        </span>
+                                    </div>
+
+                                    <div className="flex justify-between items-center bg-slate-50 p-2 rounded-lg border border-slate-100">
+                                        <span className="text-slate-500 font-bold text-[11px]">Data de Criação</span>
+                                        <span className="font-bold text-slate-800 text-[11px]">
+                                            {selectedProcess.criado_em ? format(new Date(selectedProcess.criado_em), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR }) : '-'}
+                                        </span>
+                                    </div>
+
+                                    {selectedProcess.ficha_orcamentaria && (
+                                        <div className="flex justify-between items-center bg-slate-50 p-2 rounded-lg border border-slate-100">
+                                            <span className="text-slate-500 font-bold text-[11px]">Ficha Orçamentária</span>
+                                            <span className="font-mono text-emerald-700 font-bold text-[11px]">{selectedProcess.ficha_orcamentaria}</span>
+                                        </div>
+                                    )}
+
+                                    {selectedProcess.resolucao_numero && (
+                                        <div className="flex justify-between items-center bg-slate-50 p-2 rounded-lg border border-slate-100">
+                                            <span className="text-slate-500 font-bold text-[11px]">Resolução</span>
+                                            <span className="font-mono text-indigo-700 font-bold text-[11px]">{selectedProcess.resolucao_numero}</span>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>
