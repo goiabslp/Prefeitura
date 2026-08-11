@@ -51,9 +51,9 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   currentSubView,
   systemUpdateCountdown
 }) => {
-  const isAdmin = currentUser.role === 'admin';
+  const isAdmin = currentUser?.role === 'admin';
   const isNotHome = currentView !== 'home';
-  const isKanbanViewOnly = currentView === 'licitacao:kanban-view' || (typeof window !== 'undefined' && decodeURIComponent(window.location.pathname).includes('/Kanban/view'));
+  const isKanbanViewOnly = currentView === 'licitacao:kanban-view' || (typeof window !== 'undefined' && decodeURIComponent(window.location.pathname).toLowerCase().includes('/kanban/view'));
 
   const { data: licitacaoProcessesData } = useLicitacaoProcesses();
 

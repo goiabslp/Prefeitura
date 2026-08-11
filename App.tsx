@@ -3914,8 +3914,8 @@ const App: React.FC = () => {
           )}
 
           <div className="w-full">
-            {currentUser && <AppHeader
-              currentUser={currentUser}
+            {(currentUser || currentView === 'licitacao:kanban-view') && <AppHeader
+              currentUser={currentUser || ({ id: 'view-user', name: 'Modo Sala', username: 'sala', role: 'viewer', sector: '', permissions: [] } as any)}
               uiConfig={appState.ui}
               activeBlock={activeBlock}
               onLogout={handleLogout}
