@@ -282,6 +282,8 @@ export const LicitacaoWizard: React.FC<LicitacaoWizardProps> = ({ currentUser, o
                     resolucao_descricao: resolucaoDescricao,
                     resolucao_numero: resolucaoNumero,
                     ficha_orcamentaria: fichaOrcamentaria,
+                    status: 'Em Análise' as any,
+                    aprovado_em: null as any
                 },
                 itens: itens.map(({ descricao, quantidade, unidade }) => ({
                     descricao, quantidade, observacoes: unidade

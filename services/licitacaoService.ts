@@ -43,17 +43,15 @@ export const createLicitacaoProcessCompleto = async (payload: {
     let lastError: any = null;
 
     const nowIso = new Date().toISOString();
-    const isApprovedStatus = (payload.processo.status as string) === 'Aprovado';
+    const isApprovedStatus = (payload.processo.status as string) === 'Aprovado' || (payload.processo.status as string) === 'approved';
 
     const processPayload: Partial<LicitacaoProcesso> = {
         ...payload.processo,
         status: (payload.processo.status || 'Em Análise') as any,
         fase: payload.processo.fase || 'pendente',
-        ...(isApprovedStatus ? {
-            aprovado_em: nowIso,
-            enviado_kanban_em: nowIso,
-            apresentado_animacao: false
-        } : {})
+        aprovado_em: isApprovedStatus ? nowIso : null,
+        enviado_kanban_em: isApprovedStatus ? nowIso : null,
+        apresentado_animacao: false
     };
 
     while (retries > 0) {
@@ -150,10 +148,9 @@ export const broadcastLicitacaoApproval = (approvedProcessInfo: any) => {
         } catch (e) {}
     }
 
-    // 2. Supabase Realtime Broadcast com subscribe explícito
+    // 2. Supabase Realtime Broadcast no canal fixo escutado por todos os dispositivos, TVs e telas
     try {
-        const channelName = `licitacao_channel_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-        const channel = supabase.channel(channelName, { config: { broadcast: { self: true } } });
+        const channel = supabase.channel('licitacao_kanban_priority', { config: { broadcast: { self: true } } });
         channel.subscribe((status) => {
             if (status === 'SUBSCRIBED') {
                 channel.send({
@@ -163,7 +160,7 @@ export const broadcastLicitacaoApproval = (approvedProcessInfo: any) => {
                 });
                 setTimeout(() => {
                     try { supabase.removeChannel(channel); } catch (e) {}
-                }, 2500);
+                }, 3000);
             }
         });
     } catch (e) {}
@@ -202,6 +199,36 @@ export const updateLicitacaoProcess = async (id: string, updates: Partial<Licita
             .maybeSingle();
 
         if (error) {
+            // Tratamento gracioso para restrição de check constraint no banco (Erro 23514)
+            if (error.code === '23514' && (error.message?.includes('status_check') || JSON.stringify(error).includes('status_check'))) {
+                console.warn("Status enviado não aceito pelo CHECK constraint do banco. Utilizando fallback seguro...");
+                const sanitizedUpdates = { ...updates, status: 'Em Análise' as any };
+                const { data: retryData, error: retryError } = await supabase
+                    .from('licitacao_processos')
+                    .update(sanitizedUpdates)
+                    .eq('id', id)
+                    .select()
+                    .maybeSingle();
+
+                if (retryError) throw retryError;
+
+                const isRealApproval = retryData && updates.aprovado_em !== undefined && updates.aprovado_em !== null && updates.apresentado_animacao === false;
+                if (isRealApproval) {
+                    const nowIso = new Date().toISOString();
+                    const approvedProcessInfo = {
+                        id: retryData.id,
+                        protocolo: retryData.protocolo || retryData.id.slice(0, 8),
+                        solicitante_nome: retryData.solicitante_nome || 'Não informado',
+                        solicitante_setor: retryData.solicitante_setor || 'Não informado',
+                        objeto_resumido: retryData.objeto_resumido || retryData.finalidade || 'Processo de Licitação',
+                        aprovado_em: retryData.aprovado_em || nowIso
+                    };
+                    broadcastLicitacaoApproval(approvedProcessInfo);
+                }
+
+                return retryData as LicitacaoProcesso;
+            }
+
             // Caso a coluna checkin_finalizado ainda não exista na tabela no banco
             if (error.code === 'PGRST204' && (error.message?.includes('checkin_finalizado') || JSON.stringify(error).includes('checkin_finalizado'))) {
                 console.warn("Coluna 'checkin_finalizado' não encontrada no banco. Atualizando demais campos da licitação...");
@@ -344,8 +371,8 @@ export const signLicitacaoProcess = async (assinatura: Partial<LicitacaoAssinatu
 
         if (error) throw error;
         
-        // Atualiza status do processo
-        await updateLicitacaoProcess(assinatura.processo_id!, { status: 'Assinado' });
+        // Atualiza status do processo como "Em Análise" (Aguardando Aprovação do Administrador)
+        await updateLicitacaoProcess(assinatura.processo_id!, { status: 'Em Análise' as any });
 
         return data as LicitacaoAssinatura;
     } catch (error) {

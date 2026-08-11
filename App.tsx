@@ -218,15 +218,15 @@ const PATH_TO_STATE: Record<string, any> = Object.fromEntries(
 );
 
 const mapLicitacaoProcessToOrder = (process: any): Order => {
-  const isApproved = process.status === 'Aprovado' || process.status === 'approved' || process.status === 'Assinado' || !!process.aprovado_em;
+  const isApproved = process.status === 'Aprovado' || process.status === 'approved' || !!process.aprovado_em;
 
   let mappedStatus: any = 'awaiting_approval';
   if (process.status === 'Rascunho') mappedStatus = 'pending';
   else if (process.status === 'Aguardando Assinatura') mappedStatus = 'awaiting_approval';
-  else if (isApproved) mappedStatus = 'approved';
-  else if (process.status === 'Concluído' || process.status === 'completed') mappedStatus = 'completed';
-  else if (process.status === 'Finalizado' || process.status === 'finalized') mappedStatus = 'finalized';
   else if (process.status === 'Rejeitado' || process.status === 'rejected') mappedStatus = 'rejected';
+  else if (process.status === 'Finalizado' || process.status === 'finalized') mappedStatus = 'finalized';
+  else if (process.status === 'Concluído' || process.status === 'completed') mappedStatus = 'completed';
+  else if (isApproved) mappedStatus = 'approved';
   else mappedStatus = 'awaiting_approval';
 
   const sig = process.assinatura || (process.licitacao_assinaturas && process.licitacao_assinaturas.length > 0 ? process.licitacao_assinaturas[0] : null);
@@ -4667,7 +4667,7 @@ const App: React.FC = () => {
                     let mappedBackendStatus: any = 'Em Análise';
                     if (status === 'pending') mappedBackendStatus = 'Rascunho';
                     else if (status === 'awaiting_approval') mappedBackendStatus = 'Em Análise';
-                    else if (isApprovedRequested) mappedBackendStatus = 'Em Análise';
+                    else if (isApprovedRequested) mappedBackendStatus = 'Aprovado';
                     else if (status === 'finalized') mappedBackendStatus = 'Finalizado';
                     else if (status === 'rejected') mappedBackendStatus = 'Rejeitado';
 
@@ -4681,7 +4681,7 @@ const App: React.FC = () => {
                       updatesObj.aprovado_em = nowIso;
                       updatesObj.enviado_kanban_em = nowIso;
                       updatesObj.apresentado_animacao = false;
-                    } else if (status === 'awaiting_approval' || status === 'pending') {
+                    } else {
                       updatesObj.aprovado_em = null;
                       updatesObj.enviado_kanban_em = null;
                     }
@@ -5037,7 +5037,7 @@ const App: React.FC = () => {
                     let mappedBackendStatus: any = 'Em Análise';
                     if (status === 'pending') mappedBackendStatus = 'Rascunho';
                     else if (status === 'awaiting_approval') mappedBackendStatus = 'Em Análise';
-                    else if (isApprovedRequested) mappedBackendStatus = 'Em Análise';
+                    else if (isApprovedRequested) mappedBackendStatus = 'Aprovado';
                     else if (status === 'finalized') mappedBackendStatus = 'Finalizado';
                     else if (status === 'rejected') mappedBackendStatus = 'Rejeitado';
 
@@ -5051,7 +5051,7 @@ const App: React.FC = () => {
                       updatesObj.aprovado_em = nowIso;
                       updatesObj.enviado_kanban_em = nowIso;
                       updatesObj.apresentado_animacao = false;
-                    } else if (status === 'awaiting_approval' || status === 'pending') {
+                    } else {
                       updatesObj.aprovado_em = null;
                       updatesObj.enviado_kanban_em = null;
                     }

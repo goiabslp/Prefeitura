@@ -460,7 +460,7 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
         window.addEventListener('licitacao-queue-priority-updated', handleQueueLocalEvent);
         window.addEventListener('licitacao-new-process-approved', handleNewApprovedLocalEvent);
 
-        // 1. Busca prioridades iniciais do banco
+        // 1. Busca prioridades iniciais e processo aprovado mais recente do banco
         const fetchDbPriority = async () => {
             try {
                 const { data } = await supabase
@@ -469,6 +469,10 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                     .eq('id', 'global_config')
                     .single();
                 if (data?.ui_config) {
+                    if (data.ui_config.latest_approved_licitacao_process) {
+                        triggerModalForProcess(data.ui_config.latest_approved_licitacao_process);
+                    }
+
                     if (data.ui_config.licitacao_prioridade_visual !== undefined) {
                         const dbPriority = data.ui_config.licitacao_prioridade_visual;
                         if (dbPriority) {
@@ -505,6 +509,7 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
             }
         };
         fetchDbPriority();
+        const pollingInterval = setInterval(fetchDbPriority, 2000);
 
         // 2. Supabase Realtime Channel para Broadcast instantâneo e Postgres Changes (self: true para escutar própria aba)
         const channel = supabase.channel('licitacao_kanban_priority', { config: { broadcast: { self: true } } })
@@ -538,20 +543,12 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
             })
             .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'licitacao_processos' }, (payload: any) => {
                 const updated = payload.new;
-                const old = payload.old;
-                // Disparar animação SOMENTE quando aprovado_em foi definido neste update (aprovação real)
-                // e apresentado_animacao é false (ainda não foi apresentada)
                 if (updated && updated.aprovado_em && !updated.apresentado_animacao) {
-                    // Verifica se aprovado_em é NOVO (não existia antes ou era null)
-                    const wasApprovedBefore = old && old.aprovado_em;
-                    if (!wasApprovedBefore) {
-                        triggerModalForProcess(updated);
-                    }
+                    triggerModalForProcess(updated);
                 }
             })
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'licitacao_processos' }, (payload: any) => {
                 const inserted = payload.new;
-                // Disparar animação SOMENTE se o novo processo já vem com aprovado_em preenchido
                 if (inserted && inserted.aprovado_em && !inserted.apresentado_animacao) {
                     triggerModalForProcess(inserted);
                 }
@@ -559,6 +556,9 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
             .on('postgres_changes', { event: '*', schema: 'public', table: 'organization_settings', filter: 'id=eq.global_config' }, (payload: any) => {
                 const newUi = payload.new?.ui_config;
                 if (newUi) {
+                    if (newUi.latest_approved_licitacao_process) {
+                        triggerModalForProcess(newUi.latest_approved_licitacao_process);
+                    }
                     if (newUi.licitacao_prioridade_visual !== undefined) {
                         const dbPriority = newUi.licitacao_prioridade_visual;
                         try {
@@ -594,6 +594,7 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
         channelRef.current = channel;
 
         return () => {
+            clearInterval(pollingInterval);
             if (bc) {
                 try { bc.close(); } catch (e) {}
             }
@@ -763,22 +764,10 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
     const filteredProcesses = useMemo(() => {
         return processes.filter(process => {
             const st = (process.status || '').toString().trim().toLowerCase();
-            const isEmAprovacaoOrRejeitadoOrFinalizado = 
-                st === 'em aprovação' ||
-                st === 'em aprovacao' ||
-                st === 'rascunho' ||
-                st === 'aguardando assinatura' ||
-                st === 'pending' ||
-                st === 'awaiting_approval' ||
-                st === 'payment_account' ||
-                st === 'awaiting_ficha' ||
-                st === 'rejeitado' ||
-                st === 'rejected' ||
-                st === 'finalizado' ||
-                st === 'finalized';
+            const isApproved = st === 'aprovado' || st === 'approved' || !!process.aprovado_em;
 
-            // Processos com status "Em Aprovação", "Rejeitado" ou "Finalizado" NUNCA devem aparecer no Kanban nem na visão TV
-            if (isEmAprovacaoOrRejeitadoOrFinalizado) {
+            // Processos NÃO aprovados (Em Aprovação, Em Análise, Rascunho, Rejeitado, Finalizado) NUNCA devem aparecer no Kanban nem na visão TV
+            if (!isApproved || st === 'rejeitado' || st === 'rejected' || st === 'finalizado' || st === 'finalized' || st === 'rascunho') {
                 return false;
             }
 
@@ -813,22 +802,9 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
 
         filteredProcesses.forEach(process => {
             const st = (process.status || '').toString().trim().toLowerCase();
-            const isEmAprovacaoOrRejeitadoOrFinalizado = 
-                st === 'em aprovação' ||
-                st === 'em aprovacao' ||
-                st === 'rascunho' ||
-                st === 'aguardando assinatura' ||
-                st === 'pending' ||
-                st === 'awaiting_approval' ||
-                st === 'payment_account' ||
-                st === 'awaiting_ficha' ||
-                st === 'rejeitado' ||
-                st === 'rejected' ||
-                st === 'finalizado' ||
-                st === 'finalized';
+            const isApproved = st === 'aprovado' || st === 'approved' || !!process.aprovado_em;
 
-            // Garante que NENHUM processo Em Aprovação, Rejeitado ou Finalizado seja alocado para qualquer coluna
-            if (isEmAprovacaoOrRejeitadoOrFinalizado) {
+            if (!isApproved || st === 'rejeitado' || st === 'rejected' || st === 'finalizado' || st === 'finalized' || st === 'rascunho') {
                 return;
             }
 

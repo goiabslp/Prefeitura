@@ -1930,11 +1930,19 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                                 onClick={() => {
                                                                     const id = statusSelectionOrder.id;
                                                                     const isAppr = cfg.key === 'approved';
+                                                                    const updatedAprovadoEm = isAppr ? new Date().toISOString() : null;
+
+                                                                    setStatusSelectionOrder(prev => prev ? {
+                                                                        ...prev,
+                                                                        status: cfg.key as any,
+                                                                        aprovado_em: updatedAprovadoEm
+                                                                    } as any : null);
+
                                                                     setLocalOptimisticUpdates(prev => ({
                                                                         ...prev,
                                                                         [id]: {
                                                                             status: cfg.key as any,
-                                                                            aprovado_em: isAppr ? new Date().toISOString() : null
+                                                                            aprovado_em: updatedAprovadoEm
                                                                         }
                                                                     }));
                                                                     setSuccessOrderId(id);
@@ -1944,7 +1952,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                                     setTimeout(() => {
                                                                         setStatusSelectionOrder(null);
                                                                         setSuccessOrderId(null);
-                                                                    }, 1500);
+                                                                    }, 1200);
                                                                 }}
                                                                 className={`p-6 rounded-[1.5rem] border-2 text-left transition-all relative group overflow-hidden ${isActive ? 'bg-indigo-50 border-indigo-600 text-indigo-900' : 'bg-white border-slate-100 text-slate-600 hover:border-indigo-300 hover:bg-slate-50 active:scale-[0.98]'}`}
                                                             >
