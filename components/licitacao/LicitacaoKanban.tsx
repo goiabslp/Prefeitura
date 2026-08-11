@@ -995,7 +995,7 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                                                     return (
                                                         <div
                                                             key={process.id}
-                                                            className={`group rounded-xl p-1.5 2xl:p-2.5 border transition-all duration-300 flex flex-col gap-1 2xl:gap-1.5 items-stretch cursor-default relative ${
+                                                            className={`group rounded-xl p-1.5 2xl:p-2 border transition-all duration-300 flex flex-col gap-1 2xl:gap-1.5 items-stretch cursor-default relative ${
                                                                 isPriorityProcess
                                                                     ? 'ring-4 ring-amber-400 border-amber-400 bg-amber-50/90 shadow-[0_0_20px_rgba(251,191,36,0.4)] scale-[1.02] z-30'
                                                                     : 'bg-white border-slate-200/80 shadow-2xs'
@@ -1008,8 +1008,9 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                                                             )}
 
                                                             <div className="flex items-center justify-between gap-1">
-                                                                <span className="font-sans text-[11px] xl:text-xs 2xl:text-sm font-black text-blue-700 uppercase bg-blue-50 px-1.5 py-0.5 2xl:px-2 2xl:py-1 rounded-md border border-blue-200/90 flex-1 text-center line-clamp-2 break-words leading-tight shadow-2xs" title={`Protocolo: #${process.protocolo}`}>
-                                                                    {objetoResumidoMap[process.id] || process.objeto_resumido || `#${process.protocolo || process.id.slice(0, 8)}`}
+                                                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] xl:text-[10px] 2xl:text-[11px] font-extrabold text-amber-800 bg-amber-50 border border-amber-200/80 rounded-md shrink-0 shadow-2xs">
+                                                                    <Clock className="w-2.5 h-2.5 2xl:w-3 2xl:h-3 text-amber-600 shrink-0" />
+                                                                    <span className="whitespace-nowrap">{getDaysElapsed(process.criado_em)}</span>
                                                                 </span>
 
                                                                 <button
@@ -1053,10 +1054,9 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                                                                 )}
                                                             </div>
 
-                                                            <div className="flex items-center justify-center gap-1 text-[10px] xl:text-[11px] 2xl:text-xs font-extrabold text-slate-700 bg-amber-50/80 px-1 py-0.5 2xl:px-2 2xl:py-1 rounded-md border border-amber-200/70">
-                                                                <Clock className="w-3 h-3 2xl:w-3.5 2xl:h-3.5 text-amber-600 shrink-0" />
-                                                                <span className="whitespace-nowrap">{getDaysElapsed(process.criado_em)}</span>
-                                                            </div>
+                                                            <span className="font-sans text-[11px] xl:text-xs 2xl:text-sm font-black text-blue-700 uppercase bg-blue-50 px-1.5 py-1 2xl:px-2 rounded-md border border-blue-200/90 w-full text-center line-clamp-2 break-words leading-tight shadow-2xs" title={`Protocolo: #${process.protocolo}`}>
+                                                                {objetoResumidoMap[process.id] || process.objeto_resumido || `#${process.protocolo || process.id.slice(0, 8)}`}
+                                                            </span>
                                                         </div>
                                                     );
                                                 }
