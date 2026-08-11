@@ -274,7 +274,17 @@ const mapLicitacaoProcessToOrder = (process: any): Order => {
 
 const App: React.FC = () => {
   // State controlling the active module view
-  const [currentView, setCurrentView] = useState<'login' | 'home' | 'admin' | 'tracking' | 'editor' | 'vehicle-scheduling' | 'abastecimento' | 'agricultura' | 'obras' | 'order-details' | 'tasks-dashboard' | 'purchase-inventory' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'diarias-novo-evento' | 'diarias-lancamentos' | 'diarias-gestores' | 'diarias-viajar' | 'licitacao' | 'licitacao:new' | 'licitacao:view' | 'licitacao:details' | 'licitacao:kanban' | 'licitacao:kanban-view' | 'licitacao-all' | 'licitacao-screening' | 'consultas' | 'farmacia' | 'upload'>('login');
+  const [currentView, setCurrentView] = useState<'login' | 'home' | 'admin' | 'tracking' | 'editor' | 'vehicle-scheduling' | 'abastecimento' | 'agricultura' | 'obras' | 'order-details' | 'tasks-dashboard' | 'purchase-inventory' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'diarias-novo-evento' | 'diarias-lancamentos' | 'diarias-gestores' | 'diarias-viajar' | 'licitacao' | 'licitacao:new' | 'licitacao:view' | 'licitacao:details' | 'licitacao:kanban' | 'licitacao:kanban-view' | 'licitacao-all' | 'licitacao-screening' | 'consultas' | 'farmacia' | 'upload'>(() => {
+    if (typeof window !== 'undefined') {
+      let rawPath = window.location.pathname;
+      try { rawPath = decodeURIComponent(rawPath); } catch (e) {}
+      const path = rawPath.replace(/\/$/, '').toLowerCase() || '/';
+      if (path.includes('/kanban/view') && (path.includes('/licitacao') || path.includes('/licitaco') || path.includes('/licitação'))) {
+        return 'licitacao:kanban-view';
+      }
+    }
+    return 'login';
+  });
   const [remoteAccessState, setRemoteAccessState] = useState<any>(null);
 
   useEffect(() => {
@@ -1139,10 +1149,24 @@ const App: React.FC = () => {
       } else if (path.startsWith('/upload')) {
         setCurrentView('upload');
         return;
-      } else if (path.includes('/licitacao/kanban/view') || path.includes('/licitação/kanban/view') || path.includes('/licitacao\\kanban\\view') || path.includes('/licitação\\kanban\\view')) {
+      } else if (
+        path.includes('/licitacao/kanban/view') || 
+        path.includes('/licitação/kanban/view') || 
+        path.includes('/licitaco/kanban/view') || 
+        path.includes('/licitacao\\kanban\\view') || 
+        path.includes('/licitação\\kanban\\view') || 
+        path.includes('/licitaco\\kanban\\view')
+      ) {
         setCurrentView('licitacao:kanban-view');
         return;
-      } else if (path.includes('/licitacao/kanban') || path.includes('/licitação/kanban') || path.includes('/licitacao\\kanban') || path.includes('/licitação\\kanban')) {
+      } else if (
+        path.includes('/licitacao/kanban') || 
+        path.includes('/licitação/kanban') || 
+        path.includes('/licitaco/kanban') || 
+        path.includes('/licitacao\\kanban') || 
+        path.includes('/licitação\\kanban') || 
+        path.includes('/licitaco\\kanban')
+      ) {
         setCurrentView('licitacao:kanban');
         return;
       }
@@ -1426,6 +1450,8 @@ const App: React.FC = () => {
   useEffect(() => {
     if (authLoading) return;
 
+    const isPublicView = currentView === 'licitacao:kanban-view';
+
     if (currentUser && currentView === 'login') {
       // Prevent auto-redirect if we are explicitly showing the login transition modal
       if (!isLoginTransitioning) {
@@ -1434,7 +1460,7 @@ const App: React.FC = () => {
           setCurrentView('home');
         }
       }
-    } else if (!currentUser && currentView !== 'login') {
+    } else if (!currentUser && currentView !== 'login' && !isPublicView) {
       setCurrentView('login');
     }
   }, [currentUser, currentView, authLoading, isLoginTransitioning]);
