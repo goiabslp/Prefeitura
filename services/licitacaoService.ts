@@ -221,9 +221,11 @@ export const updateLicitacaoProcess = async (id: string, updates: Partial<Licita
             throw error;
         }
 
-        const isApprovedStatus = data && data.status && (data.status === 'Aprovado' || data.status === 'Em Análise' || (data.status !== 'Rascunho' && data.status !== 'Aguardando Assinatura' && data.status !== 'Em Aprovação' && data.status !== 'Rejeitado' && data.status !== 'Finalizado'));
+        // Disparar animação de aprovação SOMENTE quando aprovado_em está sendo definido explicitamente
+        // (ou seja, uma aprovação real via MeusProcessos), NÃO em mudanças de fase/coluna do Kanban
+        const isRealApproval = data && updates.aprovado_em !== undefined && updates.aprovado_em !== null && updates.apresentado_animacao === false;
 
-        if (data && isApprovedStatus && (updates.status !== undefined || updates.apresentado_animacao === false || updates.aprovado_em !== undefined)) {
+        if (isRealApproval) {
             const nowIso = new Date().toISOString();
             const approvedProcessInfo = {
                 id: data.id,
