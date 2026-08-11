@@ -538,20 +538,22 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
             })
             .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'licitacao_processos' }, (payload: any) => {
                 const updated = payload.new;
-                if (updated && updated.status) {
-                    const isApprovedStatus = updated.status !== 'Rascunho' && updated.status !== 'Aguardando Assinatura' && updated.status !== 'Rejeitado' && updated.status !== 'Finalizado';
-                    if (isApprovedStatus) {
+                const old = payload.old;
+                // Disparar animação SOMENTE quando aprovado_em foi definido neste update (aprovação real)
+                // e apresentado_animacao é false (ainda não foi apresentada)
+                if (updated && updated.aprovado_em && !updated.apresentado_animacao) {
+                    // Verifica se aprovado_em é NOVO (não existia antes ou era null)
+                    const wasApprovedBefore = old && old.aprovado_em;
+                    if (!wasApprovedBefore) {
                         triggerModalForProcess(updated);
                     }
                 }
             })
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'licitacao_processos' }, (payload: any) => {
                 const inserted = payload.new;
-                if (inserted && inserted.status) {
-                    const isApprovedStatus = inserted.status !== 'Rascunho' && inserted.status !== 'Aguardando Assinatura' && inserted.status !== 'Rejeitado' && inserted.status !== 'Finalizado';
-                    if (isApprovedStatus) {
-                        triggerModalForProcess(inserted);
-                    }
+                // Disparar animação SOMENTE se o novo processo já vem com aprovado_em preenchido
+                if (inserted && inserted.aprovado_em && !inserted.apresentado_animacao) {
+                    triggerModalForProcess(inserted);
                 }
             })
             .on('postgres_changes', { event: '*', schema: 'public', table: 'organization_settings', filter: 'id=eq.global_config' }, (payload: any) => {
