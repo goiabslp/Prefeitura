@@ -351,6 +351,7 @@ export const saveLicitacaoProcess = async (process: any): Promise<any> => {
     if (process.status === 'awaiting_approval') dbStatus = 'Aguardando Assinatura';
     if (process.status === 'in_progress') dbStatus = 'Em Análise';
     if (process.status === 'completed') dbStatus = 'Concluído';
+    if (process.status === 'finalized') dbStatus = 'Finalizado';
     if (process.status === 'rejected') dbStatus = 'Rejeitado';
 
     // Sanitize the payload to only include columns from licitacao_processos

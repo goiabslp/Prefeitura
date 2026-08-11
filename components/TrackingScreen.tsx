@@ -5,7 +5,7 @@ import {
     ArrowLeft, Search, PackageX, FileText, Clock, Trash2,
     FileDown, Calendar, Edit3, TrendingUp, Loader2,
     CheckCircle2, AlertCircle, CalendarCheck, Check, RotateCcw,
-    Paperclip, PackageCheck, FileSearch, Scale, Landmark, ShoppingCart, CheckCircle, XCircle,
+    Paperclip, PackageCheck, FileSearch, Scale, Landmark, ShoppingCart, CheckCircle, XCircle, CheckCheck,
     Eye, History, X, Lock, User, MessageCircle, Sparkles, Plus, Upload, Download, AlertTriangle, ShieldAlert, Zap, Info, Network, Trash, ArrowRight, Edit2, MapPin, ChevronRight, MousePointer2,
     Filter, ChevronDown, Hash, Save
 } from 'lucide-react';
@@ -395,6 +395,8 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
             case 'approved':
             case 'completed':
                 return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-100 text-[9px] font-black uppercase tracking-wider"><CheckCircle2 className="w-3 h-3" /> Aprovado</span>;
+            case 'finalized':
+                return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-100 text-[9px] font-black uppercase tracking-wider"><CheckCheck className="w-3 h-3" /> Finalizado</span>;
             case 'payment_account':
                 return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-100 text-[9px] font-black uppercase tracking-wider"><RotateCcw className="w-3 h-3 animate-spin-slow" /> Aprovação</span>;
             case 'rejected':
@@ -1911,7 +1913,8 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                     {[
                                                         { key: 'awaiting_approval', label: 'Em Aprovação', icon: Clock, color: 'text-amber-600 bg-amber-50 border-amber-100' },
-                                                        { key: 'completed', label: 'Aprovado', icon: CheckCircle2, color: 'text-emerald-600 bg-emerald-50 border-emerald-100' },
+                                                        { key: 'completed', label: 'Concluído', icon: CheckCircle2, color: 'text-emerald-600 bg-emerald-50 border-emerald-100' },
+                                                        { key: 'finalized', label: 'Finalizado', icon: CheckCheck, color: 'text-purple-600 bg-purple-50 border-purple-100' },
                                                         { key: 'rejected', label: 'Rejeitado', icon: XCircle, color: 'text-rose-600 bg-rose-50 border-rose-100' }
                                                     ].map((cfg) => {
                                                         const isActive = statusSelectionOrder.status === cfg.key;

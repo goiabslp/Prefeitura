@@ -339,7 +339,7 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
     const filteredProcesses = useMemo(() => {
         return processes.filter(process => {
             const st = (process.status || '').toString().trim().toLowerCase();
-            const isEmAprovacaoOrRejeitado = 
+            const isEmAprovacaoOrRejeitadoOrFinalizado = 
                 st === 'em aprovação' ||
                 st === 'em aprovacao' ||
                 st === 'rascunho' ||
@@ -349,10 +349,12 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                 st === 'payment_account' ||
                 st === 'awaiting_ficha' ||
                 st === 'rejeitado' ||
-                st === 'rejected';
+                st === 'rejected' ||
+                st === 'finalizado' ||
+                st === 'finalized';
 
-            // Processos com status "Em Aprovação" ou "Rejeitado" NUNCA devem aparecer no Kanban nem na visão TV
-            if (isEmAprovacaoOrRejeitado) {
+            // Processos com status "Em Aprovação", "Rejeitado" ou "Finalizado" NUNCA devem aparecer no Kanban nem na visão TV
+            if (isEmAprovacaoOrRejeitadoOrFinalizado) {
                 return false;
             }
 
@@ -387,7 +389,7 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
 
         filteredProcesses.forEach(process => {
             const st = (process.status || '').toString().trim().toLowerCase();
-            const isEmAprovacaoOrRejeitado = 
+            const isEmAprovacaoOrRejeitadoOrFinalizado = 
                 st === 'em aprovação' ||
                 st === 'em aprovacao' ||
                 st === 'rascunho' ||
@@ -397,10 +399,12 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                 st === 'payment_account' ||
                 st === 'awaiting_ficha' ||
                 st === 'rejeitado' ||
-                st === 'rejected';
+                st === 'rejected' ||
+                st === 'finalizado' ||
+                st === 'finalized';
 
-            // Garante que NENHUM processo Em Aprovação ou Rejeitado seja alocado para a coluna Pendente ou qualquer outra
-            if (isEmAprovacaoOrRejeitado) {
+            // Garante que NENHUM processo Em Aprovação, Rejeitado ou Finalizado seja alocado para qualquer coluna
+            if (isEmAprovacaoOrRejeitadoOrFinalizado) {
                 return;
             }
 

@@ -63,7 +63,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
     // Filtrar processos válidos (ignorando Em Aprovação e Rejeitados)
     const validProcesses = licitacaoProcessesData.filter(p => {
       const st = (p.status || '').toString().trim().toLowerCase();
-      const isEmAprovacaoOrRejeitado = 
+      const isEmAprovacaoOrRejeitadoOrFinalizado = 
         st === 'em aprovação' ||
         st === 'em aprovacao' ||
         st === 'rascunho' ||
@@ -73,8 +73,10 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
         st === 'payment_account' ||
         st === 'awaiting_ficha' ||
         st === 'rejeitado' ||
-        st === 'rejected';
-      return !isEmAprovacaoOrRejeitado;
+        st === 'rejected' ||
+        st === 'finalizado' ||
+        st === 'finalized';
+      return !isEmAprovacaoOrRejeitadoOrFinalizado;
     });
 
     const total = validProcesses.length;

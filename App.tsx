@@ -224,6 +224,7 @@ const mapLicitacaoProcessToOrder = (process: any): Order => {
   else if (process.status === 'Assinado') mappedStatus = 'approved';
   else if (process.status === 'Em Análise') mappedStatus = 'in_progress';
   else if (process.status === 'Concluído' || process.status === 'completed') mappedStatus = 'completed';
+  else if (process.status === 'Finalizado' || process.status === 'finalized') mappedStatus = 'finalized';
   else if (process.status === 'Rejeitado' || process.status === 'rejected') mappedStatus = 'rejected';
 
   const sig = process.assinatura || (process.licitacao_assinaturas && process.licitacao_assinaturas.length > 0 ? process.licitacao_assinaturas[0] : null);
@@ -4664,6 +4665,7 @@ const App: React.FC = () => {
                     else if (status === 'awaiting_approval') mappedBackendStatus = 'Aguardando Assinatura';
                     else if (status === 'in_progress') mappedBackendStatus = 'Em Análise';
                     else if (status === 'completed') mappedBackendStatus = 'Concluído';
+                    else if (status === 'finalized') mappedBackendStatus = 'Finalizado';
                     else if (status === 'rejected') mappedBackendStatus = 'Rejeitado';
                     await updateLicitacaoProcessMutation.mutateAsync({ id: targetOrder.id, updates: { status: mappedBackendStatus as any } });
                   } else {
