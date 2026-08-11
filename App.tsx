@@ -4659,15 +4659,14 @@ const App: React.FC = () => {
                 onUpdateOrderStatus={async (order, status, justification) => {
                   const targetOrder = typeof order === 'string' ? orders.find(o => o.id === order) || mappedLicitacaoOrders.find(o => o.id === order) : order;
                   if (!targetOrder) return;
-                  if (activeBlock === 'licitacao') {
+                  const isLicitacao = activeBlock === 'licitacao' || currentView.startsWith('licitacao') || (targetOrder as any).blockType === 'licitacao' || (targetOrder as any).orderType === 'licitacao' || String((targetOrder as any).protocol || (targetOrder as any).protocolo || '').startsWith('LIC-') || mappedLicitacaoOrders.some(o => o.id === targetOrder.id);
+                  if (isLicitacao) {
                     let mappedBackendStatus: any = status;
                     if (status === 'pending') mappedBackendStatus = 'Rascunho';
                     else if (status === 'awaiting_approval') mappedBackendStatus = 'Aguardando Assinatura';
-                    else if (status === 'in_progress') mappedBackendStatus = 'Em Análise';
-                    else if (status === 'completed') mappedBackendStatus = 'Concluído';
+                    else if (status === 'in_progress' || status === 'approved' || status === 'completed') mappedBackendStatus = 'Em Análise';
                     else if (status === 'finalized') mappedBackendStatus = 'Finalizado';
                     else if (status === 'rejected') mappedBackendStatus = 'Rejeitado';
-                    else if (status === 'approved') mappedBackendStatus = 'Em Análise';
 
                     const isNowApproved = mappedBackendStatus !== 'Rascunho' && mappedBackendStatus !== 'Aguardando Assinatura' && mappedBackendStatus !== 'Rejeitado' && mappedBackendStatus !== 'Finalizado';
                     const nowIso = new Date().toISOString();
@@ -4697,29 +4696,7 @@ const App: React.FC = () => {
                           aprovado_em: nowIso
                         };
 
-                        const channel = supabase.channel('licitacao_kanban_priority');
-                        channel.send({
-                          type: 'broadcast',
-                          event: 'new-licitacao-process-approved',
-                          payload: approvedProcessInfo
-                        });
-
-                        const { data: orgData } = await supabase
-                          .from('organization_settings')
-                          .select('ui_config')
-                          .eq('id', 'global_config')
-                          .single();
-                        const currentUiConfig = orgData?.ui_config || {};
-                        await supabase
-                          .from('organization_settings')
-                          .update({
-                            ui_config: {
-                              ...currentUiConfig,
-                              latest_approved_licitacao_process: approvedProcessInfo
-                            },
-                            updated_at: nowIso
-                          })
-                          .eq('id', 'global_config');
+                        licitacaoService.broadcastLicitacaoApproval(approvedProcessInfo);
                       } catch (err) {
                         console.warn('Erro ao notificar aprovação de processo de licitação:', err);
                       }
@@ -5050,14 +5027,70 @@ const App: React.FC = () => {
                 onUpdateOrderStatus={async (order, status, justification) => {
                   const targetOrder = typeof order === 'string' ? orders.find(o => o.id === order) || mappedLicitacaoOrders.find(o => o.id === order) : order;
                   if (!targetOrder) return;
-                  if (activeBlock === 'licitacao') {
+                  const isLicitacao = activeBlock === 'licitacao' || currentView.startsWith('licitacao') || (targetOrder as any).blockType === 'licitacao' || (targetOrder as any).orderType === 'licitacao' || String((targetOrder as any).protocol || (targetOrder as any).protocolo || '').startsWith('LIC-') || mappedLicitacaoOrders.some(o => o.id === targetOrder.id);
+                  if (isLicitacao) {
                     let mappedBackendStatus: any = status;
                     if (status === 'pending') mappedBackendStatus = 'Rascunho';
                     else if (status === 'awaiting_approval') mappedBackendStatus = 'Aguardando Assinatura';
-                    else if (status === 'in_progress') mappedBackendStatus = 'Em Análise';
-                    else if (status === 'completed') mappedBackendStatus = 'Concluído';
+                    else if (status === 'in_progress' || status === 'approved' || status === 'completed') mappedBackendStatus = 'Em Análise';
+                    else if (status === 'finalized') mappedBackendStatus = 'Finalizado';
                     else if (status === 'rejected') mappedBackendStatus = 'Rejeitado';
-                    await updateLicitacaoProcessMutation.mutateAsync({ id: targetOrder.id, updates: { status: mappedBackendStatus as any } });
+
+                    const isNowApproved = mappedBackendStatus !== 'Rascunho' && mappedBackendStatus !== 'Aguardando Assinatura' && mappedBackendStatus !== 'Rejeitado' && mappedBackendStatus !== 'Finalizado';
+                    const nowIso = new Date().toISOString();
+
+                    const updatesObj: any = {
+                      status: mappedBackendStatus as any,
+                    };
+
+                    if (isNowApproved) {
+                      updatesObj.fase = (targetOrder as any).fase || 'pendente';
+                      updatesObj.aprovado_em = nowIso;
+                      updatesObj.enviado_kanban_em = nowIso;
+                      updatesObj.apresentado_animacao = false;
+                    }
+
+                    await updateLicitacaoProcessMutation.mutateAsync({ id: targetOrder.id, updates: updatesObj });
+
+                    if (isNowApproved) {
+                      try {
+                        const tOrder = targetOrder as any;
+                        const approvedProcessInfo = {
+                          id: tOrder.id,
+                          protocolo: tOrder.protocolo || tOrder.protocol || tOrder.id.slice(0, 8),
+                          solicitante_nome: tOrder.solicitante_nome || tOrder.requesterName || 'Não informado',
+                          solicitante_setor: tOrder.solicitante_setor || tOrder.department || 'Não informado',
+                          objeto_resumido: tOrder.objeto_resumido || tOrder.shortDescription || tOrder.description || tOrder.finalidade || 'Processo de Licitação',
+                          aprovado_em: nowIso
+                        };
+
+                        const channel = supabase.channel('licitacao_kanban_priority');
+                        channel.send({
+                          type: 'broadcast',
+                          event: 'new-licitacao-process-approved',
+                          payload: approvedProcessInfo
+                        });
+
+                        const { data: orgData } = await supabase
+                          .from('organization_settings')
+                          .select('ui_config')
+                          .eq('id', 'global_config')
+                          .single();
+                        const currentUiConfig = orgData?.ui_config || {};
+                        await supabase
+                          .from('organization_settings')
+                          .update({
+                            ui_config: {
+                              ...currentUiConfig,
+                              latest_approved_licitacao_process: approvedProcessInfo
+                            },
+                            updated_at: nowIso
+                          })
+                          .eq('id', 'global_config');
+                      } catch (err) {
+                        console.warn('Erro ao notificar aprovação de processo de licitação:', err);
+                      }
+                    }
                   } else {
                     await handleUpdateOrderStatus(order, status, justification);
                   }

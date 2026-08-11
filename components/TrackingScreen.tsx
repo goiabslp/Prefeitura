@@ -390,25 +390,27 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
     const isLicitacaoUser = currentUser.role === 'licitacao' || (currentUser.permissions as string[])?.includes('parent_licitacao_processos') || (currentUser.permissions as string[])?.includes('parent_licitacao') || (currentUser.permissions as string[])?.includes('licitacao') || currentUser.sector?.toLowerCase().includes('licitação') || currentUser.sector?.toLowerCase().includes('licitacao');
     const isCompras = activeBlock === 'compras';
 
-    const getStatusBadge = (status: Order['status']) => {
-        switch (status) {
-            case 'approved':
-            case 'completed':
-                return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-100 text-[9px] font-black uppercase tracking-wider"><CheckCircle2 className="w-3 h-3" /> Aprovado</span>;
-            case 'finalized':
-                return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-100 text-[9px] font-black uppercase tracking-wider"><CheckCheck className="w-3 h-3" /> Finalizado</span>;
-            case 'payment_account':
-                return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-100 text-[9px] font-black uppercase tracking-wider"><RotateCcw className="w-3 h-3 animate-spin-slow" /> Aprovação</span>;
-            case 'rejected':
-                return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-100 text-[9px] font-black uppercase tracking-wider"><XCircle className="w-3 h-3" /> Rejeitado</span>;
-            case 'pending':
-            case 'awaiting_approval':
-                return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-100 text-[9px] font-black uppercase tracking-wider"><Clock className="w-3 h-3 animate-pulse" /> Em Aprovação</span>;
-            case 'awaiting_ficha':
-                return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-100 text-[9px] font-black uppercase tracking-wider"><Clock className="w-3 h-3 animate-pulse" /> Aguardando Ficha</span>;
-            default:
-                return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-50 text-slate-700 border border-slate-100 text-[9px] font-black uppercase tracking-wider"><AlertCircle className="w-3 h-3" /> Recebido</span>;
+    const getStatusBadge = (status: Order['status'] | string) => {
+        const normStatus = String(status || '').toLowerCase();
+        if (normStatus === 'approved' || normStatus === 'completed' || normStatus === 'in_progress' || normStatus === 'em análise' || normStatus === 'em analise' || normStatus === 'aprovado') {
+            return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-100 text-[9px] font-black uppercase tracking-wider"><CheckCircle2 className="w-3 h-3" /> Aprovado</span>;
         }
+        if (normStatus === 'finalized' || normStatus === 'finalizado') {
+            return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-100 text-[9px] font-black uppercase tracking-wider"><CheckCheck className="w-3 h-3" /> Finalizado</span>;
+        }
+        if (normStatus === 'payment_account') {
+            return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-100 text-[9px] font-black uppercase tracking-wider"><RotateCcw className="w-3 h-3 animate-spin-slow" /> Aprovação</span>;
+        }
+        if (normStatus === 'rejected' || normStatus === 'rejeitado') {
+            return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-100 text-[9px] font-black uppercase tracking-wider"><XCircle className="w-3 h-3" /> Rejeitado</span>;
+        }
+        if (normStatus === 'pending' || normStatus === 'awaiting_approval' || normStatus === 'rascunho' || normStatus === 'aguardando assinatura') {
+            return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-100 text-[9px] font-black uppercase tracking-wider"><Clock className="w-3 h-3 animate-pulse" /> Em Aprovação</span>;
+        }
+        if (normStatus === 'awaiting_ficha') {
+            return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-100 text-[9px] font-black uppercase tracking-wider"><Clock className="w-3 h-3 animate-pulse" /> Aguardando Ficha</span>;
+        }
+        return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-100 text-[9px] font-black uppercase tracking-wider"><CheckCircle2 className="w-3 h-3" /> Aprovado</span>;
     };
     const isDiarias = activeBlock === 'diarias';
     const isLicitacao = activeBlock === 'licitacao';
@@ -1913,11 +1915,12 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                     {[
                                                         { key: 'awaiting_approval', label: 'Em Aprovação', icon: Clock, color: 'text-amber-600 bg-amber-50 border-amber-100' },
-                                                        { key: 'completed', label: 'Concluído', icon: CheckCircle2, color: 'text-emerald-600 bg-emerald-50 border-emerald-100' },
+                                                        { key: 'approved', label: 'Aprovado', icon: CheckCircle2, color: 'text-emerald-600 bg-emerald-50 border-emerald-100' },
                                                         { key: 'finalized', label: 'Finalizado', icon: CheckCheck, color: 'text-purple-600 bg-purple-50 border-purple-100' },
                                                         { key: 'rejected', label: 'Rejeitado', icon: XCircle, color: 'text-rose-600 bg-rose-50 border-rose-100' }
                                                     ].map((cfg) => {
-                                                        const isActive = statusSelectionOrder.status === cfg.key;
+                                                        const currentSt = statusSelectionOrder.status;
+                                                        const isActive = currentSt === cfg.key || (cfg.key === 'approved' && (currentSt === 'approved' || (currentSt as string) === 'completed' || (currentSt as string) === 'in_progress' || (currentSt as string) === 'Em Análise'));
                                                         return (
                                                             <button
                                                                 key={cfg.key}

@@ -182,14 +182,50 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
         }
     });
 
+    const sessionDismissedRef = useRef<Set<string>>(new Set());
+    const activeModalProcessIdRef = useRef<string | null>(null);
+
+    const triggerModalForProcess = (procData: any) => {
+        if (!procData || !procData.id) return;
+        const procId = procData.id;
+
+        // Se já está exibindo este modal ou se já foi dispensado nesta sessão, ignora 100%
+        if (activeModalProcessIdRef.current === procId) return;
+        if (sessionDismissedRef.current.has(procId)) return;
+        if (announcedProcessIds.includes(procId)) return;
+        try {
+            if (sessionStorage.getItem(`licitacao_dismissed_${procId}`)) return;
+        } catch (e) {}
+
+        // Trava imediatamente contra múltiplos disparos simultâneos
+        activeModalProcessIdRef.current = procId;
+
+        // Toca o som exatamente UMA VEZ no momento da ativacao
+        playNotificationChimeSound();
+
+        setModalStage('intro');
+        setNewApprovedModalProcess({
+            id: procId,
+            protocolo: procData.protocolo || procId.slice(0, 8),
+            solicitante_nome: procData.solicitante_nome || 'Não informado',
+            solicitante_setor: procData.solicitante_setor || 'Não informado',
+            objeto_resumido: procData.objeto_resumido || procData.finalidade || 'Processo de Licitação',
+            aprovado_em: procData.aprovado_em || procData.criado_em
+        });
+    };
+
     const handleDismissNewProcessModal = async () => {
         if (!newApprovedModalProcess) return;
         const processId = newApprovedModalProcess.id;
         
+        sessionDismissedRef.current.add(processId);
+        activeModalProcessIdRef.current = null;
+
         const updated = Array.from(new Set([...announcedProcessIds, processId]));
         setAnnouncedProcessIds(updated);
         try {
             localStorage.setItem('licitacao_announced_process_ids', JSON.stringify(updated));
+            sessionStorage.setItem(`licitacao_dismissed_${processId}`, 'true');
         } catch (e) {}
 
         setNewApprovedModalProcess(null);
@@ -326,16 +362,27 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
         }
     };
 
+    const [modalStage, setModalStage] = useState<'intro' | 'details'>('intro');
+    const modalId = newApprovedModalProcess?.id;
+
     useEffect(() => {
-        if (!newApprovedModalProcess) return;
+        if (!modalId) return;
 
-        playNotificationChimeSound();
+        // Estágio 1 (Transição de Anúncio / Surgimento Impactante): 5.0s
+        const stage1Timer = setTimeout(() => {
+            setModalStage('details');
+        }, 5000);
 
-        const timer = setTimeout(() => {
+        // Estágio 2 (Exibição dos Detalhes): Encerra o ciclo e finda o modal aos 15.0s totais
+        const closeTimer = setTimeout(() => {
             handleDismissNewProcessModal();
-        }, 7000);
-        return () => clearTimeout(timer);
-    }, [newApprovedModalProcess]);
+        }, 15000);
+
+        return () => {
+            clearTimeout(stage1Timer);
+            clearTimeout(closeTimer);
+        };
+    }, [modalId]);
 
     const checkIsQueuePriority = (process: LicitacaoProcesso) => {
         if (!process) return false;
@@ -401,11 +448,17 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
 
         const handleLocalEvent = () => handleSync();
         const handleQueueLocalEvent = () => handleQueueSync();
+        const handleNewApprovedLocalEvent = (e: any) => {
+            if (e.detail && e.detail.id) {
+                triggerModalForProcess(e.detail);
+            }
+        };
 
         window.addEventListener('storage', handleLocalEvent);
         window.addEventListener('licitacao-priority-updated', handleLocalEvent);
         window.addEventListener('storage', handleQueueLocalEvent);
         window.addEventListener('licitacao-queue-priority-updated', handleQueueLocalEvent);
+        window.addEventListener('licitacao-new-process-approved', handleNewApprovedLocalEvent);
 
         // 1. Busca prioridades iniciais do banco
         const fetchDbPriority = async () => {
@@ -452,10 +505,9 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
             }
         };
         fetchDbPriority();
-        const pollInterval = setInterval(fetchDbPriority, 2500);
 
-        // 2. Supabase Realtime Channel para Broadcast instantâneo e Postgres Changes
-        const channel = supabase.channel('licitacao_kanban_priority')
+        // 2. Supabase Realtime Channel para Broadcast instantâneo e Postgres Changes (self: true para escutar própria aba)
+        const channel = supabase.channel('licitacao_kanban_priority', { config: { broadcast: { self: true } } })
             .on('broadcast', { event: 'licitacao-priority-updated' }, (data) => {
                 if (data.payload !== undefined) {
                     try {
@@ -481,32 +533,15 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
             })
             .on('broadcast', { event: 'new-licitacao-process-approved' }, (data) => {
                 if (data.payload && data.payload.id) {
-                    const payload = data.payload;
-                    if (!announcedProcessIds.includes(payload.id)) {
-                        setNewApprovedModalProcess({
-                            id: payload.id,
-                            protocolo: payload.protocolo || payload.id.slice(0, 8),
-                            solicitante_nome: payload.solicitante_nome || 'Não informado',
-                            solicitante_setor: payload.solicitante_setor || 'Não informado',
-                            objeto_resumido: payload.objeto_resumido || 'Processo de Licitação',
-                            aprovado_em: payload.aprovado_em
-                        });
-                    }
+                    triggerModalForProcess(data.payload);
                 }
             })
             .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'licitacao_processos' }, (payload: any) => {
                 const updated = payload.new;
                 if (updated && updated.status) {
                     const isApprovedStatus = updated.status !== 'Rascunho' && updated.status !== 'Aguardando Assinatura' && updated.status !== 'Rejeitado' && updated.status !== 'Finalizado';
-                    if (isApprovedStatus && updated.apresentado_animacao === false && !announcedProcessIds.includes(updated.id)) {
-                        setNewApprovedModalProcess({
-                            id: updated.id,
-                            protocolo: updated.protocolo || updated.id.slice(0, 8),
-                            solicitante_nome: updated.solicitante_nome || 'Não informado',
-                            solicitante_setor: updated.solicitante_setor || 'Não informado',
-                            objeto_resumido: updated.objeto_resumido || updated.finalidade || 'Processo de Licitação',
-                            aprovado_em: updated.aprovado_em || updated.atualizado_em
-                        });
+                    if (isApprovedStatus) {
+                        triggerModalForProcess(updated);
                     }
                 }
             })
@@ -514,27 +549,14 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                 const inserted = payload.new;
                 if (inserted && inserted.status) {
                     const isApprovedStatus = inserted.status !== 'Rascunho' && inserted.status !== 'Aguardando Assinatura' && inserted.status !== 'Rejeitado' && inserted.status !== 'Finalizado';
-                    if (isApprovedStatus && inserted.apresentado_animacao === false && !announcedProcessIds.includes(inserted.id)) {
-                        setNewApprovedModalProcess({
-                            id: inserted.id,
-                            protocolo: inserted.protocolo || inserted.id.slice(0, 8),
-                            solicitante_nome: inserted.solicitante_nome || 'Não informado',
-                            solicitante_setor: inserted.solicitante_setor || 'Não informado',
-                            objeto_resumido: inserted.objeto_resumido || inserted.finalidade || 'Processo de Licitação',
-                            aprovado_em: inserted.aprovado_em || inserted.criado_em
-                        });
+                    if (isApprovedStatus) {
+                        triggerModalForProcess(inserted);
                     }
                 }
             })
             .on('postgres_changes', { event: '*', schema: 'public', table: 'organization_settings', filter: 'id=eq.global_config' }, (payload: any) => {
                 const newUi = payload.new?.ui_config;
                 if (newUi) {
-                    if (newUi.latest_approved_licitacao_process) {
-                        const latest = newUi.latest_approved_licitacao_process;
-                        if (latest && latest.id && !announcedProcessIds.includes(latest.id)) {
-                            setNewApprovedModalProcess(latest);
-                        }
-                    }
                     if (newUi.licitacao_prioridade_visual !== undefined) {
                         const dbPriority = newUi.licitacao_prioridade_visual;
                         try {
@@ -556,14 +578,28 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
             })
             .subscribe();
 
+        // Native BroadcastChannel para disparo instantâneo inter-abas
+        let bc: BroadcastChannel | null = null;
+        try {
+            bc = new BroadcastChannel('licitacao_kanban_channel');
+            bc.onmessage = (event) => {
+                if (event.data?.type === 'new-licitacao-process-approved' && event.data?.payload) {
+                    triggerModalForProcess(event.data.payload);
+                }
+            };
+        } catch (e) {}
+
         channelRef.current = channel;
 
         return () => {
-            clearInterval(pollInterval);
+            if (bc) {
+                try { bc.close(); } catch (e) {}
+            }
             window.removeEventListener('storage', handleLocalEvent);
             window.removeEventListener('licitacao-priority-updated', handleLocalEvent);
             window.removeEventListener('storage', handleQueueLocalEvent);
             window.removeEventListener('licitacao-queue-priority-updated', handleQueueLocalEvent);
+            window.removeEventListener('licitacao-new-process-approved', handleNewApprovedLocalEvent);
             supabase.removeChannel(channel);
             channelRef.current = null;
         };
@@ -1619,106 +1655,170 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                         })}
                     </div>
                 )}
-            {/* Modal de Animação para Novo Processo Aprovado */}
+            {/* Modal de Animação em Etapas para Novo Processo Aprovado */}
             {newApprovedModalProcess && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-300">
-                    <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 border-2 border-indigo-500/80 shadow-[0_0_80px_rgba(99,102,241,0.55)] rounded-3xl p-6 sm:p-8 max-w-lg w-full relative overflow-hidden animate-in zoom-in-95 duration-300 text-white">
-                        {/* Efeitos de Luz em Segundo Plano */}
-                        <div className="absolute -right-16 -top-16 w-48 h-48 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none animate-pulse" />
-                        <div className="absolute -left-16 -bottom-16 w-48 h-48 bg-amber-500/20 rounded-full blur-3xl pointer-events-none" />
+                <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4 sm:p-8 bg-slate-950/98 backdrop-blur-3xl animate-in fade-in duration-500">
+                    <style>{`
+                        @keyframes stageShrink {
+                            from { width: 100%; }
+                            to { width: 0%; }
+                        }
+                    `}</style>
+                    <div className="bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900 border-2 border-indigo-500/80 rounded-3xl p-6 sm:p-10 max-w-4xl w-full relative overflow-hidden text-white shadow-2xl animate-pop-scale animate-glow-pulse-modal">
+                        
+                        {/* Efeitos de Luz de Fundo */}
+                        <div className="absolute -right-24 -top-24 w-80 h-80 bg-indigo-500/25 rounded-full blur-3xl pointer-events-none animate-pulse" />
+                        <div className="absolute -left-24 -bottom-24 w-80 h-80 bg-amber-500/25 rounded-full blur-3xl pointer-events-none" />
+                        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-purple-500/15 rounded-full blur-3xl pointer-events-none" />
 
-                        {/* Cabeçalho do Anúncio */}
-                        <div className="flex items-center gap-3.5 mb-5 relative z-10">
-                            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-400 to-amber-200 text-amber-950 flex items-center justify-center font-bold shadow-lg shadow-amber-500/30 shrink-0 animate-bounce">
-                                <Sparkles className="w-6 h-6 fill-amber-950 text-amber-950" />
-                            </div>
-                            <div>
-                                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-indigo-500/30 text-indigo-300 border border-indigo-400/30 uppercase tracking-widest block w-fit mb-1">
-                                    Notificação em Tempo Real
-                                </span>
-                                <h2 className="text-xl sm:text-2xl font-black text-white leading-tight tracking-tight">
-                                    🎉 Novo processo cadastrado!
-                                </h2>
-                            </div>
-                        </div>
-
-                        <p className="text-slate-300 text-xs sm:text-sm font-medium mb-5 relative z-10 leading-relaxed">
-                            Um novo processo foi aprovado e adicionado automaticamente ao Kanban.
-                        </p>
-
-                        {/* Dados Principais do Processo */}
-                        <div className="bg-slate-800/80 border border-indigo-500/30 rounded-2xl p-4 sm:p-5 space-y-3 relative z-10 backdrop-blur-sm shadow-inner">
-                            <div className="flex items-center justify-between border-b border-slate-700/80 pb-2.5">
-                                <span className="text-[11px] font-extrabold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
-                                    <Tag className="w-3.5 h-3.5 text-amber-400" />
-                                    Protocolo
-                                </span>
-                                <span className="text-sm font-black text-white bg-slate-900/90 px-2.5 py-0.5 rounded-lg border border-slate-700 font-mono shadow-xs">
-                                    #{newApprovedModalProcess.protocolo}
-                                </span>
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                                <div className="bg-slate-900/60 p-2.5 rounded-xl border border-slate-700/50">
-                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1 mb-1">
-                                        <Landmark className="w-3 h-3 text-indigo-400" /> Setor
-                                    </span>
-                                    <span className="font-bold text-slate-100 block truncate text-xs">
-                                        {newApprovedModalProcess.solicitante_setor}
-                                    </span>
+                        {/* ETAPA 1: ANÚNCIO DE SURGIMENTO IMPACTANTE */}
+                        {modalStage === 'intro' ? (
+                            <div className="flex flex-col items-center text-center py-6 sm:py-10 space-y-6 animate-in zoom-in-95 fade-in duration-500 relative z-10">
+                                {/* Ícone Gigante com Anéis Reluzentes */}
+                                <div className="relative">
+                                    <div className="absolute inset-0 rounded-3xl bg-amber-400/30 blur-xl animate-ping" />
+                                    <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-3xl bg-gradient-to-tr from-amber-500 via-amber-300 to-amber-200 text-amber-950 flex items-center justify-center shadow-[0_0_50px_rgba(245,158,11,0.6)] border-4 border-amber-300 relative z-10 animate-bounce">
+                                        <Sparkles className="w-12 h-12 sm:w-14 sm:h-14 fill-amber-950 text-amber-950" />
+                                    </div>
                                 </div>
 
-                                <div className="bg-slate-900/60 p-2.5 rounded-xl border border-slate-700/50">
-                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1 mb-1">
-                                        <UserIcon className="w-3 h-3 text-indigo-400" /> Responsável
+                                <div className="space-y-2 max-w-2xl">
+                                    <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs sm:text-sm font-black bg-indigo-500/30 text-indigo-300 border border-indigo-400/40 uppercase tracking-widest shadow-inner">
+                                        <Radio className="w-4 h-4 text-indigo-400 animate-pulse" />
+                                        TRANSMISSÃO EM TEMPO REAL
                                     </span>
-                                    <span className="font-bold text-slate-100 block truncate text-xs">
-                                        {newApprovedModalProcess.solicitante_nome}
-                                    </span>
+                                    <h2 className="text-3xl sm:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-amber-200 to-indigo-200 tracking-tight leading-none pt-2">
+                                        🎉 NOVO PROCESSO CADASTRADO!
+                                    </h2>
+                                    <p className="text-slate-300 text-sm sm:text-lg font-medium pt-3 leading-relaxed">
+                                        Um novo processo foi aprovado e adicionado automaticamente à fila do Kanban.
+                                    </p>
+                                </div>
+
+                                {/* Barra de Progresso da Etapa 1 (5s) */}
+                                <div className="w-full max-w-md bg-slate-900/80 rounded-full h-2 overflow-hidden border border-indigo-500/40 p-0.5">
+                                    <div className="bg-gradient-to-r from-amber-400 to-indigo-500 h-full rounded-full" style={{ animation: 'stageShrink 5s linear forwards' }} />
+                                </div>
+
+                                <button
+                                    onClick={() => setModalStage('details')}
+                                    className="bg-indigo-600/80 hover:bg-indigo-500 text-white text-xs sm:text-sm font-bold px-6 py-2.5 rounded-xl border border-indigo-400/40 transition-all cursor-pointer shadow-lg hover:scale-105 active:scale-95"
+                                >
+                                    Ver Informações do Processo ➔
+                                </button>
+                            </div>
+                        ) : (
+                            /* ETAPA 2: EXIBIÇÃO COMPLETA DAS INFORMAÇÕES DO PROCESSO */
+                            <div className="space-y-6 sm:space-y-8 animate-in fade-in zoom-in-95 duration-500 relative z-10">
+                                {/* Cabeçalho da Etapa 2 */}
+                                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-indigo-500/30 pb-4">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-12 h-12 rounded-2xl bg-indigo-600/40 border border-indigo-400/50 flex items-center justify-center text-indigo-300 shadow-inner">
+                                            <FileText className="w-6 h-6" />
+                                        </div>
+                                        <div>
+                                            <span className="text-[11px] font-black uppercase text-indigo-300 tracking-widest block">
+                                                Etapa 2/2 • Detalhes do Processo
+                                            </span>
+                                            <h3 className="text-xl sm:text-2xl font-black text-white leading-tight">
+                                                Processo Adicionado ao Kanban
+                                            </h3>
+                                        </div>
+                                    </div>
+
+                                    {/* Destaque do Protocolo */}
+                                    <div className="bg-gradient-to-r from-amber-500/20 via-indigo-500/20 to-amber-500/20 border-2 border-amber-400/60 rounded-2xl px-5 py-2 flex items-center gap-3 shadow-[0_0_30px_rgba(245,158,11,0.2)]">
+                                        <Tag className="w-5 h-5 text-amber-400" />
+                                        <div>
+                                            <span className="text-[10px] font-black text-amber-300 uppercase tracking-widest block">Protocolo</span>
+                                            <span className="text-lg sm:text-2xl font-black text-white font-mono">
+                                                #{newApprovedModalProcess.protocolo}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Grade Grande de Informações em Destaque (Estilo TV) */}
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+                                    {/* Card Setor Solicitante */}
+                                    <div className="bg-slate-900/80 border-2 border-indigo-500/40 rounded-2xl p-5 shadow-lg backdrop-blur-md relative overflow-hidden group hover:border-indigo-400 transition-all">
+                                        <div className="flex items-center gap-3 mb-2">
+                                            <div className="w-9 h-9 rounded-xl bg-indigo-500/20 text-indigo-300 flex items-center justify-center border border-indigo-400/30">
+                                                <Landmark className="w-5 h-5" />
+                                            </div>
+                                            <span className="text-xs font-black uppercase tracking-wider text-indigo-300">
+                                                Setor Solicitante
+                                            </span>
+                                        </div>
+                                        <p className="text-lg sm:text-xl font-black text-white truncate pl-1">
+                                            {newApprovedModalProcess.solicitante_setor || 'Não informado'}
+                                        </p>
+                                    </div>
+
+                                    {/* Card Responsável */}
+                                    <div className="bg-slate-900/80 border-2 border-indigo-500/40 rounded-2xl p-5 shadow-lg backdrop-blur-md relative overflow-hidden group hover:border-indigo-400 transition-all">
+                                        <div className="flex items-center gap-3 mb-2">
+                                            <div className="w-9 h-9 rounded-xl bg-indigo-500/20 text-indigo-300 flex items-center justify-center border border-indigo-400/30">
+                                                <UserIcon className="w-5 h-5" />
+                                            </div>
+                                            <span className="text-xs font-black uppercase tracking-wider text-indigo-300">
+                                                Responsável
+                                            </span>
+                                        </div>
+                                        <p className="text-lg sm:text-xl font-black text-white truncate pl-1">
+                                            {newApprovedModalProcess.solicitante_nome || 'Não informado'}
+                                        </p>
+                                    </div>
+
+                                    {/* Card Objeto / Finalidade (Full Width) */}
+                                    <div className="sm:col-span-2 bg-slate-900/80 border-2 border-indigo-500/40 rounded-2xl p-5 sm:p-6 shadow-lg backdrop-blur-md relative overflow-hidden group hover:border-indigo-400 transition-all">
+                                        <div className="flex items-center gap-3 mb-2">
+                                            <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-300 flex items-center justify-center border border-amber-400/30">
+                                                <FileText className="w-5 h-5" />
+                                            </div>
+                                            <span className="text-xs font-black uppercase tracking-wider text-amber-300">
+                                                Objeto / Finalidade do Processo
+                                            </span>
+                                        </div>
+                                        <p className="text-base sm:text-xl font-extrabold text-amber-100 line-clamp-3 leading-relaxed pl-1">
+                                            {objetoResumidoMap[newApprovedModalProcess.id] || newApprovedModalProcess.objeto_resumido}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {/* Barra de Progresso da Etapa 2 (10s) e Botões de Controle */}
+                                <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-indigo-500/30">
+                                    <div className="w-full sm:w-auto flex-1 bg-slate-900 rounded-full h-2 overflow-hidden border border-indigo-500/30">
+                                        <div className="bg-gradient-to-r from-amber-400 via-indigo-500 to-emerald-400 h-full rounded-full" style={{ animation: 'stageShrink 10s linear forwards' }} />
+                                    </div>
+
+                                    <div className="flex items-center gap-3.5 w-full sm:w-auto justify-end">
+                                        <button
+                                            onClick={playNotificationChimeSound}
+                                            className="bg-slate-900 hover:bg-slate-800 text-amber-300 hover:text-white p-3 rounded-2xl text-xs font-bold flex items-center justify-center border border-slate-700 transition-all cursor-pointer shadow-md active:scale-95 shrink-0"
+                                            title="Ouvir toque sonoro"
+                                        >
+                                            <Volume2 className="w-5 h-5 text-amber-400" />
+                                        </button>
+                                        <button
+                                            onClick={() => audioFileInputRef.current?.click()}
+                                            className="bg-slate-900 hover:bg-slate-800 text-indigo-300 hover:text-white px-4 py-3 rounded-2xl text-xs font-bold flex items-center gap-2 border border-slate-700 transition-all cursor-pointer shadow-md active:scale-95 shrink-0"
+                                            title="Enviar seu arquivo MP3"
+                                        >
+                                            <Upload className="w-4 h-4 text-indigo-400" />
+                                            <span className="hidden sm:inline">Toque MP3</span>
+                                        </button>
+                                        <button
+                                            onClick={handleDismissNewProcessModal}
+                                            className="w-full sm:w-auto bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white font-black text-sm px-6 py-3 rounded-2xl transition-all shadow-xl shadow-indigo-600/40 flex items-center justify-center gap-2 cursor-pointer active:scale-95 shrink-0"
+                                        >
+                                            <CheckCircle2 className="w-5 h-5" />
+                                            Entendi / Ver no Kanban
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
-
-                            <div className="bg-slate-900/60 p-3 rounded-xl border border-slate-700/50">
-                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1 mb-1">
-                                    <FileText className="w-3.5 h-3.5 text-indigo-400" /> Objeto / Finalidade
-                                </span>
-                                <p className="font-bold text-indigo-200 text-xs sm:text-sm line-clamp-3 leading-snug">
-                                    {objetoResumidoMap[newApprovedModalProcess.id] || newApprovedModalProcess.objeto_resumido}
-                                </p>
-                            </div>
-                        </div>
-
-                        {/* Barra de Progresso + Botões */}
-                        <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-3 relative z-10">
-                            <div className="w-full sm:w-auto flex-1 bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                                <div className="bg-gradient-to-r from-indigo-500 to-amber-400 h-full animate-progress-shrink" />
-                            </div>
-
-                            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                                <button
-                                    onClick={playNotificationChimeSound}
-                                    className="bg-slate-800 hover:bg-slate-700 text-amber-300 hover:text-white p-2.5 rounded-xl text-xs font-bold flex items-center justify-center border border-slate-700 transition-all cursor-pointer shadow-xs shrink-0"
-                                    title="Ouvir teste do toque MP3"
-                                >
-                                    <Volume2 className="w-4 h-4 text-amber-400" />
-                                </button>
-                                <button
-                                    onClick={() => audioFileInputRef.current?.click()}
-                                    className="bg-slate-800 hover:bg-slate-700 text-indigo-300 hover:text-white px-3 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 border border-slate-700 transition-all cursor-pointer shadow-xs shrink-0"
-                                    title="Carregar seu arquivo de áudio MP3 personalizado"
-                                >
-                                    <Upload className="w-3.5 h-3.5 text-indigo-400" />
-                                    <span className="hidden sm:inline">MP3</span>
-                                </button>
-                                <button
-                                    onClick={handleDismissNewProcessModal}
-                                    className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs px-5 py-2.5 rounded-xl transition-all shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 cursor-pointer active:scale-95 shrink-0"
-                                >
-                                    <CheckCircle2 className="w-4 h-4" />
-                                    Entendi / Ver no Kanban
-                                </button>
-                            </div>
-                        </div>
+                        )}
                     </div>
                 </div>
             )}

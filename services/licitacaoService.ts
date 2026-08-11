@@ -27,6 +27,25 @@ export const createLicitacaoProcessCompleto = async (payload: {
     let retries = 5;
     let lastError: any = null;
 
+    const nowIso = new Date().toISOString();
+    const isApprovedStatus = !payload.processo.status || (
+        payload.processo.status !== 'Rascunho' &&
+        payload.processo.status !== 'Aguardando Assinatura' &&
+        payload.processo.status !== 'Rejeitado' &&
+        payload.processo.status !== 'Finalizado'
+    );
+
+    const processPayload: Partial<LicitacaoProcesso> = {
+        ...payload.processo,
+        status: payload.processo.status || 'Em Análise',
+        fase: payload.processo.fase || 'pendente',
+        ...(isApprovedStatus ? {
+            aprovado_em: nowIso,
+            enviado_kanban_em: nowIso,
+            apresentado_animacao: false
+        } : {})
+    };
+
     while (retries > 0) {
         try {
             // Generate protocol for this attempt
@@ -34,7 +53,7 @@ export const createLicitacaoProcessCompleto = async (payload: {
 
             // 1. Create process
             const processo = await createLicitacaoProcess({
-                ...payload.processo,
+                ...processPayload,
                 protocolo
             });
             
@@ -63,6 +82,23 @@ export const createLicitacaoProcessCompleto = async (payload: {
                 });
             }
 
+            // Disparar notificação em tempo real para o Kanban (/Licitacao/Kanban/view)
+            if (isApprovedStatus) {
+                try {
+                    const approvedProcessInfo = {
+                        id: processo.id,
+                        protocolo: processo.protocolo || protocolo,
+                        solicitante_nome: processo.solicitante_nome || 'Não informado',
+                        solicitante_setor: processo.solicitante_setor || 'Não informado',
+                        objeto_resumido: processo.objeto_resumido || processo.finalidade || 'Processo de Licitação',
+                        aprovado_em: nowIso
+                    };
+                    broadcastLicitacaoApproval(approvedProcessInfo);
+                } catch (err) {
+                    console.warn('Erro ao notificar novo processo de licitação no Kanban:', err);
+                }
+            }
+
             return processo;
         } catch (error: any) {
             lastError = error;
@@ -86,6 +122,64 @@ export const createLicitacaoProcessCompleto = async (payload: {
     }
 
     throw lastError || new Error("Failed to create process after multiple retries due to protocol collisions.");
+};
+
+export const broadcastLicitacaoApproval = (approvedProcessInfo: any) => {
+    if (!approvedProcessInfo || !approvedProcessInfo.id) return;
+
+    // 1. Transmissão nativa no mesmo navegador (todas as janelas e abas)
+    if (typeof window !== 'undefined') {
+        try {
+            window.dispatchEvent(new CustomEvent('licitacao-new-process-approved', { detail: approvedProcessInfo }));
+        } catch (e) {}
+
+        try {
+            const bc = new BroadcastChannel('licitacao_kanban_channel');
+            bc.postMessage({ type: 'new-licitacao-process-approved', payload: approvedProcessInfo });
+            setTimeout(() => bc.close(), 1000);
+        } catch (e) {}
+    }
+
+    // 2. Supabase Realtime Broadcast com subscribe explícito
+    try {
+        const channelName = `licitacao_channel_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        const channel = supabase.channel(channelName, { config: { broadcast: { self: true } } });
+        channel.subscribe((status) => {
+            if (status === 'SUBSCRIBED') {
+                channel.send({
+                    type: 'broadcast',
+                    event: 'new-licitacao-process-approved',
+                    payload: approvedProcessInfo
+                });
+                setTimeout(() => {
+                    try { supabase.removeChannel(channel); } catch (e) {}
+                }, 2500);
+            }
+        });
+    } catch (e) {}
+
+    // 3. Atualizar a global_config no Supabase para polling de retaguarda
+    try {
+        const nowIso = new Date().toISOString();
+        supabase
+            .from('organization_settings')
+            .select('ui_config')
+            .eq('id', 'global_config')
+            .single()
+            .then(({ data: orgData }) => {
+                const currentUiConfig = orgData?.ui_config || {};
+                supabase
+                    .from('organization_settings')
+                    .update({
+                        ui_config: {
+                            ...currentUiConfig,
+                            latest_approved_licitacao_process: approvedProcessInfo
+                        },
+                        updated_at: nowIso
+                    })
+                    .eq('id', 'global_config');
+            });
+    } catch (e) {}
 };
 
 export const updateLicitacaoProcess = async (id: string, updates: Partial<LicitacaoProcesso>): Promise<LicitacaoProcesso | null> => {
@@ -116,6 +210,23 @@ export const updateLicitacaoProcess = async (id: string, updates: Partial<Licita
             }
             throw error;
         }
+
+        const isApprovedStatus = data && data.status && data.status !== 'Rascunho' && data.status !== 'Aguardando Assinatura' && data.status !== 'Rejeitado' && data.status !== 'Finalizado';
+
+        if (data && isApprovedStatus && (updates.status !== undefined || updates.apresentado_animacao === false || updates.aprovado_em !== undefined)) {
+            const nowIso = new Date().toISOString();
+            const approvedProcessInfo = {
+                id: data.id,
+                protocolo: data.protocolo || data.id.slice(0, 8),
+                solicitante_nome: data.solicitante_nome || 'Não informado',
+                solicitante_setor: data.solicitante_setor || 'Não informado',
+                objeto_resumido: data.objeto_resumido || data.finalidade || 'Processo de Licitação',
+                aprovado_em: data.aprovado_em || nowIso
+            };
+
+            broadcastLicitacaoApproval(approvedProcessInfo);
+        }
+
         return data as LicitacaoProcesso;
     } catch (error: any) {
         if (error?.code === '23514' && error?.message?.includes('licitacao_processos_status_check')) {
@@ -348,27 +459,79 @@ export const generateLicitacaoProtocol = async (): Promise<string> => {
 // --- Backwards Compatibility Shims for App.tsx ---
 
 export const saveLicitacaoProcess = async (process: any): Promise<any> => {
-    // Map generic 'Order' status back to 'LicitacaoProcesso' status if needed
     let dbStatus = process.status;
     if (process.status === 'pending') dbStatus = 'Rascunho';
-    if (process.status === 'awaiting_approval') dbStatus = 'Aguardando Assinatura';
-    if (process.status === 'in_progress') dbStatus = 'Em Análise';
-    if (process.status === 'completed') dbStatus = 'Concluído';
-    if (process.status === 'finalized') dbStatus = 'Finalizado';
-    if (process.status === 'rejected') dbStatus = 'Rejeitado';
+    else if (process.status === 'awaiting_approval') dbStatus = 'Aguardando Assinatura';
+    else if (process.status === 'in_progress' || process.status === 'approved') dbStatus = 'Em Análise';
+    else if (process.status === 'completed') dbStatus = 'Concluído';
+    else if (process.status === 'finalized') dbStatus = 'Finalizado';
+    else if (process.status === 'rejected') dbStatus = 'Rejeitado';
 
-    // Sanitize the payload to only include columns from licitacao_processos
-    const sanitizedProcess = {
-        solicitante_nome: process.documentSnapshot?.content?.requesterName || process.userName,
-        solicitante_setor: process.documentSnapshot?.content?.requesterSector || process.requestingSector,
-        finalidade: process.documentSnapshot?.content?.objeto || process.documentSnapshot?.content?.description || process.title,
+    const isNowApproved = dbStatus !== 'Rascunho' && dbStatus !== 'Aguardando Assinatura' && dbStatus !== 'Rejeitado' && dbStatus !== 'Finalizado';
+    const nowIso = new Date().toISOString();
+
+    const sanitizedProcess: any = {
+        solicitante_nome: process.documentSnapshot?.content?.requesterName || process.userName || process.solicitante_nome || 'Não informado',
+        solicitante_setor: process.documentSnapshot?.content?.requesterSector || process.requestingSector || process.solicitante_setor || 'Não informado',
+        finalidade: process.documentSnapshot?.content?.objeto || process.documentSnapshot?.content?.description || process.title || process.finalidade || 'Processo de Licitação',
+        objeto_resumido: process.shortDescription || process.documentSnapshot?.content?.shortDescription || process.objeto_resumido || process.title || process.finalidade,
         status: dbStatus,
     };
 
-    if (process.id) {
-        return updateLicitacaoProcess(process.id, sanitizedProcess) as any;
+    if (isNowApproved) {
+        sanitizedProcess.fase = process.fase || 'pendente';
+        sanitizedProcess.aprovado_em = nowIso;
+        sanitizedProcess.enviado_kanban_em = nowIso;
+        sanitizedProcess.apresentado_animacao = false;
     }
-    return createLicitacaoProcess(sanitizedProcess) as any;
+
+    let result: any = null;
+    if (process.id) {
+        result = await updateLicitacaoProcess(process.id, sanitizedProcess);
+    } else {
+        result = await createLicitacaoProcess(sanitizedProcess);
+    }
+
+    if (isNowApproved && result) {
+        try {
+            const approvedProcessInfo = {
+                id: result.id,
+                protocolo: result.protocolo || process.protocol || process.protocolo || result.id.slice(0, 8),
+                solicitante_nome: result.solicitante_nome || 'Não informado',
+                solicitante_setor: result.solicitante_setor || 'Não informado',
+                objeto_resumido: result.objeto_resumido || result.finalidade || 'Processo de Licitação',
+                aprovado_em: nowIso
+            };
+
+            const channel = supabase.channel('licitacao_kanban_priority');
+            channel.send({
+                type: 'broadcast',
+                event: 'new-licitacao-process-approved',
+                payload: approvedProcessInfo
+            });
+
+            const { data: orgData } = await supabase
+                .from('organization_settings')
+                .select('ui_config')
+                .eq('id', 'global_config')
+                .single();
+            const currentUiConfig = orgData?.ui_config || {};
+            await supabase
+                .from('organization_settings')
+                .update({
+                    ui_config: {
+                        ...currentUiConfig,
+                        latest_approved_licitacao_process: approvedProcessInfo
+                    },
+                    updated_at: nowIso
+                })
+                .eq('id', 'global_config');
+        } catch (err) {
+            console.warn('Erro ao disparar transmissão de aprovação ao Kanban:', err);
+        }
+    }
+
+    return result;
 };
 
 export const deleteLicitacaoProcess = async (id: string): Promise<void> => {

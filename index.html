@@ -79,12 +79,49 @@
       to { width: 0%; }
     }
 
+    @keyframes stage1Shrink {
+      from { width: 100%; }
+      to { width: 0%; }
+    }
+
+    @keyframes stage2Shrink {
+      from { width: 100%; }
+      to { width: 0%; }
+    }
+
+    @keyframes popScale {
+      0% { transform: scale(0.65) translateY(20px); opacity: 0; }
+      65% { transform: scale(1.04) translateY(-4px); }
+      100% { transform: scale(1) translateY(0); opacity: 1; }
+    }
+
+    @keyframes glowPulseModal {
+      0%, 100% { box-shadow: 0 0 50px rgba(99, 102, 241, 0.45), 0 0 100px rgba(245, 158, 11, 0.25); }
+      50% { box-shadow: 0 0 110px rgba(99, 102, 241, 0.85), 0 0 160px rgba(245, 158, 11, 0.55); }
+    }
+
     .animate-queue-pulse {
       animation: queueBorderPulse 2s ease-in-out infinite;
     }
 
     .animate-progress-shrink {
       animation: progressShrink 7s linear forwards;
+    }
+
+    .animate-stage1-shrink {
+      animation: stage1Shrink 3.8s linear forwards;
+    }
+
+    .animate-stage2-shrink {
+      animation: stage2Shrink 8s linear forwards;
+    }
+
+    .animate-pop-scale {
+      animation: popScale 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    .animate-glow-pulse-modal {
+      animation: glowPulseModal 3s ease-in-out infinite;
     }
 
     ::-webkit-scrollbar {
