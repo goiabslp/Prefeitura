@@ -391,8 +391,8 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
     const isCompras = activeBlock === 'compras';
 
     const getStatusBadge = (status: Order['status'] | string) => {
-        const normStatus = String(status || '').toLowerCase();
-        if (normStatus === 'approved' || normStatus === 'completed' || normStatus === 'in_progress' || normStatus === 'em análise' || normStatus === 'em analise' || normStatus === 'aprovado') {
+        const normStatus = String(status || '').toLowerCase().trim();
+        if (normStatus === 'approved' || normStatus === 'aprovado') {
             return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-100 text-[9px] font-black uppercase tracking-wider"><CheckCircle2 className="w-3 h-3" /> Aprovado</span>;
         }
         if (normStatus === 'finalized' || normStatus === 'finalizado') {
@@ -404,13 +404,10 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
         if (normStatus === 'rejected' || normStatus === 'rejeitado') {
             return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-100 text-[9px] font-black uppercase tracking-wider"><XCircle className="w-3 h-3" /> Rejeitado</span>;
         }
-        if (normStatus === 'pending' || normStatus === 'awaiting_approval' || normStatus === 'rascunho' || normStatus === 'aguardando assinatura') {
-            return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-100 text-[9px] font-black uppercase tracking-wider"><Clock className="w-3 h-3 animate-pulse" /> Em Aprovação</span>;
-        }
         if (normStatus === 'awaiting_ficha') {
             return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-100 text-[9px] font-black uppercase tracking-wider"><Clock className="w-3 h-3 animate-pulse" /> Aguardando Ficha</span>;
         }
-        return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-100 text-[9px] font-black uppercase tracking-wider"><CheckCircle2 className="w-3 h-3" /> Aprovado</span>;
+        return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-100 text-[9px] font-black uppercase tracking-wider"><Clock className="w-3 h-3 animate-pulse" /> Em Aprovação</span>;
     };
     const isDiarias = activeBlock === 'diarias';
     const isLicitacao = activeBlock === 'licitacao';

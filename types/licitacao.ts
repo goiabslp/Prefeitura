@@ -16,7 +16,7 @@ export interface LicitacaoProcesso {
     solicitante_nome: string;
     solicitante_cargo: string;
     solicitante_setor: string;
-    status: 'Rascunho' | 'Aguardando Assinatura' | 'Assinado' | 'Em Análise' | 'Concluído' | 'Finalizado' | 'Rejeitado';
+    status: 'Rascunho' | 'Aguardando Assinatura' | 'Em Aprovação' | 'Assinado' | 'Em Análise' | 'Aprovado' | 'Concluído' | 'Finalizado' | 'Rejeitado';
     criado_por: string;
     criado_em: string;
     atualizado_em: string;

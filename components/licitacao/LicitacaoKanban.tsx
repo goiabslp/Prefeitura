@@ -1694,18 +1694,6 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                                         Um novo processo foi aprovado e adicionado automaticamente à fila do Kanban.
                                     </p>
                                 </div>
-
-                                {/* Barra de Progresso da Etapa 1 (5s) */}
-                                <div className="w-full max-w-md bg-slate-900/80 rounded-full h-2 overflow-hidden border border-indigo-500/40 p-0.5">
-                                    <div className="bg-gradient-to-r from-amber-400 to-indigo-500 h-full rounded-full" style={{ animation: 'stageShrink 5s linear forwards' }} />
-                                </div>
-
-                                <button
-                                    onClick={() => setModalStage('details')}
-                                    className="bg-indigo-600/80 hover:bg-indigo-500 text-white text-xs sm:text-sm font-bold px-6 py-2.5 rounded-xl border border-indigo-400/40 transition-all cursor-pointer shadow-lg hover:scale-105 active:scale-95"
-                                >
-                                    Ver Informações do Processo ➔
-                                </button>
                             </div>
                         ) : (
                             /* ETAPA 2: EXIBIÇÃO COMPLETA DAS INFORMAÇÕES DO PROCESSO */
@@ -1783,38 +1771,6 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, o
                                         <p className="text-base sm:text-xl font-extrabold text-amber-100 line-clamp-3 leading-relaxed pl-1">
                                             {objetoResumidoMap[newApprovedModalProcess.id] || newApprovedModalProcess.objeto_resumido}
                                         </p>
-                                    </div>
-                                </div>
-
-                                {/* Barra de Progresso da Etapa 2 (10s) e Botões de Controle */}
-                                <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-indigo-500/30">
-                                    <div className="w-full sm:w-auto flex-1 bg-slate-900 rounded-full h-2 overflow-hidden border border-indigo-500/30">
-                                        <div className="bg-gradient-to-r from-amber-400 via-indigo-500 to-emerald-400 h-full rounded-full" style={{ animation: 'stageShrink 10s linear forwards' }} />
-                                    </div>
-
-                                    <div className="flex items-center gap-3.5 w-full sm:w-auto justify-end">
-                                        <button
-                                            onClick={playNotificationChimeSound}
-                                            className="bg-slate-900 hover:bg-slate-800 text-amber-300 hover:text-white p-3 rounded-2xl text-xs font-bold flex items-center justify-center border border-slate-700 transition-all cursor-pointer shadow-md active:scale-95 shrink-0"
-                                            title="Ouvir toque sonoro"
-                                        >
-                                            <Volume2 className="w-5 h-5 text-amber-400" />
-                                        </button>
-                                        <button
-                                            onClick={() => audioFileInputRef.current?.click()}
-                                            className="bg-slate-900 hover:bg-slate-800 text-indigo-300 hover:text-white px-4 py-3 rounded-2xl text-xs font-bold flex items-center gap-2 border border-slate-700 transition-all cursor-pointer shadow-md active:scale-95 shrink-0"
-                                            title="Enviar seu arquivo MP3"
-                                        >
-                                            <Upload className="w-4 h-4 text-indigo-400" />
-                                            <span className="hidden sm:inline">Toque MP3</span>
-                                        </button>
-                                        <button
-                                            onClick={handleDismissNewProcessModal}
-                                            className="w-full sm:w-auto bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white font-black text-sm px-6 py-3 rounded-2xl transition-all shadow-xl shadow-indigo-600/40 flex items-center justify-center gap-2 cursor-pointer active:scale-95 shrink-0"
-                                        >
-                                            <CheckCircle2 className="w-5 h-5" />
-                                            Entendi / Ver no Kanban
-                                        </button>
                                     </div>
                                 </div>
                             </div>

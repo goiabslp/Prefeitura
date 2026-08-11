@@ -28,16 +28,11 @@ export const createLicitacaoProcessCompleto = async (payload: {
     let lastError: any = null;
 
     const nowIso = new Date().toISOString();
-    const isApprovedStatus = !payload.processo.status || (
-        payload.processo.status !== 'Rascunho' &&
-        payload.processo.status !== 'Aguardando Assinatura' &&
-        payload.processo.status !== 'Rejeitado' &&
-        payload.processo.status !== 'Finalizado'
-    );
+    const isApprovedStatus = (payload.processo.status as string) === 'Aprovado' || (payload.processo.status as string) === 'Em Análise';
 
     const processPayload: Partial<LicitacaoProcesso> = {
         ...payload.processo,
-        status: payload.processo.status || 'Em Análise',
+        status: (payload.processo.status || 'Em Aprovação') as any,
         fase: payload.processo.fase || 'pendente',
         ...(isApprovedStatus ? {
             aprovado_em: nowIso,
@@ -211,7 +206,7 @@ export const updateLicitacaoProcess = async (id: string, updates: Partial<Licita
             throw error;
         }
 
-        const isApprovedStatus = data && data.status && data.status !== 'Rascunho' && data.status !== 'Aguardando Assinatura' && data.status !== 'Rejeitado' && data.status !== 'Finalizado';
+        const isApprovedStatus = data && data.status && (data.status === 'Aprovado' || data.status === 'Em Análise' || (data.status !== 'Rascunho' && data.status !== 'Aguardando Assinatura' && data.status !== 'Em Aprovação' && data.status !== 'Rejeitado' && data.status !== 'Finalizado'));
 
         if (data && isApprovedStatus && (updates.status !== undefined || updates.apresentado_animacao === false || updates.aprovado_em !== undefined)) {
             const nowIso = new Date().toISOString();
