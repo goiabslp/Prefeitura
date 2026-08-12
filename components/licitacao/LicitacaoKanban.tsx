@@ -1103,7 +1103,9 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, u
                 const isPrioB = checkIsQueuePriority(b);
                 if (isPrioA && !isPrioB) return -1;
                 if (!isPrioA && isPrioB) return 1;
-                return new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime();
+                const timeA = a.criado_em ? new Date(a.criado_em).getTime() : 0;
+                const timeB = b.criado_em ? new Date(b.criado_em).getTime() : 0;
+                return timeA - timeB;
             });
         });
 
@@ -1995,10 +1997,15 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, u
                                             </div>
                                         ) : (
                                             columnProcesses
+                                                .slice()
                                                 .sort((a, b) => {
                                                     const aPrior = checkIsQueuePriority(a);
                                                     const bPrior = checkIsQueuePriority(b);
-                                                    return aPrior === bPrior ? 0 : aPrior ? -1 : 1;
+                                                    if (aPrior && !bPrior) return -1;
+                                                    if (!aPrior && bPrior) return 1;
+                                                    const timeA = a.criado_em ? new Date(a.criado_em).getTime() : 0;
+                                                    const timeB = b.criado_em ? new Date(b.criado_em).getTime() : 0;
+                                                    return timeA - timeB;
                                                 })
                                                 .map((process) => {
                                                     const isPriorityProcess = activePriority?.type === 'process' && activePriority?.processId === process.id;
