@@ -334,11 +334,21 @@ export const getLicitacaoProcesses = async (): Promise<LicitacaoProcesso[]> => {
 
         if (error) throw error;
         const localMap = getLocalConveniosMap();
-        return (data || []).map((proc: any) => ({
-            ...proc,
-            tem_convenio: proc.tem_convenio ?? localMap[proc.id]?.tem_convenio ?? false,
-            numero_convenio: proc.numero_convenio ?? localMap[proc.id]?.numero_convenio
-        })) as unknown as LicitacaoProcesso[];
+        return (data || []).map((proc: any) => {
+            const localEntry = localMap[proc.id];
+            const isConvenio = localEntry?.tem_convenio !== undefined
+                ? localEntry.tem_convenio
+                : Boolean(proc.tem_convenio);
+            const numConvenio = localEntry?.numero_convenio !== undefined
+                ? localEntry.numero_convenio
+                : proc.numero_convenio;
+
+            return {
+                ...proc,
+                tem_convenio: isConvenio,
+                numero_convenio: numConvenio
+            };
+        }) as unknown as LicitacaoProcesso[];
     } catch (error) {
         console.error("Error fetching licitacao processes:", error);
         return [];
@@ -362,10 +372,18 @@ export const getLicitacaoProcessById = async (id: string): Promise<LicitacaoProc
         if (error) throw error;
         const localMap = getLocalConveniosMap();
         const proc: any = data;
+        const localEntry = localMap[proc.id];
+        const isConvenio = localEntry?.tem_convenio !== undefined
+            ? localEntry.tem_convenio
+            : Boolean(proc.tem_convenio);
+        const numConvenio = localEntry?.numero_convenio !== undefined
+            ? localEntry.numero_convenio
+            : proc.numero_convenio;
+
         return {
             ...proc,
-            tem_convenio: proc.tem_convenio ?? localMap[proc.id]?.tem_convenio ?? false,
-            numero_convenio: proc.numero_convenio ?? localMap[proc.id]?.numero_convenio
+            tem_convenio: isConvenio,
+            numero_convenio: numConvenio
         } as unknown as LicitacaoProcesso;
     } catch (error) {
         console.error("Error fetching licitacao process by id:", error);

@@ -528,7 +528,9 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, u
 
     const checkIsQueuePriority = (process: LicitacaoProcesso) => {
         if (!process) return false;
-        const isConvenio = Boolean(process.tem_convenio || conveniosMap[process.id]?.tem_convenio);
+        const isConvenio = conveniosMap[process.id]?.tem_convenio !== undefined
+            ? Boolean(conveniosMap[process.id]?.tem_convenio)
+            : Boolean(process.tem_convenio);
         if (isConvenio) return true;
         if (removedQueuePriorityIds.includes(process.id)) return false;
         return queuePriorityIds.includes(process.id) || process.prioridade === 'Urgente' || (process.prioridade as string) === 'Alta';
@@ -553,16 +555,48 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, u
         return () => clearInterval(mapInterval);
     }, []);
 
-    const handleToggleConvenio = async (process: LicitacaoProcesso, temConvenio: boolean) => {
-        const currentNum = conveniosMap[process.id]?.numero_convenio || process.numero_convenio || '';
-        const updatedMap = {
-            ...conveniosMap,
-            [process.id]: { tem_convenio: temConvenio, numero_convenio: temConvenio ? currentNum : '' }
-        };
+    const syncConvenioGlobally = async (updatedMap: Record<string, { tem_convenio: boolean; numero_convenio?: string }>) => {
         setConveniosMap(updatedMap);
         try {
             localStorage.setItem('licitacao_convenios_map', JSON.stringify(updatedMap));
         } catch (e) {}
+
+        if (channelRef.current) {
+            channelRef.current.send({
+                type: 'broadcast',
+                event: 'licitacao-convenio-updated',
+                payload: updatedMap
+            });
+        }
+
+        try {
+            const { data: orgData } = await supabase
+                .from('organization_settings')
+                .select('ui_config')
+                .eq('id', 'global_config')
+                .single();
+            const currentUi = orgData?.ui_config || {};
+            await supabase
+                .from('organization_settings')
+                .update({
+                    ui_config: { ...currentUi, licitacao_convenios_map: updatedMap },
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', 'global_config');
+        } catch (e) {
+            console.warn('Erro ao persistir convenios_map no Supabase:', e);
+        }
+    };
+
+    const handleToggleConvenio = async (process: LicitacaoProcesso, temConvenio: boolean) => {
+        const currentNum = conveniosMap[process.id]?.numero_convenio !== undefined 
+            ? conveniosMap[process.id].numero_convenio 
+            : (process.numero_convenio || '');
+        const updatedMap = {
+            ...conveniosMap,
+            [process.id]: { tem_convenio: temConvenio, numero_convenio: temConvenio ? currentNum : '' }
+        };
+        await syncConvenioGlobally(updatedMap);
 
         if (temConvenio) {
             if (!queuePriorityIds.includes(process.id)) {
@@ -596,10 +630,7 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, u
             ...conveniosMap,
             [process.id]: { tem_convenio: true, numero_convenio: num }
         };
-        setConveniosMap(updatedMap);
-        try {
-            localStorage.setItem('licitacao_convenios_map', JSON.stringify(updatedMap));
-        } catch (e) {}
+        await syncConvenioGlobally(updatedMap);
 
         setConvenioSavedToast(true);
         setTimeout(() => setConvenioSavedToast(false), 2500);
@@ -704,6 +735,15 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, u
                             return dbAssign;
                         });
                     }
+
+                    if (data.ui_config.licitacao_convenios_map !== undefined) {
+                        const dbConvenios = data.ui_config.licitacao_convenios_map || {};
+                        try { localStorage.setItem('licitacao_convenios_map', JSON.stringify(dbConvenios)); } catch (e) {}
+                        setConveniosMap(prev => {
+                            if (JSON.stringify(prev) === JSON.stringify(dbConvenios)) return prev;
+                            return dbConvenios;
+                        });
+                    }
                 }
             } catch (e) {
                 console.warn('Erro ao carregar prioridade do banco:', e);
@@ -742,6 +782,12 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, u
                     setProcessAssignments(data.payload);
                 }
             })
+            .on('broadcast', { event: 'licitacao-convenio-updated' }, (data) => {
+                if (data.payload !== undefined) {
+                    try { localStorage.setItem('licitacao_convenios_map', JSON.stringify(data.payload)); } catch (e) {}
+                    setConveniosMap(data.payload);
+                }
+            })
             .on('broadcast', { event: 'new-licitacao-process-approved' }, (data) => {
                 if (data.payload && data.payload.id) {
                     triggerModalForProcess(data.payload);
@@ -770,6 +816,15 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, u
                             localStorage.setItem('licitacao_removed_queue_priority_ids', JSON.stringify(dbRemoved));
                         } catch (e) {}
                         handleQueueSync({ queue: dbQueue, removed: dbRemoved });
+                    }
+
+                    if (newUi.licitacao_convenios_map !== undefined) {
+                        const dbConvenios = newUi.licitacao_convenios_map || {};
+                        try { localStorage.setItem('licitacao_convenios_map', JSON.stringify(dbConvenios)); } catch (e) {}
+                        setConveniosMap(prev => {
+                            if (JSON.stringify(prev) === JSON.stringify(dbConvenios)) return prev;
+                            return dbConvenios;
+                        });
                     }
                 }
             })
@@ -1395,7 +1450,9 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, u
             );
         }
 
-        const isConvenioActive = Boolean(selectedProcess.tem_convenio || conveniosMap[selectedProcess.id]?.tem_convenio);
+        const isConvenioActive = conveniosMap[selectedProcess.id]?.tem_convenio !== undefined
+            ? Boolean(conveniosMap[selectedProcess.id]?.tem_convenio)
+            : Boolean(selectedProcess.tem_convenio);
 
         const assigned = processAssignments[selectedProcess.id];
         const currentPhaseObj = LICITACAO_PHASES.find(p => p.id === (selectedProcess.fase || 'pendente')) || LICITACAO_PHASES[0];
