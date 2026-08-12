@@ -160,6 +160,18 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, u
         }
     });
 
+    const [conveniosMap, setConveniosMap] = useState<Record<string, { tem_convenio: boolean; numero_convenio?: string }>>(() => {
+        try {
+            const saved = localStorage.getItem('licitacao_convenios_map');
+            return saved ? JSON.parse(saved) : {};
+        } catch {
+            return {};
+        }
+    });
+
+    const [numeroConvenioInput, setNumeroConvenioInput] = useState('');
+    const [convenioSavedToast, setConvenioSavedToast] = useState(false);
+
     const [processAssignments, setProcessAssignments] = useState<Record<string, { userId: string; userName: string }>>(() => {
         try {
             const saved = localStorage.getItem('licitacao_process_assignments');
@@ -516,6 +528,8 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, u
 
     const checkIsQueuePriority = (process: LicitacaoProcesso) => {
         if (!process) return false;
+        const isConvenio = Boolean(process.tem_convenio || conveniosMap[process.id]?.tem_convenio);
+        if (isConvenio) return true;
         if (removedQueuePriorityIds.includes(process.id)) return false;
         return queuePriorityIds.includes(process.id) || process.prioridade === 'Urgente' || (process.prioridade as string) === 'Alta';
     };
@@ -538,6 +552,71 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, u
         const mapInterval = setInterval(loadMap, 3000);
         return () => clearInterval(mapInterval);
     }, []);
+
+    const handleToggleConvenio = async (process: LicitacaoProcesso, temConvenio: boolean) => {
+        const currentNum = conveniosMap[process.id]?.numero_convenio || process.numero_convenio || '';
+        const updatedMap = {
+            ...conveniosMap,
+            [process.id]: { tem_convenio: temConvenio, numero_convenio: temConvenio ? currentNum : '' }
+        };
+        setConveniosMap(updatedMap);
+        try {
+            localStorage.setItem('licitacao_convenios_map', JSON.stringify(updatedMap));
+        } catch (e) {}
+
+        if (temConvenio) {
+            if (!queuePriorityIds.includes(process.id)) {
+                const newPrio = [...queuePriorityIds, process.id];
+                setQueuePriorityIds(newPrio);
+                try { localStorage.setItem('licitacao_queue_priority_ids', JSON.stringify(newPrio)); } catch (e) {}
+            }
+            if (removedQueuePriorityIds.includes(process.id)) {
+                const newRem = removedQueuePriorityIds.filter(id => id !== process.id);
+                setRemovedQueuePriorityIds(newRem);
+                try { localStorage.setItem('licitacao_removed_queue_priority_ids', JSON.stringify(newRem)); } catch (e) {}
+            }
+        }
+
+        try {
+            await updateMutation.mutateAsync({
+                id: process.id,
+                updates: {
+                    tem_convenio: temConvenio,
+                    numero_convenio: temConvenio ? currentNum : '',
+                    ...(temConvenio ? { prioridade: 'Urgente' } : {})
+                }
+            });
+        } catch (e) {
+            console.warn('Erro ao atualizar convenio:', e);
+        }
+    };
+
+    const handleSaveNumeroConvenio = async (process: LicitacaoProcesso, num: string) => {
+        const updatedMap = {
+            ...conveniosMap,
+            [process.id]: { tem_convenio: true, numero_convenio: num }
+        };
+        setConveniosMap(updatedMap);
+        try {
+            localStorage.setItem('licitacao_convenios_map', JSON.stringify(updatedMap));
+        } catch (e) {}
+
+        setConvenioSavedToast(true);
+        setTimeout(() => setConvenioSavedToast(false), 2500);
+
+        try {
+            await updateMutation.mutateAsync({
+                id: process.id,
+                updates: {
+                    tem_convenio: true,
+                    numero_convenio: num,
+                    prioridade: 'Urgente'
+                }
+            });
+        } catch (e) {
+            console.warn('Erro ao salvar numero do convenio:', e);
+        }
+    };
 
     useEffect(() => {
         const handleSync = (payloadData?: any) => {
@@ -1316,6 +1395,8 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, u
             );
         }
 
+        const isConvenioActive = Boolean(selectedProcess.tem_convenio || conveniosMap[selectedProcess.id]?.tem_convenio);
+
         const assigned = processAssignments[selectedProcess.id];
         const currentPhaseObj = LICITACAO_PHASES.find(p => p.id === (selectedProcess.fase || 'pendente')) || LICITACAO_PHASES[0];
         const PhaseIcon = currentPhaseObj.icon;
@@ -1537,6 +1618,74 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, u
                                         </div>
                                     )}
                                 </div>
+                            </div>
+
+                            {/* SEÇÃO CONVÊNIO (SIM / NÃO + NÚMERO DO CONVÊNIO) */}
+                            <div className="bg-white border border-slate-200/90 rounded-xl p-3.5 xl:p-4 shadow-2xs space-y-2.5 shrink-0">
+                                <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+                                    <div className="flex items-center gap-2">
+                                        <Building2 className="w-4 h-4 text-amber-600" />
+                                        <span className="text-[10px] xl:text-xs font-black uppercase tracking-wider text-slate-700">
+                                            Convênio
+                                        </span>
+                                    </div>
+
+                                    {/* BOTÕES SIM / NÃO */}
+                                    <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200">
+                                        <button
+                                            type="button"
+                                            onClick={() => handleToggleConvenio(selectedProcess, true)}
+                                            className={`px-3 py-1 rounded-md text-xs font-black uppercase transition-all cursor-pointer ${
+                                                isConvenioActive
+                                                    ? 'bg-amber-500 text-slate-950 shadow-xs'
+                                                    : 'bg-transparent text-slate-500 hover:bg-slate-200'
+                                            }`}
+                                        >
+                                            Sim
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleToggleConvenio(selectedProcess, false)}
+                                            className={`px-3 py-1 rounded-md text-xs font-black uppercase transition-all cursor-pointer ${
+                                                !isConvenioActive
+                                                    ? 'bg-slate-700 text-white shadow-xs'
+                                                    : 'bg-transparent text-slate-500 hover:bg-slate-200'
+                                            }`}
+                                        >
+                                            Não
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {isConvenioActive && (
+                                    <div className="space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-150">
+                                        <label className="text-[10px] font-black uppercase text-amber-800 tracking-wider block">
+                                            Número do Convênio
+                                        </label>
+                                        <div className="flex items-center gap-2">
+                                            <input
+                                                type="text"
+                                                placeholder="Digite o número do convênio..."
+                                                defaultValue={selectedProcess.numero_convenio || conveniosMap[selectedProcess.id]?.numero_convenio || ''}
+                                                onChange={(e) => setNumeroConvenioInput(e.target.value)}
+                                                onBlur={() => handleSaveNumeroConvenio(selectedProcess, numeroConvenioInput)}
+                                                className="flex-1 bg-slate-50 border border-amber-300 focus:border-amber-500 rounded-lg px-3 py-1.5 text-xs font-black text-slate-900 outline-none transition-all uppercase"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => handleSaveNumeroConvenio(selectedProcess, numeroConvenioInput)}
+                                                className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-black uppercase rounded-lg shadow-xs transition-all cursor-pointer shrink-0"
+                                            >
+                                                Salvar
+                                            </button>
+                                        </div>
+                                        {convenioSavedToast && (
+                                            <span className="text-[9px] font-extrabold text-emerald-700 block">
+                                                ✓ Convênio salvo com sucesso! (Prioridade Aplicada)
+                                            </span>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         </div>
 
@@ -1835,6 +1984,15 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, u
                                                             )}
 
                                                             <div className="flex items-center gap-1 xl:gap-1.5 flex-wrap">
+                                                                {Boolean(process.tem_convenio || conveniosMap[process.id]?.tem_convenio) && (
+                                                                    <div 
+                                                                        className="bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 text-slate-950 px-1.5 py-0.5 rounded text-[8px] xl:text-[9px] 2xl:text-xs font-black flex items-center gap-1 shadow-md uppercase tracking-wider w-fit border border-amber-300"
+                                                                        title={process.numero_convenio || conveniosMap[process.id]?.numero_convenio ? `Convênio nº ${process.numero_convenio || conveniosMap[process.id]?.numero_convenio}` : 'Processo com Convênio'}
+                                                                    >
+                                                                        <Building2 className="w-2.5 h-2.5 xl:w-3 xl:h-3 text-slate-950 shrink-0" />
+                                                                        <span>CONVÊNIO{(process.numero_convenio || conveniosMap[process.id]?.numero_convenio) ? ` #${process.numero_convenio || conveniosMap[process.id]?.numero_convenio}` : ''}</span>
+                                                                    </div>
+                                                                )}
                                                                 {isQueuePriority && !isPriorityProcess && (
                                                                     <div className="bg-gradient-to-r from-red-600 via-rose-600 to-amber-500 text-white px-1.5 py-0.5 rounded text-[8px] xl:text-[9px] 2xl:text-xs font-black flex items-center gap-1 shadow-md shadow-red-500/30 uppercase tracking-wider w-fit border border-red-400/40 animate-pulse">
                                                                         <Flame className="w-2.5 h-2.5 xl:w-3 xl:h-3 fill-yellow-300 text-yellow-300 shrink-0 animate-bounce" /> PRIORIDADE

@@ -28,6 +28,8 @@ export interface LicitacaoProcesso {
     resolucao_descricao?: string;
     resolucao_numero?: string;
     ficha_orcamentaria?: string;
+    tem_convenio?: boolean;
+    numero_convenio?: string;
     itens?: LicitacaoItem[];
     justificativa?: LicitacaoJustificativa;
     assinatura?: LicitacaoAssinatura;

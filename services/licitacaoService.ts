@@ -189,7 +189,33 @@ export const broadcastLicitacaoApproval = (approvedProcessInfo: any) => {
     } catch (e) { }
 };
 
+const getLocalConveniosMap = (): Record<string, { tem_convenio: boolean; numero_convenio?: string }> => {
+    try {
+        const stored = localStorage.getItem('licitacao_convenios_map');
+        if (stored) {
+            return JSON.parse(stored);
+        }
+    } catch (e) {
+        console.error('Erro ao ler licitacao_convenios_map', e);
+    }
+    return {};
+};
+
+const saveLocalConvenio = (id: string, tem_convenio: boolean, numero_convenio?: string) => {
+    try {
+        const map = getLocalConveniosMap();
+        map[id] = { tem_convenio, numero_convenio };
+        localStorage.setItem('licitacao_convenios_map', JSON.stringify(map));
+    } catch (e) {
+        console.error('Erro ao salvar licitacao_convenios_map', e);
+    }
+};
+
 export const updateLicitacaoProcess = async (id: string, updates: Partial<LicitacaoProcesso>): Promise<LicitacaoProcesso | null> => {
+    if (updates.tem_convenio !== undefined || updates.numero_convenio !== undefined) {
+        saveLocalConvenio(id, updates.tem_convenio ?? false, updates.numero_convenio);
+    }
+
     try {
         const { data, error } = await supabase
             .from('licitacao_processos')
@@ -229,11 +255,29 @@ export const updateLicitacaoProcess = async (id: string, updates: Partial<Licita
                 return retryData as LicitacaoProcesso;
             }
 
-            // Caso a coluna checkin_finalizado ainda não exista na tabela no banco
-            if (error.code === 'PGRST204' && (error.message?.includes('checkin_finalizado') || JSON.stringify(error).includes('checkin_finalizado'))) {
-                console.warn("Coluna 'checkin_finalizado' não encontrada no banco. Atualizando demais campos da licitação...");
+            // Caso a coluna checkin_finalizado ou colunas de convenio ainda não existam na tabela no banco
+            if (error.code === 'PGRST204' || error.message?.includes('tem_convenio') || error.message?.includes('numero_convenio') || error.message?.includes('checkin_finalizado')) {
+                console.warn("Coluna ausente no banco Supabase em licitacao_processos (PGRST204). Sanitizando update...");
                 const sanitizedUpdates = { ...updates };
                 delete (sanitizedUpdates as any).checkin_finalizado;
+                delete (sanitizedUpdates as any).tem_convenio;
+                delete (sanitizedUpdates as any).numero_convenio;
+
+                if (Object.keys(sanitizedUpdates).length === 0) {
+                    const { data: currentData, error: currentErr } = await supabase
+                        .from('licitacao_processos')
+                        .select('*')
+                        .eq('id', id)
+                        .maybeSingle();
+
+                    if (currentErr) throw currentErr;
+                    const conv = getLocalConveniosMap()[id];
+                    return {
+                        ...currentData,
+                        tem_convenio: conv ? conv.tem_convenio : updates.tem_convenio,
+                        numero_convenio: conv ? conv.numero_convenio : updates.numero_convenio
+                    } as LicitacaoProcesso;
+                }
 
                 const { data: retryData, error: retryError } = await supabase
                     .from('licitacao_processos')
@@ -243,7 +287,12 @@ export const updateLicitacaoProcess = async (id: string, updates: Partial<Licita
                     .maybeSingle();
 
                 if (retryError) throw retryError;
-                return retryData as LicitacaoProcesso;
+                const conv = getLocalConveniosMap()[id];
+                return {
+                    ...retryData,
+                    tem_convenio: conv ? conv.tem_convenio : updates.tem_convenio,
+                    numero_convenio: conv ? conv.numero_convenio : updates.numero_convenio
+                } as LicitacaoProcesso;
             }
             throw error;
         }
@@ -284,7 +333,12 @@ export const getLicitacaoProcesses = async (): Promise<LicitacaoProcesso[]> => {
             .order('criado_em', { ascending: false });
 
         if (error) throw error;
-        return data as unknown as LicitacaoProcesso[];
+        const localMap = getLocalConveniosMap();
+        return (data || []).map((proc: any) => ({
+            ...proc,
+            tem_convenio: proc.tem_convenio ?? localMap[proc.id]?.tem_convenio ?? false,
+            numero_convenio: proc.numero_convenio ?? localMap[proc.id]?.numero_convenio
+        })) as unknown as LicitacaoProcesso[];
     } catch (error) {
         console.error("Error fetching licitacao processes:", error);
         return [];
@@ -306,7 +360,13 @@ export const getLicitacaoProcessById = async (id: string): Promise<LicitacaoProc
             .single();
 
         if (error) throw error;
-        return data as unknown as LicitacaoProcesso;
+        const localMap = getLocalConveniosMap();
+        const proc: any = data;
+        return {
+            ...proc,
+            tem_convenio: proc.tem_convenio ?? localMap[proc.id]?.tem_convenio ?? false,
+            numero_convenio: proc.numero_convenio ?? localMap[proc.id]?.numero_convenio
+        } as unknown as LicitacaoProcesso;
     } catch (error) {
         console.error("Error fetching licitacao process by id:", error);
         return null;
