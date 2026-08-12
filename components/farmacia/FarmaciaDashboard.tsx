@@ -4,7 +4,7 @@ import { Search, ClipboardList, Package, Settings, History, Pill } from 'lucide-
 import { useSystemSettings } from '../../contexts/SystemSettingsContext';
 
 interface FarmaciaDashboardProps {
-    currentUser: User;
+    currentUser: User | null;
     onNavigate: (view: string) => void;
 }
 
@@ -18,12 +18,12 @@ export const FarmaciaDashboard: React.FC<FarmaciaDashboardProps> = ({
     const isEstoqueActive = moduleStatus['parent_farmacia_estoque'] !== false;
     const isDashboardActive = moduleStatus['parent_farmacia_dashboard'] !== false;
 
-    const isAdmin = currentUser.role === 'admin';
-    const canAccessConsultar = (currentUser.permissions?.includes('parent_farmacia') || isAdmin) && isConsultarActive;
-    const canAccessRetirar = (currentUser.permissions?.includes('parent_farmacia') || isAdmin) && isRetirarActive;
-    const canAccessEstoque = (currentUser.permissions?.includes('parent_farmacia') || isAdmin) && isEstoqueActive;
-    const canAccessHistorico = (currentUser.permissions?.includes('parent_farmacia') || isAdmin);
-    const canAccessDados = (currentUser.permissions?.includes('parent_farmacia_editar') || currentUser.permissions?.includes('parent_farmacia_aprovar') || isAdmin) && isDashboardActive;
+    const isAdmin = currentUser?.role === 'admin';
+    const canAccessConsultar = (currentUser?.permissions?.includes('parent_farmacia') || isAdmin) && isConsultarActive;
+    const canAccessRetirar = (currentUser?.permissions?.includes('parent_farmacia') || isAdmin) && isRetirarActive;
+    const canAccessEstoque = (currentUser?.permissions?.includes('parent_farmacia') || isAdmin) && isEstoqueActive;
+    const canAccessHistorico = (currentUser?.permissions?.includes('parent_farmacia') || isAdmin);
+    const canAccessDados = (currentUser?.permissions?.includes('parent_farmacia_editar') || currentUser?.permissions?.includes('parent_farmacia_aprovar') || isAdmin) && isDashboardActive;
 
     return (
         <div className="flex-1 flex flex-col justify-center items-center w-full max-w-6xl mx-auto px-4 py-8 animate-in fade-in slide-in-from-bottom-6 duration-500">

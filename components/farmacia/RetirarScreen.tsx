@@ -9,7 +9,7 @@ import { FarmaciaPdfGenerator } from './FarmaciaPdfGenerator';
 import { useFarmaciaAlert } from './FarmaciaAlertContext';
 
 interface RetirarScreenProps {
-    currentUser: User;
+    currentUser?: User | null;
     onBack: () => void;
     onNavigate: (view: string) => void;
     appState: any;
@@ -386,8 +386,8 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
             validade: selectedMed.validade,
             paciente_nome: patientName,
             paciente_cpf: patientCpf.replace(/\D/g, ''),
-            responsavel_nome: currentUser.name,
-            responsavel_id: currentUser.id,
+            responsavel_nome: currentUser?.name || '',
+            responsavel_id: currentUser?.id || '',
             data: new Date(withdrawalDate).toISOString(),
             observacoes: observacoes
         };
@@ -423,8 +423,8 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                 validade: savedSelectedMed.validade,
                 paciente_nome: savedPatientName,
                 paciente_cpf: savedPatientCpf.replace(/\D/g, ''),
-                responsavel_nome: currentUser.name,
-                responsavel_id: currentUser.id,
+                responsavel_nome: currentUser?.name || '',
+                responsavel_id: currentUser?.id || '',
                 data: new Date(savedWithdrawalDate).toISOString(),
                 observacoes: savedObservacoes
             });
@@ -1096,7 +1096,7 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                     </div>
                                     <div className="min-w-0 flex-1">
                                         <span className="block text-[8px] font-black uppercase text-slate-400 tracking-wider mb-0.5">Responsável pela Entrega</span>
-                                        <span className="font-bold text-slate-700 text-xs block truncate">{currentUser.name}</span>
+                                        <span className="font-bold text-slate-700 text-xs block truncate">{currentUser?.name || ''}</span>
                                     </div>
                                 </div>
                             </div>

@@ -4,7 +4,7 @@ import { ArrowLeft, Search, Filter, Calendar, Info, RefreshCw, Loader2, Clipboar
 import * as db from '../../services/farmaciaService';
 
 interface HistoricoScreenProps {
-    currentUser: User;
+    currentUser?: User | null;
     onBack: () => void;
 }
 

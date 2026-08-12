@@ -11,7 +11,7 @@ const FORMAS_FARMACEUTICAS = [
 ];
 
 interface EstoqueScreenProps {
-    currentUser: User;
+    currentUser?: User | null;
     onBack: () => void;
     appState: any;
 }
@@ -93,6 +93,7 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
     const [dosagemValor, setDosagemValor] = useState('');
     const [tipoDosagem, setTipoDosagem] = useState('mg');
     const [principioAtivo, setPrincipioAtivo] = useState('');
+    const [altoCusto, setAltoCusto] = useState<'Não' | 'Sim'>('Não');
     const [saving, setSaving] = useState(false);
     const [showSuggestions, setShowSuggestions] = useState(false);
 
@@ -154,11 +155,11 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
 
 
     // Permissions
-    const isAdmin = currentUser.role === 'admin';
-    const canCreate = currentUser.permissions?.includes('parent_farmacia_criar') || isAdmin;
-    const canEdit = currentUser.permissions?.includes('parent_farmacia_editar') || isAdmin;
-    const canDelete = currentUser.permissions?.includes('parent_farmacia_excluir') || isAdmin;
-    const canApprove = currentUser.permissions?.includes('parent_farmacia_aprovar') || isAdmin;
+    const isAdmin = currentUser?.role === 'admin';
+    const canCreate = currentUser?.permissions?.includes('parent_farmacia_criar') || isAdmin;
+    const canEdit = currentUser?.permissions?.includes('parent_farmacia_editar') || isAdmin;
+    const canDelete = currentUser?.permissions?.includes('parent_farmacia_excluir') || isAdmin;
+    const canApprove = currentUser?.permissions?.includes('parent_farmacia_aprovar') || isAdmin;
 
     const handleImportMeds = async () => {
         const medsList = getMedsToImport(RAW_MEDS);
@@ -344,6 +345,7 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
         setDosagemValor('');
         setTipoDosagem('mg');
         setPrincipioAtivo('');
+        setAltoCusto('Não');
         setSelectedExistingMed(null);
         setIsAddModalOpen(true);
     };
@@ -375,7 +377,8 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                 await db.updateMedicamento(existingLote.id, {
                     validade,
                     categoria,
-                    principio_ativo: principioAtivo.toUpperCase() || undefined
+                    principio_ativo: principioAtivo.toUpperCase() || undefined,
+                    alto_custo: altoCusto === 'Sim'
                 });
 
                 if (qtyNum > 0) {
@@ -389,8 +392,8 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                         medicamento_dosagem: existingLote.dosagem,
                         lote: lote.toUpperCase(),
                         validade: validade,
-                        responsavel_nome: currentUser.name,
-                        responsavel_id: currentUser.id,
+                        responsavel_nome: currentUser?.name || '',
+                        responsavel_id: currentUser?.id || '',
                         data: new Date().toISOString(),
                         observacoes: 'Entrada de novo estoque para lote existente'
                     });
@@ -411,7 +414,8 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                     tipo,
                     dosagem: dosagemConcatenada || undefined,
                     fornecedor: fornecedor || undefined,
-                    principio_ativo: principioAtivo.toUpperCase() || undefined
+                    principio_ativo: principioAtivo.toUpperCase() || undefined,
+                    alto_custo: altoCusto === 'Sim'
                 });
 
                 if (newMed) {
@@ -426,8 +430,8 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                             medicamento_dosagem: newMed.dosagem,
                             lote: newMed.lote,
                             validade: newMed.validade,
-                            responsavel_nome: currentUser.name,
-                            responsavel_id: currentUser.id,
+                            responsavel_nome: currentUser?.name || '',
+                            responsavel_id: currentUser?.id || '',
                             data: new Date().toISOString(),
                             observacoes: 'Cadastro de novo lote'
                         });
@@ -457,6 +461,7 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
         setFornecedor(med.fornecedor || '');
         setTipo(med.tipo || 'Comprimido');
         setPrincipioAtivo(med.principio_ativo || '');
+        setAltoCusto(med.alto_custo ? 'Sim' : 'Não');
         
         const parsed = parseDosagem(med.dosagem);
         setDosagemValor(parsed.valor);
@@ -498,7 +503,8 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                 tipo,
                 dosagem: dosagemConcatenada || undefined,
                 fornecedor: fornecedor || undefined,
-                principio_ativo: principioAtivo.toUpperCase() || undefined
+                principio_ativo: principioAtivo.toUpperCase() || undefined,
+                alto_custo: altoCusto === 'Sim'
             });
 
             // Se a quantidade foi alterada, registra a movimentação de ajuste correspondente no histórico
@@ -514,8 +520,8 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                     medicamento_dosagem: dosagemConcatenada,
                     lote: lote.toUpperCase(),
                     validade: validade,
-                    responsavel_nome: currentUser.name,
-                    responsavel_id: currentUser.id,
+                    responsavel_nome: currentUser?.name || '',
+                    responsavel_id: currentUser?.id || '',
                     data: new Date().toISOString(),
                     observacoes: `Ajuste de estoque via edição (de ${oldQty} para ${newQty})`
                 });
@@ -584,8 +590,8 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                     medicamento_dosagem: existingLote.dosagem,
                     lote: existingLote.lote,
                     validade: stockToAdd.validade,
-                    responsavel_nome: currentUser.name,
-                    responsavel_id: currentUser.id,
+                    responsavel_nome: currentUser?.name || '',
+                    responsavel_id: currentUser?.id || '',
                     data: new Date().toISOString(),
                     observacoes: 'Adição de estoque'
                 });
@@ -617,8 +623,8 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                         medicamento_dosagem: newMed.dosagem,
                         lote: newMed.lote,
                         validade: newMed.validade,
-                        responsavel_nome: currentUser.name,
-                        responsavel_id: currentUser.id,
+                        responsavel_nome: currentUser?.name || '',
+                        responsavel_id: currentUser?.id || '',
                         data: new Date().toISOString(),
                         observacoes: 'Cadastro de novo lote'
                     });

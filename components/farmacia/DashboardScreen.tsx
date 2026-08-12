@@ -3,7 +3,8 @@ import { User, FarmaciaMedicamento, FarmaciaMovimentacao } from '../../types';
 import * as db from '../../services/farmaciaService';
 import {
     ArrowLeft, TrendingUp, TrendingDown, Users, Package, AlertTriangle, Activity, 
-    Calendar, CheckCircle2, AlertCircle, ShoppingCart, Info, PieChart, FileDown
+    Calendar, CheckCircle2, AlertCircle, ShoppingCart, Info, PieChart, FileDown,
+    Plus, Search, X, MoreVertical
 } from 'lucide-react';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -17,7 +18,7 @@ import { useNotification } from '../../contexts/NotificationContext';
 import { PacientesTab } from '../common/PacientesTab';
 
 interface DashboardScreenProps {
-    currentUser: User;
+    currentUser?: User | null;
     onBack: () => void;
     onNavigate: (view: string) => void;
     subView?: string;
@@ -54,6 +55,28 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
     const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
     const { addNotification } = useNotification();
+
+    // Alto Custo Form & Modal state
+    const [isAltoCustoModalOpen, setIsAltoCustoModalOpen] = useState(false);
+    const [altoCustoSearch, setAltoCustoSearch] = useState('');
+    const [acNome, setAcNome] = useState('');
+    const [acPrincipioAtivo, setAcPrincipioAtivo] = useState('');
+    const [acTipo, setAcTipo] = useState('Comprimido');
+    const [acDosagem, setAcDosagem] = useState('');
+    const [acCategoria, setAcCategoria] = useState<'CBAF' | 'CESAF' | 'CEAF'>('CEAF');
+    const [acLote, setAcLote] = useState('S/L');
+    const [acValidade, setAcValidade] = useState('2099-12-31');
+    const [acQuantidade, setAcQuantidade] = useState('0');
+    const [acLimiteMinimo, setAcLimiteMinimo] = useState('10');
+    const [acSaving, setAcSaving] = useState(false);
+
+    // RENAME list search & filters
+    const [renameSearch, setRenameSearch] = useState('');
+    const [renameCategoryFilter, setRenameCategoryFilter] = useState<'TODOS' | 'CBAF' | 'CESAF' | 'CEAF'>('TODOS');
+    const [renameStatusFilter, setRenameStatusFilter] = useState<'TODOS' | 'DISPONIVEL' | 'BAIXO' | 'ZERADO'>('TODOS');
+
+    // Menu interativo (...) para cada item
+    const [activeMenuMedId, setActiveMenuMedId] = useState<string | null>(null);
 
     const loadData = async () => {
         try {
@@ -241,6 +264,167 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         ].filter(d => d.total > 0);
     }, [renameStats]);
 
+    const renameFilteredList = useMemo(() => {
+        return medicamentos.filter(med => {
+            const cat = med.categoria?.toUpperCase();
+            if (!['CBAF', 'CESAF', 'CEAF'].includes(cat)) return false;
+
+            if (renameCategoryFilter !== 'TODOS' && cat !== renameCategoryFilter) {
+                return false;
+            }
+
+            if (renameStatusFilter === 'DISPONIVEL' && (med.quantidade <= med.limite_minimo || med.quantidade === 0)) return false;
+            if (renameStatusFilter === 'BAIXO' && (med.quantidade === 0 || med.quantidade > med.limite_minimo)) return false;
+            if (renameStatusFilter === 'ZERADO' && med.quantidade > 0) return false;
+
+            if (!renameSearch.trim()) return true;
+            const q = renameSearch.toLowerCase();
+            return (
+                med.nome?.toLowerCase().includes(q) ||
+                med.principio_ativo?.toLowerCase().includes(q) ||
+                med.lote?.toLowerCase().includes(q) ||
+                med.categoria?.toLowerCase().includes(q) ||
+                med.tipo?.toLowerCase().includes(q)
+            );
+        });
+    }, [medicamentos, renameSearch, renameCategoryFilter, renameStatusFilter]);
+
+    const altoCustoStats = useMemo(() => {
+        const altoCustoMeds = medicamentos.filter(med => med.alto_custo === true);
+        const total = altoCustoMeds.length;
+        const disponivel = altoCustoMeds.filter(med => med.quantidade > 0).length;
+        const zerados = altoCustoMeds.filter(med => med.quantidade === 0).length;
+
+        const CBAF = { total: 0, disponivel: 0, items: [] as FarmaciaMedicamento[] };
+        const CESAF = { total: 0, disponivel: 0, items: [] as FarmaciaMedicamento[] };
+        const CEAF = { total: 0, disponivel: 0, items: [] as FarmaciaMedicamento[] };
+
+        altoCustoMeds.forEach(med => {
+            const cat = med.categoria?.toUpperCase();
+            if (cat === 'CESAF') {
+                CESAF.total += 1;
+                if (med.quantidade > 0) CESAF.disponivel += 1;
+                CESAF.items.push(med);
+            } else if (cat === 'CEAF') {
+                CEAF.total += 1;
+                if (med.quantidade > 0) CEAF.disponivel += 1;
+                CEAF.items.push(med);
+            } else {
+                CBAF.total += 1;
+                if (med.quantidade > 0) CBAF.disponivel += 1;
+                CBAF.items.push(med);
+            }
+        });
+
+        return {
+            total,
+            disponivel,
+            zerados,
+            items: altoCustoMeds,
+            byCat: { CBAF, CESAF, CEAF }
+        };
+    }, [medicamentos]);
+
+    const altoCustoChartData = useMemo(() => {
+        return [
+            { name: 'Básico (CBAF)', value: altoCustoStats.byCat.CBAF.disponivel, total: altoCustoStats.byCat.CBAF.total, fill: '#ec4899' },
+            { name: 'Estratégico (CESAF)', value: altoCustoStats.byCat.CESAF.disponivel, total: altoCustoStats.byCat.CESAF.total, fill: '#8b5cf6' },
+            { name: 'Especializado (CEAF)', value: altoCustoStats.byCat.CEAF.disponivel, total: altoCustoStats.byCat.CEAF.total, fill: '#3b82f6' },
+        ].filter(d => d.total > 0);
+    }, [altoCustoStats]);
+
+    const altoCustoFilteredList = useMemo(() => {
+        return medicamentos.filter(med => {
+            if (!med.alto_custo) return false;
+            if (!altoCustoSearch.trim()) return true;
+            const q = altoCustoSearch.toLowerCase();
+            return (
+                med.nome?.toLowerCase().includes(q) ||
+                med.principio_ativo?.toLowerCase().includes(q) ||
+                med.lote?.toLowerCase().includes(q) ||
+                med.categoria?.toLowerCase().includes(q) ||
+                med.tipo?.toLowerCase().includes(q)
+            );
+        });
+    }, [medicamentos, altoCustoSearch]);
+
+    const handleCreateAltoCusto = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!acNome.trim()) {
+            addNotification('Aviso', 'Preencha o nome do medicamento.', 'error');
+            return;
+        }
+
+        setAcSaving(true);
+        try {
+            const qtyNum = parseInt(acQuantidade, 10) || 0;
+            const limitNum = parseInt(acLimiteMinimo, 10) || 10;
+
+            const newMed = await db.createMedicamento({
+                nome: acNome.toUpperCase(),
+                categoria: acCategoria,
+                quantidade: 0,
+                unidade: 'Unidade',
+                validade: acValidade || '2099-12-31',
+                lote: (acLote || 'S/L').toUpperCase(),
+                limite_minimo: limitNum,
+                tipo: acTipo || 'Comprimido',
+                dosagem: acDosagem || undefined,
+                principio_ativo: acPrincipioAtivo ? acPrincipioAtivo.toUpperCase() : undefined,
+                alto_custo: true
+            });
+
+            if (newMed && qtyNum > 0) {
+                await db.registrarMovimentacao({
+                    medicamento_id: newMed.id,
+                    tipo: 'Entrada',
+                    quantidade: qtyNum,
+                    medicamento_nome: newMed.nome,
+                    medicamento_categoria: newMed.categoria,
+                    medicamento_tipo: newMed.tipo,
+                    medicamento_dosagem: newMed.dosagem,
+                    lote: newMed.lote,
+                    validade: newMed.validade,
+                    responsavel_nome: currentUser?.name || '',
+                    responsavel_id: currentUser?.id || '',
+                    data: new Date().toISOString(),
+                    observacoes: 'Cadastro de Medicamento de Alto Custo'
+                });
+            }
+
+            addNotification('Sucesso', 'Medicamento de Alto Custo cadastrado com sucesso!', 'success');
+            setIsAltoCustoModalOpen(false);
+            loadData();
+        } catch (error: any) {
+            addNotification('Erro', error.message || 'Erro ao cadastrar medicamento de alto custo.', 'error');
+        } finally {
+            setAcSaving(false);
+        }
+    };
+
+    const handleMoveToAltoCusto = async (med: FarmaciaMedicamento) => {
+        try {
+            await db.updateMedicamento(med.id, { alto_custo: true });
+            addNotification('Sucesso', `Medicamento "${med.nome}" movido para Alto Custo com sucesso!`, 'success');
+            setActiveMenuMedId(null);
+            await loadData();
+            handleTabChange('alto-custo');
+        } catch (error: any) {
+            addNotification('Erro', error.message || 'Erro ao mover medicamento para Alto Custo.', 'error');
+        }
+    };
+
+    const handleRemoveFromAltoCusto = async (med: FarmaciaMedicamento) => {
+        try {
+            await db.updateMedicamento(med.id, { alto_custo: false });
+            addNotification('Sucesso', `Medicamento "${med.nome}" removido de Alto Custo!`, 'success');
+            setActiveMenuMedId(null);
+            await loadData();
+        } catch (error: any) {
+            addNotification('Erro', error.message || 'Erro ao remover medicamento de Alto Custo.', 'error');
+        }
+    };
+
     const handleOpenOrderModal = () => {
         const itemIds = Object.keys(selectedCompras);
         if (itemIds.length === 0) {
@@ -272,7 +456,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         doc.text('Pedido de Compras - Farmácia Popular', 20, 20);
         doc.setFontSize(12);
         doc.text(`Data: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, 20, 30);
-        doc.text(`Solicitante: ${currentUser.name}`, 20, 40);
+        doc.text(`Solicitante: ${currentUser?.name || ''}`, 20, 40);
         
         doc.setFontSize(14);
         doc.text('Itens Solicitados:', 20, 60);
@@ -319,13 +503,13 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 status: 'pending',
                 purchaseStatus: 'budgeting', // initial status
                 createdAt: new Date().toISOString(),
-                userId: currentUser.id,
-                userName: currentUser.name,
+                userId: currentUser?.id || '',
+                userName: currentUser?.name || '',
                 blockType: 'compras',
                 description: 'Reposição de medicamentos para a Farmácia Popular. Solicitamos prioridade para manter o estoque regularizado e garantir o atendimento à população.',
                 documentSnapshot: {
                     content: {
-                        requesterName: currentUser.name,
+                        requesterName: currentUser?.name || '',
                         requesterSector: 'Farmácia Popular',
                         description: 'Reposição de medicamentos essenciais da RENAME que atingiram limite mínimo ou estão zerados no sistema da Farmácia Popular.',
                         purchaseItems
@@ -422,7 +606,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
             {/* Tabs */}
             <div className="flex overflow-x-auto gap-2 mb-6 pb-2 custom-scrollbar">
-                {['geral', 'medicamentos', 'pacientes', 'relatorios', 'rename'].map(tab => (
+                {['geral', 'medicamentos', 'pacientes', 'relatorios', 'rename', 'alto-custo'].map(tab => (
                     <button
                         key={tab}
                         onClick={() => handleTabChange(tab)}
@@ -432,7 +616,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                                 : 'bg-white text-slate-500 hover:bg-slate-50 border border-slate-200/60 hover:text-slate-900'
                         }`}
                     >
-                        {tab === 'geral' ? 'Visão Geral' : tab === 'relatorios' ? 'Relatórios' : tab === 'rename' ? 'RENAME' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                        {tab === 'geral' ? 'Visão Geral' : tab === 'relatorios' ? 'Relatórios' : tab === 'rename' ? 'RENAME' : tab === 'alto-custo' ? 'ALTO CUSTO' : tab.charAt(0).toUpperCase() + tab.slice(1)}
                     </button>
                 ))}
             </div>
@@ -952,6 +1136,531 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                                 </div>
                             ))}
                         </div>
+                    </div>
+
+                    {/* Listagem Completa de Medicamentos da RENAME abaixo das métricas */}
+                    <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden mt-6">
+                        <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                            <div>
+                                <h4 className="text-sm font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
+                                    <Package className="w-4 h-4 text-pink-600" />
+                                    Listagem Geral de Medicamentos da RENAME (CBAF, CESAF, CEAF)
+                                </h4>
+                                <p className="text-[10px] font-bold uppercase text-slate-400 mt-0.5 tracking-wider">
+                                    Exibindo {renameFilteredList.length} medicamentos cadastrados nas categorias essenciais
+                                </p>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+                                <div className="relative flex-1 md:w-64">
+                                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3" />
+                                    <input
+                                        type="text"
+                                        placeholder="Buscar medicamento ou princípio ativo..."
+                                        value={renameSearch}
+                                        onChange={e => setRenameSearch(e.target.value)}
+                                        className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:border-pink-500 outline-none transition-all"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Filtros por Categoria e Status */}
+                        <div className="p-4 bg-slate-50/30 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+                            <div className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar">
+                                <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider mr-1">Categoria:</span>
+                                {[
+                                    { id: 'TODOS', label: 'Todas' },
+                                    { id: 'CBAF', label: 'Básico (CBAF)' },
+                                    { id: 'CESAF', label: 'Estratégico (CESAF)' },
+                                    { id: 'CEAF', label: 'Especializado (CEAF)' }
+                                ].map(cat => (
+                                    <button
+                                        key={cat.id}
+                                        onClick={() => setRenameCategoryFilter(cat.id as any)}
+                                        className={`px-3 py-1 rounded-lg text-[10px] font-extrabold uppercase transition-all cursor-pointer ${
+                                            renameCategoryFilter === cat.id
+                                                ? 'bg-slate-800 text-white shadow-sm'
+                                                : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                                        }`}
+                                    >
+                                        {cat.label}
+                                    </button>
+                                ))}
+                            </div>
+
+                            <div className="flex items-center gap-1.5 overflow-x-auto custom-scrollbar">
+                                <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider mr-1">Status:</span>
+                                {[
+                                    { id: 'TODOS', label: 'Todos' },
+                                    { id: 'DISPONIVEL', label: 'Disponível' },
+                                    { id: 'BAIXO', label: 'Estoque Baixo' },
+                                    { id: 'ZERADO', label: 'Zerado' }
+                                ].map(st => (
+                                    <button
+                                        key={st.id}
+                                        onClick={() => setRenameStatusFilter(st.id as any)}
+                                        className={`px-3 py-1 rounded-lg text-[10px] font-extrabold uppercase transition-all cursor-pointer ${
+                                            renameStatusFilter === st.id
+                                                ? 'bg-pink-600 text-white shadow-sm'
+                                                : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                                        }`}
+                                    >
+                                        {st.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Tabela RENAME */}
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse min-w-[700px]">
+                                <thead>
+                                    <tr className="border-b border-slate-100 text-slate-400 text-[10px] font-black uppercase tracking-wider bg-slate-50/50">
+                                        <th className="p-4">Medicamento</th>
+                                        <th className="p-4">Princípio Ativo</th>
+                                        <th className="p-4">Categoria / Componente</th>
+                                        <th className="p-4 text-center">Lote / Validade</th>
+                                        <th className="p-4 text-center">Estoque Atual</th>
+                                        <th className="p-4 text-center">Status</th>
+                                        <th className="p-4 text-center">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {renameFilteredList.length > 0 ? (
+                                        renameFilteredList.map(med => (
+                                            <tr key={med.id} className="hover:bg-slate-50/50 transition-colors">
+                                                <td className="p-4">
+                                                    <div className="font-extrabold text-slate-800 text-xs uppercase">{med.nome}</div>
+                                                    {med.dosagem && <div className="text-[10px] text-slate-400 font-semibold">{med.dosagem} {med.tipo ? `• ${med.tipo}` : ''}</div>}
+                                                </td>
+                                                <td className="p-4">
+                                                    <span className="text-xs font-bold text-slate-600 uppercase">
+                                                        {med.principio_ativo || '—'}
+                                                    </span>
+                                                </td>
+                                                <td className="p-4">
+                                                    <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[9px] font-black uppercase border ${
+                                                        med.categoria === 'CBAF'
+                                                            ? 'bg-pink-50 text-pink-700 border-pink-200'
+                                                            : med.categoria === 'CESAF'
+                                                            ? 'bg-purple-50 text-purple-700 border-purple-200'
+                                                            : 'bg-blue-50 text-blue-700 border-blue-200'
+                                                    }`}>
+                                                        {med.categoria === 'CBAF' && 'Componente Básico (CBAF)'}
+                                                        {med.categoria === 'CESAF' && 'Componente Estratégico (CESAF)'}
+                                                        {med.categoria === 'CEAF' && 'Componente Especializado (CEAF)'}
+                                                    </span>
+                                                </td>
+                                                <td className="p-4 text-center">
+                                                    <div className="text-xs font-bold text-slate-700">{med.lote || 'S/L'}</div>
+                                                    <div className="text-[10px] text-slate-400 font-semibold">{med.validade ? format(parseISO(med.validade), 'dd/MM/yyyy') : '—'}</div>
+                                                </td>
+                                                <td className="p-4 text-center">
+                                                    <span className={`inline-flex items-center px-3 py-1 rounded-xl text-xs font-black ${
+                                                        med.quantidade === 0 
+                                                            ? 'bg-rose-100 text-rose-700 border border-rose-200' 
+                                                            : med.quantidade <= med.limite_minimo 
+                                                            ? 'bg-amber-100 text-amber-700 border border-amber-200' 
+                                                            : 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                                                    }`}>
+                                                        {med.quantidade} un
+                                                    </span>
+                                                </td>
+                                                <td className="p-4 text-center">
+                                                    {med.quantidade === 0 ? (
+                                                        <span className="text-[9px] font-black uppercase tracking-wider text-rose-600 bg-rose-50 px-2.5 py-1 rounded-full border border-rose-100">Zerado</span>
+                                                    ) : med.quantidade <= med.limite_minimo ? (
+                                                        <span className="text-[9px] font-black uppercase tracking-wider text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-100">Estoque Baixo</span>
+                                                    ) : (
+                                                        <span className="text-[9px] font-black uppercase tracking-wider text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100">Disponível</span>
+                                                    )}
+                                                </td>
+                                                <td className="p-4 text-center relative">
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setActiveMenuMedId(activeMenuMedId === med.id ? null : med.id);
+                                                        }}
+                                                        className="p-2 rounded-xl text-slate-400 hover:text-pink-600 hover:bg-pink-50 transition-all cursor-pointer font-bold border border-transparent hover:border-pink-100"
+                                                        title="Opções do medicamento"
+                                                    >
+                                                        <MoreVertical className="w-4 h-4" />
+                                                    </button>
+
+                                                    {activeMenuMedId === med.id && (
+                                                        <>
+                                                            <div 
+                                                                className="fixed inset-0 z-40" 
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setActiveMenuMedId(null);
+                                                                }} 
+                                                            />
+                                                            <div className="absolute right-4 top-12 z-50 min-w-[210px] bg-white border border-slate-200 rounded-2xl shadow-xl p-1.5 animate-in fade-in slide-in-from-top-1 duration-100 text-left">
+                                                                <button
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        handleMoveToAltoCusto(med);
+                                                                    }}
+                                                                    className="w-full px-3.5 py-2.5 text-xs font-black text-slate-700 hover:bg-amber-50 hover:text-amber-700 rounded-xl flex items-center gap-2.5 transition-colors cursor-pointer"
+                                                                >
+                                                                    <Activity className="w-4 h-4 text-amber-500 shrink-0" />
+                                                                    <span>Mover para ALTO CUSTO</span>
+                                                                </button>
+                                                            </div>
+                                                        </>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        ))
+                                    ) : (
+                                        <tr>
+                                            <td colSpan={6} className="p-8 text-center text-slate-400 text-xs font-bold uppercase tracking-wider">
+                                                Nenhum medicamento encontrado nos critérios selecionados.
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {activeTab === 'alto-custo' && (
+                <div className="space-y-6">
+                    {/* Header Card com botão de Inserir */}
+                    <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                        <div>
+                            <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
+                                <Package className="w-6 h-6 text-pink-600" />
+                                Medicamentos de Alto Custo
+                            </h3>
+                            <p className="text-slate-500 text-xs font-semibold mt-1">
+                                Espaço exclusivo para cadastro, lançamento e gerenciamento da listagem de medicamentos de alto custo.
+                            </p>
+                        </div>
+                        <button
+                            onClick={() => {
+                                setAcNome('');
+                                setAcPrincipioAtivo('');
+                                setAcTipo('Comprimido');
+                                setAcDosagem('');
+                                setAcCategoria('CEAF');
+                                setAcLote('S/L');
+                                setAcValidade('2099-12-31');
+                                setAcQuantidade('0');
+                                setAcLimiteMinimo('10');
+                                setIsAltoCustoModalOpen(true);
+                            }}
+                            className="px-5 py-3 bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-700 hover:to-rose-700 text-white font-black text-xs uppercase tracking-wider rounded-2xl shadow-lg shadow-pink-500/20 transition-all flex items-center gap-2 shrink-0 active:scale-95 cursor-pointer"
+                        >
+                            <Plus className="w-4 h-4" />
+                            Inserir Medicamento de Alto Custo
+                        </button>
+                    </div>
+
+                    {/* Barra de Busca e Resumo */}
+                    <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white rounded-2xl p-4 border border-slate-100 shadow-sm">
+                        <div className="relative w-full md:w-96">
+                            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
+                            <input
+                                type="text"
+                                placeholder="Buscar por nome ou princípio ativo..."
+                                value={altoCustoSearch}
+                                onChange={e => setAltoCustoSearch(e.target.value)}
+                                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:bg-white focus:border-pink-500 outline-none transition-all"
+                            />
+                        </div>
+
+                        <div className="flex items-center gap-3 w-full md:w-auto justify-end">
+                            <span className="px-3 py-1.5 rounded-xl text-xs font-black uppercase bg-emerald-50 text-emerald-700 border border-emerald-200/60">
+                                {altoCustoStats.disponivel} Em Estoque
+                            </span>
+                            <span className="px-3 py-1.5 rounded-xl text-xs font-black uppercase bg-rose-50 text-rose-700 border border-rose-200/60">
+                                {altoCustoStats.zerados} Zerados
+                            </span>
+                            <span className="px-3 py-1.5 rounded-xl text-xs font-black uppercase bg-slate-100 text-slate-700 border border-slate-200">
+                                Total: {altoCustoStats.total}
+                            </span>
+                        </div>
+                    </div>
+
+                    {/* Tabela de Listagem Completa de Medicamentos de Alto Custo */}
+                    <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+                        <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                            <h4 className="text-xs font-black text-slate-500 uppercase tracking-wider">
+                                Listagem de Medicamentos de Alto Custo ({altoCustoFilteredList.length})
+                            </h4>
+                        </div>
+
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse min-w-[700px]">
+                                <thead>
+                                    <tr className="border-b border-slate-100 text-slate-400 text-[10px] font-black uppercase tracking-wider bg-slate-50/50">
+                                        <th className="p-4">Medicamento</th>
+                                        <th className="p-4">Princípio Ativo</th>
+                                        <th className="p-4">Categoria / Forma</th>
+                                        <th className="p-4 text-center">Lote / Validade</th>
+                                        <th className="p-4 text-center">Estoque Atual</th>
+                                        <th className="p-4 text-center">Status</th>
+                                        <th className="p-4 text-center">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {altoCustoFilteredList.length > 0 ? (
+                                        altoCustoFilteredList.map(med => (
+                                            <tr key={med.id} className="hover:bg-slate-50/50 transition-colors">
+                                                <td className="p-4">
+                                                    <div className="font-extrabold text-slate-800 text-xs uppercase">{med.nome}</div>
+                                                    {med.dosagem && <div className="text-[10px] text-slate-400 font-semibold">{med.dosagem}</div>}
+                                                </td>
+                                                <td className="p-4">
+                                                    <span className="text-xs font-bold text-slate-600 uppercase">
+                                                        {med.principio_ativo || '—'}
+                                                    </span>
+                                                </td>
+                                                <td className="p-4">
+                                                    <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-[9px] font-black uppercase bg-pink-50 text-pink-700 border border-pink-100">
+                                                        {med.categoria}
+                                                    </span>
+                                                    {med.tipo && <span className="text-xs text-slate-500 font-semibold ml-2">{med.tipo}</span>}
+                                                </td>
+                                                <td className="p-4 text-center">
+                                                    <div className="text-xs font-bold text-slate-700">{med.lote || 'S/L'}</div>
+                                                    <div className="text-[10px] text-slate-400 font-semibold">{med.validade ? format(parseISO(med.validade), 'dd/MM/yyyy') : '—'}</div>
+                                                </td>
+                                                <td className="p-4 text-center">
+                                                    <span className={`inline-flex items-center px-3 py-1 rounded-xl text-xs font-black ${
+                                                        med.quantidade === 0 
+                                                            ? 'bg-rose-100 text-rose-700 border border-rose-200' 
+                                                            : med.quantidade <= med.limite_minimo 
+                                                            ? 'bg-amber-100 text-amber-700 border border-amber-200' 
+                                                            : 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                                                    }`}>
+                                                        {med.quantidade} un
+                                                    </span>
+                                                </td>
+                                                <td className="p-4 text-center">
+                                                    {med.quantidade === 0 ? (
+                                                        <span className="text-[9px] font-black uppercase tracking-wider text-rose-600 bg-rose-50 px-2.5 py-1 rounded-full border border-rose-100">Zerado</span>
+                                                    ) : med.quantidade <= med.limite_minimo ? (
+                                                        <span className="text-[9px] font-black uppercase tracking-wider text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-100">Estoque Baixo</span>
+                                                    ) : (
+                                                        <span className="text-[9px] font-black uppercase tracking-wider text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100">Disponível</span>
+                                                    )}
+                                                </td>
+                                                <td className="p-4 text-center relative">
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setActiveMenuMedId(activeMenuMedId === med.id ? null : med.id);
+                                                        }}
+                                                        className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-all cursor-pointer font-bold border border-transparent hover:border-rose-100"
+                                                        title="Opções do medicamento"
+                                                    >
+                                                        <MoreVertical className="w-4 h-4" />
+                                                    </button>
+
+                                                    {activeMenuMedId === med.id && (
+                                                        <>
+                                                            <div 
+                                                                className="fixed inset-0 z-40" 
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setActiveMenuMedId(null);
+                                                                }} 
+                                                            />
+                                                            <div className="absolute right-4 top-12 z-50 min-w-[210px] bg-white border border-slate-200 rounded-2xl shadow-xl p-1.5 animate-in fade-in slide-in-from-top-1 duration-100 text-left">
+                                                                <button
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        handleRemoveFromAltoCusto(med);
+                                                                    }}
+                                                                    className="w-full px-3.5 py-2.5 text-xs font-black text-slate-700 hover:bg-rose-50 hover:text-rose-700 rounded-xl flex items-center gap-2.5 transition-colors cursor-pointer"
+                                                                >
+                                                                    <X className="w-4 h-4 text-rose-500 shrink-0" />
+                                                                    <span>Remover de ALTO CUSTO</span>
+                                                                </button>
+                                                            </div>
+                                                        </>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        ))
+                                    ) : (
+                                        <tr>
+                                            <td colSpan={6} className="p-12 text-center">
+                                                <div className="flex flex-col items-center justify-center max-w-sm mx-auto">
+                                                    <div className="w-12 h-12 rounded-2xl bg-pink-50 text-pink-500 flex items-center justify-center mb-3">
+                                                        <Package className="w-6 h-6" />
+                                                    </div>
+                                                    <h5 className="font-extrabold text-slate-800 text-sm uppercase mb-1">Nenhum Medicamento de Alto Custo Encontrado</h5>
+                                                    <p className="text-slate-400 text-xs font-medium mb-4">
+                                                        Cadastre medicamentos marcados como Alto Custo para visualizá-los e gerenciá-los nesta lista.
+                                                    </p>
+                                                    <button
+                                                        onClick={() => {
+                                                            setAcNome('');
+                                                            setAcPrincipioAtivo('');
+                                                            setAcTipo('Comprimido');
+                                                            setAcDosagem('');
+                                                            setAcCategoria('CEAF');
+                                                            setAcLote('S/L');
+                                                            setAcValidade('2099-12-31');
+                                                            setAcQuantidade('0');
+                                                            setAcLimiteMinimo('10');
+                                                            setIsAltoCustoModalOpen(true);
+                                                        }}
+                                                        className="px-4 py-2.5 bg-pink-600 hover:bg-pink-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer"
+                                                    >
+                                                        <Plus className="w-4 h-4" />
+                                                        Inserir Primeiro Medicamento de Alto Custo
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal de Cadastro de Medicamento de Alto Custo */}
+            {isAltoCustoModalOpen && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden border border-slate-200/50 flex flex-col animate-in zoom-in-95 duration-200">
+                        <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                            <div>
+                                <h3 className="font-black text-pink-600 uppercase text-lg tracking-wide flex items-center gap-2">
+                                    <Plus className="w-5 h-5" />
+                                    Cadastrar Medicamento de Alto Custo
+                                </h3>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">Preencha os dados do medicamento especial de alto custo</p>
+                            </div>
+                            <button onClick={() => setIsAltoCustoModalOpen(false)} className="p-1.5 hover:bg-slate-200 rounded-lg text-slate-500 transition-colors">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        
+                        <form onSubmit={handleCreateAltoCusto} className="p-6 space-y-4">
+                            <div>
+                                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5">Nome do Medicamento *</label>
+                                <input
+                                    type="text"
+                                    required
+                                    placeholder="EX: ADALIMUMABE"
+                                    value={acNome}
+                                    onChange={e => setAcNome(e.target.value)}
+                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm font-semibold text-slate-900 uppercase focus:bg-white focus:border-pink-500 outline-none transition-all"
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5">Princípio Ativo</label>
+                                    <input
+                                        type="text"
+                                        placeholder="EX: ADALIMUMABE 40MG"
+                                        value={acPrincipioAtivo}
+                                        onChange={e => setAcPrincipioAtivo(e.target.value)}
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm font-semibold text-slate-900 uppercase focus:bg-white focus:border-pink-500 outline-none transition-all"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5">Forma Farmacêutica *</label>
+                                    <input
+                                        type="text"
+                                        required
+                                        placeholder="EX: Solução Injetável, Comprimido..."
+                                        value={acTipo}
+                                        onChange={e => setAcTipo(e.target.value)}
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm font-semibold text-slate-900 focus:bg-white focus:border-pink-500 outline-none transition-all"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5">Dosagem (Ex: 40mg, 100mg/mL)</label>
+                                    <input
+                                        type="text"
+                                        placeholder="EX: 40mg"
+                                        value={acDosagem}
+                                        onChange={e => setAcDosagem(e.target.value)}
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm font-semibold text-slate-900 focus:bg-white focus:border-pink-500 outline-none transition-all"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5">Categoria *</label>
+                                    <select
+                                        value={acCategoria}
+                                        onChange={e => setAcCategoria(e.target.value as any)}
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm font-semibold text-slate-900 focus:bg-white focus:border-pink-500 outline-none transition-all cursor-pointer"
+                                    >
+                                        <option value="CEAF">Componente Especializado (CEAF)</option>
+                                        <option value="CESAF">Componente Estratégico (CESAF)</option>
+                                        <option value="CBAF">Componente Básico (CBAF)</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5">Lote</label>
+                                    <input
+                                        type="text"
+                                        placeholder="EX: LOTE123"
+                                        value={acLote}
+                                        onChange={e => setAcLote(e.target.value)}
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm font-semibold text-slate-900 uppercase focus:bg-white focus:border-pink-500 outline-none transition-all"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5">Validade</label>
+                                    <input
+                                        type="date"
+                                        value={acValidade}
+                                        onChange={e => setAcValidade(e.target.value)}
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm font-semibold text-slate-900 focus:bg-white focus:border-pink-500 outline-none transition-all"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5">Quantidade Inicial em Estoque</label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        value={acQuantidade}
+                                        onChange={e => setAcQuantidade(e.target.value)}
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm font-semibold text-slate-900 focus:bg-white focus:border-pink-500 outline-none transition-all"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5">Limite Mínimo (Alerta)</label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        value={acLimiteMinimo}
+                                        onChange={e => setAcLimiteMinimo(e.target.value)}
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm font-semibold text-slate-900 focus:bg-white focus:border-pink-500 outline-none transition-all"
+                                    />
+                                </div>
+                            </div>
+
+                            <button
+                                type="submit"
+                                disabled={acSaving}
+                                className="w-full py-3.5 bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-700 hover:to-rose-700 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-md active:scale-98 mt-2 cursor-pointer"
+                            >
+                                {acSaving ? 'Salvando...' : 'Cadastrar Medicamento de Alto Custo'}
+                            </button>
+                        </form>
                     </div>
                 </div>
             )}

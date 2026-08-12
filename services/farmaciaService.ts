@@ -4,6 +4,32 @@ import { handleSupabaseError } from '../utils/errorUtils';
 
 // --- MEDICAMENTOS ---
 
+const getLocalAltoCustoIds = (): Set<string> => {
+    try {
+        const stored = localStorage.getItem('farmacia_alto_custo_ids');
+        if (stored) {
+            return new Set(JSON.parse(stored));
+        }
+    } catch (e) {
+        console.error('Erro ao ler farmacia_alto_custo_ids do localStorage', e);
+    }
+    return new Set();
+};
+
+const saveLocalAltoCustoIds = (ids: Set<string>) => {
+    try {
+        localStorage.setItem('farmacia_alto_custo_ids', JSON.stringify(Array.from(ids)));
+    } catch (e) {
+        console.error('Erro ao salvar farmacia_alto_custo_ids no localStorage', e);
+    }
+};
+
+const isPgrst204ColumnError = (error: any, columnName: string) => {
+    if (!error) return false;
+    const str = typeof error === 'object' ? JSON.stringify(error) : String(error);
+    return error.code === 'PGRST204' || str.includes(`'${columnName}'`) || str.includes(columnName);
+};
+
 export const getMedicamentos = async (): Promise<FarmaciaMedicamento[]> => {
     try {
         let allData: FarmaciaMedicamento[] = [];
@@ -30,7 +56,12 @@ export const getMedicamentos = async (): Promise<FarmaciaMedicamento[]> => {
                 hasMore = false;
             }
         }
-        return allData;
+
+        const localIds = getLocalAltoCustoIds();
+        return allData.map(med => ({
+            ...med,
+            alto_custo: med.alto_custo ?? localIds.has(med.id)
+        }));
     } catch (error) {
         const appError = handleSupabaseError(error);
         console.error('[farmaciaService] getMedicamentos Error:', appError.message);
@@ -41,6 +72,8 @@ export const getMedicamentos = async (): Promise<FarmaciaMedicamento[]> => {
 export const createMedicamento = async (
     med: Omit<FarmaciaMedicamento, 'id' | 'criado_em' | 'atualizado_em'>
 ): Promise<FarmaciaMedicamento | null> => {
+    const isAltoCustoRequested = med.alto_custo === true;
+
     try {
         const { data, error } = await supabase
             .from('farmacia_medicamentos')
@@ -48,7 +81,37 @@ export const createMedicamento = async (
             .select()
             .single();
 
-        if (error) throw error;
+        if (error) {
+            if (isPgrst204ColumnError(error, 'alto_custo')) {
+                console.warn("[farmaciaService] Coluna 'alto_custo' não encontrada no Supabase. Executando fallback sanitizado...");
+                const payload = { ...med };
+                delete payload.alto_custo;
+
+                const retry = await supabase
+                    .from('farmacia_medicamentos')
+                    .insert([payload])
+                    .select()
+                    .single();
+
+                if (retry.error) throw retry.error;
+                
+                if (retry.data && isAltoCustoRequested) {
+                    const localIds = getLocalAltoCustoIds();
+                    localIds.add(retry.data.id);
+                    saveLocalAltoCustoIds(localIds);
+                    return { ...retry.data, alto_custo: true };
+                }
+                return retry.data;
+            }
+            throw error;
+        }
+
+        if (data && isAltoCustoRequested) {
+            const localIds = getLocalAltoCustoIds();
+            localIds.add(data.id);
+            saveLocalAltoCustoIds(localIds);
+        }
+
         return data;
     } catch (error) {
         const appError = handleSupabaseError(error);
@@ -61,6 +124,20 @@ export const updateMedicamento = async (
     id: string,
     updates: Partial<FarmaciaMedicamento>
 ): Promise<FarmaciaMedicamento | null> => {
+    const hasAltoCustoUpdate = updates.alto_custo !== undefined;
+    const altoCustoValue = updates.alto_custo;
+
+    // Atualiza cache local para resiliência imediata
+    if (hasAltoCustoUpdate) {
+        const localIds = getLocalAltoCustoIds();
+        if (altoCustoValue) {
+            localIds.add(id);
+        } else {
+            localIds.delete(id);
+        }
+        saveLocalAltoCustoIds(localIds);
+    }
+
     try {
         const { data, error } = await supabase
             .from('farmacia_medicamentos')
@@ -69,7 +146,42 @@ export const updateMedicamento = async (
             .select()
             .single();
 
-        if (error) throw error;
+        if (error) {
+            if (isPgrst204ColumnError(error, 'alto_custo')) {
+                console.warn("[farmaciaService] Coluna 'alto_custo' não encontrada no banco Supabase. Aplicando fallback no update...");
+                const sanitizedUpdates = { ...updates };
+                delete sanitizedUpdates.alto_custo;
+
+                if (Object.keys(sanitizedUpdates).length === 0) {
+                    const { data: currentData, error: currentErr } = await supabase
+                        .from('farmacia_medicamentos')
+                        .select('*')
+                        .eq('id', id)
+                        .single();
+
+                    if (currentErr) throw currentErr;
+                    return {
+                        ...currentData,
+                        alto_custo: altoCustoValue
+                    };
+                }
+
+                const retry = await supabase
+                    .from('farmacia_medicamentos')
+                    .update(sanitizedUpdates)
+                    .eq('id', id)
+                    .select()
+                    .single();
+
+                if (retry.error) throw retry.error;
+                return {
+                    ...retry.data,
+                    alto_custo: hasAltoCustoUpdate ? altoCustoValue : retry.data.alto_custo
+                };
+            }
+            throw error;
+        }
+
         return data;
     } catch (error) {
         const appError = handleSupabaseError(error);

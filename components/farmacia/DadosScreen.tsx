@@ -5,7 +5,7 @@ import * as db from '../../services/farmaciaService';
 import { useFarmaciaAlert } from './FarmaciaAlertContext';
 
 interface DadosScreenProps {
-    currentUser: User;
+    currentUser?: User | null;
     onBack: () => void;
     onNavigate: (view: string) => void;
 }

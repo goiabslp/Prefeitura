@@ -15,7 +15,7 @@ import { FarmaciaAlertProvider } from './FarmaciaAlertContext';
 interface FarmaciaModuleProps {
     currentView: string;
     subView?: string;
-    currentUser: User;
+    currentUser: User | null;
     onNavigate: (view: string) => void;
     onLogout: () => void;
     appState: AppState;
@@ -29,7 +29,7 @@ export const FarmaciaModule: React.FC<FarmaciaModuleProps> = ({
     onLogout,
     appState
 }) => {
-    const isAdmin = currentUser.role === 'admin';
+    const isAdmin = currentUser?.role === 'admin';
 
     // Data states for stock alerts
     const [medicamentos, setMedicamentos] = useState<FarmaciaMedicamento[]>([]);
@@ -177,17 +177,17 @@ export const FarmaciaModule: React.FC<FarmaciaModuleProps> = ({
     const isEstoqueActive = moduleStatus['parent_farmacia_estoque'] !== false;
     const isDashboardActive = moduleStatus['parent_farmacia_dashboard'] !== false;
 
-    const canAccessConsultar = (currentUser.permissions?.includes('parent_farmacia') || isAdmin) && isConsultarActive;
-    const canAccessRetirar = (currentUser.permissions?.includes('parent_farmacia') || isAdmin) && isRetirarActive;
-    const canAccessEstoque = (currentUser.permissions?.includes('parent_farmacia') || isAdmin) && isEstoqueActive;
-    const canAccessHistorico = (currentUser.permissions?.includes('parent_farmacia') || isAdmin);
-    const canAccessDados = (currentUser.permissions?.includes('parent_farmacia_editar') || currentUser.permissions?.includes('parent_farmacia_aprovar') || isAdmin) && isDashboardActive;
+    const canAccessConsultar = (currentUser?.permissions?.includes('parent_farmacia') || isAdmin) && isConsultarActive;
+    const canAccessRetirar = (currentUser?.permissions?.includes('parent_farmacia') || isAdmin) && isRetirarActive;
+    const canAccessEstoque = (currentUser?.permissions?.includes('parent_farmacia') || isAdmin) && isEstoqueActive;
+    const canAccessHistorico = (currentUser?.permissions?.includes('parent_farmacia') || isAdmin);
+    const canAccessDados = (currentUser?.permissions?.includes('parent_farmacia_editar') || currentUser?.permissions?.includes('parent_farmacia_aprovar') || isAdmin) && isDashboardActive;
 
     const showConsultar = subView === 'consultar' && canAccessConsultar;
     const showRetirar = subView === 'retirar' && canAccessRetirar;
     const showEstoque = subView === 'estoque' && canAccessEstoque;
     const showDashboard = subView === 'dashboard' && canAccessDados;
-    const showDados = subView === 'dados' && (currentUser.permissions?.includes('parent_farmacia_editar') || isAdmin);
+    const showDados = subView === 'dados' && (currentUser?.permissions?.includes('parent_farmacia_editar') || isAdmin);
     const showHistorico = subView === 'historico' && canAccessHistorico;
     const showDashboardScreen = subView?.startsWith('dashboard') && canAccessDados;
 

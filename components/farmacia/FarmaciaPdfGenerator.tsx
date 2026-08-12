@@ -18,7 +18,7 @@ interface FarmaciaPdfGeneratorProps {
     unidade: string;
     data: string;
     observacoes?: string;
-    currentUser: User;
+    currentUser?: User | null;
     state: AppState;
 }
 
@@ -181,8 +181,8 @@ export const FarmaciaPdfGenerator: React.FC<FarmaciaPdfGeneratorProps> = ({
                         <div className="grid grid-cols-2 gap-8 pt-8 mt-12 border-t border-slate-100">
                             <div className="space-y-2 text-xs">
                                 <span className="block text-[7pt] font-black uppercase tracking-widest text-slate-400">Responsável pela Dispensação</span>
-                                <div className="font-bold text-slate-800">{currentUser.name}</div>
-                                <div className="text-[8pt] text-slate-400 font-semibold">{currentUser.jobTitle || 'Responsável Farmácia'}</div>
+                                <div className="font-bold text-slate-800">{currentUser?.name || ''}</div>
+                                <div className="text-[8pt] text-slate-400 font-semibold">{currentUser?.jobTitle || 'Responsável Farmácia'}</div>
                             </div>
                             <div className="space-y-2 text-xs text-right">
                                 <span className="block text-[7pt] font-black uppercase tracking-widest text-slate-400">Autenticação do Sistema</span>

@@ -212,6 +212,7 @@ export interface FarmaciaMedicamento {
   dosagem?: string;
   fornecedor?: string;
   principio_ativo?: string;
+  alto_custo?: boolean;
   criado_em?: string;
   atualizado_em?: string;
 }

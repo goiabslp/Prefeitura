@@ -10,7 +10,7 @@ import { useSystemSettings } from '../../contexts/SystemSettingsContext';
 interface ConsultasModuleProps {
     currentView: string;
     subView?: string;
-    currentUser: User;
+    currentUser?: User | null;
     onNavigate: (view: string) => void;
     onLogout: () => void;
     appState: AppState;
@@ -29,10 +29,10 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
     const isAcompanharActive = moduleStatus['parent_consultas_acompanhar'] !== false;
     const isDadosActive = moduleStatus['parent_consultas_dados'] !== false;
 
-    const isAdmin = currentUser.role === 'admin';
-    const canAccessNovoAgendamento = (currentUser.permissions?.includes('parent_consultas_novo_agendamento') || isAdmin) && isNovoAgendamentoActive;
-    const canAccessAcompanhar = (currentUser.permissions?.includes('parent_consultas_acompanhar') || isAdmin) && isAcompanharActive;
-    const canAccessDados = (currentUser.permissions?.includes('parent_consultas_dados') || isAdmin) && isDadosActive;
+    const isAdmin = currentUser?.role === 'admin';
+    const canAccessNovoAgendamento = (currentUser?.permissions?.includes('parent_consultas_novo_agendamento') || isAdmin) && isNovoAgendamentoActive;
+    const canAccessAcompanhar = (currentUser?.permissions?.includes('parent_consultas_acompanhar') || isAdmin) && isAcompanharActive;
+    const canAccessDados = (currentUser?.permissions?.includes('parent_consultas_dados') || isAdmin) && isDadosActive;
 
     const showNovoAgendamento = (subView === 'novo-agendamento' || (subView?.startsWith('novo-agendamento') ?? false) || subView === 'vagas-reservadas') && canAccessNovoAgendamento;
     const showAcompanhar = (subView === 'acompanhar' || subView === 'definir-agenda') && canAccessAcompanhar;

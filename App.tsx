@@ -207,6 +207,7 @@ const VIEW_TO_PATH: Record<string, string> = {
   'farmacia:dashboard-pacientes': '/FarmaciaPopular/Dashboard/Pacientes',
   'farmacia:dashboard-relatorios': '/FarmaciaPopular/Dashboard/Relatorios',
   'farmacia:dashboard-rename': '/FarmaciaPopular/Dashboard/Rename',
+  'farmacia:dashboard-alto-custo': '/FarmaciaPopular/Dashboard/AltoCusto',
   'upload': '/Upload'
 };
 
@@ -4879,7 +4880,7 @@ const App: React.FC = () => {
               <ConsultasModule
                 currentView={currentView}
                 subView={appState.view}
-                currentUser={currentUser!}
+                currentUser={currentUser}
                 onNavigate={(view) => {
                   if (view === 'home') {
                     setCurrentView('home');
@@ -4938,7 +4939,7 @@ const App: React.FC = () => {
               <FarmaciaModule
                 currentView={currentView}
                 subView={appState.view}
-                currentUser={currentUser!}
+                currentUser={currentUser}
                 onNavigate={(view) => {
                   if (view === 'home') {
                     setCurrentView('home');
@@ -4974,6 +4975,12 @@ const App: React.FC = () => {
                   } else if (view === 'farmacia:dashboard-relatorios') {
                     setAppState(prev => ({ ...prev, view: 'dashboard-relatorios' }));
                     window.history.pushState({}, '', '/FarmaciaPopular/Dashboard/Relatorios');
+                  } else if (view === 'farmacia:dashboard-rename') {
+                    setAppState(prev => ({ ...prev, view: 'dashboard-rename' }));
+                    window.history.pushState({}, '', '/FarmaciaPopular/Dashboard/Rename');
+                  } else if (view === 'farmacia:dashboard-alto-custo') {
+                    setAppState(prev => ({ ...prev, view: 'dashboard-alto-custo' }));
+                    window.history.pushState({}, '', '/FarmaciaPopular/Dashboard/AltoCusto');
                   } else if (view === 'farmacia') {
                     setAppState(prev => ({ ...prev, view: undefined }));
                     window.history.pushState({}, '', '/FarmaciaPopular');

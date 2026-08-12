@@ -4,7 +4,7 @@ import { ArrowLeft, Search, AlertTriangle, CheckCircle2, XCircle, Info, RefreshC
 import * as db from '../../services/farmaciaService';
 
 interface ConsultarScreenProps {
-    currentUser: User;
+    currentUser?: User | null;
     onBack: () => void;
     appState: any;
 }
