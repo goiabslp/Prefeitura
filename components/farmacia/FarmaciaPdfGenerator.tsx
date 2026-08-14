@@ -4,11 +4,7 @@ import { User, AppState } from '../../types';
 import { PageWrapper } from '../PageWrapper';
 import { CalendarDays, User as UserIcon, ShieldCheck, FileText, Pill } from 'lucide-react';
 
-interface FarmaciaPdfGeneratorProps {
-    movimentacaoId: string;
-    pacienteNome: string;
-    pacienteCpf: string;
-    pacienteApelido?: string;
+export interface DispensedItem {
     medicamentoNome: string;
     medicamentoCategoria: string;
     medicamentoDosagem?: string;
@@ -16,6 +12,21 @@ interface FarmaciaPdfGeneratorProps {
     lote: string;
     quantidade: number;
     unidade: string;
+}
+
+interface FarmaciaPdfGeneratorProps {
+    movimentacaoId: string;
+    pacienteNome: string;
+    pacienteCpf: string;
+    pacienteApelido?: string;
+    medicamentoNome?: string;
+    medicamentoCategoria?: string;
+    medicamentoDosagem?: string;
+    medicamentoTipo?: string;
+    lote?: string;
+    quantidade?: number;
+    unidade?: string;
+    itens?: DispensedItem[];
     data: string;
     observacoes?: string;
     currentUser?: User | null;
@@ -34,6 +45,7 @@ export const FarmaciaPdfGenerator: React.FC<FarmaciaPdfGeneratorProps> = ({
     lote,
     quantidade,
     unidade,
+    itens,
     data,
     observacoes,
     currentUser,
@@ -52,6 +64,18 @@ export const FarmaciaPdfGenerator: React.FC<FarmaciaPdfGeneratorProps> = ({
         const seconds = pad(dateObj.getSeconds());
         return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
     };
+
+    const itemList: DispensedItem[] = itens && itens.length > 0
+        ? itens
+        : (medicamentoNome ? [{
+            medicamentoNome,
+            medicamentoCategoria: medicamentoCategoria || 'CBAF',
+            medicamentoDosagem,
+            medicamentoTipo,
+            lote: lote || 'N/I',
+            quantidade: quantidade || 1,
+            unidade: unidade || 'UN'
+        }] : []);
 
     return createPortal(
         <div
@@ -85,7 +109,7 @@ export const FarmaciaPdfGenerator: React.FC<FarmaciaPdfGeneratorProps> = ({
                 totalPages={1}
                 isGenerating={true}
             >
-                <div className="flex flex-col gap-8 p-4">
+                <div className="flex flex-col gap-6 p-4">
                     {/* Header Title */}
                     <div className="border-b-2 border-slate-900 pb-4 flex items-center justify-between">
                         <div>
@@ -99,102 +123,95 @@ export const FarmaciaPdfGenerator: React.FC<FarmaciaPdfGeneratorProps> = ({
                     </div>
 
                     {/* Voucher Card details */}
-                    <div className="grid grid-cols-1 gap-6">
-                        <div className="bg-slate-50/50 border border-slate-200 rounded-2xl p-6 relative overflow-hidden">
-                            <div className="absolute top-0 right-0 p-6 opacity-[0.03]">
-                                <Pill className="w-48 h-48 text-slate-900" />
-                            </div>
+                    <div className="bg-slate-50/50 border border-slate-200 rounded-2xl p-6 relative overflow-hidden space-y-5">
+                        <div className="flex justify-between items-center border-b border-slate-200/80 pb-4">
+                            <span className="inline-block px-3 py-1 rounded bg-pink-600 text-white text-[8pt] uppercase font-black tracking-widest">
+                                Dispensação Realizada ({itemList.length} {itemList.length === 1 ? 'item' : 'itens'})
+                            </span>
+                            <span className="text-[9pt] font-bold text-slate-600">
+                                Data/Hora: <strong>{formatDateTimeBr(data)}</strong>
+                            </span>
+                        </div>
 
-                            <div className="relative z-10 space-y-6">
-                                <span className="inline-block px-3 py-1 rounded bg-pink-600 text-white text-[8pt] uppercase font-black tracking-widest">
-                                    Dispensação Realizada
+                        {/* Dados do Paciente */}
+                        <div className="bg-white border border-slate-200 rounded-xl p-4 flex justify-between items-center">
+                            <div>
+                                <span className="block text-[7pt] font-bold uppercase text-slate-400 tracking-wider">Paciente / Beneficiário</span>
+                                <span className="font-extrabold text-slate-800 text-sm uppercase">
+                                    {pacienteApelido ? `${pacienteNome} (${pacienteApelido})` : pacienteNome}
                                 </span>
-
-                                <div className="grid grid-cols-2 gap-8 border-t border-slate-200/80 pt-6">
-                                    <div className="space-y-4">
-                                        <h4 className="text-[9pt] font-black uppercase tracking-widest text-pink-600 flex items-center gap-2">
-                                            <UserIcon className="w-4 h-4 text-pink-600" />
-                                            Dados do Paciente
-                                        </h4>
-                                        <div className="space-y-2 text-xs">
-                                            <div>
-                                                <span className="block text-[7pt] font-bold uppercase text-slate-400 tracking-wider">Nome Completo</span>
-                                                <span className="font-extrabold text-slate-800 text-sm">
-                                                    {pacienteApelido ? `${pacienteNome} (${pacienteApelido})` : pacienteNome}
-                                                </span>
-                                            </div>
-                                            <div>
-                                                <span className="block text-[7pt] font-bold uppercase text-slate-400 tracking-wider">CPF</span>
-                                                <span className="font-bold text-slate-800">
-                                                    {pacienteCpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div className="space-y-4">
-                                        <h4 className="text-[9pt] font-black uppercase tracking-widest text-slate-700 flex items-center gap-2">
-                                            <Pill className="w-4 h-4 text-slate-700" />
-                                            Dados da Retirada
-                                        </h4>
-                                        <div className="space-y-2 text-xs">
-                                            <div>
-                                                <span className="block text-[7pt] font-bold uppercase text-slate-400 tracking-wider">Medicamento</span>
-                                                <span className="font-extrabold text-slate-800 text-sm uppercase">
-                                                    {medicamentoNome} {medicamentoDosagem ? `(${medicamentoDosagem})` : ''} {medicamentoTipo ? `• ${medicamentoTipo}` : ''}
-                                                </span>
-                                            </div>
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div>
-                                                    <span className="block text-[7pt] font-bold uppercase text-slate-400 tracking-wider">Lote</span>
-                                                    <span className="font-bold text-slate-850 uppercase font-mono">{lote}</span>
-                                                </div>
-                                                <div>
-                                                    <span className="block text-[7pt] font-bold uppercase text-slate-400 tracking-wider">Categoria</span>
-                                                    <span className="font-bold text-slate-800 uppercase">{medicamentoCategoria}</span>
-                                                </div>
-                                            </div>
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div>
-                                                    <span className="block text-[7pt] font-bold uppercase text-slate-400 tracking-wider">Quantidade</span>
-                                                    <span className="font-extrabold text-pink-650 text-sm">{quantidade} {unidade}</span>
-                                                </div>
-                                                <div>
-                                                    <span className="block text-[7pt] font-bold uppercase text-slate-400 tracking-wider">Data / Horário</span>
-                                                    <span className="font-bold text-slate-800">{formatDateTimeBr(data)}</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {observacoes && (
-                                    <div className="border-t border-slate-200/80 pt-4 text-xs">
-                                        <span className="block text-[7pt] font-bold uppercase text-slate-400 tracking-wider">Observações / Receita</span>
-                                        <span className="text-slate-700 block whitespace-pre-line leading-relaxed">{observacoes}</span>
-                                    </div>
-                                )}
+                            </div>
+                            <div className="text-right">
+                                <span className="block text-[7pt] font-bold uppercase text-slate-400 tracking-wider">CPF</span>
+                                <span className="font-bold text-slate-800 font-mono text-xs">
+                                    {pacienteCpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}
+                                </span>
                             </div>
                         </div>
 
-                        {/* Informações de Auditoria e Assinatura */}
-                        <div className="grid grid-cols-2 gap-8 pt-8 mt-12 border-t border-slate-100">
-                            <div className="space-y-2 text-xs">
-                                <span className="block text-[7pt] font-black uppercase tracking-widest text-slate-400">Responsável pela Dispensação</span>
-                                <div className="font-bold text-slate-800">{currentUser?.name || ''}</div>
-                                <div className="text-[8pt] text-slate-400 font-semibold">{currentUser?.jobTitle || 'Responsável Farmácia'}</div>
-                            </div>
-                            <div className="space-y-2 text-xs text-right">
-                                <span className="block text-[7pt] font-black uppercase tracking-widest text-slate-400">Autenticação do Sistema</span>
-                                <div className="font-mono text-[8pt] text-slate-500 font-bold uppercase tracking-wider">{movimentacaoId}</div>
-                                <div className="text-[8pt] text-slate-400 font-semibold">{new Date().toLocaleString('pt-BR')}</div>
+                        {/* Tabela de Medicamentos Dispensados */}
+                        <div className="space-y-2">
+                            <h4 className="text-[9pt] font-black uppercase tracking-widest text-slate-700 flex items-center gap-2">
+                                <Pill className="w-4 h-4 text-pink-600" />
+                                Medicamentos Entregues
+                            </h4>
+                            <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
+                                <table className="w-full text-left border-collapse">
+                                    <thead>
+                                        <tr className="bg-slate-100/70 border-b border-slate-200 text-[8pt] font-black text-slate-600 uppercase tracking-wider">
+                                            <th className="p-2.5">Medicamento / Dosagem</th>
+                                            <th className="p-2.5">Lote</th>
+                                            <th className="p-2.5">Cat.</th>
+                                            <th className="p-2.5 text-right">Qtd.</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-800">
+                                        {itemList.map((item, idx) => (
+                                            <tr key={idx} className="hover:bg-slate-50/50">
+                                                <td className="p-2.5 uppercase font-bold text-slate-900">
+                                                    {item.medicamentoNome} {item.medicamentoDosagem ? `(${item.medicamentoDosagem})` : ''} {item.medicamentoTipo ? `• ${item.medicamentoTipo}` : ''}
+                                                </td>
+                                                <td className="p-2.5 font-mono text-[10px] font-bold text-slate-600 uppercase">
+                                                    {item.lote}
+                                                </td>
+                                                <td className="p-2.5 text-[9px] font-extrabold text-pink-700 uppercase">
+                                                    {item.medicamentoCategoria}
+                                                </td>
+                                                <td className="p-2.5 text-right font-black text-pink-650">
+                                                    {item.quantidade} {item.unidade}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
 
-                        {/* Nota de rodapé legal */}
-                        <div className="mt-12 p-4 bg-slate-50 border border-slate-200/80 rounded-xl text-center text-[7pt] font-bold uppercase tracking-wider text-slate-400 leading-relaxed">
-                            Este é um documento oficial emitido eletronicamente pela Farmácia Popular Integrada.
+                        {observacoes && (
+                            <div className="border-t border-slate-200/80 pt-3 text-xs bg-white p-3.5 rounded-xl border border-slate-200">
+                                <span className="block text-[7pt] font-bold uppercase text-slate-400 tracking-wider mb-0.5">Observações / Receita</span>
+                                <span className="text-slate-700 block whitespace-pre-line leading-relaxed font-semibold">{observacoes}</span>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Informações de Auditoria e Assinatura */}
+                    <div className="grid grid-cols-2 gap-8 pt-4 border-t border-slate-200">
+                        <div className="space-y-1 text-xs">
+                            <span className="block text-[7pt] font-black uppercase tracking-widest text-slate-400">Responsável pela Dispensação</span>
+                            <div className="font-bold text-slate-800">{currentUser?.name || ''}</div>
+                            <div className="text-[8pt] text-slate-400 font-semibold">{currentUser?.jobTitle || 'Responsável Farmácia'}</div>
                         </div>
+                        <div className="space-y-1 text-xs text-right">
+                            <span className="block text-[7pt] font-black uppercase tracking-widest text-slate-400">Autenticação do Sistema</span>
+                            <div className="font-mono text-[8pt] text-slate-500 font-bold uppercase tracking-wider">{movimentacaoId}</div>
+                            <div className="text-[8pt] text-slate-400 font-semibold">{new Date().toLocaleString('pt-BR')}</div>
+                        </div>
+                    </div>
+
+                    {/* Nota de rodapé legal */}
+                    <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl text-center text-[7pt] font-bold uppercase tracking-wider text-slate-400 leading-relaxed">
+                        Este é um documento oficial emitido eletronicamente pela Farmácia Popular Integrada.
                     </div>
                 </div>
             </PageWrapper>
