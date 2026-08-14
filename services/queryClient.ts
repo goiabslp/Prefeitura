@@ -4,12 +4,12 @@ import { QueryClient } from '@tanstack/react-query';
 export const queryClient = new QueryClient({
     defaultOptions: {
         queries: {
-            staleTime: 1000 * 60 * 10, // 10 minutes (Data remains "fresh" longer)
-            gcTime: 1000 * 60 * 60 * 24, // 24 hours (Keep in cache/storage)
+            staleTime: 1000 * 60 * 5, // 5 minutos (dados mantidos válidos)
+            gcTime: 1000 * 60 * 15, // 15 minutos (Garbage Collection libera memória RAM de dados não usados)
             retry: 1,
-            refetchOnWindowFocus: false, // Prevent aggressive refetching
-            refetchOnMount: true, // Ensure fresh data on navigation/reload
-            refetchOnReconnect: true, // Sync when connection returns
+            refetchOnWindowFocus: false, // Previne requisições agressivas ao trocar de aba
+            refetchOnMount: true, // Garante dados atualizados ao navegar
+            refetchOnReconnect: true, // Sincroniza ao reconectar
         },
     },
 });
