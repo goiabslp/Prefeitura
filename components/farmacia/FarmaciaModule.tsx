@@ -34,18 +34,21 @@ export const FarmaciaModule: React.FC<FarmaciaModuleProps> = ({
     // Data states for stock alerts
     const [medicamentos, setMedicamentos] = useState<FarmaciaMedicamento[]>([]);
     const [movimentacoes, setMovimentacoes] = useState<FarmaciaMovimentacao[]>([]);
+    const [globalAlertPercentage, setGlobalAlertPercentage] = useState<number>(20);
     const [loading, setLoading] = useState(true);
     const [isAlertModalOpen, setIsAlertModalOpen] = useState(false);
     const [hasAlerted, setHasAlerted] = useState(false);
 
     const loadData = async () => {
         try {
-            const [medData, movData] = await Promise.all([
+            const [medData, movData, alertPct] = await Promise.all([
                 db.getMedicamentos(),
-                db.getMovimentacoes()
+                db.getMovimentacoes(),
+                db.getGlobalAlertPercentage()
             ]);
             setMedicamentos(medData);
             setMovimentacoes(movData);
+            setGlobalAlertPercentage(alertPct);
         } catch (error) {
             console.error('[FarmaciaModule] Error loading alert data:', error);
         } finally {
@@ -58,13 +61,18 @@ export const FarmaciaModule: React.FC<FarmaciaModuleProps> = ({
 
         const handleMedChange = () => loadData();
         const handleMovChange = () => loadData();
+        const handleConfigChange = () => {
+            db.getGlobalAlertPercentage().then(pct => setGlobalAlertPercentage(pct));
+        };
 
         window.addEventListener('farmacia-medicamentos-changed', handleMedChange);
         window.addEventListener('farmacia-movimentacoes-changed', handleMovChange);
+        window.addEventListener('farmacia-config-changed', handleConfigChange);
 
         return () => {
             window.removeEventListener('farmacia-medicamentos-changed', handleMedChange);
             window.removeEventListener('farmacia-movimentacoes-changed', handleMovChange);
+            window.removeEventListener('farmacia-config-changed', handleConfigChange);
         };
     }, []);
 
@@ -84,80 +92,100 @@ export const FarmaciaModule: React.FC<FarmaciaModuleProps> = ({
     };
 
     // Filter low stock medicines based on rule:
-    // 50% = (Estoque Anterior + Último Abastecimento) / 2
+    // Alert triggers when stock reaches globalAlertPercentage of max historical stock
     const lowStockMedicamentos = useMemo(() => {
-        return medicamentos
-            .filter(med => !(med.quantidade === 0 && med.lote === 'LOTE-INICIAL'))
-            .map(med => {
-            const medMovs = movimentacoes
-                .filter(m => m.medicamento_id === med.id)
-                .sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime());
+        const groups: Record<string, {
+            id: string;
+            nome: string;
+            dosagem?: string;
+            tipo?: string;
+            categoria: string;
+            unidade: string;
+            quantidadeTotal: number;
+            limite_minimo: number;
+            medIds: Set<string>;
+        }> = {};
 
-            // 1. Simulate starting from 0 to find the discrepancy
-            let stock = 0;
-            for (const mov of medMovs) {
+        medicamentos.forEach(med => {
+            if (med.quantidade === 0 && med.lote === 'LOTE-INICIAL') return;
+            const groupKey = `${(med.nome || '').trim().toUpperCase()}_${(med.dosagem || '').trim().toUpperCase()}_${(med.tipo || '').trim().toUpperCase()}`;
+            if (!groups[groupKey]) {
+                groups[groupKey] = {
+                    id: med.id,
+                    nome: med.nome,
+                    dosagem: med.dosagem,
+                    tipo: med.tipo,
+                    categoria: med.categoria,
+                    unidade: med.unidade || 'un',
+                    quantidadeTotal: 0,
+                    limite_minimo: med.limite_minimo || 0,
+                    medIds: new Set()
+                };
+            }
+            groups[groupKey].quantidadeTotal += (med.quantidade || 0);
+            groups[groupKey].medIds.add(med.id);
+            if (med.limite_minimo && med.limite_minimo > groups[groupKey].limite_minimo) {
+                groups[groupKey].limite_minimo = med.limite_minimo;
+            }
+        });
+
+        // Determina a data limite do dia 05 do ciclo ativo
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = now.getMonth();
+        const day = now.getDate();
+        const refMonth = day >= 5 ? month : month - 1;
+        const targetDay5 = new Date(year, refMonth, 5, 23, 59, 59, 999);
+
+        return Object.values(groups).map(group => {
+            const groupMovs = movimentacoes.filter(m => 
+                group.medIds.has(m.medicamento_id) || 
+                (m.medicamento_nome && m.medicamento_nome.toLowerCase().trim() === group.nome.toLowerCase().trim())
+            );
+
+            // Rebobina movimentações que ocorreram APÓS o dia 05 às 23:59:59
+            const movsAfterDay5 = groupMovs.filter(m => {
+                if (!m.data) return false;
+                const d = new Date(m.data);
+                return !isNaN(d.getTime()) && d > targetDay5;
+            });
+
+            let calculatedDay5Stock = group.quantidadeTotal;
+            for (const mov of movsAfterDay5) {
                 if (mov.tipo === 'Entrada') {
-                    stock += mov.quantidade;
+                    calculatedDay5Stock -= mov.quantidade;
                 } else if (mov.tipo === 'Saída') {
-                    stock -= mov.quantidade;
-                } else if (mov.tipo === 'Ajuste') {
-                    stock = mov.quantidade;
+                    calculatedDay5Stock += mov.quantidade;
                 }
             }
 
-            const discrepancy = med.quantidade - stock;
+            const estoqueDia05 = calculatedDay5Stock > 0 ? calculatedDay5Stock : Math.max(0, group.quantidadeTotal);
 
-            // 2. Rerun simulation with the correct initial stock to find the last supply and previous stock
-            stock = discrepancy;
-            let lastSupplyQty = 0;
-            let stockBeforeLastSupply = 0;
-            let lastSupplyDate = '';
-            let hasSupply = false;
+            const pctFraction = globalAlertPercentage / 100;
+            const thresholdLow = Math.round(estoqueDia05 * pctFraction);
+            const thresholdCritical = Math.round(thresholdLow / 2);
 
-            for (const mov of medMovs) {
-                if (mov.tipo === 'Entrada') {
-                    lastSupplyQty = mov.quantidade;
-                    stockBeforeLastSupply = stock;
-                    stock += mov.quantidade;
-                    lastSupplyDate = mov.data;
-                    hasSupply = true;
-                } else if (mov.tipo === 'Saída') {
-                    stock -= mov.quantidade;
-                } else if (mov.tipo === 'Ajuste') {
-                    if (mov.quantidade > stock) {
-                        lastSupplyQty = mov.quantidade - stock;
-                        stockBeforeLastSupply = stock;
-                        lastSupplyDate = mov.data;
-                        hasSupply = true;
-                    }
-                    stock = mov.quantidade;
-                }
-            }
-
-            if (!hasSupply) {
-                lastSupplyQty = discrepancy > 0 ? discrepancy : med.quantidade;
-                stockBeforeLastSupply = 0;
-            }
-
-            const thresholdLow = (lastSupplyQty + stockBeforeLastSupply) / 2;
-            const thresholdCritical = thresholdLow / 2;
-            const isCritical = med.quantidade <= thresholdCritical && med.quantidade > 0;
-            const isLow = med.quantidade <= thresholdLow && med.quantidade > thresholdCritical;
-            const isOutOfStock = med.quantidade === 0;
+            const isOutOfStock = group.quantidadeTotal === 0;
+            const isCritical = !isOutOfStock && group.quantidadeTotal <= thresholdCritical;
+            const isLow = !isOutOfStock && !isCritical && group.quantidadeTotal <= thresholdLow;
 
             return {
-                ...med,
+                id: group.id,
+                nome: group.nome,
+                dosagem: group.dosagem,
+                tipo: group.tipo,
+                categoria: group.categoria,
+                unidade: group.unidade,
+                quantidade: group.quantidadeTotal,
+                estoqueDia05,
                 thresholdLow,
                 thresholdCritical,
-                lastSupplyQty,
-                stockBeforeLastSupply,
-                lastSupplyDate,
                 isLow,
                 isCritical,
                 isOutOfStock
             };
         }).filter(item => item.isLow || item.isCritical || item.isOutOfStock);
-    }, [medicamentos, movimentacoes]);
+    }, [medicamentos, movimentacoes, globalAlertPercentage]);
 
     const hasCriticalItems = useMemo(() => {
         return lowStockMedicamentos.some(med => med.isCritical || med.isOutOfStock);
@@ -453,14 +481,14 @@ export const FarmaciaModule: React.FC<FarmaciaModuleProps> = ({
                                                                 </span>
                                                             ) : med.isCritical ? (
                                                                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-red-100 text-red-800 border border-red-200 animate-pulse whitespace-nowrap">
-                                                                    Crítico (≤ 25%)
+                                                                    Crítico (≤ {Math.round(globalAlertPercentage / 2)}%)
                                                                 </span>
                                                             ) : (
                                                                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200 whitespace-nowrap">
-                                                                    Estoque Baixo
+                                                                    Estoque Baixo (≤ {globalAlertPercentage}%)
                                                                 </span>
                                                             )}
-                                                        </td>
+                                                         </td>
                                                     </tr>
                                                 );
                                             })}

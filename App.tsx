@@ -209,6 +209,7 @@ const VIEW_TO_PATH: Record<string, string> = {
   'farmacia:dashboard-relatorios': '/FarmaciaPopular/Dashboard/Relatorios',
   'farmacia:dashboard-rename': '/FarmaciaPopular/Dashboard/Rename',
   'farmacia:dashboard-alto-custo': '/FarmaciaPopular/Dashboard/AltoCusto',
+  'farmacia:dashboard-configuracao': '/FarmaciaPopular/Dashboard/Configuracao',
   'upload': '/Upload'
 };
 
@@ -4982,6 +4983,9 @@ const App: React.FC = () => {
                   } else if (view === 'farmacia:dashboard-alto-custo') {
                     setAppState(prev => ({ ...prev, view: 'dashboard-alto-custo' }));
                     window.history.pushState({}, '', '/FarmaciaPopular/Dashboard/AltoCusto');
+                  } else if (view === 'farmacia:dashboard-configuracao') {
+                    setAppState(prev => ({ ...prev, view: 'dashboard-configuracao' }));
+                    window.history.pushState({}, '', '/FarmaciaPopular/Dashboard/Configuracao');
                   } else if (view === 'farmacia') {
                     setAppState(prev => ({ ...prev, view: undefined }));
                     window.history.pushState({}, '', '/FarmaciaPopular');

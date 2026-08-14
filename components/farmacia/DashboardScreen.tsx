@@ -4,7 +4,7 @@ import * as db from '../../services/farmaciaService';
 import {
     ArrowLeft, TrendingUp, TrendingDown, Users, Package, AlertTriangle, Activity, 
     Calendar, CheckCircle2, AlertCircle, ShoppingCart, Info, PieChart, FileDown,
-    Plus, Search, X, MoreVertical
+    Plus, Search, X, MoreVertical, Settings, Sparkles, Brain
 } from 'lucide-react';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -49,7 +49,14 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     };
     const [medicamentos, setMedicamentos] = useState<FarmaciaMedicamento[]>([]);
     const [movimentacoes, setMovimentacoes] = useState<FarmaciaMovimentacao[]>([]);
+    const [globalAlertPercentage, setGlobalAlertPercentage] = useState<number>(20);
+    const [savingConfig, setSavingConfig] = useState(false);
+    const [configSearch, setConfigSearch] = useState('');
     const [loading, setLoading] = useState(true);
+
+    // Estados para o Modal de IA Preditiva de Estoque
+    const [selectedIAMed, setSelectedIAMed] = useState<any | null>(null);
+    const [isIAModalOpen, setIsIAModalOpen] = useState(false);
 
     const [reportView, setReportView] = useState<'alertas' | 'compras'>('alertas');
     const [comprasSearch, setComprasSearch] = useState('');
@@ -149,18 +156,288 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     const loadData = async () => {
         try {
             setLoading(true);
-            const [medData, movData] = await Promise.all([
+            const [medData, movData, alertPct] = await Promise.all([
                 db.getMedicamentos(),
-                db.getMovimentacoes()
+                db.getMovimentacoes(),
+                db.getGlobalAlertPercentage()
             ]);
             setMedicamentos(medData);
             setMovimentacoes(movData);
+            setGlobalAlertPercentage(alertPct);
         } catch (error) {
             console.error('Erro ao carregar dados do dashboard:', error);
         } finally {
             setLoading(false);
         }
     };
+
+    const handleSaveConfig = async () => {
+        setSavingConfig(true);
+        try {
+            const success = await db.saveGlobalAlertPercentage(globalAlertPercentage);
+            if (success) {
+                addNotification('Sucesso', `Porcentagem de alerta atualizada para ${globalAlertPercentage}%.`, 'success');
+            } else {
+                addNotification('Aviso', 'Configuração salva localmente.', 'info');
+            }
+        } catch (error) {
+            console.error('Erro ao salvar porcentagem de alerta:', error);
+            addNotification('Erro', 'Falha ao salvar configuração.', 'error');
+        } finally {
+            setSavingConfig(false);
+        }
+    };
+
+    const configPreviewList = useMemo(() => {
+        // Agrupamento de medicamentos por Nome + Dosagem + Tipo
+        const groups: Record<string, {
+            id: string;
+            nome: string;
+            dosagem?: string;
+            tipo?: string;
+            categoria: string;
+            unidade: string;
+            quantidadeTotal: number;
+            limite_minimo: number;
+            medIds: Set<string>;
+        }> = {};
+
+        medicamentos.forEach(med => {
+            const groupKey = `${(med.nome || '').trim().toUpperCase()}_${(med.dosagem || '').trim().toUpperCase()}_${(med.tipo || '').trim().toUpperCase()}`;
+            if (!groups[groupKey]) {
+                groups[groupKey] = {
+                    id: med.id,
+                    nome: med.nome,
+                    dosagem: med.dosagem,
+                    tipo: med.tipo,
+                    categoria: med.categoria,
+                    unidade: med.unidade || 'un',
+                    quantidadeTotal: 0,
+                    limite_minimo: med.limite_minimo || 0,
+                    medIds: new Set()
+                };
+            }
+            groups[groupKey].quantidadeTotal += (med.quantidade || 0);
+            groups[groupKey].medIds.add(med.id);
+            if (med.limite_minimo && med.limite_minimo > groups[groupKey].limite_minimo) {
+                groups[groupKey].limite_minimo = med.limite_minimo;
+            }
+        });
+
+        // Determina a data limite do dia 05 do ciclo ativo
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = now.getMonth();
+        const day = now.getDate();
+        const refMonth = day >= 5 ? month : month - 1;
+        const targetDay5 = new Date(year, refMonth, 5, 23, 59, 59, 999);
+
+        return Object.values(groups).map(group => {
+            const groupMovs = movimentacoes.filter(m => 
+                group.medIds.has(m.medicamento_id) || 
+                (m.medicamento_nome && m.medicamento_nome.toLowerCase().trim() === group.nome.toLowerCase().trim())
+            );
+
+            // Rebobina movimentações que ocorreram APÓS o dia 05 às 23:59:59
+            const movsAfterDay5 = groupMovs.filter(m => {
+                if (!m.data) return false;
+                const d = new Date(m.data);
+                return !isNaN(d.getTime()) && d > targetDay5;
+            });
+
+            let calculatedDay5Stock = group.quantidadeTotal;
+            for (const mov of movsAfterDay5) {
+                if (mov.tipo === 'Entrada') {
+                    calculatedDay5Stock -= mov.quantidade;
+                } else if (mov.tipo === 'Saída') {
+                    calculatedDay5Stock += mov.quantidade;
+                }
+            }
+
+            const estoqueDia05 = calculatedDay5Stock > 0 ? calculatedDay5Stock : Math.max(0, group.quantidadeTotal);
+
+            const thresholdLow = Math.round(estoqueDia05 * (globalAlertPercentage / 100));
+            const thresholdCritical = Math.round(thresholdLow / 2);
+
+            // --- CÁLCULO DE INTELIGÊNCIA ARTIFICIAL (IA) ---
+            // A IA analisa APENAS medicamentos que contenham estoque > 0. Medicamentos com estoque zerado são ignorados.
+            const isEstoqueAtivo = group.quantidadeTotal > 0;
+
+            let consumoDiarioMedio = 0;
+            let demandaMensal = 0;
+            let estoqueIdealIA = 0;
+            let sugestaoCompra = 0;
+            let diasCobertura = 999;
+            let statusIA: 'SEM_ESTOQUE_CADASTRADO' | 'ANALISANDO' | 'RISCO_DESABASTECIMENTO' | 'RISCO_VENCIMENTO' | 'SUPERESTOCAGEM' | 'EQUILIBRADO' = 'SEM_ESTOQUE_CADASTRADO';
+            let parecerIA = '';
+
+            if (!isEstoqueAtivo) {
+                statusIA = 'SEM_ESTOQUE_CADASTRADO';
+                parecerIA = 'Medicamento sem estoque cadastrado no sistema (saldo 0). A análise por IA será iniciada automaticamente assim que for adicionado novo estoque.';
+            } else {
+                // Verifica a data da primeira movimentação/entrada para contar o período de 3 meses
+                let primeiraMovData: Date | null = null;
+                if (groupMovs.length > 0) {
+                    const dates = groupMovs.map(m => new Date(m.data).getTime()).filter(t => !isNaN(t));
+                    if (dates.length > 1) {
+                        primeiraMovData = new Date(Math.min(...dates));
+                    }
+                }
+
+                let diasDecorridos = 0;
+                let mesesDecorridos = 0;
+                if (primeiraMovData) {
+                    const diffMs = now.getTime() - primeiraMovData.getTime();
+                    diasDecorridos = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+                    mesesDecorridos = Math.floor(diasDecorridos / 30);
+                }
+
+                const emAnalise3Meses = mesesDecorridos < 3;
+
+                if (emAnalise3Meses) {
+                    const mesAtualAnalise = Math.min(3, mesesDecorridos + 1);
+                    statusIA = 'ANALISANDO';
+                    parecerIA = `Em período inicial de aprendizado da IA (Mês ${mesAtualAnalise} de 3). O algoritmo está acumulando o histórico de retiradas entre o dia 01 e o último dia do mês. O Estoque Ideal IA será liberado após o término dos 3 meses.`;
+                } else {
+                    // Após 3 meses concluídos: calcula o consumo médio trimestral e atualiza mensalmente
+                    const saidaMovs = groupMovs.filter(m => m.tipo === 'Saída');
+                    const totalSaidas = saidaMovs.reduce((acc, m) => acc + (m.quantidade || 0), 0);
+
+                    let periodoDias = 90; // Janela trimestral de aprendizado concluída
+                    if (saidaMovs.length > 1) {
+                        const dates = saidaMovs.map(m => new Date(m.data).getTime()).filter(t => !isNaN(t));
+                        if (dates.length > 1) {
+                            const minDate = Math.min(...dates);
+                            const maxDate = Math.max(...dates);
+                            const diffDays = Math.ceil((maxDate - minDate) / (1000 * 60 * 60 * 24));
+                            periodoDias = Math.max(90, diffDays);
+                        }
+                    }
+
+                    consumoDiarioMedio = totalSaidas > 0 ? (totalSaidas / periodoDias) : 0;
+                    demandaMensal = Math.round(consumoDiarioMedio * 30);
+
+                    // Estoque Mensal Ideal IA (Demanda Mensal + 20% Margem de Segurança)
+                    if (demandaMensal > 0) {
+                        estoqueIdealIA = Math.round(demandaMensal * 1.20);
+                    } else {
+                        estoqueIdealIA = Math.max(group.quantidadeTotal, group.limite_minimo ? group.limite_minimo * 2 : 10);
+                    }
+
+                    sugestaoCompra = Math.max(0, estoqueIdealIA - group.quantidadeTotal);
+                    diasCobertura = consumoDiarioMedio > 0 ? Math.round(group.quantidadeTotal / consumoDiarioMedio) : 999;
+
+                    // Análise de Vencimento dos Lotes
+                    const lotesDoMed = medicamentos.filter(med => 
+                        (med.nome || '').trim().toUpperCase() === group.nome.toUpperCase() &&
+                        (med.dosagem || '').trim().toUpperCase() === (group.dosagem || '').toUpperCase()
+                    );
+
+                    let menorValidade: Date | null = null;
+                    lotesDoMed.forEach(l => {
+                        if (l.validade && l.quantidade > 0) {
+                            const valDate = new Date(l.validade);
+                            if (!isNaN(valDate.getTime())) {
+                                if (!menorValidade || valDate < menorValidade) {
+                                    menorValidade = valDate;
+                                }
+                            }
+                        }
+                    });
+
+                    let diasAteVencer = 999;
+                    let temRiscoVencimento = false;
+                    let unidadesEmRiscoVencimento = 0;
+
+                    if (menorValidade) {
+                        diasAteVencer = Math.max(0, Math.ceil((menorValidade.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+                        if (diasAteVencer <= 90 && consumoDiarioMedio > 0) {
+                            const consumoAteVencer = Math.round(consumoDiarioMedio * diasAteVencer);
+                            if (group.quantidadeTotal > consumoAteVencer) {
+                                temRiscoVencimento = true;
+                                unidadesEmRiscoVencimento = group.quantidadeTotal - consumoAteVencer;
+                            }
+                        }
+                    }
+
+                    if (diasCobertura < 10 && consumoDiarioMedio > 0) {
+                        statusIA = 'RISCO_DESABASTECIMENTO';
+                        parecerIA = `Atenção Crítica: Estoque atual cobre aproximadamente ${diasCobertura} dias de uso. Recomenda-se comprar ${sugestaoCompra} ${group.unidade}.`;
+                    } else if (temRiscoVencimento) {
+                        statusIA = 'RISCO_VENCIMENTO';
+                        parecerIA = `Alerta de Validade: Aproximadamente ${unidadesEmRiscoVencimento} ${group.unidade} correm risco de vencer em ${diasAteVencer} dias antes de serem dispensadas no ritmo atual.`;
+                    } else if (group.quantidadeTotal > estoqueIdealIA * 2 && group.quantidadeTotal > 50) {
+                        statusIA = 'SUPERESTOCAGEM';
+                        parecerIA = `Superestocagem: O saldo atual cobre cerca de ${diasCobertura} dias de uso. Pausar compras para evitar imobilização de recursos.`;
+                    } else {
+                        statusIA = 'EQUILIBRADO';
+                        parecerIA = `Estoque Equilibrado: O saldo atual de ${group.quantidadeTotal} ${group.unidade} atende com segurança a demanda estimada do mês.`;
+                    }
+                }
+            }
+
+            return {
+                id: group.id,
+                nome: group.nome,
+                dosagem: group.dosagem,
+                tipo: group.tipo,
+                categoria: group.categoria,
+                unidade: group.unidade,
+                quantidade: group.quantidadeTotal,
+                estoqueDia05,
+                thresholdLow,
+                thresholdCritical,
+                consumoDiarioMedio,
+                demandaMensal,
+                estoqueIdealIA,
+                sugestaoCompra,
+                diasCobertura,
+                statusIA,
+                parecerIA,
+                isEstoqueAtivo
+            };
+        }).filter(med => {
+            // Oculta da tela medicamentos sem análise (estoque === 0)
+            if (!med.isEstoqueAtivo) return false;
+
+            if (!configSearch.trim()) return true;
+            const q = configSearch.toLowerCase().trim();
+            return (
+                med.nome?.toLowerCase().includes(q) ||
+                med.categoria?.toLowerCase().includes(q) ||
+                med.dosagem?.toLowerCase().includes(q) ||
+                (med.tipo && med.tipo.toLowerCase().includes(q))
+            );
+        }).sort((a, b) => a.nome.localeCompare(b.nome));
+    }, [medicamentos, movimentacoes, globalAlertPercentage, configSearch]);
+
+    // Resumo Preditivo KPI da IA (analisa APENAS medicamentos que contenham estoque > 0)
+    const iaKpiSummary = useMemo(() => {
+        let totalSugestaoCompra = 0;
+        let qtdRiscoDesabastecimento = 0;
+        let qtdRiscoVencimento = 0;
+        let qtdEquilibrados = 0;
+
+        configPreviewList.forEach(item => {
+            if (item.quantidade > 0) {
+                totalSugestaoCompra += item.sugestaoCompra;
+                if (item.statusIA === 'RISCO_DESABASTECIMENTO') {
+                    qtdRiscoDesabastecimento++;
+                } else if (item.statusIA === 'RISCO_VENCIMENTO') {
+                    qtdRiscoVencimento++;
+                } else if (item.statusIA === 'EQUILIBRADO') {
+                    qtdEquilibrados++;
+                }
+            }
+        });
+
+        return {
+            totalSugestaoCompra,
+            qtdRiscoDesabastecimento,
+            qtdRiscoVencimento,
+            qtdEquilibrados
+        };
+    }, [configPreviewList]);
 
     const handleExportCSV = () => {
         const headers = ['Medicamento', 'Princípio Ativo', 'Categoria', 'Tipo', 'Dosagem', 'Lote', 'Validade', 'Fornecedor', 'Situação', 'Estoque', 'Unidade', 'Limite Mínimo'];
@@ -198,13 +475,18 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         loadData();
 
         const handleRealtimeChange = () => loadData();
+        const handleConfigChange = () => {
+            db.getGlobalAlertPercentage().then(pct => setGlobalAlertPercentage(pct));
+        };
 
         window.addEventListener('farmacia-medicamentos-changed', handleRealtimeChange);
         window.addEventListener('farmacia-movimentacoes-changed', handleRealtimeChange);
+        window.addEventListener('farmacia-config-changed', handleConfigChange);
 
         return () => {
             window.removeEventListener('farmacia-medicamentos-changed', handleRealtimeChange);
             window.removeEventListener('farmacia-movimentacoes-changed', handleRealtimeChange);
+            window.removeEventListener('farmacia-config-changed', handleConfigChange);
         };
     }, []);
 
@@ -218,36 +500,64 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     const daysPassedThisMonth = useMemo(() => differenceInDays(now, currentMonthStart) || 1, [now, currentMonthStart]);
     const daysInCurrentMonth = useMemo(() => differenceInDays(currentMonthEnd, currentMonthStart) + 1, [currentMonthEnd, currentMonthStart]);
 
-    // Parsing robusto de data para movimentações
-    const parseMovimentacaoDate = (dateStr?: string): Date | null => {
+    // Helper para identificar movimentações de Saída com flexibilidade de caracteres
+    const isSaidaTipo = (tipoStr?: string) => {
+        if (!tipoStr) return false;
+        const normalized = tipoStr.trim().toLowerCase();
+        return normalized === 'saída' || normalized === 'saida';
+    };
+
+    // Parsing robusto de data para movimentações (priorizando formato brasileiro DD/MM/YYYY)
+    const parseMovimentacaoDate = (dateStr?: string | Date): Date | null => {
         if (!dateStr) return null;
+        if (dateStr instanceof Date) return isNaN(dateStr.getTime()) ? null : dateStr;
         try {
-            let dateObj = parseISO(dateStr);
-            if (!isNaN(dateObj.getTime())) return dateObj;
+            const str = String(dateStr).trim();
+            if (!str) return null;
 
-            dateObj = new Date(dateStr);
-            if (!isNaN(dateObj.getTime())) return dateObj;
-
-            if (typeof dateStr === 'string' && dateStr.includes('/')) {
-                const parts = dateStr.split(' ')[0].split('/');
-                if (parts.length === 3) {
-                    const day = parseInt(parts[0], 10);
-                    const month = parseInt(parts[1], 10) - 1;
-                    const year = parseInt(parts[2], 10);
-                    dateObj = new Date(year, month, day);
-                    if (!isNaN(dateObj.getTime())) return dateObj;
+            // Prioridade 1: Formato brasileiro com barras (DD/MM/YYYY ou DD/MM/YYYY HH:mm:ss)
+            if (str.includes('/')) {
+                const parts = str.split(' ');
+                const dateParts = parts[0].split('/');
+                if (dateParts.length === 3) {
+                    const day = parseInt(dateParts[0], 10);
+                    const month = parseInt(dateParts[1], 10) - 1; // Mês 0-indexed
+                    const year = parseInt(dateParts[2], 10);
+                    let hours = 0, minutes = 0, seconds = 0;
+                    if (parts[1]) {
+                        const timeParts = parts[1].split(':');
+                        hours = parseInt(timeParts[0], 10) || 0;
+                        minutes = parseInt(timeParts[1], 10) || 0;
+                        seconds = parseInt(timeParts[2], 10) || 0;
+                    }
+                    const parsedDate = new Date(year, month, day, hours, minutes, seconds);
+                    if (!isNaN(parsedDate.getTime())) return parsedDate;
                 }
             }
+
+            // Prioridade 2: Formato ISO (YYYY-MM-DDTHH:mm:ss)
+            const isoParsed = parseISO(str);
+            if (!isNaN(isoParsed.getTime())) return isoParsed;
+
+            // Prioridade 3: Instanciação direta
+            const directDate = new Date(str);
+            if (!isNaN(directDate.getTime())) return directDate;
+
             return null;
         } catch {
             return null;
         }
     };
 
+    // Todas as movimentações de Saída
+    const allSaidaMovimentacoes = useMemo(() => {
+        return movimentacoes.filter(m => isSaidaTipo(m.tipo));
+    }, [movimentacoes]);
+
     // Dispensações do mês atual e mês anterior
     const currentMonthDispenses = useMemo(() => {
         return movimentacoes.filter(m => {
-            if (m.tipo !== 'Saída' || !m.data) return false;
+            if (!isSaidaTipo(m.tipo) || !m.data) return false;
             const dateObj = parseMovimentacaoDate(m.data);
             if (!dateObj) return false;
             return isWithinInterval(dateObj, { start: currentMonthStart, end: currentMonthEnd });
@@ -256,7 +566,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
     const lastMonthDispenses = useMemo(() => {
         return movimentacoes.filter(m => {
-            if (m.tipo !== 'Saída' || !m.data) return false;
+            if (!isSaidaTipo(m.tipo) || !m.data) return false;
             const dateObj = parseMovimentacaoDate(m.data);
             if (!dateObj) return false;
             return isWithinInterval(dateObj, { start: lastMonthStart, end: lastMonthEnd });
@@ -267,6 +577,10 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     const totalMedsCurrentMonth = useMemo(() => {
         return currentMonthDispenses.reduce((acc, curr) => acc + (curr.quantidade || 0), 0);
     }, [currentMonthDispenses]);
+
+    const totalMedsAllTime = useMemo(() => {
+        return allSaidaMovimentacoes.reduce((acc, curr) => acc + (curr.quantidade || 0), 0);
+    }, [allSaidaMovimentacoes]);
 
     const totalMedsLastMonth = useMemo(() => {
         return lastMonthDispenses.reduce((acc, curr) => acc + (curr.quantidade || 0), 0);
@@ -279,7 +593,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
     // KPI 2: Pacientes Atendidos (Unique CPFs or Names in 'Saída')
     const getUniquePatientsCount = (movs: FarmaciaMovimentacao[]) => {
-        const unique = new Set(movs.filter(m => m.paciente_cpf || m.paciente_nome).map(m => m.paciente_cpf || m.paciente_nome));
+        const unique = new Set(movs.filter(m => m.paciente_cpf || m.paciente_nome).map(m => (m.paciente_cpf || m.paciente_nome || '').trim().toLowerCase()).filter(Boolean));
         return unique.size;
     };
 
@@ -296,12 +610,39 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         return ((totalPatientsCurrentMonth - totalPatientsLastMonth) / totalPatientsLastMonth) * 100;
     }, [totalPatientsCurrentMonth, totalPatientsLastMonth]);
 
-    // KPI 3: Estoque Crítico e Baixo
+    // KPI 3: Estoque Crítico e Baixo (baseado no estoque do dia 05 do mês)
     const lowStockAlerts = useMemo(() => {
-        // Simplified low stock calculation for dashboard (can be same logic as FarmaciaModule if needed)
-        // Here we use a simpler threshold logic: if quantity < limit_minimo
-        return medicamentos.filter(med => med.quantidade <= med.limite_minimo && !(med.quantidade === 0 && med.lote === 'LOTE-INICIAL'));
-    }, [medicamentos]);
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = now.getMonth();
+        const day = now.getDate();
+        const refMonth = day >= 5 ? month : month - 1;
+        const targetDay5 = new Date(year, refMonth, 5, 23, 59, 59, 999);
+
+        return medicamentos.filter(med => {
+            if (med.quantidade === 0 && med.lote === 'LOTE-INICIAL') return false;
+
+            const medMovs = movimentacoes.filter(m => m.medicamento_id === med.id);
+            const movsAfterDay5 = medMovs.filter(m => {
+                if (!m.data) return false;
+                const d = new Date(m.data);
+                return !isNaN(d.getTime()) && d > targetDay5;
+            });
+
+            let calculatedDay5Stock = med.quantidade;
+            for (const mov of movsAfterDay5) {
+                if (mov.tipo === 'Entrada') {
+                    calculatedDay5Stock -= mov.quantidade;
+                } else if (mov.tipo === 'Saída') {
+                    calculatedDay5Stock += mov.quantidade;
+                }
+            }
+
+            const estoqueDia05 = calculatedDay5Stock > 0 ? calculatedDay5Stock : Math.max(0, med.quantidade);
+            const thresholdLow = Math.round(estoqueDia05 * (globalAlertPercentage / 100));
+            return med.quantidade <= thresholdLow;
+        });
+    }, [medicamentos, movimentacoes, globalAlertPercentage]);
 
     const zeroStockAlerts = medicamentos.filter(med => med.quantidade === 0 && med.lote !== 'LOTE-INICIAL');
 
@@ -744,7 +1085,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
             {/* Tabs */}
             <div className="flex overflow-x-auto gap-2 mb-6 pb-2 custom-scrollbar">
-                {['geral', 'medicamentos', 'pacientes', 'operacoes', 'relatorios', 'rename', 'alto-custo'].map(tab => (
+                {['geral', 'medicamentos', 'pacientes', 'operacoes', 'relatorios', 'rename', 'alto-custo', 'configuracao'].map(tab => (
                     <button
                         key={tab}
                         onClick={() => handleTabChange(tab)}
@@ -754,7 +1095,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                                 : 'bg-white text-slate-500 hover:bg-slate-50 border border-slate-200/60 hover:text-slate-900'
                         }`}
                     >
-                        {tab === 'geral' ? 'Visão Geral' : tab === 'operacoes' ? 'Operações' : tab === 'relatorios' ? 'Relatórios' : tab === 'rename' ? 'RENAME' : tab === 'alto-custo' ? 'ALTO CUSTO' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                        {tab === 'geral' ? 'Visão Geral' : tab === 'operacoes' ? 'Operações' : tab === 'relatorios' ? 'Relatórios' : tab === 'rename' ? 'RENAME' : tab === 'alto-custo' ? 'ALTO CUSTO' : tab === 'configuracao' ? 'Configuração' : tab.charAt(0).toUpperCase() + tab.slice(1)}
                     </button>
                 ))}
             </div>
@@ -771,7 +1112,9 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                         <Package className="w-16 h-16 text-pink-500" />
                     </div>
                     <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Medicamentos Entregues</h3>
-                    <div className="text-3xl font-black text-slate-800 mb-2">{totalMedsCurrentMonth} <span className="text-sm font-medium text-slate-400">unids</span></div>
+                    <div className="text-3xl font-black text-slate-800 mb-2">
+                        {totalMedsCurrentMonth.toLocaleString('pt-BR')} <span className="text-sm font-medium text-slate-400">unidades</span>
+                    </div>
                     {varMeds !== null ? (
                         <div className={`flex items-center gap-1 text-xs font-bold ${varMeds >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
                             {varMeds >= 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
@@ -779,7 +1122,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                         </div>
                     ) : (
                         <div className="text-xs font-bold text-slate-400">
-                            Sem registros no mês anterior
+                            {totalMedsAllTime > 0 ? `Total acumulado: ${totalMedsAllTime.toLocaleString('pt-BR')} un` : 'Sem registros no mês anterior'}
                         </div>
                     )}
                 </div>
@@ -1896,6 +2239,407 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                     </div>
                 </div>
             )}
+            {activeTab === 'configuracao' && (
+                <div className="space-y-6 animate-in fade-in duration-300">
+                    {/* Banner de Topo com Destaque de IA */}
+                    <div className="bg-gradient-to-r from-slate-900 via-purple-950 to-slate-900 rounded-3xl p-6 text-white shadow-xl relative overflow-hidden">
+                        <div className="absolute right-0 top-0 translate-x-1/4 -translate-y-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl pointer-events-none"></div>
+                        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+                            <div className="space-y-2 max-w-3xl">
+                                <div className="inline-flex items-center gap-2 px-3 py-1 bg-purple-500/20 text-purple-300 border border-purple-500/30 rounded-full text-[10px] font-black uppercase tracking-widest">
+                                    <Sparkles className="w-3.5 h-3.5 text-purple-300 animate-pulse" />
+                                    Motor de Inteligência Preditiva de Estoque (IA)
+                                </div>
+                                <h3 className="text-2xl font-black uppercase tracking-tight text-white flex items-center gap-3">
+                                    Configuração & Inteligência de Compras por IA
+                                </h3>
+                                <p className="text-slate-300 text-xs font-medium leading-relaxed">
+                                    Nossa Inteligência Artificial analisa em tempo real a velocidade de retiradas, validade dos lotes e cobertura do estoque para sugerir o <strong className="text-purple-300">estoque mensal ideal a comprar</strong>, evitando falta de remédios ou perdas por vencimento.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Cards de Resumo Preditivo da IA */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                        <div className="bg-white rounded-3xl p-5 border border-purple-100 shadow-sm flex items-center gap-4">
+                            <div className="p-3.5 bg-purple-50 text-purple-600 rounded-2xl shrink-0">
+                                <ShoppingCart className="w-6 h-6" />
+                            </div>
+                            <div>
+                                <span className="block text-[10px] font-black uppercase tracking-widest text-slate-400">Sugestão de Compras IA</span>
+                                <div className="text-xl font-black text-slate-900 mt-0.5">
+                                    {iaKpiSummary.totalSugestaoCompra.toLocaleString('pt-BR')} <span className="text-xs font-bold text-slate-400">unidades</span>
+                                </div>
+                                <p className="text-[10px] font-medium text-purple-600 mt-0.5">Sugerido para manter a farmácia abastecida no mês</p>
+                            </div>
+                        </div>
+
+                        <div className="bg-white rounded-3xl p-5 border border-rose-100 shadow-sm flex items-center gap-4">
+                            <div className="p-3.5 bg-rose-50 text-rose-600 rounded-2xl shrink-0">
+                                <AlertTriangle className="w-6 h-6" />
+                            </div>
+                            <div>
+                                <span className="block text-[10px] font-black uppercase tracking-widest text-slate-400">Risco de Desabastecimento</span>
+                                <div className="text-xl font-black text-rose-600 mt-0.5">
+                                    {iaKpiSummary.qtdRiscoDesabastecimento} <span className="text-xs font-bold text-rose-400">medicamentos</span>
+                                </div>
+                                <p className="text-[10px] font-medium text-rose-600 mt-0.5">Estoque atual cobre menos de 10 dias de consumo</p>
+                            </div>
+                        </div>
+
+                        <div className="bg-white rounded-3xl p-5 border border-amber-100 shadow-sm flex items-center gap-4">
+                            <div className="p-3.5 bg-amber-50 text-amber-600 rounded-2xl shrink-0">
+                                <Calendar className="w-6 h-6" />
+                            </div>
+                            <div>
+                                <span className="block text-[10px] font-black uppercase tracking-widest text-slate-400">Risco de Vencimento</span>
+                                <div className="text-xl font-black text-amber-600 mt-0.5">
+                                    {iaKpiSummary.qtdRiscoVencimento} <span className="text-xs font-bold text-amber-500">medicamentos</span>
+                                </div>
+                                <p className="text-[10px] font-medium text-amber-700 mt-0.5">Lotes com validade próxima vs. consumo estimado</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Card de Formulário de Configuração */}
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        {/* Formulário Principal */}
+                        <div className="lg:col-span-1 bg-white rounded-3xl p-6 border border-slate-200/60 shadow-sm flex flex-col justify-between space-y-6">
+                            <div>
+                                <div className="flex items-center gap-3 mb-4">
+                                    <div className="p-3 rounded-2xl bg-pink-50 text-pink-600">
+                                        <AlertTriangle className="w-6 h-6" />
+                                    </div>
+                                    <div>
+                                        <h4 className="font-extrabold text-slate-800 text-base uppercase tracking-tight">Porcentagem Global de Alerta</h4>
+                                        <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Aplica-se sobre o estoque do dia 05</p>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-2">
+                                            Valor da Porcentagem (%)
+                                        </label>
+                                        <div className="relative flex items-center">
+                                            <input
+                                                type="number"
+                                                min="1"
+                                                max="100"
+                                                value={globalAlertPercentage}
+                                                onChange={e => {
+                                                    const val = Math.min(100, Math.max(1, parseInt(e.target.value, 10) || 1));
+                                                    setGlobalAlertPercentage(val);
+                                                }}
+                                                className="w-full text-2xl font-black text-slate-900 bg-slate-50 border border-slate-200 rounded-2xl py-3 px-4 focus:bg-white focus:border-pink-500 outline-none transition-all pr-12"
+                                            />
+                                            <span className="absolute right-4 font-black text-slate-400 text-lg">%</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Slider */}
+                                    <div>
+                                        <input
+                                            type="range"
+                                            min="5"
+                                            max="50"
+                                            step="1"
+                                            value={globalAlertPercentage}
+                                            onChange={e => setGlobalAlertPercentage(Number(e.target.value))}
+                                            className="w-full h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-pink-600"
+                                        />
+                                        <div className="flex justify-between text-[10px] font-bold text-slate-400 mt-1">
+                                            <span>5% (Mais restritivo)</span>
+                                            <span>20% (Recomendado)</span>
+                                            <span>50% (Mais amplo)</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Botões de Preset Rápido */}
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2">
+                                            Valores Rápidos
+                                        </label>
+                                        <div className="grid grid-cols-4 gap-2">
+                                            {[10, 15, 20, 25, 30, 40, 50].map(pct => (
+                                                <button
+                                                    key={pct}
+                                                    type="button"
+                                                    onClick={() => setGlobalAlertPercentage(pct)}
+                                                    className={`py-2 rounded-xl text-xs font-black transition-all ${
+                                                        globalAlertPercentage === pct
+                                                            ? 'bg-pink-600 text-white shadow-md shadow-pink-500/30 scale-105'
+                                                            : 'bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200/60'
+                                                    }`}
+                                                >
+                                                    {pct}%
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <button
+                                type="button"
+                                onClick={handleSaveConfig}
+                                disabled={savingConfig}
+                                className="w-full py-4 bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-700 hover:to-rose-700 text-white font-black text-xs uppercase tracking-widest rounded-2xl transition-all shadow-lg shadow-pink-600/20 active:scale-95 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                            >
+                                {savingConfig ? (
+                                    <>
+                                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                        <span>Salvando...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <CheckCircle2 className="w-4 h-4" />
+                                        <span>Salvar Configuração Global</span>
+                                    </>
+                                )}
+                            </button>
+                        </div>
+
+                        {/* Card Ilustrativo com Exemplo Prático */}
+                        <div className="lg:col-span-2 bg-gradient-to-br from-purple-50/70 via-slate-50 to-white rounded-3xl p-6 border border-purple-100/60 shadow-sm flex flex-col justify-between space-y-6">
+                            <div>
+                                <div className="inline-flex items-center gap-2 px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-[10px] font-black uppercase tracking-wider mb-4">
+                                    <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                                    Como a IA calcula a sugestão de compras?
+                                </div>
+
+                                <h4 className="text-lg font-black text-slate-800 uppercase tracking-tight mb-2">
+                                    Inteligência Artificial de Previsão Mensal
+                                </h4>
+
+                                <p className="text-slate-600 text-xs font-medium leading-relaxed mb-6">
+                                    O algoritmo cruza o <strong>histórico real de saídas</strong> dos últimos meses, calcula a média diária de consumo, adiciona 20% de margem de segurança antidesabastecimento e previne compras excessivas em itens com risco de vencer.
+                                </p>
+
+                                {/* Simulação Visual de Exemplo */}
+                                <div className="bg-white rounded-2xl p-5 border border-purple-100 shadow-sm space-y-4">
+                                    <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                                        <span className="text-xs font-black text-slate-700 uppercase">Medicamento Exemplo:</span>
+                                        <span className="text-xs font-black text-purple-600 uppercase bg-purple-50 px-2.5 py-1 rounded-lg">DIPIRONA 500MG</span>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
+                                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                            <span className="block text-[10px] font-bold text-slate-400 uppercase">Consumo Médio Estimado</span>
+                                            <span className="text-lg font-black text-slate-800">1.000 <span className="text-xs text-slate-500">un/mês</span></span>
+                                        </div>
+                                        <div className="bg-purple-50 p-3 rounded-xl border border-purple-100">
+                                            <span className="block text-[10px] font-bold text-purple-600 uppercase">Estoque Mensal Ideal (IA)</span>
+                                            <span className="text-lg font-black text-purple-700">1.200 <span className="text-xs text-purple-500">un</span></span>
+                                        </div>
+                                        <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-100">
+                                            <span className="block text-[10px] font-bold text-emerald-600 uppercase">Sugestão de Compra</span>
+                                            <span className="text-lg font-black text-emerald-700">
+                                                + 800 <span className="text-xs text-emerald-600">un</span>
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div className="p-3 bg-purple-500/10 border border-purple-200/60 rounded-xl flex items-start gap-3">
+                                        <Sparkles className="w-5 h-5 text-purple-600 shrink-0 mt-0.5" />
+                                        <p className="text-xs text-purple-950 font-semibold leading-relaxed">
+                                            Com estoque atual de 400 un e consumo de 1.000 un/mês, a IA sugere comprar <strong>800 unidades</strong> para alcançar o Estoque Ideal de 1.200 un com margem de segurança.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Tabela de Pré-visualização com Colunas Inteligentes da IA */}
+                    <div className="bg-white rounded-3xl border border-slate-200/60 shadow-sm overflow-hidden">
+                        <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50/50">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2.5 bg-purple-50 text-purple-600 rounded-2xl">
+                                    <Brain className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <h4 className="font-extrabold text-slate-800 text-sm uppercase tracking-tight flex items-center gap-2">
+                                        Tabela de Configuração & Inteligência Preditiva por IA
+                                    </h4>
+                                    <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mt-0.5">
+                                        Análise em tempo real de estoque ideal, sugestão de compra e risco de vencimento
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="relative w-full md:w-72">
+                                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                                <input
+                                    type="text"
+                                    placeholder="Buscar medicamento..."
+                                    value={configSearch}
+                                    onChange={e => setConfigSearch(e.target.value)}
+                                    className="w-full bg-white border border-slate-200 rounded-xl py-2 pl-9 pr-4 text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:border-purple-500 outline-none transition-all shadow-sm"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="overflow-x-auto custom-scrollbar">
+                            <table className="w-full text-left border-collapse min-w-[1050px]">
+                                <thead>
+                                    <tr className="bg-slate-50/90 border-b border-slate-200 text-slate-500 text-[10px] font-black uppercase tracking-wider">
+                                        <th className="py-4 px-6 text-left w-[26%]">Medicamento</th>
+                                        <th className="py-4 px-3 text-center w-[10%]">Estoque Atual</th>
+                                        <th className="py-4 px-3 text-center w-[11%]">Estoque Dia 05</th>
+                                        <th className="py-4 px-3 text-center w-[14%] bg-purple-50/50 text-purple-900">Estoque Ideal IA</th>
+                                        <th className="py-4 px-3 text-center w-[13%] bg-purple-50/50 text-purple-900">Sugestão Compra</th>
+                                        <th className="py-4 px-6 text-center w-[23%]">Diagnóstico IA & Parecer</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {configPreviewList.length > 0 ? (
+                                        configPreviewList.map(med => {
+                                            const isCritical = med.quantidade <= med.thresholdCritical && med.quantidade > 0;
+                                            const isLow = med.quantidade <= med.thresholdLow && med.quantidade > med.thresholdCritical;
+                                            const isZero = med.quantidade === 0;
+
+                                            return (
+                                                <tr key={med.id} className="hover:bg-purple-50/20 transition-colors text-xs text-slate-700">
+                                                    <td className="py-4 px-6">
+                                                        <div className="flex flex-wrap items-center gap-2">
+                                                            <span className="font-black text-slate-900 uppercase">
+                                                                {med.nome}
+                                                            </span>
+                                                            {med.categoria && (
+                                                                <span className="text-[9px] font-bold px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md uppercase tracking-wider">
+                                                                    {med.categoria}
+                                                                </span>
+                                                            )}
+                                                            {med.tipo && (
+                                                                <span className="text-[9px] font-bold px-2 py-0.5 bg-pink-50 text-pink-600 rounded-md uppercase tracking-wider">
+                                                                    {med.tipo}
+                                                                </span>
+                                                            )}
+                                                            {med.dosagem && (
+                                                                <span className="text-[10px] font-medium text-slate-400">
+                                                                    {med.dosagem}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </td>
+
+                                                    {/* Estoque Atual */}
+                                                    <td className="py-4 px-3 text-center">
+                                                        <span className={`inline-flex items-center justify-center px-3 py-1 rounded-xl text-xs font-black ${
+                                                            isZero || isCritical
+                                                                ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                                                                : isLow
+                                                                ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                                                                : 'bg-slate-100 text-slate-900'
+                                                        }`}>
+                                                            {med.quantidade.toLocaleString('pt-BR')} <span className="text-[10px] font-bold opacity-75 ml-1">{med.unidade}</span>
+                                                        </span>
+                                                    </td>
+
+                                                    {/* Estoque no Dia 05 */}
+                                                    <td className="py-4 px-3 text-center">
+                                                        <span className="inline-flex items-center justify-center px-3 py-1 bg-slate-100/80 text-slate-800 font-extrabold rounded-xl text-xs">
+                                                            {med.estoqueDia05.toLocaleString('pt-BR')} <span className="text-[10px] font-bold text-slate-400 ml-1">{med.unidade}</span>
+                                                        </span>
+                                                    </td>
+
+                                                    {/* Estoque Mensal Ideal IA */}
+                                                    <td className="py-4 px-3 text-center bg-purple-50/30 font-black">
+                                                        {!med.isEstoqueAtivo ? (
+                                                            <span className="text-slate-400 font-bold text-xs">-</span>
+                                                        ) : med.statusIA === 'ANALISANDO' ? (
+                                                            <span className="inline-flex items-center justify-center px-3 py-1 bg-purple-50 text-purple-700 rounded-xl text-xs font-bold border border-purple-200">
+                                                                <Sparkles className="w-3 h-3 mr-1 text-purple-600 animate-spin" /> Analisando
+                                                            </span>
+                                                        ) : (
+                                                            <span className="inline-flex items-center justify-center px-3 py-1 bg-purple-100/80 text-purple-900 rounded-xl text-xs border border-purple-200/60 font-black">
+                                                                {med.estoqueIdealIA.toLocaleString('pt-BR')} <span className="text-[10px] font-bold text-purple-600 ml-1">{med.unidade}</span>
+                                                            </span>
+                                                        )}
+                                                    </td>
+
+                                                    {/* Sugestão de Compra IA */}
+                                                    <td className="py-4 px-3 text-center bg-purple-50/30">
+                                                        {!med.isEstoqueAtivo ? (
+                                                            <span className="inline-flex items-center justify-center px-3 py-1 bg-slate-100 text-slate-400 rounded-xl text-xs font-semibold">
+                                                                Sem Análise
+                                                            </span>
+                                                        ) : med.statusIA === 'ANALISANDO' ? (
+                                                            <span className="inline-flex items-center justify-center px-3 py-1 bg-slate-100 text-slate-500 rounded-xl text-xs font-bold">
+                                                                Analisando
+                                                            </span>
+                                                        ) : med.sugestaoCompra > 0 ? (
+                                                            <span className="inline-flex items-center justify-center px-3 py-1 bg-emerald-100 text-emerald-800 rounded-xl text-xs font-black border border-emerald-200">
+                                                                + {med.sugestaoCompra.toLocaleString('pt-BR')} <span className="text-[10px] font-bold text-emerald-600 ml-1">{med.unidade}</span>
+                                                            </span>
+                                                        ) : (
+                                                            <span className="inline-flex items-center justify-center px-3 py-1 bg-slate-100 text-slate-500 rounded-xl text-xs font-bold">
+                                                                Não Comprar
+                                                            </span>
+                                                        )}
+                                                    </td>
+
+                                                    {/* Diagnóstico IA & Parecer */}
+                                                    <td className="py-4 px-6 text-center">
+                                                        <div className="flex items-center justify-center gap-2">
+                                                            {!med.isEstoqueAtivo ? (
+                                                                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[9px] font-bold uppercase tracking-wider bg-slate-100 text-slate-500 border border-slate-200">
+                                                                    Sem Análise
+                                                                </span>
+                                                            ) : med.statusIA === 'ANALISANDO' ? (
+                                                                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider bg-purple-100 text-purple-800 border border-purple-200 shadow-xs">
+                                                                    <Sparkles className="w-3 h-3 mr-1 text-purple-600 animate-pulse" /> Analisando
+                                                                </span>
+                                                            ) : med.statusIA === 'RISCO_DESABASTECIMENTO' ? (
+                                                                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider bg-red-100 text-red-800 border border-red-200 animate-pulse">
+                                                                    Comprar Urgente
+                                                                </span>
+                                                            ) : med.statusIA === 'RISCO_VENCIMENTO' ? (
+                                                                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200">
+                                                                    Risco Vencimento
+                                                                </span>
+                                                            ) : med.statusIA === 'SUPERESTOCAGEM' ? (
+                                                                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider bg-purple-100 text-purple-800 border border-purple-200">
+                                                                    Superestocado
+                                                                </span>
+                                                            ) : (
+                                                                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                                                    Ideal
+                                                                </span>
+                                                            )}
+
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setSelectedIAMed(med);
+                                                                    setIsIAModalOpen(true);
+                                                                }}
+                                                                className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-purple-100 text-slate-600 hover:text-purple-800 text-[10px] font-extrabold transition-all flex items-center gap-1 cursor-pointer"
+                                                                title="Ver Parecer Detalhado da IA"
+                                                            >
+                                                                <Sparkles className="w-3 h-3 text-purple-600" />
+                                                                <span>Parecer IA</span>
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })
+                                    ) : (
+                                        <tr>
+                                            <td colSpan={6} className="p-8 text-center text-slate-400 font-bold text-xs uppercase">
+                                                Nenhum medicamento encontrado.
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Modal de Cadastro de Medicamento de Alto Custo */}
             {isAltoCustoModalOpen && (
@@ -2108,6 +2852,70 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                         branding: { title: 'Prefeitura Integrada' }
                     } as any}
                 />
+            )}
+
+            {/* Modal de Parecer Detalhado da IA */}
+            {isIAModalOpen && selectedIAMed && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4 animate-in fade-in duration-200">
+                    <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-6">
+                        <div className="flex items-start justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="p-3 bg-gradient-to-br from-purple-500 to-pink-600 text-white rounded-2xl shadow-md">
+                                    <Sparkles className="w-6 h-6 animate-pulse" />
+                                </div>
+                                <div>
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-purple-600">Inteligência Artificial Preditiva</span>
+                                    <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">{selectedIAMed.nome}</h3>
+                                    <p className="text-xs font-semibold text-slate-400">{selectedIAMed.dosagem} • {selectedIAMed.categoria} ({selectedIAMed.tipo || 'Geral'})</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setIsIAModalOpen(false)}
+                                className="p-2 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-slate-600 transition-colors"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        {/* Métricas da IA */}
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100">
+                                <span className="block text-[10px] font-bold text-slate-400 uppercase">Estoque Atual</span>
+                                <span className="text-base font-black text-slate-800">{selectedIAMed.quantidade.toLocaleString('pt-BR')} {selectedIAMed.unidade}</span>
+                            </div>
+                            <div className="bg-purple-50 p-3.5 rounded-2xl border border-purple-100">
+                                <span className="block text-[10px] font-bold text-purple-600 uppercase">Estoque Ideal IA / Mês</span>
+                                <span className="text-base font-black text-purple-700">{selectedIAMed.estoqueIdealIA.toLocaleString('pt-BR')} {selectedIAMed.unidade}</span>
+                            </div>
+                            <div className="bg-amber-50 p-3.5 rounded-2xl border border-amber-100">
+                                <span className="block text-[10px] font-bold text-amber-700 uppercase">Consumo Mensal Estimado</span>
+                                <span className="text-base font-black text-amber-800">{selectedIAMed.demandaMensal.toLocaleString('pt-BR')} {selectedIAMed.unidade}/mês</span>
+                            </div>
+                            <div className="bg-emerald-50 p-3.5 rounded-2xl border border-emerald-100">
+                                <span className="block text-[10px] font-bold text-emerald-700 uppercase">Sugestão de Compra</span>
+                                <span className="text-base font-black text-emerald-800">{selectedIAMed.sugestaoCompra.toLocaleString('pt-BR')} {selectedIAMed.unidade}</span>
+                            </div>
+                        </div>
+
+                        {/* Parecer IA */}
+                        <div className="p-4 bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-100 rounded-2xl space-y-2">
+                            <div className="flex items-center gap-2 text-xs font-black text-purple-900 uppercase">
+                                <Sparkles className="w-4 h-4 text-purple-600" />
+                                <span>Parecer Preditivo do Algoritmo IA</span>
+                            </div>
+                            <p className="text-xs font-semibold text-slate-700 leading-relaxed">
+                                {selectedIAMed.parecerIA}
+                            </p>
+                        </div>
+
+                        <button
+                            onClick={() => setIsIAModalOpen(false)}
+                            className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-colors cursor-pointer"
+                        >
+                            Fechar Diagnóstico
+                        </button>
+                    </div>
+                </div>
             )}
         </div>
     );

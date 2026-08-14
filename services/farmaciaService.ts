@@ -387,3 +387,34 @@ export const saveFarmaciaConfig = async (chave: string, valor: any): Promise<boo
         return false;
     }
 };
+
+export const getGlobalAlertPercentage = async (): Promise<number> => {
+    try {
+        const dbValue = await getFarmaciaConfig('global_alert_percentage');
+        if (dbValue !== null && dbValue !== undefined && !isNaN(Number(dbValue))) {
+            const num = Number(dbValue);
+            localStorage.setItem('farmacia_global_alert_percentage', String(num));
+            return num;
+        }
+    } catch (e) {
+        console.warn('[farmaciaService] Erro ao obter porcentagem de alerta do Supabase, tentando localStorage:', e);
+    }
+    const local = localStorage.getItem('farmacia_global_alert_percentage');
+    if (local && !isNaN(Number(local))) {
+        return Number(local);
+    }
+    return 20; // Default 20%
+};
+
+export const saveGlobalAlertPercentage = async (percentage: number): Promise<boolean> => {
+    try {
+        localStorage.setItem('farmacia_global_alert_percentage', String(percentage));
+        const ok = await saveFarmaciaConfig('global_alert_percentage', percentage);
+        window.dispatchEvent(new CustomEvent('farmacia-config-changed'));
+        return ok;
+    } catch (e) {
+        console.error('[farmaciaService] saveGlobalAlertPercentage Error:', e);
+        return false;
+    }
+};
+
