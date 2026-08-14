@@ -205,6 +205,7 @@ const VIEW_TO_PATH: Record<string, string> = {
   'farmacia:dashboard-geral': '/FarmaciaPopular/Dashboard/VisaoGeral',
   'farmacia:dashboard-medicamentos': '/FarmaciaPopular/Dashboard/Medicamentos',
   'farmacia:dashboard-pacientes': '/FarmaciaPopular/Dashboard/Pacientes',
+  'farmacia:dashboard-operacoes': '/FarmaciaPopular/Dashboard/Operacoes',
   'farmacia:dashboard-relatorios': '/FarmaciaPopular/Dashboard/Relatorios',
   'farmacia:dashboard-rename': '/FarmaciaPopular/Dashboard/Rename',
   'farmacia:dashboard-alto-custo': '/FarmaciaPopular/Dashboard/AltoCusto',

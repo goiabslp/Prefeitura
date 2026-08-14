@@ -13,6 +13,8 @@ import {
 import { startOfMonth, endOfMonth, subMonths, isWithinInterval, parseISO, format, formatDistanceToNow, differenceInDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { jsPDF } from 'jspdf';
+import html2canvas from 'html2canvas';
+import { FarmaciaPdfGenerator } from './FarmaciaPdfGenerator';
 import { savePurchaseOrder } from '../../services/comprasService';
 import { useNotification } from '../../contexts/NotificationContext';
 import { PacientesTab } from '../common/PacientesTab';
@@ -78,6 +80,72 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     // Menu interativo (...) para cada item
     const [activeMenuMedId, setActiveMenuMedId] = useState<string | null>(null);
 
+    // Operações tab filter states & PDF printer
+    const [operacoesSearch, setOperacoesSearch] = useState('');
+    const [operacoesTipoFilter, setOperacoesTipoFilter] = useState<'TODOS' | 'Saída' | 'Entrada' | 'Ajuste'>('TODOS');
+    const [operacoesCategoriaFilter, setOperacoesCategoriaFilter] = useState<'TODOS' | 'CBAF' | 'CESAF' | 'CEAF'>('TODOS');
+    const [printingMov, setPrintingMov] = useState<FarmaciaMovimentacao | null>(null);
+    const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+
+    const handlePrintMov = async (mov: FarmaciaMovimentacao) => {
+        setIsGeneratingPdf(true);
+        setPrintingMov(mov);
+        await new Promise(resolve => setTimeout(resolve, 500));
+        try {
+            const container = document.getElementById('farmacia-pdf-content');
+            if (container) {
+                const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+                const canvas = await html2canvas(container, {
+                    scale: 2,
+                    useCORS: true,
+                    allowTaint: true,
+                    logging: false,
+                    backgroundColor: '#ffffff',
+                    width: container.offsetWidth,
+                    height: container.offsetHeight
+                });
+                const imgData = canvas.toDataURL('image/jpeg', 0.98);
+                const pdfWidth = pdf.internal.pageSize.getWidth();
+                const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+                pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+                const protocol = mov.id.substring(0, 8).toUpperCase();
+                pdf.save(`Comprovante-Retirada-Farmacia-${protocol}.pdf`);
+            }
+        } catch (err) {
+            console.error('Erro ao gerar PDF:', err);
+        } finally {
+            setIsGeneratingPdf(false);
+            setPrintingMov(null);
+        }
+    };
+
+    const operacoesFiltered = useMemo(() => {
+        let list = [...movimentacoes];
+
+        if (operacoesTipoFilter !== 'TODOS') {
+            list = list.filter(m => m.tipo === operacoesTipoFilter);
+        }
+
+        if (operacoesCategoriaFilter !== 'TODOS') {
+            list = list.filter(m => m.medicamento_categoria === operacoesCategoriaFilter);
+        }
+
+        if (operacoesSearch.trim()) {
+            const query = operacoesSearch.toLowerCase().trim();
+            const cleanQuery = query.replace(/\D/g, '');
+            list = list.filter(m => 
+                (m.paciente_nome || '').toLowerCase().includes(query) ||
+                (m.paciente_cpf || '').includes(cleanQuery) ||
+                m.medicamento_nome.toLowerCase().includes(query) ||
+                (m.medicamento_dosagem || '').toLowerCase().includes(query) ||
+                m.lote.toLowerCase().includes(query) ||
+                (m.responsavel_nome || '').toLowerCase().includes(query)
+            );
+        }
+
+        return list;
+    }, [movimentacoes, operacoesTipoFilter, operacoesCategoriaFilter, operacoesSearch]);
+
     const loadData = async () => {
         try {
             setLoading(true);
@@ -128,35 +196,87 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
     useEffect(() => {
         loadData();
+
+        const handleRealtimeChange = () => loadData();
+
+        window.addEventListener('farmacia-medicamentos-changed', handleRealtimeChange);
+        window.addEventListener('farmacia-movimentacoes-changed', handleRealtimeChange);
+
+        return () => {
+            window.removeEventListener('farmacia-medicamentos-changed', handleRealtimeChange);
+            window.removeEventListener('farmacia-movimentacoes-changed', handleRealtimeChange);
+        };
     }, []);
 
     // --- DATA PROCESSING ---
 
-    const now = new Date();
-    const currentMonthStart = startOfMonth(now);
-    const currentMonthEnd = endOfMonth(now);
-    const lastMonthStart = startOfMonth(subMonths(now, 1));
-    const lastMonthEnd = endOfMonth(subMonths(now, 1));
-    const daysPassedThisMonth = differenceInDays(now, currentMonthStart) || 1; // avoid divide by zero
-    const daysInCurrentMonth = differenceInDays(currentMonthEnd, currentMonthStart) + 1;
+    const now = useMemo(() => new Date(), []);
+    const currentMonthStart = useMemo(() => startOfMonth(now), [now]);
+    const currentMonthEnd = useMemo(() => endOfMonth(now), [now]);
+    const lastMonthStart = useMemo(() => startOfMonth(subMonths(now, 1)), [now]);
+    const lastMonthEnd = useMemo(() => endOfMonth(subMonths(now, 1)), [now]);
+    const daysPassedThisMonth = useMemo(() => differenceInDays(now, currentMonthStart) || 1, [now, currentMonthStart]);
+    const daysInCurrentMonth = useMemo(() => differenceInDays(currentMonthEnd, currentMonthStart) + 1, [currentMonthEnd, currentMonthStart]);
 
-    // ZERADO A PEDIDO DO USUÁRIO
-    const currentMonthDispenses: FarmaciaMovimentacao[] = []; 
-    const lastMonthDispenses: FarmaciaMovimentacao[] = [];
+    // Dispensações do mês atual e mês anterior
+    const currentMonthDispenses = useMemo(() => {
+        return movimentacoes.filter(m => {
+            if (m.tipo !== 'Saída' || !m.data) return false;
+            try {
+                const dateObj = parseISO(m.data);
+                if (isNaN(dateObj.getTime())) return false;
+                return isWithinInterval(dateObj, { start: currentMonthStart, end: currentMonthEnd });
+            } catch {
+                return false;
+            }
+        });
+    }, [movimentacoes, currentMonthStart, currentMonthEnd]);
+
+    const lastMonthDispenses = useMemo(() => {
+        return movimentacoes.filter(m => {
+            if (m.tipo !== 'Saída' || !m.data) return false;
+            try {
+                const dateObj = parseISO(m.data);
+                if (isNaN(dateObj.getTime())) return false;
+                return isWithinInterval(dateObj, { start: lastMonthStart, end: lastMonthEnd });
+            } catch {
+                return false;
+            }
+        });
+    }, [movimentacoes, lastMonthStart, lastMonthEnd]);
 
     // KPI 1: Total Medicamentos Entregues
-    const totalMedsCurrentMonth = 0; // currentMonthDispenses.reduce((acc, curr) => acc + curr.quantidade, 0);
-    const totalMedsLastMonth = 0; // lastMonthDispenses.reduce((acc, curr) => acc + curr.quantidade, 0);
-    const varMeds = 0; // totalMedsLastMonth === 0 ? 100 : ((totalMedsCurrentMonth - totalMedsLastMonth) / totalMedsLastMonth) * 100;
+    const totalMedsCurrentMonth = useMemo(() => {
+        return currentMonthDispenses.reduce((acc, curr) => acc + (curr.quantidade || 0), 0);
+    }, [currentMonthDispenses]);
+
+    const totalMedsLastMonth = useMemo(() => {
+        return lastMonthDispenses.reduce((acc, curr) => acc + (curr.quantidade || 0), 0);
+    }, [lastMonthDispenses]);
+
+    const varMeds = useMemo(() => {
+        if (totalMedsLastMonth === 0) return totalMedsCurrentMonth > 0 ? 100 : 0;
+        return ((totalMedsCurrentMonth - totalMedsLastMonth) / totalMedsLastMonth) * 100;
+    }, [totalMedsCurrentMonth, totalMedsLastMonth]);
 
     // KPI 2: Pacientes Atendidos (Unique CPFs or Names in 'Saída')
     const getUniquePatientsCount = (movs: FarmaciaMovimentacao[]) => {
         const unique = new Set(movs.filter(m => m.paciente_cpf || m.paciente_nome).map(m => m.paciente_cpf || m.paciente_nome));
         return unique.size;
     };
-    const totalPatientsCurrentMonth = 0; // getUniquePatientsCount(currentMonthDispenses);
-    const totalPatientsLastMonth = 0; // getUniquePatientsCount(lastMonthDispenses);
-    const varPatients = 0; // totalPatientsLastMonth === 0 ? 100 : ((totalPatientsCurrentMonth - totalPatientsLastMonth) / totalPatientsLastMonth) * 100;
+
+    const totalPatientsCurrentMonth = useMemo(() => {
+        return getUniquePatientsCount(currentMonthDispenses);
+    }, [currentMonthDispenses]);
+
+    const totalPatientsLastMonth = useMemo(() => {
+        return getUniquePatientsCount(lastMonthDispenses);
+    }, [lastMonthDispenses]);
+
+    const varPatients = useMemo(() => {
+        if (totalPatientsLastMonth === 0) return totalPatientsCurrentMonth > 0 ? 100 : 0;
+        return ((totalPatientsCurrentMonth - totalPatientsLastMonth) / totalPatientsLastMonth) * 100;
+    }, [totalPatientsCurrentMonth, totalPatientsLastMonth]);
 
     // KPI 3: Estoque Crítico e Baixo
     const lowStockAlerts = useMemo(() => {
@@ -606,7 +726,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
             {/* Tabs */}
             <div className="flex overflow-x-auto gap-2 mb-6 pb-2 custom-scrollbar">
-                {['geral', 'medicamentos', 'pacientes', 'relatorios', 'rename', 'alto-custo'].map(tab => (
+                {['geral', 'medicamentos', 'pacientes', 'operacoes', 'relatorios', 'rename', 'alto-custo'].map(tab => (
                     <button
                         key={tab}
                         onClick={() => handleTabChange(tab)}
@@ -616,7 +736,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                                 : 'bg-white text-slate-500 hover:bg-slate-50 border border-slate-200/60 hover:text-slate-900'
                         }`}
                     >
-                        {tab === 'geral' ? 'Visão Geral' : tab === 'relatorios' ? 'Relatórios' : tab === 'rename' ? 'RENAME' : tab === 'alto-custo' ? 'ALTO CUSTO' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                        {tab === 'geral' ? 'Visão Geral' : tab === 'operacoes' ? 'Operações' : tab === 'relatorios' ? 'Relatórios' : tab === 'rename' ? 'RENAME' : tab === 'alto-custo' ? 'ALTO CUSTO' : tab.charAt(0).toUpperCase() + tab.slice(1)}
                     </button>
                 ))}
             </div>
@@ -858,6 +978,224 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 </div>
             </div>
             </>
+            )}
+
+            {activeTab === 'operacoes' && (
+            <div className="space-y-6">
+                {/* KPIs da aba Operações */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm relative overflow-hidden">
+                        <div className="absolute top-0 right-0 p-6 opacity-20">
+                            <Activity className="w-16 h-16 text-pink-500" />
+                        </div>
+                        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total de Operações</h3>
+                        <div className="text-3xl font-black text-slate-800 mb-1">{operacoesFiltered.length}</div>
+                        <p className="text-xs font-semibold text-slate-400">Registros de saídas, entradas e ajustes</p>
+                    </div>
+
+                    <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm relative overflow-hidden">
+                        <div className="absolute top-0 right-0 p-6 opacity-20">
+                            <Package className="w-16 h-16 text-emerald-500" />
+                        </div>
+                        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Unidades Dispensadas</h3>
+                        <div className="text-3xl font-black text-emerald-600 mb-1">
+                            {operacoesFiltered.filter(m => m.tipo === 'Saída').reduce((acc, curr) => acc + (curr.quantidade || 0), 0)} <span className="text-sm font-medium text-slate-400">unids</span>
+                        </div>
+                        <p className="text-xs font-semibold text-slate-400">Somatório de itens entregues</p>
+                    </div>
+
+                    <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm relative overflow-hidden">
+                        <div className="absolute top-0 right-0 p-6 opacity-20">
+                            <Users className="w-16 h-16 text-blue-500" />
+                        </div>
+                        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Pacientes Distintos</h3>
+                        <div className="text-3xl font-black text-blue-600 mb-1">
+                            {new Set(operacoesFiltered.filter(m => m.paciente_cpf || m.paciente_nome).map(m => m.paciente_cpf || m.paciente_nome)).size}
+                        </div>
+                        <p className="text-xs font-semibold text-slate-400">Beneficiários atendidos</p>
+                    </div>
+                </div>
+
+                {/* Barra de Filtros */}
+                <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm space-y-4">
+                    <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+                        <div className="relative w-full md:max-w-md">
+                            <input
+                                type="text"
+                                placeholder="Buscar por Paciente, CPF, Medicamento, Lote ou Operador..."
+                                className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-10 py-2.5 text-xs font-semibold placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 transition-all text-slate-900 shadow-inner"
+                                value={operacoesSearch}
+                                onChange={(e) => setOperacoesSearch(e.target.value)}
+                            />
+                            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+                            {operacoesSearch && (
+                                <button
+                                    onClick={() => setOperacoesSearch('')}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                >
+                                    <X className="w-3.5 h-3.5" />
+                                </button>
+                            )}
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+                            {/* Filtros Tipo */}
+                            <div className="flex bg-slate-100 p-1 rounded-xl">
+                                {(['TODOS', 'Saída', 'Entrada', 'Ajuste'] as const).map(tipo => (
+                                    <button
+                                        key={tipo}
+                                        onClick={() => setOperacoesTipoFilter(tipo)}
+                                        className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
+                                            operacoesTipoFilter === tipo
+                                                ? 'bg-white text-pink-600 shadow-sm'
+                                                : 'text-slate-500 hover:text-slate-800'
+                                        }`}
+                                    >
+                                        {tipo}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {/* Filtros Categoria */}
+                            <div className="flex bg-slate-100 p-1 rounded-xl">
+                                {(['TODOS', 'CBAF', 'CESAF', 'CEAF'] as const).map(cat => (
+                                    <button
+                                        key={cat}
+                                        onClick={() => setOperacoesCategoriaFilter(cat)}
+                                        className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
+                                            operacoesCategoriaFilter === cat
+                                                ? 'bg-white text-slate-900 shadow-sm'
+                                                : 'text-slate-500 hover:text-slate-800'
+                                        }`}
+                                    >
+                                        {cat}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Tabela de Operações */}
+                <div className="bg-white border border-slate-200/80 rounded-3xl overflow-hidden shadow-sm">
+                    <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                        <h3 className="font-extrabold text-slate-800 uppercase text-xs tracking-wider flex items-center gap-2">
+                            <Activity className="w-4 h-4 text-pink-600" />
+                            Histórico de Operações de Retirada ({operacoesFiltered.length})
+                        </h3>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">
+                            Ordenado pelas mais recentes
+                        </span>
+                    </div>
+
+                    {operacoesFiltered.length > 0 ? (
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse min-w-[800px]">
+                                <thead>
+                                    <tr className="bg-slate-50 border-b border-slate-100 text-[9px] font-black text-slate-400 uppercase tracking-wider">
+                                        <th className="p-4">Data / Hora</th>
+                                        <th className="p-4">Tipo</th>
+                                        <th className="p-4">Paciente / Beneficiário</th>
+                                        <th className="p-4">Medicamento / Detalhes</th>
+                                        <th className="p-4 text-center">Quantidade</th>
+                                        <th className="p-4">Responsável</th>
+                                        <th className="p-4 text-right">Comprovante</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-700">
+                                    {operacoesFiltered.map(op => {
+                                        const isSaida = op.tipo === 'Saída';
+                                        const isEntrada = op.tipo === 'Entrada';
+                                        const tipoColor = isSaida
+                                            ? 'bg-pink-50 text-pink-700 border-pink-100'
+                                            : isEntrada
+                                                ? 'bg-blue-50 text-blue-700 border-blue-100'
+                                                : 'bg-amber-50 text-amber-700 border-amber-100';
+
+                                        return (
+                                            <tr key={op.id} className="hover:bg-slate-50/40 transition-colors">
+                                                <td className="p-4 font-mono text-[11px] text-slate-500 whitespace-nowrap">
+                                                    {op.data ? format(parseISO(op.data), 'dd/MM/yyyy HH:mm:ss') : '—'}
+                                                </td>
+                                                <td className="p-4 whitespace-nowrap">
+                                                    <span className={`inline-block px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider border ${tipoColor}`}>
+                                                        {op.tipo}
+                                                    </span>
+                                                </td>
+                                                <td className="p-4">
+                                                    {op.paciente_nome ? (
+                                                        <div>
+                                                            <div className="font-extrabold text-slate-900 uppercase">
+                                                                {op.paciente_nome}
+                                                            </div>
+                                                            {op.paciente_cpf && (
+                                                                <div className="text-[10px] text-slate-400 font-mono font-bold mt-0.5">
+                                                                    CPF: {op.paciente_cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-slate-400 italic text-[11px]">N/A (Operação Interna)</span>
+                                                    )}
+                                                </td>
+                                                <td className="p-4">
+                                                    <div className="font-bold text-slate-900 uppercase">
+                                                        {op.medicamento_nome} {op.medicamento_dosagem ? `(${op.medicamento_dosagem})` : ''}
+                                                    </div>
+                                                    <div className="flex flex-wrap gap-1 mt-1">
+                                                        <span className="px-1.5 py-0.5 text-[8px] font-bold uppercase rounded bg-pink-50 text-pink-600">
+                                                            {op.medicamento_categoria}
+                                                        </span>
+                                                        {op.medicamento_tipo && (
+                                                            <span className="px-1.5 py-0.5 text-[8px] font-bold uppercase rounded bg-slate-100 text-slate-500">
+                                                                {op.medicamento_tipo}
+                                                            </span>
+                                                        )}
+                                                        <span className="px-1.5 py-0.5 text-[8px] font-bold uppercase rounded bg-slate-50 border border-slate-200 text-slate-500 font-mono">
+                                                            Lote: {op.lote}
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                                <td className="p-4 text-center font-black text-slate-900">
+                                                    <span className={isSaida ? 'text-pink-600 font-extrabold' : isEntrada ? 'text-blue-600 font-extrabold' : 'text-slate-800'}>
+                                                        {isSaida ? `-${op.quantidade}` : isEntrada ? `+${op.quantidade}` : op.quantidade}
+                                                    </span>
+                                                </td>
+                                                <td className="p-4 font-semibold text-slate-600 whitespace-nowrap">
+                                                    {op.responsavel_nome || '—'}
+                                                </td>
+                                                <td className="p-4 text-right whitespace-nowrap">
+                                                    {isSaida ? (
+                                                        <button
+                                                            onClick={() => handlePrintMov(op)}
+                                                            disabled={isGeneratingPdf}
+                                                            className="px-3 py-1.5 bg-pink-50 hover:bg-pink-100 text-pink-700 font-extrabold text-[10px] uppercase tracking-wider rounded-xl transition-all border border-pink-200/50 flex items-center gap-1.5 ml-auto active:scale-95 cursor-pointer shadow-sm"
+                                                            title="Baixar Comprovante PDF"
+                                                        >
+                                                            <FileDown className="w-3.5 h-3.5 text-pink-600" />
+                                                            Comprovante
+                                                        </button>
+                                                    ) : (
+                                                        <span className="text-slate-300 text-[10px] font-mono">—</span>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    ) : (
+                        <div className="py-16 text-center text-slate-400 flex flex-col items-center justify-center">
+                            <Activity className="w-12 h-12 mb-2 opacity-20 text-slate-500" />
+                            <h4 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">Nenhuma operação encontrada</h4>
+                            <p className="text-[10px] text-slate-400 mt-1 font-medium max-w-sm">
+                                Não encontramos registros de operações que correspondam aos filtros selecionados.
+                            </p>
+                        </div>
+                    )}
+                </div>
+            </div>
             )}
 
             {activeTab === 'relatorios' && (
@@ -1716,6 +2054,31 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 </div>
             )}
 
+            {printingMov && (
+                <FarmaciaPdfGenerator
+                    movimentacaoId={printingMov.id}
+                    pacienteNome={printingMov.paciente_nome || 'N/I'}
+                    pacienteCpf={printingMov.paciente_cpf || ''}
+                    medicamentoNome={printingMov.medicamento_nome}
+                    medicamentoCategoria={printingMov.medicamento_categoria}
+                    medicamentoDosagem={printingMov.medicamento_dosagem}
+                    medicamentoTipo={printingMov.medicamento_tipo}
+                    lote={printingMov.lote}
+                    quantidade={printingMov.quantidade}
+                    unidade={
+                        (() => {
+                            const m = medicamentos.find(med => med.id === printingMov.medicamento_id);
+                            return m?.unidade || 'Unidade';
+                        })()
+                    }
+                    data={printingMov.data}
+                    observacoes={printingMov.observacoes}
+                    currentUser={currentUser}
+                    state={{
+                        branding: { title: 'Prefeitura Integrada' }
+                    } as any}
+                />
+            )}
         </div>
     );
 };
