@@ -45,6 +45,65 @@ const STATUS_MAP: Record<ScheduleStatus, { label: string, color: string, icon: a
   cancelado: { label: 'Rejeitado/Cancelado', color: 'rose', icon: X },
 };
 
+const getScheduleStyles = (status: ScheduleStatus) => {
+  switch (status) {
+    case 'confirmado':
+      return {
+        cardBg: 'bg-emerald-50/90 border-emerald-200 text-emerald-950 hover:bg-emerald-100 hover:border-emerald-400 shadow-emerald-500/5',
+        badgeBg: 'bg-emerald-600 text-white',
+        iconBg: 'bg-emerald-500 text-white shadow-emerald-500/30',
+        labelColor: 'text-emerald-700',
+        timeColor: 'text-emerald-900',
+        dot: 'bg-emerald-500'
+      };
+    case 'em_curso':
+      return {
+        cardBg: 'bg-blue-50/90 border-blue-200 text-blue-950 hover:bg-blue-100 hover:border-blue-400 shadow-blue-500/5',
+        badgeBg: 'bg-blue-600 text-white',
+        iconBg: 'bg-blue-600 text-white shadow-blue-500/30 animate-pulse',
+        labelColor: 'text-blue-700',
+        timeColor: 'text-blue-900',
+        dot: 'bg-blue-500 animate-ping'
+      };
+    case 'pendente':
+      return {
+        cardBg: 'bg-amber-50/90 border-amber-200 text-amber-950 hover:bg-amber-100 hover:border-amber-400 shadow-amber-500/5',
+        badgeBg: 'bg-amber-500 text-white',
+        iconBg: 'bg-amber-500 text-white shadow-amber-500/30',
+        labelColor: 'text-amber-700',
+        timeColor: 'text-amber-900',
+        dot: 'bg-amber-500 animate-pulse'
+      };
+    case 'concluido':
+      return {
+        cardBg: 'bg-slate-100/90 border-slate-200 text-slate-900 hover:bg-slate-200 hover:border-slate-300',
+        badgeBg: 'bg-slate-600 text-white',
+        iconBg: 'bg-slate-600 text-white',
+        labelColor: 'text-slate-600',
+        timeColor: 'text-slate-800',
+        dot: 'bg-slate-400'
+      };
+    case 'cancelado':
+      return {
+        cardBg: 'bg-rose-50/90 border-rose-200 text-rose-950 hover:bg-rose-100 hover:border-rose-300',
+        badgeBg: 'bg-rose-500 text-white',
+        iconBg: 'bg-rose-500 text-white',
+        labelColor: 'text-rose-700',
+        timeColor: 'text-rose-900',
+        dot: 'bg-rose-500'
+      };
+    default:
+      return {
+        cardBg: 'bg-indigo-50/90 border-indigo-200 text-indigo-950 hover:bg-indigo-100',
+        badgeBg: 'bg-indigo-600 text-white',
+        iconBg: 'bg-indigo-600 text-white',
+        labelColor: 'text-indigo-700',
+        timeColor: 'text-indigo-900',
+        dot: 'bg-indigo-500'
+      };
+  }
+};
+
 const HOLIDAYS: Record<string, string> = {
   '01-01': 'Confraternização Universal',
   '21-04': 'Tiradentes',
@@ -587,36 +646,87 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
   );
 
   const renderCalendar = () => (
-    <div className="flex-1 flex flex-col overflow-hidden animate-fade-in h-full">
-      <div className="bg-white border-b border-slate-200 px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0 z-20">
+    <div className="flex-1 flex flex-col overflow-hidden animate-fade-in h-full bg-slate-100/60">
+      {/* Header bar */}
+      <div className="bg-white border-b border-slate-200/80 px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0 z-20 shadow-sm">
         <div className="flex items-center gap-4">
-          <button onClick={() => handleSubViewChange('menu')} className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 shadow-sm transition-all active:scale-95">
-            <ArrowLeft className="w-6 h-6" />
+          <button 
+            onClick={() => handleSubViewChange('menu')} 
+            className="w-11 h-11 bg-white rounded-2xl flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 border border-slate-200/80 shadow-sm transition-all active:scale-95 group"
+            title="Voltar ao Menu Principal"
+          >
+            <ArrowLeft className="w-5 h-5 group-hover:-translate-x-0.5 transition-transform" />
           </button>
           <div>
-            <h2 className="text-3xl font-black text-slate-900 uppercase tracking-tight leading-none">Agendar Veículo</h2>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Nova Solicitação</p>
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 rounded-xl bg-indigo-50 text-indigo-600">
+                <CalendarDays className="w-5 h-5" />
+              </div>
+              <h2 className="text-2xl md:text-3xl font-black text-slate-900 uppercase tracking-tight leading-none">Agendar Veículo</h2>
+            </div>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1 ml-0.5">Calendário Interativo de Viagens</p>
           </div>
         </div>
-        <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-2xl border border-slate-200 shadow-inner">
-          <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))} className="p-2 hover:bg-white hover:shadow-sm rounded-xl text-slate-600 transition-all"><ChevronLeft className="w-5 h-5" /></button>
-          <div className="px-6 text-sm font-black text-slate-900 uppercase tracking-widest min-w-[220px] text-center">{currentDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</div>
-          <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))} className="p-2 hover:bg-white hover:shadow-sm rounded-xl text-slate-600 transition-all"><ChevronRight className="w-5 h-5" /></button>
+
+        {/* Month Selector */}
+        <div className="flex items-center gap-2 bg-slate-100/90 p-1.5 rounded-2xl border border-slate-200/80 shadow-inner">
+          <button 
+            onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))} 
+            className="p-2 hover:bg-white hover:shadow-sm rounded-xl text-slate-600 transition-all active:scale-90"
+            title="Mês Anterior"
+          >
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+          <div className="px-6 text-sm font-black text-slate-900 uppercase tracking-widest min-w-[220px] text-center">
+            {currentDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+          </div>
+          <button 
+            onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))} 
+            className="p-2 hover:bg-white hover:shadow-sm rounded-xl text-slate-600 transition-all active:scale-90"
+            title="Próximo Mês"
+          >
+            <ChevronRight className="w-5 h-5" />
+          </button>
         </div>
+
+        {/* Actions */}
         <div className="flex items-center gap-3">
-          <button onClick={() => setCurrentDate(new Date())} className="px-5 py-2.5 bg-white border border-slate-200 text-slate-600 hover:text-indigo-600 hover:border-indigo-200 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm">Hoje</button>
-          <button onClick={() => handleOpenModal()} className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-xl shadow-lg shadow-indigo-600/20 transition-all hover:-translate-y-0.5 active:scale-95 flex items-center gap-2 uppercase text-[10px] tracking-[0.2em]"><Plus className="w-4 h-4" />Novo Agendamento</button>
+          <button 
+            onClick={() => setCurrentDate(new Date())} 
+            className="px-4 py-2.5 bg-white border border-slate-200 text-slate-700 hover:text-indigo-600 hover:border-indigo-300 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm active:scale-95"
+          >
+            Hoje
+          </button>
+          <button 
+            onClick={() => handleOpenModal()} 
+            className="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-black rounded-xl shadow-lg shadow-indigo-600/20 transition-all hover:-translate-y-0.5 active:scale-95 flex items-center gap-2 uppercase text-[10px] tracking-[0.2em]"
+          >
+            <Plus className="w-4 h-4" /> Novo Agendamento
+          </button>
         </div>
       </div>
-      <div className="grid grid-cols-7 bg-slate-900 shrink-0 shadow-lg z-10">
+
+      {/* Weekday headers */}
+      <div className="grid grid-cols-7 bg-slate-900 shrink-0 shadow-md z-10">
         {['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'].map((d, i) => (
-          <div key={d} className={`py-4 text-center text-[10px] font-black uppercase tracking-[0.3em] border-r border-slate-800/50 last:border-0 ${i === 0 || i === 6 ? 'text-amber-400' : 'text-slate-400'}`}>{d}</div>
+          <div key={d} className={`py-3.5 text-center text-[10px] font-black uppercase tracking-[0.25em] border-r border-slate-800/60 last:border-0 ${i === 0 || i === 6 ? 'text-amber-400' : 'text-slate-300'}`}>
+            {d}
+          </div>
         ))}
       </div>
-      <div className="flex-1 overflow-hidden">
-        <div className="grid grid-cols-7 h-full w-full bg-slate-200 gap-px">
+
+      {/* Grid container with custom smooth scroll & explicit row minimum heights to prevent clipping */}
+      <div className="flex-1 overflow-y-auto custom-scrollbar p-2 md:p-4 bg-slate-200/50">
+        <div className="grid grid-cols-7 gap-2 w-full">
           {calendarData.map((cell, idx) => {
-            if (!cell.isCurrent) return <div key={idx} className="bg-slate-50/30 min-h-0" />;
+            if (!cell.isCurrent) {
+              return (
+                <div key={idx} className="bg-slate-100/40 rounded-2xl min-h-[140px] md:min-h-[165px] p-2 border border-slate-200/30 opacity-40 select-none">
+                  <span className="text-xs font-bold text-slate-400">{cell.day}</span>
+                </div>
+              );
+            }
+
             const dayStart = new Date(cell.year, cell.month, cell.day, 0, 0, 0).getTime();
             const dayEnd = new Date(cell.year, cell.month, cell.day, 23, 59, 59).getTime();
             const dateObj = new Date(cell.year, cell.month, cell.day);
@@ -624,45 +734,142 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
             const dayKey = `${String(cell.day).padStart(2, '0')}-${String(cell.month + 1).padStart(2, '0')}`;
             const holidayName = HOLIDAYS[dayKey];
             const isHoliday = !!holidayName;
+            
             const daySchedules = schedules.filter(s => {
               if (s.status === 'cancelado') return false;
               const dep = new Date(s.departureDateTime).getTime();
               const ret = new Date(s.returnDateTime).getTime();
               return (dep <= dayEnd) && (ret >= dayStart);
             });
+
             const isToday = new Date().getDate() === cell.day && new Date().getMonth() === cell.month && new Date().getFullYear() === cell.year;
 
-            // Dynamic classes for better aesthetics
-            let cellBgClass = 'bg-white hover:bg-slate-50';
-            if (isHoliday) cellBgClass = 'bg-rose-50/70 hover:bg-rose-100/60';
-            else if (isWeekend) cellBgClass = 'bg-indigo-50/30 hover:bg-indigo-50/60';
+            // Visual background styling
+            let cellBgClass = 'bg-white hover:bg-slate-50/90 border-slate-200/80';
+            if (isToday) cellBgClass = 'bg-indigo-50/30 border-indigo-300 ring-2 ring-indigo-500/20';
+            else if (isHoliday) cellBgClass = 'bg-rose-50/60 border-rose-200/80';
+            else if (isWeekend) cellBgClass = 'bg-slate-50/90 border-slate-200/60';
+
+            const cellDateStr = `${cell.year}-${String(cell.month + 1).padStart(2, '0')}-${String(cell.day).padStart(2, '0')}`;
 
             return (
-              <div key={idx} className={`group relative min-h-0 flex flex-col p-3 transition-all duration-300 cursor-pointer ${cellBgClass} hover:scale-[1.03] hover:shadow-xl hover:z-20 hover:rounded-xl border border-transparent hover:border-indigo-200/50`} onClick={() => {
-                const dateStr = `${cell.year}-${String(cell.month + 1).padStart(2, '0')}-${String(cell.day).padStart(2, '0')}`;
-                if (onNavigate) {
-                  onNavigate(`/AgendamentoVeiculos/Agendar/Dia?date=${dateStr}`);
-                } else {
-                  setSelectedDay(new Date(cell.year, cell.month, cell.day));
-                  setActiveSubView('day');
-                }
-              }}>
-                <div className="flex items-center justify-between mb-2">
-                  <span className={`text-xs font-black w-8 h-8 flex items-center justify-center rounded-full transition-all ${isToday ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30 scale-110' : isHoliday ? 'text-rose-600 bg-rose-100' : isWeekend ? 'text-indigo-900 bg-indigo-100/50' : 'text-slate-700 bg-slate-100'}`}>{cell.day}</span>
-                  {isHoliday && <span title={holidayName} className="text-rose-500 bg-white rounded-full p-1 shadow-sm"><Gift className="w-3.5 h-3.5" /></span>}
+              <div 
+                key={idx} 
+                className={`group relative min-h-[140px] md:min-h-[165px] flex flex-col p-2.5 rounded-2xl border transition-all duration-300 cursor-pointer shadow-xs hover:shadow-xl hover:z-20 hover:-translate-y-1 ${cellBgClass}`}
+                onClick={() => {
+                  if (onNavigate) {
+                    onNavigate(`/AgendamentoVeiculos/Agendar/Dia?date=${cellDateStr}`);
+                  } else {
+                    setSelectedDay(new Date(cell.year, cell.month, cell.day));
+                    setActiveSubView('day');
+                  }
+                }}
+              >
+                {/* Cell Header */}
+                <div className="flex items-center justify-between mb-2 shrink-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className={`text-xs font-black w-7 h-7 flex items-center justify-center rounded-xl transition-transform group-hover:scale-110 ${
+                      isToday 
+                        ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30' 
+                        : isHoliday 
+                        ? 'text-rose-700 bg-rose-100 font-extrabold' 
+                        : isWeekend 
+                        ? 'text-indigo-900 bg-indigo-100/60' 
+                        : 'text-slate-800 bg-slate-100'
+                    }`}>
+                      {cell.day}
+                    </span>
+                    {isToday && (
+                      <span className="text-[8px] font-black uppercase tracking-widest text-indigo-600 bg-indigo-100/80 px-1.5 py-0.5 rounded-md">Hoje</span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    {isHoliday && (
+                      <span title={holidayName} className="text-rose-500 bg-white rounded-full p-1 shadow-sm">
+                        <Gift className="w-3.5 h-3.5" />
+                      </span>
+                    )}
+                    
+                    {/* Quick Add Plus button on hover */}
+                    {!isDateBeforeToday(dateObj) && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenModal(undefined, new Date(cell.year, cell.month, cell.day, new Date().getHours() + 1, 0));
+                        }}
+                        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-indigo-600 hover:text-white text-indigo-600 rounded-lg transition-all shadow-xs"
+                        title="Agendar neste dia"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col gap-1.5 pr-1 pb-2">
-                  {daySchedules.slice(0, 3).map(s => {
+
+                {/* Day Schedules List - Completely visible with interactive clickable badges */}
+                <div className="flex-1 flex flex-col gap-1.5 overflow-hidden">
+                  {daySchedules.slice(0, 4).map(s => {
                     const v = vehicles.find(veh => veh.id === s.vehicleId);
+                    const driver = persons.find(p => p.id === s.driverId);
                     const cfg = STATUS_MAP[s.status];
+                    const styles = getScheduleStyles(s.status);
+                    const StatusIcon = cfg?.icon || Car;
+
+                    const depTimeStr = new Date(s.departureDateTime).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
                     return (
-                      <div key={s.id} className={`w-full text-left p-1.5 rounded-lg border flex flex-col gap-0.5 shadow-sm transition-all bg-${cfg.color}-50 border-${cfg.color}-200 text-${cfg.color}-900`}>
-                        <span className="text-[9px] font-black uppercase truncate leading-none">{v?.model || 'Veículo'}</span>
-                        <span className="text-[7px] font-mono font-bold opacity-60 leading-none truncate">{new Date(s.departureDateTime).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
-                      </div>
+                      <button
+                        key={s.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setViewingSchedule(s);
+                          setIsViewModalOpen(true);
+                        }}
+                        title={`Clique para visualizar agendamento: ${v?.model || 'Veículo'} (${s.destination}) - Motorista: ${driver?.name || 'Não inf.'}`}
+                        className={`group/item w-full text-left p-1.5 px-2 rounded-xl border flex items-center justify-between gap-1.5 transition-all duration-200 shadow-2xs hover:shadow-md hover:scale-[1.02] cursor-pointer ${styles.cardBg}`}
+                      >
+                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                          <div className={`w-5 h-5 rounded-lg flex items-center justify-center shrink-0 transition-transform group-hover/item:scale-110 ${styles.iconBg}`}>
+                            <StatusIcon className="w-3 h-3" />
+                          </div>
+                          <div className="flex flex-col min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-1">
+                              <span className="text-[9.5px] font-black uppercase truncate leading-tight tracking-tight">
+                                {v?.model || 'Veículo'}
+                              </span>
+                              <span className="text-[8px] font-mono font-bold opacity-80 shrink-0">
+                                {depTimeStr}
+                              </span>
+                            </div>
+                            {s.destination && (
+                              <span className="text-[8px] font-bold opacity-75 truncate leading-none mt-0.5">
+                                📍 {s.destination}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </button>
                     );
                   })}
-                  {daySchedules.length > 3 && <div className="text-[8px] font-black text-slate-400 text-center uppercase tracking-widest">+ {daySchedules.length - 3} itens</div>}
+
+                  {daySchedules.length > 4 && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (onNavigate) {
+                          onNavigate(`/AgendamentoVeiculos/Agendar/Dia?date=${cellDateStr}`);
+                        } else {
+                          setSelectedDay(new Date(cell.year, cell.month, cell.day));
+                          setActiveSubView('day');
+                        }
+                      }}
+                      className="mt-auto py-1 px-2 text-[9px] font-black text-indigo-700 bg-indigo-100/80 hover:bg-indigo-600 hover:text-white rounded-lg text-center uppercase tracking-wider transition-all shadow-xs flex items-center justify-center gap-1 group/more"
+                    >
+                      <span>+ {daySchedules.length - 4} viagens</span>
+                      <ChevronRight className="w-3 h-3 group-hover/more:translate-x-0.5 transition-transform" />
+                    </button>
+                  )}
                 </div>
               </div>
             );

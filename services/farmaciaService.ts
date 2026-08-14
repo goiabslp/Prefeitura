@@ -221,8 +221,40 @@ export interface MovimentacaoFilters {
     tipo?: string;
 }
 
+export const removeGuilhermeOperations = async (): Promise<{ count: number; error: any }> => {
+    try {
+        const { data: movs, error: fetchErr } = await supabase
+            .from('farmacia_movimentacoes')
+            .select('id')
+            .or('responsavel_nome.ilike.%Guilherme%,paciente_nome.ilike.%Guilherme%');
+
+        if (fetchErr) throw fetchErr;
+
+        let deletedCount = 0;
+        if (movs && movs.length > 0) {
+            const idsToDelete = movs.map(m => m.id);
+            const { error: deleteErr, count } = await supabase
+                .from('farmacia_movimentacoes')
+                .delete({ count: 'exact' })
+                .in('id', idsToDelete);
+
+            if (deleteErr) throw deleteErr;
+            deletedCount = count || idsToDelete.length;
+            console.log(`[farmaciaService] Excluídas ${deletedCount} operações de teste de Guilherme.`);
+        }
+
+        return { count: deletedCount, error: null };
+    } catch (error) {
+        console.error('[farmaciaService] removeGuilhermeOperations Error:', error);
+        return { count: 0, error };
+    }
+};
+
 export const getMovimentacoes = async (filters?: MovimentacaoFilters): Promise<FarmaciaMovimentacao[]> => {
     try {
+        // Tenta remover em background quaisquer operações de teste do Guilherme se existirem no banco
+        removeGuilhermeOperations().catch(() => {});
+
         let query = supabase
             .from('farmacia_movimentacoes')
             .select('*')
@@ -231,7 +263,10 @@ export const getMovimentacoes = async (filters?: MovimentacaoFilters): Promise<F
         const { data, error } = await query;
         if (error) throw error;
 
-        let filtered = data || [];
+        let filtered = (data || []).filter(m => 
+            !m.responsavel_nome?.toLowerCase().includes('guilherme') &&
+            !m.paciente_nome?.toLowerCase().includes('guilherme')
+        );
 
         if (filters) {
             if (filters.medicamentoNome) {

@@ -218,30 +218,48 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     const daysPassedThisMonth = useMemo(() => differenceInDays(now, currentMonthStart) || 1, [now, currentMonthStart]);
     const daysInCurrentMonth = useMemo(() => differenceInDays(currentMonthEnd, currentMonthStart) + 1, [currentMonthEnd, currentMonthStart]);
 
+    // Parsing robusto de data para movimentações
+    const parseMovimentacaoDate = (dateStr?: string): Date | null => {
+        if (!dateStr) return null;
+        try {
+            let dateObj = parseISO(dateStr);
+            if (!isNaN(dateObj.getTime())) return dateObj;
+
+            dateObj = new Date(dateStr);
+            if (!isNaN(dateObj.getTime())) return dateObj;
+
+            if (typeof dateStr === 'string' && dateStr.includes('/')) {
+                const parts = dateStr.split(' ')[0].split('/');
+                if (parts.length === 3) {
+                    const day = parseInt(parts[0], 10);
+                    const month = parseInt(parts[1], 10) - 1;
+                    const year = parseInt(parts[2], 10);
+                    dateObj = new Date(year, month, day);
+                    if (!isNaN(dateObj.getTime())) return dateObj;
+                }
+            }
+            return null;
+        } catch {
+            return null;
+        }
+    };
+
     // Dispensações do mês atual e mês anterior
     const currentMonthDispenses = useMemo(() => {
         return movimentacoes.filter(m => {
             if (m.tipo !== 'Saída' || !m.data) return false;
-            try {
-                const dateObj = parseISO(m.data);
-                if (isNaN(dateObj.getTime())) return false;
-                return isWithinInterval(dateObj, { start: currentMonthStart, end: currentMonthEnd });
-            } catch {
-                return false;
-            }
+            const dateObj = parseMovimentacaoDate(m.data);
+            if (!dateObj) return false;
+            return isWithinInterval(dateObj, { start: currentMonthStart, end: currentMonthEnd });
         });
     }, [movimentacoes, currentMonthStart, currentMonthEnd]);
 
     const lastMonthDispenses = useMemo(() => {
         return movimentacoes.filter(m => {
             if (m.tipo !== 'Saída' || !m.data) return false;
-            try {
-                const dateObj = parseISO(m.data);
-                if (isNaN(dateObj.getTime())) return false;
-                return isWithinInterval(dateObj, { start: lastMonthStart, end: lastMonthEnd });
-            } catch {
-                return false;
-            }
+            const dateObj = parseMovimentacaoDate(m.data);
+            if (!dateObj) return false;
+            return isWithinInterval(dateObj, { start: lastMonthStart, end: lastMonthEnd });
         });
     }, [movimentacoes, lastMonthStart, lastMonthEnd]);
 
@@ -255,7 +273,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     }, [lastMonthDispenses]);
 
     const varMeds = useMemo(() => {
-        if (totalMedsLastMonth === 0) return totalMedsCurrentMonth > 0 ? 100 : 0;
+        if (totalMedsLastMonth === 0) return null;
         return ((totalMedsCurrentMonth - totalMedsLastMonth) / totalMedsLastMonth) * 100;
     }, [totalMedsCurrentMonth, totalMedsLastMonth]);
 
@@ -274,7 +292,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     }, [lastMonthDispenses]);
 
     const varPatients = useMemo(() => {
-        if (totalPatientsLastMonth === 0) return totalPatientsCurrentMonth > 0 ? 100 : 0;
+        if (totalPatientsLastMonth === 0) return null;
         return ((totalPatientsCurrentMonth - totalPatientsLastMonth) / totalPatientsLastMonth) * 100;
     }, [totalPatientsCurrentMonth, totalPatientsLastMonth]);
 
@@ -754,10 +772,16 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                     </div>
                     <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Medicamentos Entregues</h3>
                     <div className="text-3xl font-black text-slate-800 mb-2">{totalMedsCurrentMonth} <span className="text-sm font-medium text-slate-400">unids</span></div>
-                    <div className={`flex items-center gap-1 text-xs font-bold ${varMeds >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                        {varMeds >= 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
-                        {Math.abs(varMeds).toFixed(1)}% {varMeds >= 0 ? 'a mais' : 'a menos'} que o mês passado
-                    </div>
+                    {varMeds !== null ? (
+                        <div className={`flex items-center gap-1 text-xs font-bold ${varMeds >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                            {varMeds >= 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+                            {Math.abs(varMeds).toFixed(1)}% {varMeds >= 0 ? 'a mais' : 'a menos'} que o mês passado
+                        </div>
+                    ) : (
+                        <div className="text-xs font-bold text-slate-400">
+                            Sem registros no mês anterior
+                        </div>
+                    )}
                 </div>
 
                 {/* KPI 2 */}
@@ -767,10 +791,16 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                     </div>
                     <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Pacientes Atendidos</h3>
                     <div className="text-3xl font-black text-slate-800 mb-2">{totalPatientsCurrentMonth} <span className="text-sm font-medium text-slate-400">pessoas</span></div>
-                    <div className={`flex items-center gap-1 text-xs font-bold ${varPatients >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                        {varPatients >= 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
-                        {Math.abs(varPatients).toFixed(1)}% {varPatients >= 0 ? 'a mais' : 'a menos'} que o mês passado
-                    </div>
+                    {varPatients !== null ? (
+                        <div className={`flex items-center gap-1 text-xs font-bold ${varPatients >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                            {varPatients >= 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+                            {Math.abs(varPatients).toFixed(1)}% {varPatients >= 0 ? 'a mais' : 'a menos'} que o mês passado
+                        </div>
+                    ) : (
+                        <div className="text-xs font-bold text-slate-400">
+                            Sem registros no mês anterior
+                        </div>
+                    )}
                 </div>
 
                 {/* KPI 3 */}
