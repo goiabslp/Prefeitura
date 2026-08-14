@@ -1271,7 +1271,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                             </div>
                                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
                                                 <div>
-                                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5 ml-1">Número do SUS</label>
+                                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5 ml-1">Número do SUS (Opcional)</label>
                                                     <input
                                                         type="text"
                                                         className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all text-xs font-bold tracking-wider shadow-inner"
@@ -2479,7 +2479,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                             {/* Número do SUS + Rua */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1 ml-1">Número do SUS</label>
+                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1 ml-1">Número do SUS (Opcional)</label>
                                     <input
                                         type="text"
                                         className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-3 px-3.5 text-xs text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all font-bold tracking-wider shadow-inner"

@@ -56,16 +56,28 @@ export const getPacienteByCpf = async (cpf: string): Promise<ConsultaPaciente | 
 
 export const createPaciente = async (paciente: Omit<ConsultaPaciente, 'id' | 'created_at' | 'updated_at'>): Promise<ConsultaPaciente | null> => {
     try {
-        const cleanPaciente = {
+        const cleanPaciente: any = {
             ...paciente,
             cpf: paciente.cpf.replace(/\D/g, '') // strip mask
         };
 
-        const { data, error } = await supabase
+        let { data, error } = await supabase
             .from('consultas_pacientes')
             .insert([cleanPaciente])
             .select()
             .single();
+
+        // Se a coluna sus_number ainda não existir na tabela Supabase (erro PGRST204), tenta inserir sem esse campo
+        if (error && error.code === 'PGRST204' && (error.message?.includes('sus_number') || error.message?.includes('column'))) {
+            const { sus_number, ...pacienteWithoutSus } = cleanPaciente;
+            const retryRes = await supabase
+                .from('consultas_pacientes')
+                .insert([pacienteWithoutSus])
+                .select()
+                .single();
+            data = retryRes.data;
+            error = retryRes.error;
+        }
 
         if (error) throw error;
         return data;
@@ -82,17 +94,30 @@ export const createPaciente = async (paciente: Omit<ConsultaPaciente, 'id' | 'cr
 
 export const updatePaciente = async (id: string, updates: Partial<ConsultaPaciente>): Promise<ConsultaPaciente | null> => {
     try {
-        const cleanUpdates = { ...updates };
+        const cleanUpdates: any = { ...updates };
         if (updates.cpf) {
             cleanUpdates.cpf = updates.cpf.replace(/\D/g, '');
         }
 
-        const { data, error } = await supabase
+        let { data, error } = await supabase
             .from('consultas_pacientes')
             .update(cleanUpdates)
             .eq('id', id)
             .select()
             .single();
+
+        // Se a coluna sus_number ainda não existir na tabela Supabase (erro PGRST204), tenta atualizar sem esse campo
+        if (error && error.code === 'PGRST204' && (error.message?.includes('sus_number') || error.message?.includes('column'))) {
+            const { sus_number, ...updatesWithoutSus } = cleanUpdates;
+            const retryRes = await supabase
+                .from('consultas_pacientes')
+                .update(updatesWithoutSus)
+                .eq('id', id)
+                .select()
+                .single();
+            data = retryRes.data;
+            error = retryRes.error;
+        }
 
         if (error) throw error;
         return data;

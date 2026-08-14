@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS public.consultas_pacientes (
     neighborhood TEXT,
     street TEXT,
     city TEXT DEFAULT 'SÃO JOSÉ DO GOIABAL -MG',
+    sus_number TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );

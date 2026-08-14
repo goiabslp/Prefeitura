@@ -29,6 +29,7 @@ export const PacientesTab: React.FC = () => {
     const [patNeighborhood, setPatNeighborhood] = useState('');
     const [patStreet, setPatStreet] = useState('');
     const [patCity, setPatCity] = useState('SÃO JOSÉ DO GOIABAL -MG');
+    const [patSusNumber, setPatSusNumber] = useState('');
     const [patError, setPatError] = useState('');
 
     const fetchPatients = async () => {
@@ -120,7 +121,8 @@ export const PacientesTab: React.FC = () => {
                     phone: patPhone.trim() || null,
                     neighborhood: patNeighborhood.trim() || null,
                     street: patStreet.trim() || null,
-                    city: patCity.trim() || null
+                    city: patCity.trim() || null,
+                    sus_number: patSusNumber.trim() || null
                 });
             } else {
                 await db.createPaciente({
@@ -131,7 +133,8 @@ export const PacientesTab: React.FC = () => {
                     phone: patPhone.trim() || null,
                     neighborhood: patNeighborhood.trim() || null,
                     street: patStreet.trim() || null,
-                    city: patCity.trim() || null
+                    city: patCity.trim() || null,
+                    sus_number: patSusNumber.trim() || null
                 });
             }
             setIsPatientModalOpen(false);
@@ -183,6 +186,7 @@ export const PacientesTab: React.FC = () => {
             setPatNeighborhood(patient.neighborhood || '');
             setPatStreet(patient.street || '');
             setPatCity(patient.city || 'SÃO JOSÉ DO GOIABAL -MG');
+            setPatSusNumber(patient.sus_number || '');
         } else {
             setPatName('');
             setPatNickname('');
@@ -192,6 +196,7 @@ export const PacientesTab: React.FC = () => {
             setPatNeighborhood('');
             setPatStreet('');
             setPatCity('SÃO JOSÉ DO GOIABAL -MG');
+            setPatSusNumber('');
         }
         setPatError('');
         setIsPatientModalOpen(true);
@@ -199,7 +204,8 @@ export const PacientesTab: React.FC = () => {
 
     const filteredPatients = patients.filter(p => 
         p.name.toLowerCase().includes(patientSearch.toLowerCase()) || 
-        p.cpf.includes(patientSearch.replace(/\D/g, ''))
+        p.cpf.includes(patientSearch.replace(/\D/g, '')) ||
+        (p.sus_number || '').includes(patientSearch.replace(/\D/g, ''))
     );
 
     return (
@@ -380,6 +386,16 @@ export const PacientesTab: React.FC = () => {
                                         required
                                     />
                                 </div>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Número do SUS (Opcional)</label>
+                                <input
+                                    type="text"
+                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none transition-all text-xs font-bold tracking-wider"
+                                    placeholder="000 0000 0000 0000"
+                                    value={patSusNumber}
+                                    onChange={(e) => setPatSusNumber(e.target.value.replace(/\D/g, '').slice(0, 15))}
+                                />
                             </div>
                             <div className="pt-4 border-t border-slate-50 flex justify-end gap-3 shrink-0">
                                 <button

@@ -885,7 +885,7 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                             {/* Linha 3: Número do SUS e Rua */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 <div>
-                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">Número do SUS</label>
+                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">Número do SUS (Opcional)</label>
                                     <input
                                         type="text"
                                         className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 px-3.5 text-xs text-slate-900 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-bold tracking-wider shadow-inner"
