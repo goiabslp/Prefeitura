@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { User, ConsultaPaciente, ConsultaProcedimento, AppState, ConsultaAgendamento, ConsultaVaga } from '../../types';
+import { User, ConsultaPaciente, ConsultaProcedimento, AppState, ConsultaAgendamento, ConsultaVaga, AGENTES_DE_SAUDE } from '../../types';
 import { 
     ArrowLeft, 
     UserPlus, 
@@ -22,7 +22,8 @@ import {
     ChevronLeft,
     ChevronRight,
     Sparkles,
-    Info
+    Info,
+    ChevronDown
 } from 'lucide-react';
 import * as db from '../../services/consultasService';
 import { jsPDF } from 'jspdf';
@@ -103,6 +104,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
     const [newPatientStreet, setNewPatientStreet] = useState('');
     const [newPatientCity, setNewPatientCity] = useState('SÃO JOSÉ DO GOIABAL -MG');
     const [newPatientSusNumber, setNewPatientSusNumber] = useState('');
+    const [newPatientAgenteSaude, setNewPatientAgenteSaude] = useState('');
     const [cpfError, setCpfError] = useState('');
     const [showCpfNotFoundModal, setShowCpfNotFoundModal] = useState(false);
     const [unregisteredCpf, setUnregisteredCpf] = useState('');
@@ -416,7 +418,8 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                 neighborhood: newPatientNeighborhood.trim() || null,
                 street: newPatientStreet.trim() || null,
                 city: newPatientCity.trim() || null,
-                sus_number: newPatientSusNumber.trim() || null
+                sus_number: newPatientSusNumber.trim() || null,
+                agente_saude: newPatientAgenteSaude.trim() || null
             });
 
             if (newPatient) {
@@ -432,6 +435,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                 setNewPatientStreet('');
                 setNewPatientCity('SÃO JOSÉ DO GOIABAL -MG');
                 setNewPatientSusNumber('');
+                setNewPatientAgenteSaude('');
                 setCpfError('');
                 setPatientQuery('');
                 onNavigate('consultas:novo-agendamento-paciente');
@@ -1059,6 +1063,10 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                             <span className="block text-[8.5px] font-black text-slate-400 uppercase tracking-wider mb-0.5">Número do SUS</span>
                                             <span className="text-slate-800 font-bold block text-xs">{selectedPatient.sus_number || 'Não informado'}</span>
                                         </div>
+                                        <div>
+                                            <span className="block text-[8.5px] font-black text-slate-400 uppercase tracking-wider mb-0.5">Agente de Saúde</span>
+                                            <span className="text-slate-800 font-bold uppercase block text-xs">{selectedPatient.agente_saude || 'Não informado'}</span>
+                                        </div>
                                         <div className="sm:col-span-1">
                                             <span className="block text-[8.5px] font-black text-slate-400 uppercase tracking-wider mb-0.5">Endereço (Rua / Número)</span>
                                             <span className="text-slate-800 font-bold uppercase block text-xs">{selectedPatient.street || 'Não informado'}</span>
@@ -1269,7 +1277,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                                     />
                                                 </div>
                                             </div>
-                                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+                                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-5">
                                                 <div>
                                                     <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5 ml-1">Número do SUS (Opcional)</label>
                                                     <input
@@ -1279,6 +1287,24 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                                         value={newPatientSusNumber}
                                                         onChange={(e) => setNewPatientSusNumber(e.target.value.replace(/\D/g, '').slice(0, 15))}
                                                     />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5 ml-1">Agente de Saúde (ACS)</label>
+                                                    <div className="relative">
+                                                        <select
+                                                            className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 pr-8 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all text-xs font-semibold uppercase cursor-pointer appearance-none shadow-inner"
+                                                            value={newPatientAgenteSaude}
+                                                            onChange={(e) => setNewPatientAgenteSaude(e.target.value)}
+                                                        >
+                                                            <option value="">-- SELECIONE O AGENTE DE SAÚDE (OPCIONAL) --</option>
+                                                            {AGENTES_DE_SAUDE.map((agente) => (
+                                                                <option key={agente} value={agente.toUpperCase()}>
+                                                                    {agente.toUpperCase()}
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                        <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                                    </div>
                                                 </div>
                                                 <div>
                                                     <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5 ml-1">Rua</label>
@@ -2522,6 +2548,26 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                         onChange={(e) => setNewPatientCity(e.target.value.toUpperCase())}
                                         required
                                     />
+                                </div>
+                            </div>
+
+                            {/* Agente de Saúde */}
+                            <div>
+                                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1 ml-1">Agente de Saúde (ACS)</label>
+                                <div className="relative">
+                                    <select
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-3 px-3.5 pr-8 text-xs text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all font-semibold uppercase shadow-inner cursor-pointer appearance-none"
+                                        value={newPatientAgenteSaude}
+                                        onChange={(e) => setNewPatientAgenteSaude(e.target.value)}
+                                    >
+                                        <option value="">-- SELECIONE O AGENTE DE SAÚDE (OPCIONAL) --</option>
+                                        {AGENTES_DE_SAUDE.map((agente) => (
+                                            <option key={agente} value={agente.toUpperCase()}>
+                                                {agente.toUpperCase()}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                                 </div>
                             </div>
 

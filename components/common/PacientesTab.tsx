@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { ConsultaPaciente, ConsultaAgendamento } from '../../types';
-import { Search, Plus, Edit2, Trash2, X, AlertTriangle, Loader2 } from 'lucide-react';
+import { ConsultaPaciente, ConsultaAgendamento, AGENTES_DE_SAUDE } from '../../types';
+import { Search, Plus, Edit2, Trash2, X, AlertTriangle, Loader2, ChevronDown } from 'lucide-react';
 import * as db from '../../services/consultasService';
 
 export const formatPatientName = (patient?: ConsultaPaciente | null) => {
@@ -30,6 +30,7 @@ export const PacientesTab: React.FC = () => {
     const [patStreet, setPatStreet] = useState('');
     const [patCity, setPatCity] = useState('SÃO JOSÉ DO GOIABAL -MG');
     const [patSusNumber, setPatSusNumber] = useState('');
+    const [patAgenteSaude, setPatAgenteSaude] = useState('');
     const [patError, setPatError] = useState('');
 
     const fetchPatients = async () => {
@@ -122,7 +123,8 @@ export const PacientesTab: React.FC = () => {
                     neighborhood: patNeighborhood.trim() || null,
                     street: patStreet.trim() || null,
                     city: patCity.trim() || null,
-                    sus_number: patSusNumber.trim() || null
+                    sus_number: patSusNumber.trim() || null,
+                    agente_saude: patAgenteSaude.trim() || null
                 });
             } else {
                 await db.createPaciente({
@@ -134,7 +136,8 @@ export const PacientesTab: React.FC = () => {
                     neighborhood: patNeighborhood.trim() || null,
                     street: patStreet.trim() || null,
                     city: patCity.trim() || null,
-                    sus_number: patSusNumber.trim() || null
+                    sus_number: patSusNumber.trim() || null,
+                    agente_saude: patAgenteSaude.trim() || null
                 });
             }
             setIsPatientModalOpen(false);
@@ -187,6 +190,7 @@ export const PacientesTab: React.FC = () => {
             setPatStreet(patient.street || '');
             setPatCity(patient.city || 'SÃO JOSÉ DO GOIABAL -MG');
             setPatSusNumber(patient.sus_number || '');
+            setPatAgenteSaude(patient.agente_saude || '');
         } else {
             setPatName('');
             setPatNickname('');
@@ -197,6 +201,7 @@ export const PacientesTab: React.FC = () => {
             setPatStreet('');
             setPatCity('SÃO JOSÉ DO GOIABAL -MG');
             setPatSusNumber('');
+            setPatAgenteSaude('');
         }
         setPatError('');
         setIsPatientModalOpen(true);
@@ -205,7 +210,8 @@ export const PacientesTab: React.FC = () => {
     const filteredPatients = patients.filter(p => 
         p.name.toLowerCase().includes(patientSearch.toLowerCase()) || 
         p.cpf.includes(patientSearch.replace(/\D/g, '')) ||
-        (p.sus_number || '').includes(patientSearch.replace(/\D/g, ''))
+        (p.sus_number || '').includes(patientSearch.replace(/\D/g, '')) ||
+        (p.agente_saude || '').toLowerCase().includes(patientSearch.toLowerCase())
     );
 
     return (
@@ -396,6 +402,24 @@ export const PacientesTab: React.FC = () => {
                                     value={patSusNumber}
                                     onChange={(e) => setPatSusNumber(e.target.value.replace(/\D/g, '').slice(0, 15))}
                                 />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Agente de Saúde (ACS)</label>
+                                <div className="relative">
+                                    <select
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 pr-8 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none transition-all text-xs font-semibold uppercase cursor-pointer appearance-none"
+                                        value={patAgenteSaude}
+                                        onChange={(e) => setPatAgenteSaude(e.target.value)}
+                                    >
+                                        <option value="">-- SELECIONE O AGENTE DE SAÚDE (OPCIONAL) --</option>
+                                        {AGENTES_DE_SAUDE.map((agente) => (
+                                            <option key={agente} value={agente.toUpperCase()}>
+                                                {agente.toUpperCase()}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                </div>
                             </div>
                             <div className="pt-4 border-t border-slate-50 flex justify-end gap-3 shrink-0">
                                 <button

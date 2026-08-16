@@ -230,6 +230,10 @@ export interface FarmaciaMovimentacao {
   validade: string;
   paciente_nome?: string;
   paciente_cpf?: string;
+  medico_crm?: string;
+  medico_uf?: string;
+  medico_nome?: string;
+  medico_consulta_data?: string;
   responsavel_nome: string;
   responsavel_id?: string;
   data: string;
@@ -566,9 +570,28 @@ export interface ConsultaPaciente {
   street?: string;
   city?: string;
   sus_number?: string;
+  agente_saude?: string;
   created_at?: string;
   updated_at?: string;
 }
+
+export const AGENTES_DE_SAUDE = [
+  'Alexandra Martins Gandra',
+  'Amanda Beatriz Ferreira',
+  'Claudia A Da Silva Souza',
+  'Debhora Aparecida Mendes',
+  'Ermelinda Solange De Oliveira',
+  'Luciana E Martins Folgado',
+  'Marco Tulio De Oliveira',
+  'Maria Aparecida Vitor Profeta',
+  'Maria Jose Ferreira',
+  'Reginaldo Da Silva Marques',
+  'Rosimar A De Andrade Araujo',
+  'Rosimary Magalhaes Silva',
+  'Rosimeire De Castro',
+  'Rosimere Vieira Santos',
+  'Silvana Maria A De P Guilherme',
+];
 
 export interface ConsultaProcedimento {
   id: string;

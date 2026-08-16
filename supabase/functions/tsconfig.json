@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "target": "esnext",
+    "module": "esnext",
+    "lib": ["esnext", "dom"],
+    "skipLibCheck": true,
+    "allowJs": true,
+    "noImplicitAny": false,
+    "types": []
+  },
+  "include": ["./**/*.ts"]
+}

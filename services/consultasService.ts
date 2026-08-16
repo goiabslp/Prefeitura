@@ -67,12 +67,12 @@ export const createPaciente = async (paciente: Omit<ConsultaPaciente, 'id' | 'cr
             .select()
             .single();
 
-        // Se a coluna sus_number ainda não existir na tabela Supabase (erro PGRST204), tenta inserir sem esse campo
-        if (error && error.code === 'PGRST204' && (error.message?.includes('sus_number') || error.message?.includes('column'))) {
-            const { sus_number, ...pacienteWithoutSus } = cleanPaciente;
+        // Se as colunas novas ainda não existirem na tabela Supabase (erro PGRST204), tenta inserir sem esses campos
+        if (error && error.code === 'PGRST204' && (error.message?.includes('agente_saude') || error.message?.includes('sus_number') || error.message?.includes('column'))) {
+            const { agente_saude, sus_number, ...pacienteWithoutNewCols } = cleanPaciente;
             const retryRes = await supabase
                 .from('consultas_pacientes')
-                .insert([pacienteWithoutSus])
+                .insert([pacienteWithoutNewCols])
                 .select()
                 .single();
             data = retryRes.data;
@@ -106,12 +106,12 @@ export const updatePaciente = async (id: string, updates: Partial<ConsultaPacien
             .select()
             .single();
 
-        // Se a coluna sus_number ainda não existir na tabela Supabase (erro PGRST204), tenta atualizar sem esse campo
-        if (error && error.code === 'PGRST204' && (error.message?.includes('sus_number') || error.message?.includes('column'))) {
-            const { sus_number, ...updatesWithoutSus } = cleanUpdates;
+        // Se as colunas novas ainda não existirem na tabela Supabase (erro PGRST204), tenta atualizar sem esses campos
+        if (error && error.code === 'PGRST204' && (error.message?.includes('agente_saude') || error.message?.includes('sus_number') || error.message?.includes('column'))) {
+            const { agente_saude, sus_number, ...updatesWithoutNewCols } = cleanUpdates;
             const retryRes = await supabase
                 .from('consultas_pacientes')
-                .update(updatesWithoutSus)
+                .update(updatesWithoutNewCols)
                 .eq('id', id)
                 .select()
                 .single();

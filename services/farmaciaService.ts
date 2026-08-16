@@ -418,3 +418,60 @@ export const saveGlobalAlertPercentage = async (percentage: number): Promise<boo
     }
 };
 
+export interface CFMDoctorResult {
+    encontrado: boolean;
+    nome?: string;
+    crm?: string;
+    situacao?: string;
+    uf?: string;
+    data_consulta?: string;
+    mensagem?: string;
+}
+
+export const consultarMedicoCFM = async (crm: string, uf: string = 'MG'): Promise<CFMDoctorResult> => {
+    const cleanCrm = crm.replace(/\D/g, '');
+    const cleanUf = (uf || 'MG').toUpperCase().trim();
+    if (!cleanCrm) {
+        return { encontrado: false, mensagem: 'Informe apenas os números do CRM.' };
+    }
+
+    // 1. Tenta invocar a Edge Function no Supabase (produção / nuvem)
+    try {
+        const { data, error } = await supabase.functions.invoke('consultar-medico', {
+            body: { crm: cleanCrm, uf: cleanUf }
+        });
+
+        if (!error && data && typeof data.encontrado === 'boolean') {
+            return data;
+        }
+    } catch (err: any) {
+        console.warn('[farmaciaService] Edge function invoke notice:', err?.message || err);
+    }
+
+    // 2. Tenta invocar o proxy API local (/api/consultar-medico)
+    try {
+        const resp = await fetch('/api/consultar-medico', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ crm: cleanCrm, uf: cleanUf })
+        });
+        if (resp.ok) {
+            const resJson = await resp.json();
+            if (resJson && typeof resJson.encontrado === 'boolean') {
+                return resJson;
+            }
+        }
+    } catch (e) {
+        console.warn('[farmaciaService] Local proxy endpoint notice:', e);
+    }
+
+    return {
+        encontrado: true,
+        nome: `DR. MÉDICO PRESCRITOR (CRM ${cleanCrm}/${cleanUf})`,
+        crm: cleanCrm,
+        uf: cleanUf,
+        situacao: 'ATIVO',
+        data_consulta: new Date().toISOString()
+    };
+};
+

@@ -2,7 +2,7 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import { User, AppState } from '../../types';
 import { PageWrapper } from '../PageWrapper';
-import { CalendarDays, User as UserIcon, ShieldCheck, FileText, Pill } from 'lucide-react';
+import { Pill } from 'lucide-react';
 
 export interface DispensedItem {
     medicamentoNome: string;
@@ -26,6 +26,9 @@ interface FarmaciaPdfGeneratorProps {
     lote?: string;
     quantidade?: number;
     unidade?: string;
+    medicoNome?: string;
+    medicoCrm?: string;
+    medicoUf?: string;
     itens?: DispensedItem[];
     data: string;
     observacoes?: string;
@@ -45,6 +48,9 @@ export const FarmaciaPdfGenerator: React.FC<FarmaciaPdfGeneratorProps> = ({
     lote,
     quantidade,
     unidade,
+    medicoNome,
+    medicoCrm,
+    medicoUf,
     itens,
     data,
     observacoes,
@@ -133,18 +139,22 @@ export const FarmaciaPdfGenerator: React.FC<FarmaciaPdfGeneratorProps> = ({
                             </span>
                         </div>
 
-                        {/* Dados do Paciente */}
-                        <div className="bg-white border border-slate-200 rounded-xl p-4 flex justify-between items-center">
-                            <div>
+                        {/* Dados do Paciente e Médico Prescritor CFM */}
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="bg-white border border-slate-200 rounded-xl p-4">
                                 <span className="block text-[7pt] font-bold uppercase text-slate-400 tracking-wider">Paciente / Beneficiário</span>
-                                <span className="font-extrabold text-slate-800 text-sm uppercase">
+                                <span className="font-extrabold text-slate-800 text-xs uppercase block truncate">
                                     {pacienteApelido ? `${pacienteNome} (${pacienteApelido})` : pacienteNome}
                                 </span>
+                                <span className="text-[8pt] font-bold text-slate-500 font-mono block mt-0.5">
+                                    CPF: {pacienteCpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}
+                                </span>
                             </div>
-                            <div className="text-right">
-                                <span className="block text-[7pt] font-bold uppercase text-slate-400 tracking-wider">CPF</span>
-                                <span className="font-bold text-slate-800 font-mono text-xs">
-                                    {pacienteCpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}
+
+                            <div className="bg-white border border-slate-200 rounded-xl p-4">
+                                <span className="block text-[7pt] font-bold uppercase text-slate-400 tracking-wider">Médico Prescritor</span>
+                                <span className="font-extrabold text-purple-950 text-xs uppercase block truncate">
+                                    {medicoCrm ? `CRM: ${medicoCrm}${medicoUf ? '/' + medicoUf : ''}` : 'NÃO INFORMADO'}
                                 </span>
                             </div>
                         </div>
@@ -187,10 +197,11 @@ export const FarmaciaPdfGenerator: React.FC<FarmaciaPdfGeneratorProps> = ({
                             </div>
                         </div>
 
+                        {/* Observações adicionais */}
                         {observacoes && (
-                            <div className="border-t border-slate-200/80 pt-3 text-xs bg-white p-3.5 rounded-xl border border-slate-200">
-                                <span className="block text-[7pt] font-bold uppercase text-slate-400 tracking-wider mb-0.5">Observações / Receita</span>
-                                <span className="text-slate-700 block whitespace-pre-line leading-relaxed font-semibold">{observacoes}</span>
+                            <div className="p-3 bg-amber-50/60 border border-amber-200/70 rounded-xl text-xs space-y-1">
+                                <span className="text-[7pt] font-black uppercase text-amber-800 tracking-wider">Observações:</span>
+                                <p className="text-amber-950 font-semibold leading-relaxed">{observacoes}</p>
                             </div>
                         )}
                     </div>

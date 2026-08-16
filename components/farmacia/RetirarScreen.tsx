@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { User, FarmaciaMedicamento, FarmaciaMovimentacao, ConsultaPaciente, AppState } from '../../types';
-import { ArrowLeft, User as UserIcon, Calendar, ClipboardList, CheckCircle2, AlertTriangle, Search, Loader2, History, X, FileDown, Pill, ShieldCheck, FileText, Plus, Trash2, Minus } from 'lucide-react';
+import { User, FarmaciaMedicamento, FarmaciaMovimentacao, ConsultaPaciente, AppState, AGENTES_DE_SAUDE } from '../../types';
+import { ArrowLeft, User as UserIcon, Calendar, ClipboardList, CheckCircle2, AlertTriangle, Search, Loader2, History, X, FileDown, Pill, ShieldCheck, FileText, Plus, Trash2, Minus, UserPlus, ChevronDown } from 'lucide-react';
 import * as db from '../../services/farmaciaService';
 import { getPacientes, createPaciente } from '../../services/consultasService';
 import { jsPDF } from 'jspdf';
@@ -50,6 +50,10 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
     const [withdrawalDate, setWithdrawalDate] = useState(getFormattedDateTimeLocal());
     const [observacoes, setObservacoes] = useState('');
 
+    // CRM do Médico
+    const [medicoCrm, setMedicoCrm] = useState('');
+    const [medicoUf, setMedicoUf] = useState('MG');
+
     // Autocomplete dropdown UI states
     const [showPatientDropdown, setShowPatientDropdown] = useState(false);
     const [patientSearchQuery, setPatientSearchQuery] = useState('');
@@ -67,6 +71,7 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
     const [newPatientStreet, setNewPatientStreet] = useState('');
     const [newPatientCity, setNewPatientCity] = useState('SÃO JOSÉ DO GOIABAL -MG');
     const [newPatientSusNumber, setNewPatientSusNumber] = useState('');
+    const [newPatientAgenteSaude, setNewPatientAgenteSaude] = useState('');
     const [registering, setRegistering] = useState(false);
 
     // Success notification modal state
@@ -81,6 +86,34 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
     const [isMedModalOpen, setIsMedModalOpen] = useState(false);
     const [medModalSearch, setMedModalSearch] = useState('');
     const [medModalCategory, setMedModalCategory] = useState<'TODOS' | 'CBAF' | 'CESAF' | 'CEAF'>('TODOS');
+    const [qtyModalMed, setQtyModalMed] = useState<FarmaciaMedicamento | null>(null);
+    const [qtyInput, setQtyInput] = useState<number>(1);
+
+    const handleOpenQtyModal = (med: FarmaciaMedicamento) => {
+        const existing = selectedItems.find(si => si.med.id === med.id);
+        setQtyModalMed(med);
+        setQtyInput(existing ? existing.quantity : 1);
+    };
+
+    const handleConfirmQuantity = () => {
+        if (!qtyModalMed) return;
+        const finalQty = Math.max(0, Math.min(qtyModalMed.quantidade, qtyInput));
+        if (finalQty <= 0) {
+            handleRemoveItem(qtyModalMed.id);
+        } else {
+            setSelectedItems(prev => {
+                const existingIndex = prev.findIndex(item => item.med.id === qtyModalMed.id);
+                if (existingIndex >= 0) {
+                    const updated = [...prev];
+                    updated[existingIndex] = { ...updated[existingIndex], quantity: finalQty };
+                    return updated;
+                } else {
+                    return [...prev, { med: qtyModalMed, quantity: finalQty }];
+                }
+            });
+        }
+        setQtyModalMed(null);
+    };
 
     // Load data
     const loadData = async (silent = false) => {
@@ -123,13 +156,15 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
         return () => clearInterval(interval);
     }, []);
 
-    // Filter patients suggestion list
+    // Filter patients suggestion list (por nome, CPF ou Cartão SUS)
     const patientSuggestions = useMemo(() => {
         if (!patientSearchQuery) return [];
         const query = patientSearchQuery.toLowerCase();
+        const cleanQuery = query.replace(/\D/g, '');
         return pacientes.filter(p => 
             p.name.toLowerCase().includes(query) || 
-            p.cpf.includes(query.replace(/\D/g, ''))
+            (p.cpf && p.cpf.replace(/\D/g, '').includes(cleanQuery)) ||
+            (p.sus_number && p.sus_number.replace(/\D/g, '').includes(cleanQuery))
         ).slice(0, 5);
     }, [pacientes, patientSearchQuery]);
 
@@ -164,8 +199,10 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
         setSelectedItems(prev => prev.filter(item => item.med.id !== medId));
     };
 
-    // Filtered list of medicines for select modal
+    // Filtered list of medicines for select modal (apenas exibidos mediante busca)
     const modalMedOptions = useMemo(() => {
+        if (!medModalSearch.trim()) return [];
+
         let list = [...medicamentos];
         
         // Filter by category tab
@@ -173,17 +210,20 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
             list = list.filter(m => m.categoria === medModalCategory);
         }
         
-        // Filter by search query
-        if (medModalSearch.trim()) {
-            const query = medModalSearch.toLowerCase();
-            list = list.filter(m => 
-                m.nome.toLowerCase().includes(query) ||
-                (m.principio_ativo || '').toLowerCase().includes(query) ||
-                m.lote.toLowerCase().includes(query)
-            );
-        }
+        // Filter by search query (utiliza startsWith igual aos outros campos de busca)
+        const query = medModalSearch.toLowerCase().trim();
+        const matchAtStart = (str: string | undefined | null) => {
+            if (!str) return false;
+            return str.toLowerCase().startsWith(query);
+        };
+
+        list = list.filter(m => 
+            matchAtStart(m.nome) ||
+            matchAtStart(m.principio_ativo) ||
+            matchAtStart(m.lote)
+        );
         
-        // Agrupar e manter apenas o lote com vencimento mais antigo (menor validade) se busca vazia
+        // Agrupar e manter apenas o lote com vencimento mais antigo (menor validade)
         const grouped = new Map<string, typeof list[0]>();
         
         list.forEach(m => {
@@ -241,20 +281,37 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
         });
     }, [recentWithdrawals, patientName, patientCpf]);
 
-    // Mask CPF input helper
+    // Mask CPF / Cartão SUS input helper
     const handleCpfChange = (val: string) => {
         let clean = val.replace(/\D/g, '');
-        if (clean.length > 11) clean = clean.slice(0, 11);
+        if (clean.length > 15) clean = clean.slice(0, 15);
 
-        let formatted = '';
-        if (clean.length > 0) formatted += clean.slice(0, 3);
-        if (clean.length > 3) formatted += '.' + clean.slice(3, 6);
-        if (clean.length > 6) formatted += '.' + clean.slice(6, 9);
-        if (clean.length > 9) formatted += '-' + clean.slice(9, 11);
+        let formatted = clean;
+        if (clean.length <= 11) {
+            formatted = '';
+            if (clean.length > 0) formatted += clean.slice(0, 3);
+            if (clean.length > 3) formatted += '.' + clean.slice(3, 6);
+            if (clean.length > 6) formatted += '.' + clean.slice(6, 9);
+            if (clean.length > 9) formatted += '-' + clean.slice(9, 11);
+        } else {
+            formatted = '';
+            if (clean.length > 0) formatted += clean.slice(0, 3);
+            if (clean.length > 3) formatted += ' ' + clean.slice(3, 7);
+            if (clean.length > 7) formatted += ' ' + clean.slice(7, 11);
+            if (clean.length > 11) formatted += ' ' + clean.slice(11, 15);
+        }
+
         setPatientCpf(formatted);
 
-        if (clean.length === 11) {
-            const found = pacientes.find(p => p.cpf.replace(/\D/g, '') === clean);
+        const findMatchingPatient = (cleanNum: string) => {
+            return pacientes.find(p => 
+                (p.cpf && p.cpf.replace(/\D/g, '') === cleanNum) ||
+                (p.sus_number && p.sus_number.replace(/\D/g, '') === cleanNum)
+            );
+        };
+
+        if (clean.length === 11 || clean.length === 15) {
+            const found = findMatchingPatient(clean);
             if (found) {
                 const displayName = found.nickname ? `${found.name} (${found.nickname})` : found.name;
                 setPatientName(displayName);
@@ -264,6 +321,16 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                 setIsPatientUnlocked(false);
                 setPendingCpf(formatted);
                 setIsRegModalOpen(true);
+            }
+        } else if (clean.length >= 11) {
+            const found = findMatchingPatient(clean);
+            if (found) {
+                const displayName = found.nickname ? `${found.name} (${found.nickname})` : found.name;
+                setPatientName(displayName);
+                setIsPatientUnlocked(true);
+            } else {
+                setPatientName('');
+                setIsPatientUnlocked(false);
             }
         } else {
             setPatientName('');
@@ -346,6 +413,12 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
             return;
         }
 
+        const cleanCrm = medicoCrm.replace(/\D/g, '');
+        if (!cleanCrm) {
+            showAlert('Por favor, informe o número do CRM do médico prescritor.', 'error');
+            return;
+        }
+
         if (selectedItems.length === 0) {
             showAlert('Por favor, selecione pelo menos um medicamento para dispensar.', 'error');
             return;
@@ -369,6 +442,12 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
     const handleConfirmSubmit = async () => {
         if (!patientName || !patientCpf || selectedItems.length === 0 || !withdrawalDate) {
             showAlert('Por favor, preencha todos os campos obrigatórios.', 'error');
+            return;
+        }
+
+        const cleanCrm = medicoCrm.replace(/\D/g, '');
+        if (!cleanCrm) {
+            showAlert('Por favor, informe o número do CRM do médico prescritor.', 'error');
             return;
         }
 
@@ -403,6 +482,10 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
             validade: item.med.validade,
             paciente_nome: patientName,
             paciente_cpf: cleanCpf,
+            medico_crm: cleanCrm,
+            medico_uf: medicoUf,
+            medico_nome: `MÉDICO PRESCRITOR (CRM ${cleanCrm}/${medicoUf})`,
+            medico_consulta_data: new Date().toISOString(),
             responsavel_nome: currentUser?.name || '',
             responsavel_id: currentUser?.id || '',
             data: isoDate,
@@ -414,6 +497,8 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
         // Keep copy of values to clear or restore
         const savedPatientName = patientName;
         const savedPatientCpf = patientCpf;
+        const savedMedicoCrm = cleanCrm;
+        const savedMedicoUf = medicoUf;
         const savedSelectedItems = [...selectedItems];
         const savedWithdrawalDate = withdrawalDate;
         const savedObservacoes = observacoes;
@@ -423,6 +508,8 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
         setObservacoes('');
         setPatientName('');
         setPatientCpf('');
+        setMedicoCrm('');
+        setMedicoUf('MG');
         setIsPatientUnlocked(false);
 
         try {
@@ -439,6 +526,10 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                     validade: item.med.validade,
                     paciente_nome: savedPatientName,
                     paciente_cpf: cleanCpf,
+                    medico_crm: savedMedicoCrm,
+                    medico_uf: savedMedicoUf,
+                    medico_nome: `MÉDICO PRESCRITOR (CRM ${savedMedicoCrm}/${savedMedicoUf})`,
+                    medico_consulta_data: new Date().toISOString(),
                     responsavel_nome: currentUser?.name || '',
                     responsavel_id: currentUser?.id || '',
                     data: isoDate,
@@ -459,10 +550,14 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
             // Restore form values
             setPatientName(savedPatientName);
             setPatientCpf(savedPatientCpf);
+            setMedicoCrm(savedMedicoCrm);
+            setMedicoUf(savedMedicoUf);
             setSelectedItems(savedSelectedItems);
+            setWithdrawalDate(savedWithdrawalDate);
             setObservacoes(savedObservacoes);
             setIsPatientUnlocked(true);
-            showAlert(err.message || 'Erro ao registrar a retirada.', 'error');
+            setIsConfirmModalOpen(false);
+            showAlert('Falha ao registrar a dispensação. Tente novamente.', 'error');
         } finally {
             setSaving(false);
         }
@@ -499,14 +594,36 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                         <ClipboardList className="w-5 h-5 text-pink-600" />
                         <h3 className="font-extrabold text-slate-800 text-xs uppercase tracking-tight">Nova Dispensação de Medicamentos</h3>
                     </div>
-                    <button
-                        type="button"
-                        onClick={() => setIsHistoryModalOpen(true)}
-                        className="px-3.5 py-2 bg-pink-50 hover:bg-pink-100 text-pink-700 font-black text-[9px] uppercase tracking-wider rounded-xl transition-all flex items-center gap-1.5 border border-pink-200/40 shadow-sm"
-                    >
-                        <History className="w-3.5 h-3.5" />
-                        Ver Histórico
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setPendingCpf('');
+                                setNewPatientName('');
+                                setNewPatientBirthDate('');
+                                setNewPatientNickname('');
+                                setNewPatientPhone('');
+                                setNewPatientNeighborhood('');
+                                setNewPatientStreet('');
+                                setNewPatientCity('SÃO JOSÉ DO GOIABAL -MG');
+                                setNewPatientSusNumber('');
+                                setNewPatientAgenteSaude('');
+                                setIsRegModalOpen(true);
+                            }}
+                            className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-black text-[9px] uppercase tracking-wider rounded-xl transition-all flex items-center gap-1.5 border border-emerald-200/50 shadow-sm cursor-pointer"
+                        >
+                            <UserPlus className="w-3.5 h-3.5" />
+                            Cadastrar Paciente
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setIsHistoryModalOpen(true)}
+                            className="px-3.5 py-2 bg-pink-50 hover:bg-pink-100 text-pink-700 font-black text-[9px] uppercase tracking-wider rounded-xl transition-all flex items-center gap-1.5 border border-pink-200/40 shadow-sm cursor-pointer"
+                        >
+                            <History className="w-3.5 h-3.5" />
+                            Ver Histórico
+                        </button>
+                    </div>
                 </div>
 
                 <form onSubmit={handlePreSubmit} className="flex-1 flex flex-col justify-between gap-4 min-h-0 overflow-hidden">
@@ -514,11 +631,11 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                         {/* Linha 1: CPF do Paciente e Paciente */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">CPF do Paciente *</label>
+                                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">CPF ou Cartão SUS do Paciente *</label>
                                 <input
                                     type="text"
                                     className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm text-slate-900 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-mono font-bold"
-                                    placeholder="000.000.000-00"
+                                    placeholder="CPF (000.000.000-00) ou N° SUS"
                                     value={patientCpf}
                                     onChange={(e) => handleCpfChange(e.target.value)}
                                     required
@@ -534,7 +651,7 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                             ? 'bg-slate-100 opacity-60 cursor-not-allowed' 
                                             : 'bg-slate-50 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10'
                                     }`}
-                                    placeholder={!isPatientUnlocked ? "Digite o CPF primeiro" : "Nome Completo do Paciente"}
+                                    placeholder={!isPatientUnlocked ? "Digite o CPF ou SUS primeiro" : "Nome Completo do Paciente"}
                                     value={patientName}
                                     onChange={(e) => {
                                         setPatientName(e.target.value.toUpperCase());
@@ -557,14 +674,15 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                                 onMouseDown={() => {
                                                     const displayName = p.nickname ? `${p.name} (${p.nickname})` : p.name;
                                                     setPatientName(displayName);
-                                                    handleCpfChange(p.cpf);
+                                                    handleCpfChange(p.cpf || p.sus_number || '');
                                                     setShowPatientDropdown(false);
                                                 }}
                                                 className="w-full text-left px-4 py-2.5 hover:bg-pink-50 text-slate-700 text-xs font-semibold border-b border-slate-50 last:border-0 flex items-center justify-between"
                                             >
                                                 <span>{p.name}</span>
                                                 <span className="text-[10px] text-slate-400 font-mono">
-                                                    {p.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}
+                                                    {p.cpf ? `CPF: ${p.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}` : ''}
+                                                    {p.sus_number ? ` • SUS: ${p.sus_number}` : ''}
                                                 </span>
                                             </button>
                                         ))}
@@ -573,7 +691,41 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                             </div>
                         </div>
 
-                        {/* Linha 2: Lista de Medicamentos a Dispensar (Multi-Item Selection) */}
+                        {/* Linha 2: CRM do Médico e UF (Compacto) */}
+                        <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                            <div className="md:col-span-6 max-w-sm">
+                                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">
+                                    CRM & UF do Médico *
+                                </label>
+                                <div className="flex gap-2 items-center">
+                                    <div className="relative flex-1 flex items-center">
+                                        <input
+                                            type="text"
+                                            pattern="[0-9]*"
+                                            className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-3.5 pr-3 text-sm font-mono font-bold text-slate-900 outline-none focus:bg-white focus:border-purple-500 focus:ring-2 focus:ring-purple-500/10 transition-all"
+                                            placeholder="Ex: 12345"
+                                            value={medicoCrm}
+                                            onChange={(e) => {
+                                                const clean = e.target.value.replace(/\D/g, '');
+                                                setMedicoCrm(clean);
+                                            }}
+                                            required
+                                        />
+                                    </div>
+                                    <select
+                                        className="w-24 rounded-xl border border-slate-200 bg-slate-50 py-2.5 px-2 text-sm font-bold text-slate-800 outline-none focus:bg-white focus:border-purple-500 focus:ring-2 focus:ring-purple-500/10 transition-all uppercase cursor-pointer"
+                                        value={medicoUf}
+                                        onChange={(e) => setMedicoUf(e.target.value)}
+                                    >
+                                        {['AC', 'AL', 'AM', 'AP', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MG', 'MS', 'MT', 'PA', 'PB', 'PE', 'PI', 'PR', 'RJ', 'RN', 'RO', 'RR', 'RS', 'SC', 'SE', 'SP', 'TO'].map(uf => (
+                                            <option key={uf} value={uf}>{uf}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Linha 3: Lista de Medicamentos a Dispensar (Multi-Item Selection) */}
                         <div className="space-y-2">
                             <div className="flex justify-between items-center px-1">
                                 <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500">
@@ -841,9 +993,15 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                 <h3 className="font-extrabold text-slate-800 uppercase text-xs tracking-wider">
                                     Cadastrar Novo Paciente
                                 </h3>
-                                <p className="text-[10px] text-pink-600 font-bold uppercase mt-0.5">
-                                    CPF {pendingCpf} não cadastrado
-                                </p>
+                                {pendingCpf ? (
+                                    <p className="text-[10px] text-pink-600 font-bold uppercase mt-0.5">
+                                        Documento {pendingCpf} não cadastrado
+                                    </p>
+                                ) : (
+                                    <p className="text-[10px] text-emerald-600 font-bold uppercase mt-0.5">
+                                        Preencha as informações do novo paciente
+                                    </p>
+                                )}
                             </div>
                             <button
                                 type="button"
@@ -873,7 +1031,8 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                         neighborhood: newPatientNeighborhood.trim() || null,
                                         street: newPatientStreet.trim() || null,
                                         city: newPatientCity.trim() || null,
-                                        sus_number: newPatientSusNumber.trim() || null
+                                        sus_number: newPatientSusNumber.trim() || null,
+                                        agente_saude: newPatientAgenteSaude.trim() || null
                                     });
                                     if (created) {
                                         setPacientes(prev => [...prev, created]);
@@ -889,6 +1048,7 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                         setNewPatientStreet('');
                                         setNewPatientCity('SÃO JOSÉ DO GOIABAL -MG');
                                         setNewPatientSusNumber('');
+                                        setNewPatientAgenteSaude('');
                                         setIsRegModalOpen(false);
                                         showAlert('Paciente cadastrado com sucesso!', 'success');
                                     } else {
@@ -1005,6 +1165,26 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                         onChange={(e) => setNewPatientCity(e.target.value.toUpperCase())}
                                         required
                                     />
+                                </div>
+                            </div>
+
+                            {/* Linha 5: Agente de Saúde */}
+                            <div>
+                                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">Agente de Saúde (ACS)</label>
+                                <div className="relative">
+                                    <select
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-3.5 pr-8 text-xs text-slate-900 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold uppercase shadow-inner cursor-pointer appearance-none"
+                                        value={newPatientAgenteSaude}
+                                        onChange={(e) => setNewPatientAgenteSaude(e.target.value)}
+                                    >
+                                        <option value="">-- SELECIONE O AGENTE DE SAÚDE (OPCIONAL) --</option>
+                                        {AGENTES_DE_SAUDE.map((agente) => (
+                                            <option key={agente} value={agente.toUpperCase()}>
+                                                {agente.toUpperCase()}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                                 </div>
                             </div>
 
@@ -1333,7 +1513,15 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
 
                         {/* List */}
                         <div className="flex-1 overflow-y-auto p-4 space-y-2.5 custom-scrollbar min-h-0">
-                            {modalMedOptions.length > 0 ? (
+                            {!medModalSearch.trim() ? (
+                                <div className="py-16 flex flex-col items-center justify-center text-slate-400">
+                                    <Search className="w-12 h-12 mb-3 text-slate-300 animate-pulse" />
+                                    <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider">Digite um termo para pesquisar</h4>
+                                    <p className="text-[11px] text-slate-400 text-center mt-1 font-semibold max-w-xs">
+                                        Digite no campo acima o nome do medicamento, princípio ativo ou número do lote para listar as opções.
+                                    </p>
+                                </div>
+                            ) : modalMedOptions.length > 0 ? (
                                 modalMedOptions.map(med => {
                                     const isLowStock = med.quantidade <= med.limite_minimo;
                                     const qtyBadgeColor = med.quantidade === 0 
@@ -1349,94 +1537,71 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                     return (
                                         <div
                                             key={med.id}
-                                            className={`w-full p-3.5 rounded-2xl border transition-all flex flex-col gap-2 ${
+                                            className={`w-full p-4 rounded-2xl border-2 transition-all flex flex-col gap-2.5 relative overflow-hidden ${
                                                 isSelected 
-                                                    ? 'border-pink-500 bg-pink-50/30 shadow-sm' 
-                                                    : 'border-slate-150/70 hover:border-pink-300 hover:bg-pink-50/10'
+                                                    ? 'border-pink-500 bg-pink-50/40 shadow-md shadow-pink-500/10 ring-2 ring-pink-500/20' 
+                                                    : 'border-slate-200/80 hover:border-pink-300 hover:bg-pink-50/10 bg-white'
                                             }`}
                                         >
-                                            <div className="flex justify-between items-start w-full">
+                                            {isSelected && (
+                                                <div className="absolute top-0 right-0 bg-pink-600 text-white text-[9px] font-black uppercase px-3 py-1 rounded-bl-xl shadow-xs flex items-center gap-1">
+                                                    <CheckCircle2 className="w-3 h-3" />
+                                                    <span>Selecionado ({existing.quantity} {med.unidade})</span>
+                                                </div>
+                                            )}
+
+                                            <div className="flex justify-between items-start w-full pr-24">
                                                 <div>
                                                     <h4 className="font-black text-sm uppercase text-slate-800 flex items-center gap-2">
                                                         {med.nome} {med.dosagem ? `(${med.dosagem})` : ''}
                                                     </h4>
-                                                    <div className="flex flex-wrap gap-1 mt-1">
-                                                        <span className="px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded bg-pink-50 text-pink-600">
+                                                    <div className="flex flex-wrap gap-1 mt-1.5">
+                                                        <span className="px-2 py-0.5 text-[8px] font-black uppercase tracking-wider rounded bg-pink-100 text-pink-700">
                                                             {med.categoria}
                                                         </span>
                                                         {med.tipo && (
-                                                            <span className="px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded bg-slate-100 text-slate-500">
+                                                            <span className="px-2 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded bg-slate-100 text-slate-600">
                                                                 {med.tipo}
                                                             </span>
                                                         )}
                                                         {med.principio_ativo && (
-                                                            <span className="px-1.5 py-0.5 text-[8px] font-extrabold uppercase tracking-wider rounded bg-emerald-50 text-emerald-700 border border-emerald-100">
+                                                            <span className="px-2 py-0.5 text-[8px] font-extrabold uppercase tracking-wider rounded bg-emerald-50 text-emerald-700 border border-emerald-200/60">
                                                                 P.Ativo: {med.principio_ativo}
                                                             </span>
                                                         )}
-                                                        <span className="px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded bg-slate-50 border border-slate-200 text-slate-500 font-mono">
+                                                        <span className="px-2 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded bg-slate-50 border border-slate-200 text-slate-600 font-mono">
                                                             Lote: {med.lote}
                                                         </span>
                                                     </div>
                                                 </div>
-
-                                                <div className="flex items-center gap-2 shrink-0">
-                                                    <span className={`inline-flex px-2 py-1 rounded-lg text-[10px] font-black border uppercase tracking-wider ${qtyBadgeColor}`}>
-                                                        {med.quantidade} {med.unidade}
-                                                    </span>
-
-                                                    {med.quantidade > 0 && (
-                                                        isSelected ? (
-                                                            <div className="flex items-center gap-1 bg-pink-100 border border-pink-200 rounded-xl p-0.5">
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => {
-                                                                        if (existing.quantity <= 1) {
-                                                                            handleRemoveItem(med.id);
-                                                                        } else {
-                                                                            handleUpdateItemQuantity(med.id, existing.quantity - 1);
-                                                                        }
-                                                                    }}
-                                                                    className="w-6 h-6 rounded-lg bg-white text-pink-700 flex items-center justify-center font-bold text-xs hover:bg-pink-50"
-                                                                >
-                                                                    <Minus className="w-3 h-3" />
-                                                                </button>
-                                                                <span className="px-1.5 text-xs font-black text-pink-800 font-mono">
-                                                                    {existing.quantity}
-                                                                </span>
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => handleAddItem(med, 1)}
-                                                                    disabled={existing.quantity >= med.quantidade}
-                                                                    className="w-6 h-6 rounded-lg bg-white text-pink-700 disabled:opacity-50 flex items-center justify-center font-bold text-xs hover:bg-pink-50"
-                                                                >
-                                                                    <Plus className="w-3 h-3" />
-                                                                </button>
-                                                            </div>
-                                                        ) : (
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => handleAddItem(med, 1)}
-                                                                className="px-3 py-1.5 bg-pink-600 hover:bg-pink-700 text-white font-extrabold text-[10px] uppercase tracking-wider rounded-xl transition-all shadow-sm active:scale-95 flex items-center gap-1 cursor-pointer"
-                                                            >
-                                                                <Plus className="w-3 h-3" /> Adicionar
-                                                            </button>
-                                                        )
-                                                    )}
-                                                </div>
                                             </div>
 
-                                            <div className="flex items-center justify-between text-[10px] text-slate-500 border-t border-slate-100 pt-2 mt-1">
-                                                <span className="font-semibold">
-                                                    Validade: <span className={isExpired ? 'text-rose-500 font-bold' : 'font-bold'}>
-                                                        {formatDateBr(med.validade)}
-                                                        {isExpired && ' (Vencido)'}
+                                            <div className="flex items-center justify-between text-[10px] text-slate-500 border-t border-slate-100 pt-2.5 mt-1">
+                                                <div className="flex items-center gap-3">
+                                                    <span className="font-semibold">
+                                                        Validade: <span className={isExpired ? 'text-rose-500 font-bold' : 'font-bold text-slate-700'}>
+                                                            {formatDateBr(med.validade)}
+                                                            {isExpired && ' (Vencido)'}
+                                                        </span>
                                                     </span>
-                                                </span>
-                                                {med.fornecedor && (
-                                                    <span className="font-medium italic truncate max-w-[200px]">
-                                                        Forn: {med.fornecedor}
+                                                    <span className={`inline-flex px-2 py-0.5 rounded-lg text-[9px] font-black border uppercase tracking-wider ${qtyBadgeColor}`}>
+                                                        Estoque: {med.quantidade} {med.unidade}
                                                     </span>
+                                                </div>
+
+                                                {med.quantidade > 0 && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleOpenQtyModal(med)}
+                                                        className={`px-3.5 py-1.5 text-white font-extrabold text-[10px] uppercase tracking-wider rounded-xl transition-all shadow-sm active:scale-95 flex items-center gap-1 cursor-pointer ${
+                                                            isSelected 
+                                                                ? 'bg-purple-600 hover:bg-purple-700' 
+                                                                : 'bg-pink-600 hover:bg-pink-700'
+                                                        }`}
+                                                    >
+                                                        <Plus className="w-3.5 h-3.5" />
+                                                        <span>{isSelected ? `Alterar (${existing.quantity})` : 'Adicionar'}</span>
+                                                    </button>
                                                 )}
                                             </div>
                                         </div>
@@ -1447,7 +1612,7 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                     <Search className="w-12 h-12 mb-2 opacity-20 text-slate-500" />
                                     <h4 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">Nenhum medicamento encontrado</h4>
                                     <p className="text-[10px] text-slate-500 text-center mt-0.5 font-medium">
-                                        Tente alterar os termos de busca ou a categoria selecionada.
+                                        Não encontramos resultados para "{medModalSearch}". Tente alterar os termos de busca ou a categoria.
                                     </p>
                                 </div>
                             )}
@@ -1464,6 +1629,112 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                 className="px-5 py-2.5 bg-pink-600 hover:bg-pink-700 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md active:scale-95 cursor-pointer"
                             >
                                 Concluir Seleção
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* MODAL DE QUANTIDADE DESEJADA */}
+            {qtyModalMed && (
+                <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-100 flex flex-col animate-in zoom-in-95 duration-200">
+                        {/* Header */}
+                        <div className="p-5 border-b border-slate-100 bg-gradient-to-r from-pink-50/80 via-purple-50/50 to-white flex justify-between items-start">
+                            <div className="space-y-1">
+                                <div className="flex items-center gap-2">
+                                    <span className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded bg-pink-600 text-white">
+                                        {qtyModalMed.categoria}
+                                    </span>
+                                    {qtyModalMed.dosagem && (
+                                        <span className="px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider rounded bg-pink-100 text-pink-800">
+                                            {qtyModalMed.dosagem}
+                                        </span>
+                                    )}
+                                </div>
+                                <h3 className="font-black text-slate-800 text-base uppercase leading-tight pt-1">
+                                    {qtyModalMed.nome}
+                                </h3>
+                                <p className="text-[11px] text-slate-500 font-semibold flex items-center gap-2 pt-0.5">
+                                    <span>Lote: <strong className="font-mono font-bold text-slate-700">{qtyModalMed.lote}</strong></span>
+                                    <span>•</span>
+                                    <span>Estoque: <strong className="text-emerald-600 font-extrabold">{qtyModalMed.quantidade} {qtyModalMed.unidade}</strong></span>
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setQtyModalMed(null)}
+                                className="p-1.5 hover:bg-slate-200/70 rounded-xl text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        {/* Body: Input de quantidade */}
+                        <div className="p-6 space-y-4">
+                            <label className="block text-xs font-black uppercase tracking-wider text-slate-500 text-center">
+                                Informe a quantidade desejada a dispensar
+                            </label>
+
+                            <div className="flex items-center justify-center gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setQtyInput(prev => Math.max(1, prev - 1))}
+                                    disabled={qtyInput <= 1}
+                                    className="w-12 h-12 rounded-2xl bg-slate-100 hover:bg-slate-200 active:scale-95 disabled:opacity-40 text-slate-700 flex items-center justify-center font-extrabold text-lg transition-all shadow-sm cursor-pointer"
+                                >
+                                    <Minus className="w-5 h-5" />
+                                </button>
+
+                                <div className="relative">
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max={qtyModalMed.quantidade}
+                                        value={qtyInput}
+                                        onChange={(e) => {
+                                            const val = parseInt(e.target.value) || 0;
+                                            setQtyInput(Math.max(0, Math.min(qtyModalMed.quantidade, val)));
+                                        }}
+                                        className="w-32 py-3 px-3 border-2 border-pink-500 rounded-2xl text-center text-2xl font-black font-mono text-slate-900 bg-pink-50/20 focus:outline-none focus:ring-4 focus:ring-pink-500/20 shadow-inner"
+                                    />
+                                    <span className="block text-[9px] font-extrabold uppercase text-slate-400 text-center mt-1">
+                                        {qtyModalMed.unidade || 'Unidades'}
+                                    </span>
+                                </div>
+
+                                <button
+                                    type="button"
+                                    onClick={() => setQtyInput(prev => Math.min(qtyModalMed.quantidade, prev + 1))}
+                                    disabled={qtyInput >= qtyModalMed.quantidade}
+                                    className="w-12 h-12 rounded-2xl bg-pink-600 hover:bg-pink-700 active:scale-95 disabled:opacity-40 text-white flex items-center justify-center font-extrabold text-lg transition-all shadow-sm shadow-pink-600/30 cursor-pointer"
+                                >
+                                    <Plus className="w-5 h-5" />
+                                </button>
+                            </div>
+
+                            {qtyInput >= qtyModalMed.quantidade && (
+                                <p className="text-[10px] font-bold text-amber-600 text-center bg-amber-50 py-1.5 px-3 rounded-xl border border-amber-200/60">
+                                    Limite máximo disponível no estoque atingo ({qtyModalMed.quantidade} {qtyModalMed.unidade})
+                                </p>
+                            )}
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-4 bg-slate-50 border-t border-slate-100 flex gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setQtyModalMed(null)}
+                                className="flex-1 py-3 bg-slate-200/80 hover:bg-slate-300 text-slate-700 font-extrabold text-xs uppercase tracking-wider rounded-2xl transition-all cursor-pointer"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleConfirmQuantity}
+                                className="flex-1 py-3 bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-700 hover:to-rose-700 text-white font-black text-xs uppercase tracking-wider rounded-2xl transition-all shadow-md shadow-pink-600/30 active:scale-95 cursor-pointer"
+                            >
+                                Confirmar Quantidade
                             </button>
                         </div>
                     </div>
