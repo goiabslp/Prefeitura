@@ -340,13 +340,29 @@ export const registrarMovimentacao = async (
         }
 
         // Insert movement history log
-        const { data, error } = await supabase
+        let { data, error } = await supabase
             .from('farmacia_movimentacoes')
             .insert([mov])
             .select()
             .single();
 
-        if (error) throw error;
+        if (error) {
+            const errMsg = error.message || '';
+            if (errMsg.includes('column') || errMsg.includes('schema cache') || error.code === 'PGRST204') {
+                console.warn('[farmaciaService] Colunas médicas não encontradas na tabela farmacia_movimentacoes. Executando inserção sem dados médicos.', errMsg);
+                const { medico_crm, medico_uf, medico_nome, medico_consulta_data, ...movClean } = mov as any;
+                const retry = await supabase
+                    .from('farmacia_movimentacoes')
+                    .insert([movClean])
+                    .select()
+                    .single();
+
+                if (retry.error) throw retry.error;
+                data = retry.data;
+            } else {
+                throw error;
+            }
+        }
         return data;
     } catch (error: any) {
         console.error('[farmaciaService] registrarMovimentacao Error:', error.message);
