@@ -2,14 +2,15 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
     ArrowLeft, Search, Filter, Calendar, AlertTriangle, CheckCircle2, 
     FileText, User as UserIcon, Building2, ChevronRight, ChevronLeft, 
-    Sparkles, Gavel, ArrowRightLeft, Eye, Clock, ShieldAlert,
+    Sparkles, Gavel, ArrowRightLeft, Eye, EyeOff, Clock, ShieldAlert,
     Paperclip, Package, Tag, Scale, Landmark, Megaphone, CheckSquare,
     AlertCircle, Award, FileCheck, Layers, Tv, MoreHorizontal, MoreVertical,
     Zap, X, Maximize2, Radio, Check, RefreshCw, Flame, Volume2, Music, Upload
 } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { User } from '../../types';
 import { LicitacaoProcesso } from '../../types/licitacao';
-import { useLicitacaoProcesses, useUpdateLicitacaoProcess } from '../../hooks/useLicitacaoModule';
+import { useLicitacaoProcesses, useUpdateLicitacaoProcess, licitacaoKeys } from '../../hooks/useLicitacaoModule';
 import { fetchObjetoResumidoMap } from '../../services/licitacaoService';
 import { LicitacaoWizard } from './LicitacaoWizard';
 import { format } from 'date-fns';
@@ -121,6 +122,7 @@ export const LICITACAO_PHASES: PhaseConfig[] = [
 ];
 
 export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, users: usersProp = [], onBack, isViewOnly = false }) => {
+    const queryClient = useQueryClient();
     const { data: processes = [], isLoading } = useLicitacaoProcesses();
     const updateMutation = useUpdateLicitacaoProcess();
 
@@ -649,6 +651,34 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, u
         }
     };
 
+    const [isUpdatingVisibilidade, setIsUpdatingVisibilidade] = useState(false);
+
+    const handleToggleVisibilidadeTv = async (processToToggle: LicitacaoProcesso) => {
+        if (!processToToggle || isUpdatingVisibilidade) return;
+        setIsUpdatingVisibilidade(true);
+        const newOculto = !processToToggle.oculto_kanban_view;
+
+        try {
+            await updateMutation.mutateAsync({
+                id: processToToggle.id,
+                updates: { oculto_kanban_view: newOculto }
+            });
+
+            // Disparar transmissão Realtime para outras telas
+            if (channelRef.current) {
+                channelRef.current.send({
+                    type: 'broadcast',
+                    event: 'licitacao-visibilidade-updated',
+                    payload: { processId: processToToggle.id, oculto_kanban_view: newOculto }
+                });
+            }
+        } catch (err) {
+            console.error("Erro ao atualizar visibilidade no Kanban:", err);
+        } finally {
+            setIsUpdatingVisibilidade(false);
+        }
+    };
+
     useEffect(() => {
         const handleSync = (payloadData?: any) => {
             try {
@@ -791,6 +821,16 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, u
             .on('broadcast', { event: 'new-licitacao-process-approved' }, (data) => {
                 if (data.payload && data.payload.id) {
                     triggerModalForProcess(data.payload);
+                }
+            })
+            .on('broadcast', { event: 'licitacao-visibilidade-updated' }, (data) => {
+                if (data.payload?.processId !== undefined) {
+                    const { processId, oculto_kanban_view } = data.payload;
+                    queryClient.setQueriesData({ queryKey: licitacaoKeys.lists() }, (oldData: LicitacaoProcesso[] | undefined) => {
+                        if (!oldData) return oldData;
+                        return oldData.map(p => p.id === processId ? { ...p, oculto_kanban_view } : p);
+                    });
+                    queryClient.invalidateQueries({ queryKey: licitacaoKeys.all });
                 }
             })
             .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'licitacao_processos' }, (payload: any) => {
@@ -1026,6 +1066,11 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, u
 
             // Processos NÃO aprovados (Em Aprovação, Em Análise, Rascunho, Rejeitado, Finalizado) NUNCA devem aparecer no Kanban nem na visão TV
             if (!isApproved || st === 'rejeitado' || st === 'rejected' || st === 'finalizado' || st === 'finalized' || st === 'rascunho') {
+                return false;
+            }
+
+            // Ocultar da tela /Licitacao/Kanban/view se a visibilidade na TV estiver desativada (oculto_kanban_view = true)
+            if (isViewOnly && process.oculto_kanban_view) {
                 return false;
             }
 
@@ -1489,13 +1534,41 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, u
                             </div>
                         </div>
 
-                        <button
-                            onClick={() => setSelectedProcessForDetails(selectedProcess)}
-                            className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 xl:px-4 xl:py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95 shrink-0"
-                        >
-                            <Eye className="w-3.5 h-3.5 xl:w-4 xl:h-4" />
-                            Ver Documento Completo
-                        </button>
+                        <div className="flex items-center gap-2 flex-wrap shrink-0">
+                            {/* Botão de Visibilidade no Kanban / TV */}
+                            {!isViewOnly && (
+                                <button
+                                    onClick={() => handleToggleVisibilidadeTv(selectedProcess)}
+                                    disabled={isUpdatingVisibilidade}
+                                    className={`px-3 py-1.5 xl:px-4 xl:py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95 shrink-0 border ${
+                                        selectedProcess.oculto_kanban_view
+                                            ? 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
+                                            : 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+                                    }`}
+                                    title={selectedProcess.oculto_kanban_view ? "Processo oculto da tela /Licitacao/Kanban/view. Clique para exibir na TV." : "Processo visível na tela /Licitacao/Kanban/view. Clique para ocultar da TV."}
+                                >
+                                    {selectedProcess.oculto_kanban_view ? (
+                                        <>
+                                            <EyeOff className="w-3.5 h-3.5 xl:w-4 xl:h-4 text-amber-600" />
+                                            <span>Visibilidade: Oculto na TV</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Eye className="w-3.5 h-3.5 xl:w-4 xl:h-4 text-emerald-600" />
+                                            <span>Visibilidade: Visível na TV</span>
+                                        </>
+                                    )}
+                                </button>
+                            )}
+
+                            <button
+                                onClick={() => setSelectedProcessForDetails(selectedProcess)}
+                                className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 xl:px-4 xl:py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95 shrink-0"
+                            >
+                                <Eye className="w-3.5 h-3.5 xl:w-4 xl:h-4" />
+                                Ver Documento Completo
+                            </button>
+                        </div>
                     </div>
                 </header>
 
@@ -2066,7 +2139,7 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, u
                                                                     <Clock className="w-2.5 h-2.5 xl:w-3 xl:h-3 text-white shrink-0" />
                                                                     <span>{getDaysElapsed(process.criado_em)}</span>
                                                                 </div>
-                                                                {(() => {
+                                                                 {(() => {
                                                                     const assignedUser = processAssignments[process.id];
                                                                     const firstName = assignedUser?.userName ? assignedUser.userName.trim().split(' ')[0] : '';
                                                                     if (!firstName) return null;
@@ -2077,6 +2150,12 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, u
                                                                         </div>
                                                                     );
                                                                 })()}
+                                                                {process.oculto_kanban_view && (
+                                                                    <div className="bg-amber-100 text-amber-900 border border-amber-300 px-1.5 py-0.5 rounded text-[8px] xl:text-[9px] 2xl:text-xs font-black flex items-center gap-1 shadow-2xs uppercase tracking-wider w-fit" title="Este processo está oculto na tela /Licitacao/Kanban/view">
+                                                                        <EyeOff className="w-2.5 h-2.5 xl:w-3 xl:h-3 text-amber-700 shrink-0" />
+                                                                        <span>Oculto na TV</span>
+                                                                    </div>
+                                                                )}
                                                             </div>
 
                                                             <div className="flex items-start justify-between gap-1 relative w-full">
@@ -2103,9 +2182,34 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, u
                                                                         <button
                                                                             onClick={(e) => {
                                                                                 e.stopPropagation();
-                                                                                toggleQueuePriority(process.id);
+                                                                                handleToggleVisibilidadeTv(process);
+                                                                                setOpenCardMenu(null);
                                                                             }}
                                                                             className={`w-full text-left px-2.5 py-1.5 text-xs font-bold rounded-lg flex items-center gap-2 cursor-pointer transition-colors ${
+                                                                                process.oculto_kanban_view
+                                                                                    ? 'text-amber-800 bg-amber-50 hover:bg-amber-100'
+                                                                                    : 'text-slate-700 hover:bg-slate-100'
+                                                                            }`}
+                                                                        >
+                                                                            {process.oculto_kanban_view ? (
+                                                                                <>
+                                                                                    <Eye className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                                                                    <span>Exibir na TV (/view)</span>
+                                                                                </>
+                                                                            ) : (
+                                                                                <>
+                                                                                    <EyeOff className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                                                                    <span>Ocultar da TV (/view)</span>
+                                                                                </>
+                                                                            )}
+                                                                        </button>
+
+                                                                        <button
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                toggleQueuePriority(process.id);
+                                                                            }}
+                                                                            className={`w-full text-left px-2.5 py-1.5 text-xs font-bold rounded-lg flex items-center gap-2 cursor-pointer transition-colors mt-0.5 ${
                                                                                 isQueuePriority ? 'text-red-700 bg-red-50 hover:bg-red-100' : 'text-slate-700 hover:bg-red-50 hover:text-red-700'
                                                                             }`}
                                                                         >

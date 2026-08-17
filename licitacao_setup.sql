@@ -23,6 +23,7 @@ ALTER TABLE public.licitacao_processos ADD COLUMN IF NOT EXISTS checkin_finaliza
 ALTER TABLE public.licitacao_processos ADD COLUMN IF NOT EXISTS aprovado_em TIMESTAMP WITH TIME ZONE;
 ALTER TABLE public.licitacao_processos ADD COLUMN IF NOT EXISTS enviado_kanban_em TIMESTAMP WITH TIME ZONE;
 ALTER TABLE public.licitacao_processos ADD COLUMN IF NOT EXISTS apresentado_animacao BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.licitacao_processos ADD COLUMN IF NOT EXISTS oculto_kanban_view BOOLEAN DEFAULT FALSE;
 ALTER TABLE public.licitacao_processos DROP CONSTRAINT IF EXISTS licitacao_processos_status_check;
 ALTER TABLE public.licitacao_processos ADD CONSTRAINT licitacao_processos_status_check CHECK (status IN ('Rascunho', 'Aguardando Assinatura', 'Assinado', 'Em Análise', 'Concluído', 'Finalizado', 'Rejeitado'));
 

@@ -30,6 +30,7 @@ export interface LicitacaoProcesso {
     ficha_orcamentaria?: string;
     tem_convenio?: boolean;
     numero_convenio?: string;
+    oculto_kanban_view?: boolean;
     itens?: LicitacaoItem[];
     justificativa?: LicitacaoJustificativa;
     assinatura?: LicitacaoAssinatura;

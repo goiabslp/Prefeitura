@@ -211,9 +211,34 @@ const saveLocalConvenio = (id: string, tem_convenio: boolean, numero_convenio?: 
     }
 };
 
+const getLocalOcultoMap = (): Record<string, boolean> => {
+    try {
+        const stored = localStorage.getItem('licitacao_oculto_map');
+        if (stored) {
+            return JSON.parse(stored);
+        }
+    } catch (e) {
+        console.error('Erro ao ler licitacao_oculto_map', e);
+    }
+    return {};
+};
+
+const saveLocalOculto = (id: string, oculto: boolean) => {
+    try {
+        const map = getLocalOcultoMap();
+        map[id] = oculto;
+        localStorage.setItem('licitacao_oculto_map', JSON.stringify(map));
+    } catch (e) {
+        console.error('Erro ao salvar licitacao_oculto_map', e);
+    }
+};
+
 export const updateLicitacaoProcess = async (id: string, updates: Partial<LicitacaoProcesso>): Promise<LicitacaoProcesso | null> => {
     if (updates.tem_convenio !== undefined || updates.numero_convenio !== undefined) {
         saveLocalConvenio(id, updates.tem_convenio ?? false, updates.numero_convenio);
+    }
+    if (updates.oculto_kanban_view !== undefined) {
+        saveLocalOculto(id, updates.oculto_kanban_view);
     }
 
     try {
@@ -255,13 +280,14 @@ export const updateLicitacaoProcess = async (id: string, updates: Partial<Licita
                 return retryData as LicitacaoProcesso;
             }
 
-            // Caso a coluna checkin_finalizado ou colunas de convenio ainda não existam na tabela no banco
-            if (error.code === 'PGRST204' || error.message?.includes('tem_convenio') || error.message?.includes('numero_convenio') || error.message?.includes('checkin_finalizado')) {
+            // Caso a coluna checkin_finalizado, colunas de convenio ou oculto_kanban_view ainda não existam na tabela no banco
+            if (error.code === 'PGRST204' || error.message?.includes('tem_convenio') || error.message?.includes('numero_convenio') || error.message?.includes('checkin_finalizado') || error.message?.includes('oculto_kanban_view')) {
                 console.warn("Coluna ausente no banco Supabase em licitacao_processos (PGRST204). Sanitizando update...");
                 const sanitizedUpdates = { ...updates };
                 delete (sanitizedUpdates as any).checkin_finalizado;
                 delete (sanitizedUpdates as any).tem_convenio;
                 delete (sanitizedUpdates as any).numero_convenio;
+                delete (sanitizedUpdates as any).oculto_kanban_view;
 
                 if (Object.keys(sanitizedUpdates).length === 0) {
                     const { data: currentData, error: currentErr } = await supabase
@@ -272,10 +298,12 @@ export const updateLicitacaoProcess = async (id: string, updates: Partial<Licita
 
                     if (currentErr) throw currentErr;
                     const conv = getLocalConveniosMap()[id];
+                    const localOculto = getLocalOcultoMap()[id];
                     return {
                         ...currentData,
                         tem_convenio: conv ? conv.tem_convenio : updates.tem_convenio,
-                        numero_convenio: conv ? conv.numero_convenio : updates.numero_convenio
+                        numero_convenio: conv ? conv.numero_convenio : updates.numero_convenio,
+                        oculto_kanban_view: localOculto !== undefined ? localOculto : updates.oculto_kanban_view
                     } as LicitacaoProcesso;
                 }
 
@@ -288,10 +316,12 @@ export const updateLicitacaoProcess = async (id: string, updates: Partial<Licita
 
                 if (retryError) throw retryError;
                 const conv = getLocalConveniosMap()[id];
+                const localOculto = getLocalOcultoMap()[id];
                 return {
                     ...retryData,
                     tem_convenio: conv ? conv.tem_convenio : updates.tem_convenio,
-                    numero_convenio: conv ? conv.numero_convenio : updates.numero_convenio
+                    numero_convenio: conv ? conv.numero_convenio : updates.numero_convenio,
+                    oculto_kanban_view: localOculto !== undefined ? localOculto : updates.oculto_kanban_view
                 } as LicitacaoProcesso;
             }
             throw error;
@@ -311,7 +341,6 @@ export const updateLicitacaoProcess = async (id: string, updates: Partial<Licita
                 objeto_resumido: data.objeto_resumido || data.finalidade || 'Processo de Licitação',
                 aprovado_em: data.aprovado_em || nowIso
             };
-
             broadcastLicitacaoApproval(approvedProcessInfo);
         }
 
@@ -334,6 +363,7 @@ export const getLicitacaoProcesses = async (): Promise<LicitacaoProcesso[]> => {
 
         if (error) throw error;
         const localMap = getLocalConveniosMap();
+        const localOcultoMap = getLocalOcultoMap();
         return (data || []).map((proc: any) => {
             const localEntry = localMap[proc.id];
             const isConvenio = localEntry?.tem_convenio !== undefined
@@ -343,10 +373,15 @@ export const getLicitacaoProcesses = async (): Promise<LicitacaoProcesso[]> => {
                 ? localEntry.numero_convenio
                 : proc.numero_convenio;
 
+            const isOculto = localOcultoMap[proc.id] !== undefined
+                ? localOcultoMap[proc.id]
+                : Boolean(proc.oculto_kanban_view);
+
             return {
                 ...proc,
                 tem_convenio: isConvenio,
-                numero_convenio: numConvenio
+                numero_convenio: numConvenio,
+                oculto_kanban_view: isOculto
             };
         }) as unknown as LicitacaoProcesso[];
     } catch (error) {
@@ -371,6 +406,7 @@ export const getLicitacaoProcessById = async (id: string): Promise<LicitacaoProc
 
         if (error) throw error;
         const localMap = getLocalConveniosMap();
+        const localOcultoMap = getLocalOcultoMap();
         const proc: any = data;
         const localEntry = localMap[proc.id];
         const isConvenio = localEntry?.tem_convenio !== undefined
@@ -380,10 +416,15 @@ export const getLicitacaoProcessById = async (id: string): Promise<LicitacaoProc
             ? localEntry.numero_convenio
             : proc.numero_convenio;
 
+        const isOculto = localOcultoMap[proc.id] !== undefined
+            ? localOcultoMap[proc.id]
+            : Boolean(proc.oculto_kanban_view);
+
         return {
             ...proc,
             tem_convenio: isConvenio,
-            numero_convenio: numConvenio
+            numero_convenio: numConvenio,
+            oculto_kanban_view: isOculto
         } as unknown as LicitacaoProcesso;
     } catch (error) {
         console.error("Error fetching licitacao process by id:", error);
