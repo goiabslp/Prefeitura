@@ -137,7 +137,7 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
     return (
         <div className="flex-1 w-full h-full bg-[#f8fafc] relative flex flex-col overflow-hidden min-h-0">
             <div className="flex-1 flex flex-col h-full bg-[#f8fafc] w-full max-w-[100vw] overflow-hidden relative min-h-0">
-                <main className="flex-1 overflow-y-auto md:overflow-hidden p-3 md:p-4 custom-scrollbar flex flex-col min-h-0">
+                <main className="flex-1 overflow-hidden p-2 sm:p-3 flex flex-col min-h-0">
                     {!isSubView ? (
                         renderMainScreen()
                     ) : showNovoAgendamento ? (

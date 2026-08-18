@@ -636,11 +636,18 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
         }
     };
 
-    // Filter procedures
-    const filteredProcedures = procedures.filter(p => 
-        p.name.toLowerCase().includes(procedureQuery.toLowerCase()) ||
-        (p.code && p.code.includes(procedureQuery))
-    );
+    // Filter procedures: pesquisa pelo valor digitado no início (startsWith), e não por "contém" (includes)
+    const normalizeStr = (str: string) => 
+        str ? str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim() : '';
+
+    const cleanQuery = normalizeStr(procedureQuery);
+
+    const filteredProcedures = procedures.filter(p => {
+        if (!cleanQuery) return true;
+        const normName = normalizeStr(p.name);
+        const normCode = p.code ? normalizeStr(p.code) : '';
+        return normName.startsWith(cleanQuery) || normCode.startsWith(cleanQuery);
+    });
 
     // Helper functions and waitlist check defined at top
 
@@ -909,25 +916,25 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
 
 
     return (
-        <div className="w-full max-w-[96%] 2xl:max-w-[1440px] mx-auto flex flex-col h-full max-h-full min-h-0 bg-white/95 backdrop-blur-md rounded-[2.5rem] border border-slate-200/80 shadow-[0_20px_60px_rgba(0,0,0,0.06)] overflow-hidden animate-in fade-in zoom-in-95 duration-300">
+        <div className="w-full max-w-[98%] 2xl:max-w-[1440px] mx-auto flex flex-col h-full max-h-full min-h-0 bg-white/95 backdrop-blur-md rounded-[2rem] border border-slate-200/80 shadow-[0_20px_60px_rgba(0,0,0,0.06)] overflow-hidden animate-in fade-in zoom-in-95 duration-300">
             {/* Header */}
-            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/60 shrink-0">
-                <div className="flex items-center gap-4">
+            <div className="px-4 py-2.5 border-b border-slate-100 flex items-center justify-between bg-slate-50/60 shrink-0">
+                <div className="flex items-center gap-3">
                     <button 
                         onClick={onBack} 
-                        className="p-2.5 text-slate-400 hover:text-slate-800 hover:bg-slate-200/70 rounded-2xl transition-all active:scale-95"
+                        className="p-2 text-slate-400 hover:text-slate-800 hover:bg-slate-200/70 rounded-xl transition-all active:scale-95"
                         title="Voltar"
                     >
-                        <ArrowLeft className="w-5 h-5" />
+                        <ArrowLeft className="w-4 h-4" />
                     </button>
                     <div>
-                        <h3 className="font-black text-slate-900 tracking-tight text-xl uppercase">Novo Agendamento</h3>
-                        <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">Módulo de Regulação e Consultas</p>
+                        <h3 className="font-black text-slate-900 tracking-tight text-lg uppercase">Novo Agendamento</h3>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Módulo de Regulação e Consultas</p>
                     </div>
                 </div>
 
                 {/* Barra de Abas com Rotas URL Dedicadas */}
-                <div className="flex items-center gap-1.5 sm:gap-2 bg-slate-100/90 p-1.5 rounded-2xl border border-slate-200/80 shadow-inner">
+                <div className="flex items-center gap-1 sm:gap-1.5 bg-slate-100/90 p-1 rounded-xl border border-slate-200/80 shadow-inner">
                     {[
                         { stepNum: 1, label: 'Paciente', route: 'consultas:novo-agendamento-paciente', icon: UserIcon },
                         { stepNum: 2, label: 'Procedimento', route: 'consultas:novo-agendamento-procedimento', icon: CalendarDays },
@@ -951,7 +958,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                     }
                                 }}
                                 disabled={!isClickable}
-                                className={`px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-300 flex items-center gap-2 outline-none border-0 ${
+                                className={`px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-lg text-[11px] font-black uppercase tracking-wider transition-all duration-300 flex items-center gap-1.5 outline-none border-0 ${
                                     isActive
                                     ? 'bg-sky-600 text-white shadow-md shadow-sky-600/20 scale-[1.02] cursor-default'
                                     : isClickable
@@ -959,8 +966,8 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                     : 'bg-transparent text-slate-400 cursor-not-allowed opacity-50'
                                 }`}
                             >
-                                <div className={`w-6 h-6 rounded-lg flex items-center justify-center ${isActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'}`}>
-                                    <Icon className="w-3.5 h-3.5" />
+                                <div className={`w-5 h-5 rounded-md flex items-center justify-center ${isActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                                    <Icon className="w-3 h-3" />
                                 </div>
                                 <span className="hidden md:inline">{tab.label}</span>
                                 <span className="md:hidden">Aba {tab.stepNum}</span>
@@ -971,21 +978,21 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
             </div>
 
             {/* Content Body - Centralized layout, no scrollbars on the window */}
-            <div className="flex-1 overflow-hidden flex flex-col p-4 md:p-5 min-h-0 bg-white">
+            <div className="flex-1 overflow-hidden flex flex-col p-2.5 md:p-3 min-h-0 bg-white">
                 
                 {errorMessage && (
-                    <div className="mb-5 p-4 bg-rose-50 border border-rose-100 text-rose-600 rounded-2xl text-xs font-bold flex items-center gap-3 animate-in slide-in-from-top-4 duration-300 shrink-0 shadow-sm">
-                        <div className="w-7 h-7 rounded-lg bg-rose-100 flex items-center justify-center shrink-0">
-                            <AlertTriangle className="w-4 h-4 text-rose-600" />
+                    <div className="mb-3 p-3 bg-rose-50 border border-rose-100 text-rose-600 rounded-xl text-xs font-bold flex items-center gap-2.5 animate-in slide-in-from-top-4 duration-300 shrink-0 shadow-sm">
+                        <div className="w-6 h-6 rounded-lg bg-rose-100 flex items-center justify-center shrink-0">
+                            <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
                         </div>
                         {errorMessage}
                     </div>
                 )}
 
                 {successMessage && (
-                    <div className="mb-5 p-4 bg-emerald-50 border border-emerald-100 text-emerald-600 rounded-2xl text-xs font-bold flex items-center gap-3 animate-in slide-in-from-top-4 duration-300 shrink-0 shadow-sm">
-                        <div className="w-7 h-7 rounded-lg bg-emerald-100 flex items-center justify-center shrink-0">
-                            <Check className="w-4 h-4 text-emerald-600" />
+                    <div className="mb-3 p-3 bg-emerald-50 border border-emerald-100 text-emerald-600 rounded-2xl text-xs font-bold flex items-center gap-2.5 animate-in slide-in-from-top-4 duration-300 shrink-0 shadow-sm">
+                        <div className="w-6 h-6 rounded-lg bg-emerald-100 flex items-center justify-center shrink-0">
+                            <Check className="w-3.5 h-3.5 text-emerald-600" />
                         </div>
                         {successMessage}
                     </div>
@@ -996,17 +1003,17 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                     <div className="flex-1 flex flex-col min-h-0 animate-in fade-in duration-300">
                         {selectedPatient && !isRegistering ? (
                             /* ABA 1: INFORMAÇÕES COMPLETAS DO PACIENTE SELECIONADO */
-                            <div className="flex-1 flex flex-col min-h-0 space-y-3 overflow-y-auto scrollbar-none pr-0.5">
-                                <div className="flex items-center justify-between shrink-0 bg-gradient-to-r from-sky-50 to-indigo-50/50 border border-sky-100 p-3 sm:p-3.5 rounded-2xl shadow-sm">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 rounded-xl bg-sky-600 text-white flex items-center justify-center font-black text-base shadow-md shadow-sky-600/20">
+                            <div className="flex-1 flex flex-col min-h-0 space-y-2 justify-between">
+                                <div className="flex items-center justify-between shrink-0 bg-gradient-to-r from-sky-50 to-indigo-50/50 border border-sky-100 p-2.5 rounded-xl shadow-sm">
+                                    <div className="flex items-center gap-2.5">
+                                        <div className="w-8 h-8 rounded-lg bg-sky-600 text-white flex items-center justify-center font-black text-sm shadow-md shadow-sky-600/20">
                                             {selectedPatient.name.charAt(0).toUpperCase()}
                                         </div>
                                         <div>
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full">Paciente Vinculado</span>
+                                            <div className="flex items-center gap-1.5">
+                                                <span className="text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded-full">Paciente Vinculado</span>
                                             </div>
-                                            <h3 className="text-sm sm:text-base font-black text-slate-900 uppercase tracking-tight mt-0.5">{formatPatientName(selectedPatient)}</h3>
+                                            <h3 className="text-xs sm:text-sm font-black text-slate-900 uppercase tracking-tight mt-0.5">{formatPatientName(selectedPatient)}</h3>
                                         </div>
                                     </div>
                                     <button
@@ -1014,83 +1021,83 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                             setSelectedPatient(null);
                                             onNavigate('consultas:novo-agendamento');
                                         }}
-                                        className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600 text-slate-600 rounded-xl text-xs font-extrabold transition-all shadow-sm active:scale-95 flex items-center gap-1.5 cursor-pointer shrink-0"
+                                        className="px-2.5 py-1 bg-white border border-slate-200 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600 text-slate-600 rounded-lg text-[11px] font-extrabold transition-all shadow-sm active:scale-95 flex items-center gap-1 cursor-pointer shrink-0"
                                     >
-                                        <X className="w-3.5 h-3.5 text-rose-500" />
+                                        <X className="w-3 h-3 text-rose-500" />
                                         Alterar Paciente
                                     </button>
                                 </div>
 
                                 {/* Cartão de Informações Pessoais do Paciente */}
-                                <div className="bg-slate-50/70 border border-slate-200/80 rounded-2xl p-4 space-y-3 shadow-sm">
-                                    <h4 className="text-xs font-black uppercase tracking-widest text-slate-600 flex items-center gap-2 pb-2 border-b border-slate-200/80">
-                                        <UserIcon className="w-4 h-4 text-sky-600" />
+                                <div className="bg-slate-50/70 border border-slate-200/80 rounded-xl p-2.5 space-y-1.5 shadow-sm">
+                                    <h4 className="text-[11px] font-black uppercase tracking-widest text-slate-600 flex items-center gap-1.5 pb-1 border-b border-slate-200/80">
+                                        <UserIcon className="w-3.5 h-3.5 text-sky-600" />
                                         Informações Completas do Paciente
                                     </h4>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5 text-xs font-semibold">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-1.5 sm:gap-2 text-[11px]">
                                         <div>
-                                            <span className="block text-[8.5px] font-black text-slate-400 uppercase tracking-wider mb-0.5">Nome Completo</span>
-                                            <span className="text-slate-900 font-extrabold uppercase text-xs block">{selectedPatient.name}</span>
+                                            <span className="block text-[8px] font-black text-slate-400 uppercase tracking-wider">Nome Completo</span>
+                                            <span className="text-slate-900 font-extrabold uppercase truncate block">{selectedPatient.name}</span>
                                         </div>
                                         <div>
-                                            <span className="block text-[8.5px] font-black text-slate-400 uppercase tracking-wider mb-0.5">Apelido</span>
-                                            <span className="text-slate-800 font-bold uppercase block text-xs">{selectedPatient.nickname || 'Não informado'}</span>
+                                            <span className="block text-[8px] font-black text-slate-400 uppercase tracking-wider">Apelido</span>
+                                            <span className="text-slate-800 font-bold uppercase truncate block">{selectedPatient.nickname || 'Não informado'}</span>
                                         </div>
                                         <div>
-                                            <span className="block text-[8.5px] font-black text-slate-400 uppercase tracking-wider mb-0.5">CPF</span>
-                                            <span className="text-slate-800 font-mono font-bold block text-xs">{selectedPatient.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}</span>
+                                            <span className="block text-[8px] font-black text-slate-400 uppercase tracking-wider">CPF</span>
+                                            <span className="text-slate-800 font-mono font-bold block">{selectedPatient.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}</span>
                                         </div>
                                         <div>
-                                            <span className="block text-[8.5px] font-black text-slate-400 uppercase tracking-wider mb-0.5">Data de Nascimento</span>
-                                            <span className="text-slate-800 font-bold block text-xs">
+                                            <span className="block text-[8px] font-black text-slate-400 uppercase tracking-wider">Data de Nascimento</span>
+                                            <span className="text-slate-800 font-bold block">
                                                 {new Date(selectedPatient.birth_date + 'T12:00:00').toLocaleDateString('pt-BR')} 
                                                 {calculateAge(selectedPatient.birth_date) ? ` (${calculateAge(selectedPatient.birth_date)})` : ''}
                                             </span>
                                         </div>
                                         <div>
-                                            <span className="block text-[8.5px] font-black text-slate-400 uppercase tracking-wider mb-0.5">Telefone / WhatsApp</span>
-                                            <span className="text-slate-800 font-bold block text-xs">{selectedPatient.phone || 'Não informado'}</span>
+                                            <span className="block text-[8px] font-black text-slate-400 uppercase tracking-wider">Telefone / WhatsApp</span>
+                                            <span className="text-slate-800 font-bold block">{selectedPatient.phone || 'Não informado'}</span>
                                         </div>
                                         <div>
-                                            <span className="block text-[8.5px] font-black text-slate-400 uppercase tracking-wider mb-0.5">Cidade</span>
-                                            <span className="text-slate-800 font-bold uppercase block text-xs">{selectedPatient.city || 'SÃO JOSÉ DO GOIABAL - MG'}</span>
+                                            <span className="block text-[8px] font-black text-slate-400 uppercase tracking-wider">Cidade</span>
+                                            <span className="text-slate-800 font-bold uppercase truncate block">{selectedPatient.city || 'SÃO JOSÉ DO GOIABAL - MG'}</span>
                                         </div>
                                         <div>
-                                            <span className="block text-[8.5px] font-black text-slate-400 uppercase tracking-wider mb-0.5">Bairro</span>
-                                            <span className="text-slate-800 font-bold uppercase block text-xs">{selectedPatient.neighborhood || 'Não informado'}</span>
+                                            <span className="block text-[8px] font-black text-slate-400 uppercase tracking-wider">Bairro</span>
+                                            <span className="text-slate-800 font-bold uppercase truncate block">{selectedPatient.neighborhood || 'Não informado'}</span>
                                         </div>
                                         <div>
-                                            <span className="block text-[8.5px] font-black text-slate-400 uppercase tracking-wider mb-0.5">Número do SUS</span>
-                                            <span className="text-slate-800 font-bold block text-xs">{selectedPatient.sus_number || 'Não informado'}</span>
+                                            <span className="block text-[8px] font-black text-slate-400 uppercase tracking-wider">Número do SUS</span>
+                                            <span className="text-slate-800 font-bold block">{selectedPatient.sus_number || 'Não informado'}</span>
                                         </div>
                                         <div>
-                                            <span className="block text-[8.5px] font-black text-slate-400 uppercase tracking-wider mb-0.5">Agente de Saúde</span>
-                                            <span className="text-slate-800 font-bold uppercase block text-xs">{selectedPatient.agente_saude || 'Não informado'}</span>
+                                            <span className="block text-[8px] font-black text-slate-400 uppercase tracking-wider">Agente de Saúde</span>
+                                            <span className="text-slate-800 font-bold uppercase truncate block">{selectedPatient.agente_saude || 'Não informado'}</span>
                                         </div>
                                         <div className="sm:col-span-1">
-                                            <span className="block text-[8.5px] font-black text-slate-400 uppercase tracking-wider mb-0.5">Endereço (Rua / Número)</span>
-                                            <span className="text-slate-800 font-bold uppercase block text-xs">{selectedPatient.street || 'Não informado'}</span>
+                                            <span className="block text-[8px] font-black text-slate-400 uppercase tracking-wider">Endereço (Rua / Número)</span>
+                                            <span className="text-slate-800 font-bold uppercase truncate block">{selectedPatient.street || 'Não informado'}</span>
                                         </div>
                                     </div>
                                 </div>
 
                                 {/* Cartão de Histórico de Agendamentos do Paciente */}
-                                <div className="bg-slate-50/70 border border-slate-200/80 rounded-2xl p-4 space-y-2 shadow-sm">
-                                    <h4 className="text-xs font-black uppercase tracking-widest text-slate-600 flex items-center gap-2 pb-2 border-b border-slate-200/80">
-                                        <Activity className="w-4 h-4 text-indigo-600" />
+                                <div className="bg-slate-50/70 border border-slate-200/80 rounded-xl p-2.5 space-y-1.5 shadow-sm">
+                                    <h4 className="text-[11px] font-black uppercase tracking-widest text-slate-600 flex items-center gap-1.5 pb-1 border-b border-slate-200/80">
+                                        <Activity className="w-3.5 h-3.5 text-indigo-600" />
                                         Histórico Recente de Agendamentos do Paciente
                                     </h4>
                                     {patientHistory.length > 0 ? (
-                                        <div className="space-y-2 max-h-36 overflow-y-auto scrollbar-none pr-1">
-                                            {patientHistory.slice(0, 4).map(h => (
-                                                <div key={h.id} className="p-3 bg-white rounded-xl border border-slate-200/70 flex items-center justify-between text-xs hover:border-slate-300 transition-colors shadow-sm">
+                                        <div className="space-y-1.5 max-h-24 overflow-y-auto scrollbar-none pr-1">
+                                            {patientHistory.slice(0, 3).map(h => (
+                                                <div key={h.id} className="p-2 bg-white rounded-lg border border-slate-200/70 flex items-center justify-between text-[11px] hover:border-slate-300 transition-colors shadow-sm">
                                                     <div>
-                                                        <span className="font-extrabold text-slate-800 uppercase block">{h.procedimento?.name || 'Procedimento'}</span>
-                                                        <span className="text-[10px] text-slate-400 font-bold">
+                                                        <span className="font-extrabold text-slate-800 uppercase block leading-tight">{h.procedimento?.name || 'Procedimento'}</span>
+                                                        <span className="text-[9px] text-slate-400 font-bold">
                                                             Data: {new Date(h.appointment_date + 'T12:00:00').toLocaleDateString('pt-BR')} • Prioridade: {h.priority}
                                                         </span>
                                                     </div>
-                                                    <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase border ${
+                                                    <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase border ${
                                                         h.status === 'Agendado' || h.status === 'Solicitado'
                                                         ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
                                                         : h.status === 'Fila de espera'
@@ -1103,14 +1110,14 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                             ))}
                                         </div>
                                     ) : (
-                                        <p className="text-xs text-slate-400 font-semibold py-1.5">Nenhum agendamento anterior registrado para este paciente em nossa base.</p>
+                                        <p className="text-[11px] text-slate-400 font-semibold py-1">Nenhum agendamento anterior registrado para este paciente em nossa base.</p>
                                     )}
                                 </div>
 
-                                <div className="pt-1 flex justify-end shrink-0">
+                                <div className="pt-0.5 flex justify-end shrink-0">
                                     <button
                                         onClick={() => onNavigate('consultas:novo-agendamento-procedimento')}
-                                        className="px-6 py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-extrabold rounded-xl shadow-lg shadow-sky-600/10 hover:shadow-sky-600/20 active:scale-95 transition-all text-xs uppercase tracking-widest flex items-center gap-2 cursor-pointer"
+                                        className="px-5 py-2 bg-sky-600 hover:bg-sky-700 text-white font-extrabold rounded-xl shadow-md shadow-sky-600/10 hover:shadow-sky-600/20 active:scale-95 transition-all text-xs uppercase tracking-widest flex items-center gap-1.5 cursor-pointer"
                                     >
                                         Avançar para Procedimento
                                         <ChevronRight className="w-4 h-4" />
