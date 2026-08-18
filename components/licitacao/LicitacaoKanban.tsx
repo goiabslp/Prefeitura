@@ -121,7 +121,11 @@ export const LICITACAO_PHASES: PhaseConfig[] = [
     }
 ];
 
-export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, users: usersProp = [], onBack, isViewOnly = false }) => {
+export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = () => {
+    return null;
+};
+
+export const LicitacaoKanbanDisabled: React.FC<LicitacaoKanbanProps> = ({ currentUser, users: usersProp = [], onBack, isViewOnly = false }) => {
     const queryClient = useQueryClient();
     const { data: processes = [], isLoading } = useLicitacaoProcesses();
     const updateMutation = useUpdateLicitacaoProcess();

@@ -178,8 +178,8 @@ const VIEW_TO_PATH: Record<string, string> = {
   'licitacao': '/Licitacao',
   'licitacao:new': '/Licitacao/NovoPedido',
   'licitacao:details': '/Licitacao/MeusProcessos',
-  'licitacao:kanban': '/Licitacao/Kanban',
-  'licitacao:kanban-view': '/Licitacao/Kanban/view',
+  'licitacao:kanban': '/Licitacao',
+  'licitacao:kanban-view': '/Licitacao',
   'consultas': '/Consultas',
   'consultas:novo-agendamento': '/Consultas/NovoAgendamento',
   'consultas:novo-agendamento-paciente': '/Consultas/NovoAgendamento/Paciente',
@@ -285,8 +285,8 @@ const App: React.FC = () => {
       let rawPath = window.location.pathname;
       try { rawPath = decodeURIComponent(rawPath); } catch (e) {}
       const path = rawPath.replace(/\/$/, '').toLowerCase() || '/';
-      if (path.includes('/kanban/view') && (path.includes('/licitacao') || path.includes('/licitaco') || path.includes('/licitação'))) {
-        return 'licitacao:kanban-view';
+      if (path.includes('/kanban')) {
+        return 'licitacao';
       }
     }
     return 'login';
@@ -1155,25 +1155,8 @@ const App: React.FC = () => {
       } else if (path.startsWith('/upload')) {
         setCurrentView('upload');
         return;
-      } else if (
-        path.includes('/licitacao/kanban/view') || 
-        path.includes('/licitação/kanban/view') || 
-        path.includes('/licitaco/kanban/view') || 
-        path.includes('/licitacao\\kanban\\view') || 
-        path.includes('/licitação\\kanban\\view') || 
-        path.includes('/licitaco\\kanban\\view')
-      ) {
-        setCurrentView('licitacao:kanban-view');
-        return;
-      } else if (
-        path.includes('/licitacao/kanban') || 
-        path.includes('/licitação/kanban') || 
-        path.includes('/licitaco/kanban') || 
-        path.includes('/licitacao\\kanban') || 
-        path.includes('/licitação\\kanban') || 
-        path.includes('/licitaco\\kanban')
-      ) {
-        setCurrentView('licitacao:kanban');
+      } else if (path.includes('/kanban')) {
+        setCurrentView('licitacao');
         return;
       }
 
@@ -4720,17 +4703,7 @@ const App: React.FC = () => {
               />
             )}
 
-            {(currentView === 'licitacao:kanban' || currentView === 'licitacao:kanban-view') && (
-              <LicitacaoKanban
-                currentUser={currentUser || ({ id: 'view-user', name: 'Modo Sala', username: 'sala', role: 'viewer', sector: '', permissions: [] } as any)}
-                users={users}
-                isViewOnly={currentView === 'licitacao:kanban-view'}
-                onBack={() => {
-                  setCurrentView('licitacao');
-                  window.history.pushState({}, '', '/Licitacao');
-                }}
-              />
-            )}
+            {/* Kanban desabilitado 100% */}
 
             {currentView === 'projetos' && (
               <ProjetosModule
@@ -5083,12 +5056,7 @@ const App: React.FC = () => {
                           aprovado_em: nowIso
                         };
 
-                        const channel = supabase.channel('licitacao_kanban_priority');
-                        channel.send({
-                          type: 'broadcast',
-                          event: 'new-licitacao-process-approved',
-                          payload: approvedProcessInfo
-                        });
+                        // Broadcast do kanban desabilitado 100%
 
                         const { data: orgData } = await supabase
                           .from('organization_settings')

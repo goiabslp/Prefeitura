@@ -148,22 +148,7 @@ export const broadcastLicitacaoApproval = (approvedProcessInfo: any) => {
         } catch (e) { }
     }
 
-    // 2. Supabase Realtime Broadcast no canal fixo escutado por todos os dispositivos, TVs e telas
-    try {
-        const channel = supabase.channel('licitacao_kanban_priority', { config: { broadcast: { self: true } } });
-        channel.subscribe((status) => {
-            if (status === 'SUBSCRIBED') {
-                channel.send({
-                    type: 'broadcast',
-                    event: 'new-licitacao-process-approved',
-                    payload: approvedProcessInfo
-                });
-                setTimeout(() => {
-                    try { supabase.removeChannel(channel); } catch (e) { }
-                }, 3000);
-            }
-        });
-    } catch (e) { }
+    // Broadcast do Kanban desabilitado 100%
 
     // 3. Atualizar a global_config no Supabase para polling de retaguarda
     try {
@@ -663,12 +648,7 @@ export const saveLicitacaoProcess = async (process: any): Promise<any> => {
                 aprovado_em: nowIso
             };
 
-            const channel = supabase.channel('licitacao_kanban_priority');
-            channel.send({
-                type: 'broadcast',
-                event: 'new-licitacao-process-approved',
-                payload: approvedProcessInfo
-            });
+            // Channel send desabilitado
 
             const { data: orgData } = await supabase
                 .from('organization_settings')
@@ -740,12 +720,7 @@ export const saveObjetoResumidoMap = async (processId: string, text: string): Pr
             localStorage.setItem('licitacao_objeto_resumido_map', JSON.stringify(updatedMap));
         } catch (e) { }
 
-        const channel = supabase.channel('licitacao_kanban_priority');
-        channel.send({
-            type: 'broadcast',
-            event: 'licitacao-objeto-resumido-updated',
-            payload: updatedMap
-        });
+        // Channel send desabilitado
     } catch (e) {
         console.warn('Erro ao salvar objeto_resumido em organization_settings:', e);
     }

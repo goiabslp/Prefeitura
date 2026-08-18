@@ -112,17 +112,8 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
         loadMap();
         const interval = setInterval(loadMap, 3000);
 
-        const channel = supabase.channel('licitacao_kanban_priority')
-            .on('broadcast', { event: 'licitacao-objeto-resumido-updated' }, (payload: any) => {
-                if (payload.payload) {
-                    setObjetoResumidoMap(payload.payload);
-                }
-            })
-            .subscribe();
-
         return () => {
             clearInterval(interval);
-            supabase.removeChannel(channel);
         };
     }, []);
 
