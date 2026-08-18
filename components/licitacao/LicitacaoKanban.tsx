@@ -121,13 +121,9 @@ export const LICITACAO_PHASES: PhaseConfig[] = [
     }
 ];
 
-export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = () => {
-    return null;
-};
-
-export const LicitacaoKanbanDisabled: React.FC<LicitacaoKanbanProps> = ({ currentUser, users: usersProp = [], onBack, isViewOnly = false }) => {
+export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, users: usersProp = [], onBack, isViewOnly = false }) => {
     const queryClient = useQueryClient();
-    const { data: processes = [], isLoading } = useLicitacaoProcesses();
+    const { data: processes = [], isLoading } = useLicitacaoProcesses({ refetchInterval: isViewOnly ? 10 * 60 * 1000 : false });
     const updateMutation = useUpdateLicitacaoProcess();
 
     const [searchTerm, setSearchTerm] = useState('');
@@ -784,6 +780,22 @@ export const LicitacaoKanbanDisabled: React.FC<LicitacaoKanbanProps> = ({ curren
             }
         };
         fetchDbPriority();
+
+        // Se for modo visualização (/Licitacao/Kanban/view), NÃO ativa canais Realtime. Atualiza via polling a cada 10 minutos.
+        if (isViewOnly) {
+            const tenMinutesInterval = setInterval(() => {
+                queryClient.invalidateQueries({ queryKey: licitacaoKeys.all });
+            }, 10 * 60 * 1000);
+
+            return () => {
+                clearInterval(tenMinutesInterval);
+                window.removeEventListener('storage', handleLocalEvent);
+                window.removeEventListener('licitacao-priority-updated', handleLocalEvent);
+                window.removeEventListener('storage', handleQueueLocalEvent);
+                window.removeEventListener('licitacao-queue-priority-updated', handleQueueLocalEvent);
+                window.removeEventListener('licitacao-new-process-approved', handleNewApprovedLocalEvent);
+            };
+        }
 
         // 2. Supabase Realtime Channel para Broadcast instantâneo e Postgres Changes (self: true para escutar própria aba)
         const channel = supabase.channel('licitacao_kanban_priority', { config: { broadcast: { self: true } } })

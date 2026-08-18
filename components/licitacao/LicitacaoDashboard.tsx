@@ -66,6 +66,40 @@ export const LicitacaoDashboard: React.FC<LicitacaoDashboardProps> = ({ onNaviga
                                 <p className="text-[10px] desktop:text-xs font-bold text-slate-400 group-hover:text-sky-600 transition-colors uppercase tracking-widest">Acompanhe e gerencie</p>
                             </button>
 
+                            {/* Quadro Kanban Button */}
+                            <button
+                                onClick={() => onNavigate('licitacao:kanban')}
+                                className="group relative flex-1 min-w-[240px] desktop:min-w-[260px] max-w-[360px] min-h-[120px] desktop:min-h-[130px] h-auto py-6 rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-purple-500/30 hover:border-purple-200 hover:from-white hover:to-purple-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden shrink-0 basis-0 grow"
+                                style={{ animationDelay: '200ms' }}
+                            >
+                                <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
+                                <div className="absolute bottom-0 left-0 w-24 h-24 bg-purple-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
+
+                                <div className="relative w-12 h-12 desktop:w-14 desktop:h-14 rounded-2xl bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center mb-3 text-white group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300 shadow-lg shadow-purple-500/30 ring-4 ring-white">
+                                    <LayoutGrid className="w-6 h-6 desktop:w-7 desktop:h-7 drop-shadow-md" />
+                                </div>
+
+                                <h3 className="text-lg desktop:text-2xl font-bold text-slate-800 mb-1 group-hover:text-slate-900 tracking-tight">Quadro Kanban</h3>
+                                <p className="text-[10px] desktop:text-xs font-bold text-slate-400 group-hover:text-purple-600 transition-colors uppercase tracking-widest">Fluxo em Tempo Real</p>
+                            </button>
+
+                            {/* Painel de Acompanhamento (View) Button */}
+                            <button
+                                onClick={() => onNavigate('licitacao:kanban-view')}
+                                className="group relative flex-1 min-w-[240px] desktop:min-w-[260px] max-w-[360px] min-h-[120px] desktop:min-h-[130px] h-auto py-6 rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-emerald-500/30 hover:border-emerald-200 hover:from-white hover:to-emerald-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden shrink-0 basis-0 grow"
+                                style={{ animationDelay: '300ms' }}
+                            >
+                                <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
+                                <div className="absolute bottom-0 left-0 w-24 h-24 bg-emerald-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
+
+                                <div className="relative w-12 h-12 desktop:w-14 desktop:h-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center mb-3 text-white group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300 shadow-lg shadow-emerald-500/30 ring-4 ring-white">
+                                    <Tv className="w-6 h-6 desktop:w-7 desktop:h-7 drop-shadow-md" />
+                                </div>
+
+                                <h3 className="text-lg desktop:text-2xl font-bold text-slate-800 mb-1 group-hover:text-slate-900 tracking-tight">Painel Visualização</h3>
+                                <p className="text-[10px] desktop:text-xs font-bold text-slate-400 group-hover:text-emerald-600 transition-colors uppercase tracking-widest">Atualiza a cada 10 min</p>
+                            </button>
+
                         </div>
                     </div>
                 </div>

@@ -178,8 +178,8 @@ const VIEW_TO_PATH: Record<string, string> = {
   'licitacao': '/Licitacao',
   'licitacao:new': '/Licitacao/NovoPedido',
   'licitacao:details': '/Licitacao/MeusProcessos',
-  'licitacao:kanban': '/Licitacao',
-  'licitacao:kanban-view': '/Licitacao',
+  'licitacao:kanban': '/Licitacao/Kanban',
+  'licitacao:kanban-view': '/Licitacao/Kanban/view',
   'consultas': '/Consultas',
   'consultas:novo-agendamento': '/Consultas/NovoAgendamento',
   'consultas:novo-agendamento-paciente': '/Consultas/NovoAgendamento/Paciente',
@@ -285,8 +285,11 @@ const App: React.FC = () => {
       let rawPath = window.location.pathname;
       try { rawPath = decodeURIComponent(rawPath); } catch (e) {}
       const path = rawPath.replace(/\/$/, '').toLowerCase() || '/';
+      if (path.includes('/kanban/view')) {
+        return 'licitacao:kanban-view';
+      }
       if (path.includes('/kanban')) {
-        return 'licitacao';
+        return 'licitacao:kanban';
       }
     }
     return 'login';
@@ -1155,8 +1158,11 @@ const App: React.FC = () => {
       } else if (path.startsWith('/upload')) {
         setCurrentView('upload');
         return;
+      } else if (path.includes('/kanban/view')) {
+        setCurrentView('licitacao:kanban-view');
+        return;
       } else if (path.includes('/kanban')) {
-        setCurrentView('licitacao');
+        setCurrentView('licitacao:kanban');
         return;
       }
 
@@ -4703,7 +4709,33 @@ const App: React.FC = () => {
               />
             )}
 
-            {/* Kanban desabilitado 100% */}
+            {currentView === 'licitacao:kanban' && (
+              <LicitacaoKanban
+                currentUser={currentUser!}
+                users={users}
+                onBack={() => {
+                  setCurrentView('licitacao');
+                  window.history.pushState({}, '', '/Licitacao');
+                }}
+              />
+            )}
+
+            {currentView === 'licitacao:kanban-view' && (
+              <LicitacaoKanban
+                currentUser={(currentUser || { id: 'public', username: 'public', name: 'Painel Público', email: '', role: 'collaborator', permissions: [] }) as unknown as User}
+                users={users}
+                isViewOnly={true}
+                onBack={() => {
+                  if (currentUser) {
+                    setCurrentView('licitacao');
+                    window.history.pushState({}, '', '/Licitacao');
+                  } else {
+                    setCurrentView('login');
+                    window.history.pushState({}, '', '/Login');
+                  }
+                }}
+              />
+            )}
 
             {currentView === 'projetos' && (
               <ProjetosModule
@@ -5056,7 +5088,7 @@ const App: React.FC = () => {
                           aprovado_em: nowIso
                         };
 
-                        // Broadcast do kanban desabilitado 100%
+                        licitacaoService.broadcastLicitacaoApproval(approvedProcessInfo);
 
                         const { data: orgData } = await supabase
                           .from('organization_settings')
