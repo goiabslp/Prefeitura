@@ -110,7 +110,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
             setObjetoResumidoMap(prev => JSON.stringify(prev) === JSON.stringify(map) ? prev : map);
         };
         loadMap();
-        const interval = setInterval(loadMap, 3000);
+        const interval = setInterval(loadMap, 30000);
 
         return () => {
             clearInterval(interval);
