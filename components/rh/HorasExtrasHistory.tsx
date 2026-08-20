@@ -189,12 +189,13 @@ export const HorasExtrasHistory: React.FC<HorasExtrasHistoryProps> = ({
                 {/* List Content */}
                 <div className="flex-1 overflow-y-auto p-2 desktop:p-4 bg-slate-50/50 custom-scrollbar">
                     {/* Header Columns (Desktop Only) */}
-                    <div className="hidden desktop:grid grid-cols-12 gap-4 px-6 py-3 mb-2 sticky top-0 bg-slate-50/95 backdrop-blur-sm z-10 rounded-xl border border-slate-200/60 shadow-sm text-[10px] font-extrabold tracking-widest text-slate-400 uppercase">
+                    <div className="hidden desktop:grid grid-cols-12 gap-3 px-6 py-3 mb-2 sticky top-0 bg-slate-50/95 backdrop-blur-sm z-10 rounded-xl border border-slate-200/60 shadow-sm text-[10px] font-extrabold tracking-widest text-slate-400 uppercase">
                         <div className="col-span-2">Mês / Ano</div>
                         <div className="col-span-2">Data Emissão</div>
                         <div className="col-span-3">Setor</div>
-                        <div className="col-span-3">Responsável / Colaboradores</div>
-                        <div className="col-span-2 text-center">Ações</div>
+                        <div className="col-span-2">Responsável</div>
+                        <div className="col-span-1 text-center">Equipe</div>
+                        <div className="col-span-2 text-right pr-2">Ações</div>
                     </div>
 
                     <div className="space-y-2">
@@ -239,18 +240,18 @@ export const HorasExtrasHistory: React.FC<HorasExtrasHistoryProps> = ({
                                 return (
                                     <div
                                         key={record.id}
-                                        className={`group relative bg-white border rounded-2xl p-4 desktop:p-0 desktop:px-6 desktop:py-4 flex flex-col desktop:grid desktop:grid-cols-12 gap-4 desktop:gap-4 items-start desktop:items-center transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5
+                                        className={`group relative bg-white border rounded-2xl p-4 desktop:p-0 desktop:px-6 desktop:py-4 flex flex-col desktop:grid desktop:grid-cols-12 gap-3 items-start desktop:items-center transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5
                                             ${isHighlighted ? 'border-indigo-400 shadow-md ring-2 ring-indigo-50' : 'border-slate-200 hover:border-indigo-200'}
                                             ${isRecordDeleting ? 'opacity-50 pointer-events-none' : ''}
                                         `}
                                     >
                                         {/* Col 1-2: Date Box */}
-                                        <div className="desktop:col-span-2 flex items-center gap-4 w-full">
+                                        <div className="desktop:col-span-2 flex items-center gap-4 w-full min-w-0">
                                             <div className="flex flex-col items-center justify-center bg-white border-2 border-slate-100 rounded-xl p-2 w-16 h-16 shrink-0 shadow-sm group-hover:border-indigo-100 group-hover:shadow-indigo-100 transition-all">
                                                 <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">{mesStr?.substring(0, 3)}</span>
                                                 <span className="text-lg font-black text-slate-700 leading-none mt-0.5">{displayAno}</span>
                                             </div>
-                                            <div className="flex-1 desktop:hidden">
+                                            <div className="flex-1 desktop:hidden min-w-0">
                                                 <div className="flex flex-wrap items-center gap-2 mb-1">
                                                     <span className="bg-indigo-50 text-indigo-700 px-2.5 py-0.5 rounded-md text-xs font-bold font-mono tracking-wider">
                                                         #{record.id?.substring(0, 6)}
@@ -261,18 +262,18 @@ export const HorasExtrasHistory: React.FC<HorasExtrasHistoryProps> = ({
                                         </div>
 
                                         {/* Col 3-4: Protocol/Date */}
-                                        <div className="desktop:col-span-2 hidden desktop:flex flex-col items-start gap-1">
+                                        <div className="desktop:col-span-2 hidden desktop:flex flex-col items-start gap-1 min-w-0">
                                             <span className="bg-indigo-50 text-indigo-700 px-2.5 py-0.5 rounded-md text-[10px] font-bold font-mono tracking-wider flex items-center gap-1 w-fit">
                                                 <Calendar className="w-3 h-3" />
                                                 #{record.id?.substring(0, 6)}
                                             </span>
-                                            <span className="text-xs font-medium text-slate-500 whitespace-nowrap">
+                                            <span className="text-xs font-medium text-slate-500 whitespace-nowrap truncate max-w-full">
                                                 {formatDate(record.created_at)}
                                             </span>
                                         </div>
 
                                         {/* Col 5-7: Sector */}
-                                        <div className="desktop:col-span-3 w-full hidden desktop:flex flex-col items-start justify-center pr-4">
+                                        <div className="desktop:col-span-3 w-full hidden desktop:flex flex-col items-start justify-center pr-2 min-w-0">
                                             <div className="text-sm font-bold text-slate-800 line-clamp-2 leading-tight group-hover:text-indigo-700 transition-colors">
                                                 {record.sector}
                                             </div>
@@ -281,38 +282,40 @@ export const HorasExtrasHistory: React.FC<HorasExtrasHistoryProps> = ({
                                             </div>
                                         </div>
 
-                                        {/* Col 8-10: Responsável & Colaboradores */}
-                                        <div className="desktop:col-span-3 w-full flex items-center justify-between desktop:justify-start gap-3 bg-slate-50 desktop:bg-transparent p-3 desktop:p-0 rounded-xl">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-100 to-fuchsia-100 border-2 border-white shadow-sm flex items-center justify-center shrink-0">
-                                                    {record.user_name ? (
-                                                        <span className="text-xs font-black text-indigo-700 uppercase">
-                                                            {record.user_name.substring(0, 2)}
-                                                        </span>
-                                                    ) : (
-                                                        <User className="w-4 h-4 text-indigo-400" />
-                                                    )}
-                                                </div>
-                                                <div className="flex flex-col">
-                                                    <span className="text-xs font-bold text-slate-700 line-clamp-1 group-hover:text-indigo-600 transition-colors">
-                                                        {record.user_name}
+                                        {/* Col 8-9: Responsável */}
+                                        <div className="desktop:col-span-2 w-full flex items-center gap-2.5 min-w-0">
+                                            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-100 to-fuchsia-100 border-2 border-white shadow-sm flex items-center justify-center shrink-0">
+                                                {record.user_name ? (
+                                                    <span className="text-xs font-black text-indigo-700 uppercase">
+                                                        {record.user_name.substring(0, 2)}
                                                     </span>
-                                                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-                                                        <Signature className="w-3 h-3 text-indigo-400" /> Assinado Elet.
-                                                    </span>
-                                                </div>
+                                                ) : (
+                                                    <User className="w-4 h-4 text-indigo-400" />
+                                                )}
                                             </div>
-                                            <div className="flex items-center gap-1.5 bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full border border-blue-100 shrink-0">
+                                            <div className="flex flex-col min-w-0">
+                                                <span className="text-xs font-bold text-slate-700 truncate group-hover:text-indigo-600 transition-colors" title={record.user_name}>
+                                                    {record.user_name}
+                                                </span>
+                                                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1 whitespace-nowrap">
+                                                    <Signature className="w-3 h-3 text-indigo-400 shrink-0" /> Assinado Elet.
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        {/* Col 10: Colaboradores (Equipe) */}
+                                        <div className="desktop:col-span-1 w-full flex items-center justify-start desktop:justify-center shrink-0">
+                                            <div className="flex items-center gap-1.5 bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full border border-blue-100 shrink-0 shadow-sm" title="Total de Colaboradores">
                                                 <Users className="w-3.5 h-3.5" />
                                                 <span className="font-bold text-xs">{record.entries.length}</span>
                                             </div>
                                         </div>
 
                                         {/* Col 11-12: Actions */}
-                                        <div className="desktop:col-span-2 w-full flex items-center justify-end gap-2 border-t border-slate-100 desktop:border-t-0 pt-3 desktop:pt-0 mt-1 desktop:mt-0 opacity-100 desktop:opacity-0 desktop:group-hover:opacity-100 transition-opacity duration-300">
+                                        <div className="desktop:col-span-2 w-full flex items-center justify-end gap-1.5 border-t border-slate-100 desktop:border-t-0 pt-3 desktop:pt-0 mt-1 desktop:mt-0 shrink-0">
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); onDownloadPdf(record); }}
-                                                className="flex-1 desktop:flex-none flex items-center justify-center gap-1.5 px-3 py-2 bg-white border border-slate-200 hover:border-indigo-300 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all shadow-sm group/btn"
+                                                className="p-2 bg-white border border-slate-200 hover:border-indigo-300 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all shadow-sm shrink-0"
                                                 title="Baixar PDF"
                                             >
                                                 <FileDown className="w-4 h-4" />
@@ -320,7 +323,7 @@ export const HorasExtrasHistory: React.FC<HorasExtrasHistoryProps> = ({
 
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); onEdit(record); }}
-                                                className="flex-1 desktop:flex-none flex items-center justify-center gap-1.5 px-3 py-2 bg-white border border-slate-200 hover:border-amber-300 text-slate-600 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-all shadow-sm"
+                                                className="p-2 bg-white border border-slate-200 hover:border-amber-300 text-slate-600 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-all shadow-sm shrink-0"
                                                 title="Editar"
                                             >
                                                 <Edit2 className="w-4 h-4" />
@@ -329,7 +332,7 @@ export const HorasExtrasHistory: React.FC<HorasExtrasHistoryProps> = ({
                                             {userRole === 'admin' && onView && (
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); onView(record); }}
-                                                    className="flex-1 desktop:flex-none flex items-center justify-center gap-1.5 px-3 py-2 bg-white border border-slate-200 hover:border-emerald-300 text-slate-600 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all shadow-sm"
+                                                    className="p-2 bg-white border border-slate-200 hover:border-emerald-300 text-slate-600 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all shadow-sm shrink-0"
                                                     title="Visualizar"
                                                 >
                                                     <Search className="w-4 h-4" />
@@ -339,7 +342,7 @@ export const HorasExtrasHistory: React.FC<HorasExtrasHistoryProps> = ({
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); handleDelete(record.id!, record.month); }}
                                                 disabled={isRecordDeleting}
-                                                className="flex-1 desktop:flex-none flex items-center justify-center gap-1.5 px-3 py-2 bg-white border border-slate-200 hover:border-rose-300 text-slate-600 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all shadow-sm disabled:opacity-50"
+                                                className="p-2 bg-white border border-slate-200 hover:border-rose-300 text-slate-600 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all shadow-sm disabled:opacity-50 shrink-0"
                                                 title="Excluir"
                                             >
                                                 {isRecordDeleting ? (
