@@ -217,10 +217,9 @@ export const AbastecimentoForm: React.FC<AbastecimentoFormProps> = ({
     };
 
     const buildRecord = (customInvoiceId?: string) => {
-        // Data e hora capturadas automaticamente no momento do salvamento para novos registros
         const nowLocal = getLocalISOData(new Date());
-        const currentDateStr = initialData ? date : nowLocal.date;
-        const currentTimeStr = initialData ? time : nowLocal.time;
+        const currentDateStr = date || nowLocal.date;
+        const currentTimeStr = time || nowLocal.time;
 
         const [yr, mo, dy] = currentDateStr.split('-').map(Number);
         const [hr, mi] = currentTimeStr.split(':').map(Number);
@@ -635,6 +634,14 @@ export const AbastecimentoForm: React.FC<AbastecimentoFormProps> = ({
                                             )}
 
                                             <div className="w-full bg-slate-50 border border-slate-200 rounded-2xl shadow-sm text-left overflow-hidden divide-y divide-slate-100">
+                                                <div className="py-2 px-3 grid grid-cols-2 gap-3 bg-white">
+                                                    <div>
+                                                        <CustomDateTimeInput label="Data" value={date} onChange={setDate} type="date" required />
+                                                    </div>
+                                                    <div>
+                                                        <CustomDateTimeInput label="Hora" value={time} onChange={setTime} type="time" required />
+                                                    </div>
+                                                </div>
                                                 <div className="py-2 px-3">
                                                     <span className="block text-[9px] font-black uppercase tracking-wider text-slate-400 mb-0.5">Motorista</span>
                                                     <p className="text-sm font-bold text-slate-800">{driver || '—'}</p>
@@ -775,9 +782,9 @@ export const AbastecimentoForm: React.FC<AbastecimentoFormProps> = ({
 
                 <form onSubmit={handleSubmit} className="p-4 sm:p-6">
                     <div className="grid grid-cols-12 gap-x-4 gap-y-5">
-                        <div className="hidden wide:block wide:col-span-3"><CustomDateTimeInput label="Data" value={date} onChange={setDate} type="date" required /></div>
-                        <div className="hidden wide:block wide:col-span-3"><CustomDateTimeInput label="Hora" value={time} onChange={setTime} type="time" required /></div>
-                        <div className="col-span-12 wide:col-span-6 space-y-1">
+                        <div className="col-span-12 sm:col-span-6 lg:col-span-3"><CustomDateTimeInput label="Data" value={date} onChange={setDate} type="date" required /></div>
+                        <div className="col-span-12 sm:col-span-6 lg:col-span-3"><CustomDateTimeInput label="Hora" value={time} onChange={setTime} type="time" required /></div>
+                        <div className="col-span-12 lg:col-span-6 space-y-1">
                             <label className={labelClass}>Número da Nota</label>
                             <div className="relative group">
                                 <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-cyan-500 transition-colors"><FileText className="w-5 h-5" /></div>
