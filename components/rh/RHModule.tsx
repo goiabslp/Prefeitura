@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { User, AppState, BlockType, Order, RhHorasExtras, Person, Job, Sector } from '../../types';
+import { User, AppState, RhHorasExtras, Person, Job, Sector } from '../../types';
 import { HorasExtrasForm } from './HorasExtrasForm';
 import { HorasExtrasHistory } from './HorasExtrasHistory';
-import { Users, FileText, ArrowLeft, History, PlusCircle } from 'lucide-react';
+import { Users, ArrowLeft, History, PlusCircle } from 'lucide-react';
 import { HorasExtrasPdfGenerator } from './HorasExtrasPdfGenerator';
 import { useSystemSettings } from '../../contexts/SystemSettingsContext';
 
@@ -80,12 +80,14 @@ export const RHModule: React.FC<RHModuleProps> = ({
         setEditingRecord(record);
         setIsViewMode(false);
         setActiveTab('novo');
+        onNavigate('rh:horas-extras');
     };
 
     const handleView = (record: RhHorasExtras) => {
         setEditingRecord(record);
         setIsViewMode(true);
         setActiveTab('novo');
+        onNavigate('rh:horas-extras');
     };
 
     return (
@@ -173,7 +175,7 @@ export const RHModule: React.FC<RHModuleProps> = ({
                                 </div>
                             </div>
                         </div>
-                    ) : showHistorico && activeTab === 'historico' ? (
+                    ) : showHistorico || (activeTab === 'historico' && subView !== 'horas-extras') ? (
                         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 flex-1 flex flex-col w-full h-full">
                             <HorasExtrasHistory
                                 userRole={userRole}
@@ -182,13 +184,18 @@ export const RHModule: React.FC<RHModuleProps> = ({
                                 onEdit={handleEdit}
                                 onView={handleView}
                                 onBack={() => onNavigate('rh')}
+                                highlightId={highlightId}
                             />
                         </div>
-                    ) : showHorasExtras ? (
+                    ) : showHorasExtras || activeTab === 'novo' ? (
                         <div className="max-w-7xl mx-auto w-full">
                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
                                 <button
-                                    onClick={() => onNavigate('rh')}
+                                    onClick={() => {
+                                        setEditingRecord(null);
+                                        setIsViewMode(false);
+                                        onNavigate('rh');
+                                    }}
                                     className="flex items-center gap-2 text-slate-500 hover:text-fuchsia-600 font-bold transition-colors group w-fit"
                                 >
                                     <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
@@ -210,12 +217,13 @@ export const RHModule: React.FC<RHModuleProps> = ({
                                         onSaveForm(data);
                                         setEditingRecord(null);
                                         setIsViewMode(false);
+                                        onNavigate('rh:historico');
                                     }}
                                     onCancel={() => {
+                                        setEditingRecord(null);
+                                        setIsViewMode(false);
                                         if (editingRecord) {
-                                            setEditingRecord(null);
-                                            setIsViewMode(false);
-                                            setActiveTab('historico');
+                                            onNavigate('rh:historico');
                                         } else {
                                             onNavigate('rh');
                                         }

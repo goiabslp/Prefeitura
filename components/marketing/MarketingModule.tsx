@@ -130,7 +130,7 @@ export const MarketingModule: React.FC<MarketingModuleProps> = ({
                 />
             )}
 
-            {subView === 'list' && (
+            {(subView === 'list' || (subView === 'details' && !selectedRequestId)) && (
                 <MeusConteudosList 
                     userId={userId} 
                     userRole={userRole} 

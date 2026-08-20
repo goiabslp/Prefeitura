@@ -55,7 +55,7 @@ export const ProjetosModule: React.FC<ProjetosModuleProps> = ({
 
     return (
         <div className="flex-1 w-full bg-slate-50 relative min-h-screen">
-            {(!subView || subView === 'list') && (
+            {(!subView || subView === 'list' || (subView === 'details' && !selectedId)) && (
                 <ProjetosList
                     userId={userId}
                     userRole={userRole}

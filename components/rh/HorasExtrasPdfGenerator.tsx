@@ -69,7 +69,9 @@ export const HorasExtrasPdfGenerator: React.FC<HorasExtrasPdfGeneratorProps> = (
                 pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
             }
 
-            pdf.save(`HorasExtras_${record.sector.replace(/\s+/g, '_')}_${record.month.replace(/\s+/g, '_')}.pdf`);
+            const safeSector = (record.sector || 'Setor').replace(/\s+/g, '_');
+            const safeMonth = (record.month || 'Mes').replace(/\s+/g, '_');
+            pdf.save(`HorasExtras_${safeSector}_${safeMonth}.pdf`);
             onClose();
         } catch (error) {
             console.error('Error generating PDF:', error);
@@ -81,9 +83,9 @@ export const HorasExtrasPdfGenerator: React.FC<HorasExtrasPdfGeneratorProps> = (
         }
     };
 
-    const validEntries = (record.entries || []).filter(e => e.status !== 'Pendente');
-    const sectorEntries = validEntries.filter(e => !e.isCedido).sort((a, b) => a.name.localeCompare(b.name));
-    const cedidosEntries = validEntries.filter(e => e.isCedido).sort((a, b) => a.name.localeCompare(b.name));
+    const validEntries = (record.entries || []).filter(e => e?.status !== 'Pendente');
+    const sectorEntries = validEntries.filter(e => !e?.isCedido).sort((a, b) => (a?.name || '').localeCompare(b?.name || ''));
+    const cedidosEntries = validEntries.filter(e => e?.isCedido).sort((a, b) => (a?.name || '').localeCompare(b?.name || ''));
 
     const displayItems: { type: 'header' | 'row', title?: string, data?: any }[] = [];
     
@@ -103,9 +105,9 @@ export const HorasExtrasPdfGenerator: React.FC<HorasExtrasPdfGeneratorProps> = (
     const reportState = {
         ...state,
         branding: {
-            ...state.branding,
+            ...state?.branding,
             watermark: {
-                ...state.branding?.watermark,
+                ...state?.branding?.watermark,
                 enabled: false
             }
         }
