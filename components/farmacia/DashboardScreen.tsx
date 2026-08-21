@@ -4,7 +4,7 @@ import * as db from '../../services/farmaciaService';
 import {
     ArrowLeft, TrendingUp, TrendingDown, Users, Package, AlertTriangle, Activity, 
     Calendar, CheckCircle2, AlertCircle, ShoppingCart, Info, PieChart, FileDown,
-    Plus, Search, X, MoreVertical, Settings, Sparkles, Brain
+    Plus, Search, X, MoreVertical, Settings, Sparkles, Brain, Clock, Flame, Thermometer, Zap
 } from 'lucide-react';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -53,6 +53,10 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     const [savingConfig, setSavingConfig] = useState(false);
     const [configSearch, setConfigSearch] = useState('');
     const [loading, setLoading] = useState(true);
+
+    // Estado para filtro de período do Horário de Pico (Temperatura de Atendimento)
+    const [peakHoursPeriod, setPeakHoursPeriod] = useState<'30_days' | 'current_month' | 'all'>('30_days');
+    const [hoveredPeakCell, setHoveredPeakCell] = useState<{ dayLabel: string; hour: number; count: number } | null>(null);
 
     // Estados para o Modal de IA Preditiva de Estoque
     const [selectedIAMed, setSelectedIAMed] = useState<any | null>(null);
@@ -672,6 +676,75 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
             .slice(0, 5);
     }, [currentMonthDispenses]);
 
+    // Métrica: Horário de Pico (Temperatura de Atendimento) - Matriz 7x24 (Dias da Semana x 24h)
+    const peakHoursData = useMemo(() => {
+        const matrix: number[][] = Array.from({ length: 7 }, () => Array(24).fill(0));
+        
+        let filteredMovs = movimentacoes.filter(m => isSaidaTipo(m.tipo) && m.data);
+
+        const nowDate = new Date();
+        if (peakHoursPeriod === 'current_month') {
+            filteredMovs = currentMonthDispenses;
+        } else if (peakHoursPeriod === '30_days') {
+            const thirtyDaysAgo = subMonths(nowDate, 1);
+            filteredMovs = filteredMovs.filter(m => {
+                const d = parseMovimentacaoDate(m.data);
+                return d && d >= thirtyDaysAgo;
+            });
+        }
+
+        let maxCount = 0;
+        let totalDispenseEvents = 0;
+        let peakSlot = { dayIndex: 1, hour: 10, count: 0 };
+        const dayTotals = Array(7).fill(0);
+        const hourTotals = Array(24).fill(0);
+
+        filteredMovs.forEach(m => {
+            const d = parseMovimentacaoDate(m.data);
+            if (!d) return;
+            const day = d.getDay(); // 0=Dom, 1=Seg...
+            const hour = d.getHours(); // 0..23
+
+            matrix[day][hour] += 1;
+            dayTotals[day] += 1;
+            hourTotals[hour] += 1;
+            totalDispenseEvents += 1;
+
+            if (matrix[day][hour] > maxCount) {
+                maxCount = matrix[day][hour];
+                peakSlot = { dayIndex: day, hour, count: matrix[day][hour] };
+            }
+        });
+
+        const daysConfig = [
+            { index: 1, label: 'Segunda-feira', short: 'Seg' },
+            { index: 2, label: 'Terça-feira', short: 'Ter' },
+            { index: 3, label: 'Quarta-feira', short: 'Qua' },
+            { index: 4, label: 'Quinta-feira', short: 'Qui' },
+            { index: 5, label: 'Sexta-feira', short: 'Sex' },
+            { index: 6, label: 'Sábado', short: 'Sáb' },
+            { index: 0, label: 'Domingo', short: 'Dom' },
+        ];
+
+        const maxDayTotalIndex = dayTotals.indexOf(Math.max(...dayTotals));
+        const peakDayObj = daysConfig.find(d => d.index === maxDayTotalIndex) || daysConfig[0];
+        const maxHourTotalIndex = hourTotals.indexOf(Math.max(...hourTotals));
+
+        return {
+            matrix,
+            maxCount,
+            totalDispenseEvents,
+            peakSlot,
+            peakDayName: daysConfig.find(d => d.index === peakSlot.dayIndex)?.label || 'Segunda-feira',
+            peakDayTotalName: peakDayObj.label,
+            peakDayTotalCount: dayTotals[maxDayTotalIndex] || 0,
+            peakHourGlobal: maxHourTotalIndex,
+            daysConfig,
+            dayTotals,
+            hourTotals
+        };
+    }, [movimentacoes, peakHoursPeriod, currentMonthDispenses]);
+
     // PREDITIVA: Previsão de Demanda e Necessidade de Compra
     const purchaseRecommendations = useMemo(() => {
         const recommendations = [];
@@ -1212,6 +1285,222 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                                 <Bar dataKey="quantidade" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={40} />
                             </BarChart>
                         </ResponsiveContainer>
+                    </div>
+                </div>
+            </div>
+
+            {/* Quadro de Horário de Pico / Temperatura de Atendimento */}
+            <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm mb-8">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-slate-100">
+                    <div>
+                        <h3 className="text-base font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
+                            <Flame className="w-5 h-5 text-rose-500 animate-pulse" />
+                            Horário de Pico (Temperatura de Atendimento)
+                        </h3>
+                        <p className="text-xs text-slate-500 font-semibold mt-1">
+                            Mapa de calor interativo registrando a intensidade de atendimentos por dia da semana e 24 horas do dia.
+                        </p>
+                    </div>
+
+                    {/* Filtros de período */}
+                    <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-2xl shrink-0 self-start sm:self-auto">
+                        <button
+                            onClick={() => setPeakHoursPeriod('30_days')}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                                peakHoursPeriod === '30_days'
+                                ? 'bg-white text-slate-900 shadow-sm'
+                                : 'text-slate-500 hover:text-slate-800'
+                            }`}
+                        >
+                            Últimos 30 Dias
+                        </button>
+                        <button
+                            onClick={() => setPeakHoursPeriod('current_month')}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                                peakHoursPeriod === 'current_month'
+                                ? 'bg-white text-slate-900 shadow-sm'
+                                : 'text-slate-500 hover:text-slate-800'
+                            }`}
+                        >
+                            Mês Atual
+                        </button>
+                        <button
+                            onClick={() => setPeakHoursPeriod('all')}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                                peakHoursPeriod === 'all'
+                                ? 'bg-white text-slate-900 shadow-sm'
+                                : 'text-slate-500 hover:text-slate-800'
+                            }`}
+                        >
+                            Geral (Histórico)
+                        </button>
+                    </div>
+                </div>
+
+                {/* Cards de Destaque do Horário de Pico */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                    <div className="bg-gradient-to-br from-rose-50 to-pink-50/50 p-4 rounded-2xl border border-rose-100 flex items-center gap-3">
+                        <div className="p-3 bg-rose-500 text-white rounded-xl shadow-md shadow-rose-200">
+                            <Flame className="w-5 h-5" />
+                        </div>
+                        <div>
+                            <span className="text-[10px] font-black uppercase text-rose-400 block tracking-wider">Pico Máximo de Atendimento</span>
+                            <span className="text-sm font-black text-rose-950 block">
+                                {peakHoursData.peakSlot.count > 0 
+                                    ? `${peakHoursData.peakDayName} às ${String(peakHoursData.peakSlot.hour).padStart(2, '0')}:00h` 
+                                    : 'Sem dados no período'}
+                            </span>
+                            <span className="text-[10px] font-extrabold text-rose-600">
+                                {peakHoursData.peakSlot.count > 0 ? `${peakHoursData.peakSlot.count} atendimentos registrados` : '-'}
+                            </span>
+                        </div>
+                    </div>
+
+                    <div className="bg-gradient-to-br from-amber-50 to-orange-50/50 p-4 rounded-2xl border border-amber-100 flex items-center gap-3">
+                        <div className="p-3 bg-amber-500 text-white rounded-xl shadow-md shadow-amber-200">
+                            <Clock className="w-5 h-5" />
+                        </div>
+                        <div>
+                            <span className="text-[10px] font-black uppercase text-amber-500 block tracking-wider">Faixa Horária Crítica</span>
+                            <span className="text-sm font-black text-amber-950 block">
+                                {peakHoursData.totalDispenseEvents > 0 
+                                    ? `${String(peakHoursData.peakHourGlobal).padStart(2, '0')}:00h - ${String(peakHoursData.peakHourGlobal + 1).padStart(2, '0')}:00h`
+                                    : '08:00h - 11:00h'}
+                            </span>
+                            <span className="text-[10px] font-extrabold text-amber-700">
+                                Maior concentração de público
+                            </span>
+                        </div>
+                    </div>
+
+                    <div className="bg-gradient-to-br from-blue-50 to-indigo-50/50 p-4 rounded-2xl border border-blue-100 flex items-center gap-3">
+                        <div className="p-3 bg-blue-500 text-white rounded-xl shadow-md shadow-blue-200">
+                            <Calendar className="w-5 h-5" />
+                        </div>
+                        <div>
+                            <span className="text-[10px] font-black uppercase text-blue-400 block tracking-wider">Dia com Maior Movimento</span>
+                            <span className="text-sm font-black text-blue-950 block">
+                                {peakHoursData.peakDayTotalName}
+                            </span>
+                            <span className="text-[10px] font-extrabold text-blue-700">
+                                {peakHoursData.peakDayTotalCount} atendimentos no período
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Heatmap Grid 24h x Dias da Semana */}
+                <div className="overflow-x-auto custom-scrollbar pb-2">
+                    <div className="min-w-[820px]">
+                        {/* Cabeçalho de Horas (00h até 23h) */}
+                        <div className="grid grid-cols-[90px_repeat(24,1fr)] gap-1 mb-2 text-center">
+                            <div className="text-[10px] font-black text-slate-400 uppercase flex items-center justify-start pl-1">
+                                Dia / Hora
+                            </div>
+                            {Array.from({ length: 24 }).map((_, h) => (
+                                <div 
+                                    key={h} 
+                                    className={`text-[9px] font-extrabold py-1 rounded-md transition-colors ${
+                                        h >= 7 && h <= 17 
+                                        ? 'text-slate-800 bg-slate-100/80 font-black' 
+                                        : 'text-slate-400'
+                                    }`}
+                                >
+                                    {String(h).padStart(2, '0')}h
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Linhas dos Dias da Semana */}
+                        <div className="space-y-1.5">
+                            {peakHoursData.daysConfig.map((dayObj) => {
+                                const dayMatrix = peakHoursData.matrix[dayObj.index];
+                                return (
+                                    <div key={dayObj.index} className="grid grid-cols-[90px_repeat(24,1fr)] gap-1 items-center">
+                                        {/* Label do Dia */}
+                                        <div className="text-xs font-black text-slate-700 flex items-center justify-between pr-2">
+                                            <span>{dayObj.short}</span>
+                                            <span className="text-[9px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full">
+                                                {peakHoursData.dayTotals[dayObj.index]}
+                                            </span>
+                                        </div>
+
+                                        {/* Células de Horas (00-23h) */}
+                                        {Array.from({ length: 24 }).map((_, hour) => {
+                                            const count = dayMatrix[hour];
+                                            const max = peakHoursData.maxCount;
+                                            const ratio = max > 0 ? count / max : 0;
+                                            const isPeakSlot = peakHoursData.peakSlot.dayIndex === dayObj.index && peakHoursData.peakSlot.hour === hour && count > 0;
+
+                                            let cellBg = 'bg-slate-50/80 text-slate-300 border-slate-100/60';
+                                            if (count > 0) {
+                                                if (ratio <= 0.25) {
+                                                    cellBg = 'bg-emerald-100 text-emerald-900 border-emerald-200/80 font-bold';
+                                                } else if (ratio <= 0.50) {
+                                                    cellBg = 'bg-amber-100 text-amber-950 border-amber-200 font-extrabold';
+                                                } else if (ratio <= 0.75) {
+                                                    cellBg = 'bg-orange-200 text-orange-950 border-orange-300 font-extrabold';
+                                                } else {
+                                                    cellBg = 'bg-rose-500 text-white border-rose-600 font-black shadow-md shadow-rose-200';
+                                                }
+                                            }
+
+                                            return (
+                                                <div
+                                                    key={hour}
+                                                    onMouseEnter={() => setHoveredPeakCell({ dayLabel: dayObj.label, hour, count })}
+                                                    onMouseLeave={() => setHoveredPeakCell(null)}
+                                                    className={`h-9 rounded-lg border flex items-center justify-center text-[10px] transition-all cursor-pointer relative group ${cellBg} ${
+                                                        isPeakSlot ? 'ring-2 ring-rose-400 ring-offset-1 scale-105 z-10' : 'hover:scale-105 hover:z-10'
+                                                    }`}
+                                                >
+                                                    {count > 0 ? count : ''}
+
+                                                    {/* Tooltip Hover */}
+                                                    <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 hidden group-hover:block z-30 pointer-events-none">
+                                                        <div className="bg-slate-900 text-white text-[10px] font-bold px-2.5 py-1.5 rounded-xl shadow-xl whitespace-nowrap border border-slate-700">
+                                                            <div className="font-extrabold text-amber-400">{dayObj.label} às {String(hour).padStart(2, '0')}:00h</div>
+                                                            <div className="text-slate-200">{count} atendimento{count !== 1 ? 's' : ''}</div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Legenda de Temperatura */}
+                <div className="mt-5 pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-4 text-xs">
+                    <div className="flex items-center gap-1.5 text-slate-500 font-bold">
+                        <Thermometer className="w-4 h-4 text-slate-400" />
+                        <span>Temperatura de Atendimento:</span>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-3 text-[11px] font-bold">
+                        <div className="flex items-center gap-1.5">
+                            <span className="w-3.5 h-3.5 rounded bg-slate-50 border border-slate-200"></span>
+                            <span className="text-slate-400">Sem movimento (0)</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                            <span className="w-3.5 h-3.5 rounded bg-emerald-100 border border-emerald-200"></span>
+                            <span className="text-emerald-800">Baixo (Frio 🥶)</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                            <span className="w-3.5 h-3.5 rounded bg-amber-100 border border-amber-200"></span>
+                            <span className="text-amber-900">Moderado (Morno ⚡)</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                            <span className="w-3.5 h-3.5 rounded bg-orange-200 border border-orange-300"></span>
+                            <span className="text-orange-950">Alto (Quente 🔥)</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                            <span className="w-3.5 h-3.5 rounded bg-rose-500 border border-rose-600"></span>
+                            <span className="text-rose-700 font-black">Pico (🔴)</span>
+                        </div>
                     </div>
                 </div>
             </div>
