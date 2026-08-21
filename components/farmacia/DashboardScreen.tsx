@@ -10,7 +10,7 @@ import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
     LineChart, Line, PieChart as RechartsPieChart, Pie, Cell
 } from 'recharts';
-import { startOfMonth, endOfMonth, subMonths, isWithinInterval, parseISO, format, formatDistanceToNow, differenceInDays } from 'date-fns';
+import { startOfMonth, endOfMonth, subMonths, isWithinInterval, parseISO, format, formatDistanceToNow, differenceInDays, startOfWeek, endOfWeek, startOfDay, endOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -55,7 +55,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     const [loading, setLoading] = useState(true);
 
     // Estado para filtro de período do Horário de Pico (Temperatura de Atendimento)
-    const [peakHoursPeriod, setPeakHoursPeriod] = useState<'30_days' | 'current_month' | 'all'>('30_days');
+    const [peakHoursPeriod, setPeakHoursPeriod] = useState<'today' | 'current_week' | '30_days' | 'current_month' | 'all'>('30_days');
     const [hoveredPeakCell, setHoveredPeakCell] = useState<{ dayLabel: string; hour: number; count: number } | null>(null);
 
     // Estados para o Modal de IA Preditiva de Estoque
@@ -683,7 +683,21 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         let filteredMovs = movimentacoes.filter(m => isSaidaTipo(m.tipo) && m.data);
 
         const nowDate = new Date();
-        if (peakHoursPeriod === 'current_month') {
+        if (peakHoursPeriod === 'today') {
+            const todayStart = startOfDay(nowDate);
+            const todayEnd = endOfDay(nowDate);
+            filteredMovs = filteredMovs.filter(m => {
+                const d = parseMovimentacaoDate(m.data);
+                return d && isWithinInterval(d, { start: todayStart, end: todayEnd });
+            });
+        } else if (peakHoursPeriod === 'current_week') {
+            const weekStart = startOfWeek(nowDate, { weekStartsOn: 0 });
+            const weekEnd = endOfWeek(nowDate, { weekStartsOn: 0 });
+            filteredMovs = filteredMovs.filter(m => {
+                const d = parseMovimentacaoDate(m.data);
+                return d && isWithinInterval(d, { start: weekStart, end: weekEnd });
+            });
+        } else if (peakHoursPeriod === 'current_month') {
             filteredMovs = currentMonthDispenses;
         } else if (peakHoursPeriod === '30_days') {
             const thirtyDaysAgo = subMonths(nowDate, 1);
@@ -1303,7 +1317,27 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                     </div>
 
                     {/* Filtros de período */}
-                    <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-2xl shrink-0 self-start sm:self-auto">
+                    <div className="flex flex-wrap items-center gap-1 bg-slate-100 p-1 rounded-2xl shrink-0 self-start sm:self-auto">
+                        <button
+                            onClick={() => setPeakHoursPeriod('today')}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                                peakHoursPeriod === 'today'
+                                ? 'bg-white text-slate-900 shadow-sm'
+                                : 'text-slate-500 hover:text-slate-800'
+                            }`}
+                        >
+                            Hoje
+                        </button>
+                        <button
+                            onClick={() => setPeakHoursPeriod('current_week')}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                                peakHoursPeriod === 'current_week'
+                                ? 'bg-white text-slate-900 shadow-sm'
+                                : 'text-slate-500 hover:text-slate-800'
+                            }`}
+                        >
+                            Semana Atual
+                        </button>
                         <button
                             onClick={() => setPeakHoursPeriod('30_days')}
                             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
