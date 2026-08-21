@@ -117,9 +117,11 @@ export const HorasExtrasForm: React.FC<HorasExtrasFormProps> = ({
         // Check 16h and 20h limit for Motoristas/Operadores
         const jobTitleLower = (selectedPerson?.jobTitle || '').toLowerCase();
         const isRestrictedRole = jobTitleLower.includes('motorista') || jobTitleLower.includes('operador');
+        const isAdmin = userRole === 'admin';
         
         if (isRestrictedRole) {
-            if (selectedHours > 20) {
+            // Apenas usuários não administradores possuem o bloqueio rígido de 20 horas
+            if (selectedHours > 20 && !isAdmin) {
                 setPendingBloqueio({ person: selectedPerson, hours: selectedHours });
                 return; // Interrupt normal flow
             }
