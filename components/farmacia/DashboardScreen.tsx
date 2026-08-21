@@ -1250,8 +1250,8 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                         <PieChart className="w-4 h-4 text-pink-500" />
                         Top 5 Medicamentos (Demanda)
                     </h3>
-                    <div className="h-64 w-full">
-                        <ResponsiveContainer width="100%" height="100%">
+                    <div className="h-64 w-full min-w-0">
+                        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                             <BarChart data={topMedicines} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
                                 <XAxis type="number" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
@@ -1272,8 +1272,8 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                         <Activity className="w-4 h-4 text-blue-500" />
                         Dispensação por Categoria
                     </h3>
-                    <div className="h-64 w-full">
-                        <ResponsiveContainer width="100%" height="100%">
+                    <div className="h-64 w-full min-w-0">
+                        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                             <BarChart data={dispensesByCategory} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                                 <XAxis dataKey="name" tick={{ fontSize: 10, fontWeight: 'bold' }} axisLine={false} tickLine={false} />
