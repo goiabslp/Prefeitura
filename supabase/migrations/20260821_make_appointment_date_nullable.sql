@@ -1,26 +1,31 @@
--- Migration: Permitir appointment_date como NULL para agendamentos em Fila de Espera / Aguardando Data
+-- Migration: Permitir appointment_date como NULL e Remover Reserva de 20% de Vagas para Urgência
 
 -- 1. Remover restrição NOT NULL da coluna appointment_date na tabela public.consultas_agendamentos
 ALTER TABLE public.consultas_agendamentos 
 ALTER COLUMN appointment_date DROP NOT NULL;
 
--- 2. Atualizar a função do trigger para tratar appointment_date nulo utilizando solicitation_date como fallback para cálculo de reservas
+-- 2. Atualizar a função do trigger para remover qualquer reserva de cota para Urgência (ambas as prioridades usam 100% do saldo de vagas)
 CREATE OR REPLACE FUNCTION public.handle_consultas_vagas_change()
 RETURNS TRIGGER AS $$
 DECLARE
     v_available INTEGER;
     v_total INTEGER;
-    v_reserved INTEGER;
     v_old_occupies BOOLEAN := FALSE;
     v_new_occupies BOOLEAN := FALSE;
-    v_target_date DATE;
 BEGIN
-    -- Determine if OLD status occupies a slot
+    -- Se for Retorno, garantir que is_retorno seja TRUE
+    IF (TG_OP = 'INSERT' OR TG_OP = 'UPDATE') THEN
+        IF (NEW.status = 'Retorno') THEN
+            NEW.is_retorno := TRUE;
+        END IF;
+    END IF;
+
+    -- Avalia OLD.status apenas em UPDATE e DELETE
     IF (TG_OP = 'UPDATE' OR TG_OP = 'DELETE') THEN
         v_old_occupies := OLD.status IN ('Solicitado', 'Agendado', 'Aguardando Data', 'Realizado', 'Retorno');
     END IF;
 
-    -- Determine if NEW status occupies a slot
+    -- Avalia NEW.status apenas em INSERT e UPDATE
     IF (TG_OP = 'INSERT' OR TG_OP = 'UPDATE') THEN
         v_new_occupies := NEW.status IN ('Solicitado', 'Agendado', 'Aguardando Data', 'Realizado', 'Retorno');
     END IF;
@@ -31,23 +36,9 @@ BEGIN
             FROM public.consultas_procedimentos
             WHERE id = NEW.procedimento_id;
 
-            v_target_date := COALESCE(NEW.appointment_date, NEW.solicitation_date, CURRENT_DATE);
-
-            -- 20% reservation calculation (bypass in the last week of the month)
-            IF EXTRACT(MONTH FROM v_target_date) <> EXTRACT(MONTH FROM (v_target_date + INTERVAL '7 days')) THEN
-                v_reserved := 0;
-            ELSE
-                v_reserved := CEIL(v_total * 0.20);
-            END IF;
-
-            IF (NEW.priority = 'Normal') THEN
-                IF v_available < (v_reserved + NEW.quantity) THEN
-                    NEW.status := 'Fila de espera';
-                END IF;
-            ELSE
-                IF v_available < NEW.quantity THEN
-                    NEW.status := 'Fila de espera';
-                END IF;
+            -- Ambas as prioridades usam 100% das vagas disponíveis sem reserva exclusiva
+            IF v_available < NEW.quantity THEN
+                NEW.status := 'Fila de espera';
             END IF;
         END IF;
 
@@ -57,22 +48,8 @@ BEGIN
             FROM public.consultas_procedimentos
             WHERE id = NEW.procedimento_id;
 
-            v_target_date := COALESCE(NEW.appointment_date, NEW.solicitation_date, CURRENT_DATE);
-
-            IF EXTRACT(MONTH FROM v_target_date) <> EXTRACT(MONTH FROM (v_target_date + INTERVAL '7 days')) THEN
-                v_reserved := 0;
-            ELSE
-                v_reserved := CEIL(v_total * 0.20);
-            END IF;
-
-            IF (NEW.priority = 'Normal') THEN
-                IF v_available < (v_reserved + NEW.quantity) THEN
-                    NEW.status := 'Fila de espera';
-                END IF;
-            ELSE
-                IF v_available < NEW.quantity THEN
-                    NEW.status := 'Fila de espera';
-                END IF;
+            IF v_available < NEW.quantity THEN
+                NEW.status := 'Fila de espera';
             END IF;
 
         ELSIF (v_old_occupies AND v_new_occupies) THEN
@@ -81,28 +58,45 @@ BEGIN
                 FROM public.consultas_procedimentos
                 WHERE id = NEW.procedimento_id;
 
-                v_target_date := COALESCE(NEW.appointment_date, NEW.solicitation_date, CURRENT_DATE);
-
-                IF EXTRACT(MONTH FROM v_target_date) <> EXTRACT(MONTH FROM (v_target_date + INTERVAL '7 days')) THEN
-                    v_reserved := 0;
-                ELSE
-                    v_reserved := CEIL(v_total * 0.20);
-                END IF;
-
-                -- For availability check, add back the OLD quantity to see what is available
-                IF (NEW.priority = 'Normal') THEN
-                    IF (v_available + OLD.quantity) < (v_reserved + NEW.quantity) THEN
-                        RAISE EXCEPTION 'Vagas normais esgotadas para este procedimento. Vagas restantes reservadas para Urgência.';
-                    END IF;
-                ELSE
-                    IF (v_available + OLD.quantity) < NEW.quantity THEN
-                        RAISE EXCEPTION 'Vagas esgotadas para este procedimento.';
-                    END IF;
+                -- Ambas as prioridades usam 100% das vagas disponíveis
+                IF (v_available + OLD.quantity) < NEW.quantity THEN
+                    RAISE EXCEPTION 'Vagas esgotadas para este procedimento.';
                 END IF;
             END IF;
         END IF;
     END IF;
 
     RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 3. Atualizar função processar_fila_espera_consultas para promover itens da fila de espera sem cota de reserva
+CREATE OR REPLACE FUNCTION public.processar_fila_espera_consultas(p_procedimento_id UUID)
+RETURNS VOID AS $$
+DECLARE
+    v_available INTEGER;
+    v_total INTEGER;
+    r RECORD;
+BEGIN
+    FOR r IN 
+        SELECT id, appointment_date, quantity, priority 
+        FROM public.consultas_agendamentos
+        WHERE procedimento_id = p_procedimento_id 
+          AND status = 'Fila de espera'
+        ORDER BY 
+            CASE WHEN priority = 'Urgência' THEN 0 ELSE 1 END ASC, 
+            COALESCE(solicitation_date, appointment_date, created_at::date) ASC, 
+            created_at ASC
+    LOOP
+        SELECT available_quantity, total_quantity INTO v_available, v_total
+        FROM public.consultas_procedimentos
+        WHERE id = p_procedimento_id;
+
+        IF v_available >= r.quantity THEN
+            UPDATE public.consultas_agendamentos
+            SET status = 'Aguardando Data'
+            WHERE id = r.id;
+        END IF;
+    END LOOP;
 END;
 $$ LANGUAGE plpgsql;
