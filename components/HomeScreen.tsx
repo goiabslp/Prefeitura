@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FilePlus, Package, History, FileText, ArrowRight, ArrowLeft, ShoppingCart, Gavel, Wallet, Inbox, CalendarRange, FileSearch, Droplet, Fuel, BarChart3, TrendingUp, LogOut, Sprout, HardHat, Activity, Car, ChevronDown, CalendarDays, Users, LayoutGrid, Megaphone, Database, Pill, Timer, Upload } from 'lucide-react';
+import { FilePlus, Package, History, FileText, ArrowRight, ArrowLeft, ShoppingCart, Gavel, Wallet, Inbox, CalendarRange, FileSearch, Droplet, Fuel, BarChart3, TrendingUp, LogOut, Sprout, HardHat, Activity, Car, ChevronDown, CalendarDays, Users, LayoutGrid, Megaphone, Database, Pill, Timer, Upload, Banknote } from 'lucide-react';
 import { UserRole, UIConfig, AppPermission, BlockType, DiariaEvento } from '../types';
 import { TasksDashboard } from './dashboard/TasksDashboard';
 import { QuickTaskCreation } from './dashboard/QuickTaskCreation';
@@ -360,6 +360,18 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                         window.dispatchEvent(new Event('popstate'));
                     },
                     color: 'emerald'
+                });
+            }
+            if ((permissions.includes('parent_diarias_adiantamento') || userRole === 'admin') && isModuleActive('parent_diarias_adiantamento')) {
+                actionButtons.push({
+                    label: 'Adiantamento',
+                    desc: 'Solicitar Adiantamento',
+                    icon: Banknote,
+                    onClick: () => {
+                        window.history.pushState({}, '', '/Diarias/Adiantamento');
+                        window.dispatchEvent(new Event('popstate'));
+                    },
+                    color: 'amber'
                 });
             }
         }
