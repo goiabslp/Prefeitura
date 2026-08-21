@@ -465,8 +465,8 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
         const optimisticBooking = {
             patient_id: selectedPatient.id,
             procedimento_id: selectedProcedure.id,
-            appointment_date: canSeeSlots ? targetDate : undefined,
-            appointment_time: (canSeeSlots && bookingDate && !isWaitlistOnly) ? (bookingTime || undefined) : undefined,
+            appointment_date: (canSeeSlots && bookingDate && targetStatus !== 'Fila de espera') ? targetDate : undefined,
+            appointment_time: (canSeeSlots && bookingDate && !isWaitlistOnly && targetStatus !== 'Fila de espera') ? (bookingTime || undefined) : undefined,
             solicitation_date: solicitationDate,
             quantity: bookingQty,
             priority: bookingPriority,

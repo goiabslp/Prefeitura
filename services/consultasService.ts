@@ -314,7 +314,7 @@ export const getAgendamentos = async (filters?: AgendamentoFilters): Promise<Con
 export const createAgendamento = async (agendamento: Omit<ConsultaAgendamento, 'id' | 'created_at'>): Promise<ConsultaAgendamento> => {
     try {
         // 1. Conflict Prevention check: check if this patient already has an active booking for this procedure on this day
-        if (agendamento.status === 'Agendado') {
+        if (agendamento.status === 'Agendado' && agendamento.appointment_date) {
             const { data: conflicts, error: conflictErr } = await supabase
                 .from('consultas_agendamentos')
                 .select('id')

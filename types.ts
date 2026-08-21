@@ -610,7 +610,7 @@ export interface ConsultaAgendamento {
   id: string;
   patient_id: string;
   procedimento_id: string;
-  appointment_date: string;
+  appointment_date?: string | null;
   appointment_time?: string;
   solicitation_date?: string;
   quantity: number;
