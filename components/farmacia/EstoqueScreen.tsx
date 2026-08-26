@@ -156,10 +156,10 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
 
     // Permissions
     const isAdmin = currentUser?.role === 'admin';
-    const canCreate = currentUser?.permissions?.includes('parent_farmacia_criar') || isAdmin;
-    const canEdit = currentUser?.permissions?.includes('parent_farmacia_editar') || isAdmin;
-    const canDelete = currentUser?.permissions?.includes('parent_farmacia_excluir') || isAdmin;
-    const canApprove = currentUser?.permissions?.includes('parent_farmacia_aprovar') || isAdmin;
+    const canCreate = currentUser?.permissions?.includes('parent_farmacia_estoque') || currentUser?.permissions?.includes('parent_farmacia') || currentUser?.permissions?.includes('parent_farmacia_criar') || isAdmin;
+    const canEdit = currentUser?.permissions?.includes('parent_farmacia_estoque') || currentUser?.permissions?.includes('parent_farmacia') || currentUser?.permissions?.includes('parent_farmacia_editar') || isAdmin;
+    const canDelete = currentUser?.permissions?.includes('parent_farmacia_estoque') || currentUser?.permissions?.includes('parent_farmacia') || currentUser?.permissions?.includes('parent_farmacia_excluir') || isAdmin;
+    const canApprove = currentUser?.permissions?.includes('parent_farmacia_estoque') || currentUser?.permissions?.includes('parent_farmacia') || currentUser?.permissions?.includes('parent_farmacia_aprovar') || isAdmin;
 
     const handleImportMeds = async () => {
         const medsList = getMedsToImport(RAW_MEDS);

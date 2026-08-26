@@ -203,11 +203,76 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
     if (!isAdmin) return;
     setFormData(prev => {
       const currentPerms = prev.permissions || [];
-      if (currentPerms.includes(perm)) {
-        return { ...prev, permissions: currentPerms.filter(p => p !== perm) };
+      const isChecking = !currentPerms.includes(perm);
+
+      let updated = isChecking
+        ? [...currentPerms, perm]
+        : currentPerms.filter(p => p !== perm);
+
+      const subPermsMap: Record<string, string[]> = {
+        parent_farmacia: ['parent_farmacia_consultar', 'parent_farmacia_retirar', 'parent_farmacia_estoque', 'parent_farmacia_dashboard'],
+        parent_consultas: ['parent_consultas_novo_agendamento', 'parent_consultas_acompanhar', 'parent_consultas_dados'],
+        parent_abastecimento: ['parent_abastecimento_novo', 'parent_abastecimento_gestao', 'parent_abastecimento_dashboard'],
+        parent_frotas: ['parent_frotas_dashboard', 'parent_frotas_leve', 'parent_frotas_pesado', 'parent_frotas_acessorio'],
+        parent_compras: ['parent_compras_pedidos', 'parent_compras_itens', 'parent_compras_dados'],
+        parent_diarias: ['parent_diarias_editor', 'parent_diarias_historico', 'parent_diarias_novo_evento', 'parent_diarias_lancamentos', 'parent_diarias_gestores', 'parent_diarias_viajar', 'parent_diarias_adiantamento'],
+        parent_licitacao: ['parent_licitacao_processos', 'parent_licitacao_triagem'],
+        parent_rh: ['parent_rh_horas_extras', 'parent_rh_historico']
+      };
+
+      const parentMap: Record<string, AppPermission> = {
+        parent_farmacia_consultar: 'parent_farmacia',
+        parent_farmacia_retirar: 'parent_farmacia',
+        parent_farmacia_estoque: 'parent_farmacia',
+        parent_farmacia_dashboard: 'parent_farmacia',
+        parent_consultas_novo_agendamento: 'parent_consultas',
+        parent_consultas_acompanhar: 'parent_consultas',
+        parent_consultas_dados: 'parent_consultas',
+        parent_abastecimento_novo: 'parent_abastecimento',
+        parent_abastecimento_gestao: 'parent_abastecimento',
+        parent_abastecimento_dashboard: 'parent_abastecimento',
+        parent_frotas_dashboard: 'parent_frotas',
+        parent_frotas_leve: 'parent_frotas',
+        parent_frotas_pesado: 'parent_frotas',
+        parent_frotas_acessorio: 'parent_frotas',
+        parent_compras_pedidos: 'parent_compras',
+        parent_compras_itens: 'parent_compras',
+        parent_compras_dados: 'parent_compras',
+        parent_diarias_editor: 'parent_diarias',
+        parent_diarias_historico: 'parent_diarias',
+        parent_diarias_novo_evento: 'parent_diarias',
+        parent_diarias_lancamentos: 'parent_diarias',
+        parent_diarias_gestores: 'parent_diarias',
+        parent_diarias_viajar: 'parent_diarias',
+        parent_diarias_adiantamento: 'parent_diarias',
+        parent_licitacao_processos: 'parent_licitacao',
+        parent_licitacao_triagem: 'parent_licitacao',
+        parent_rh_horas_extras: 'parent_rh',
+        parent_rh_historico: 'parent_rh'
+      };
+
+      if (isChecking) {
+        // Se marcou um módulo pai, marca também todos os seus sub-cards
+        if (subPermsMap[perm]) {
+          subPermsMap[perm].forEach(sub => {
+            if (!updated.includes(sub as AppPermission)) {
+              updated.push(sub as AppPermission);
+            }
+          });
+        }
+        // Se marcou um card individual, garante que o módulo pai também está marcado
+        const parentPerm = parentMap[perm];
+        if (parentPerm && !updated.includes(parentPerm)) {
+          updated.push(parentPerm);
+        }
       } else {
-        return { ...prev, permissions: [...currentPerms, perm] };
+        // Se desmarcou um módulo pai, desmarca todos os seus sub-cards
+        if (subPermsMap[perm]) {
+          updated = updated.filter(p => !subPermsMap[perm].includes(p));
+        }
       }
+
+      return { ...prev, permissions: updated };
     });
   };
 
@@ -1025,7 +1090,7 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                       {
                         title: 'Compras',
                         permissions: [
-                          { id: 'parent_compras', label: 'Gestão de Compras' },
+                          { id: 'parent_compras', label: 'Módulo: Compras' },
                           { id: 'parent_compras_pedidos', label: 'Gestão de Pedidos' },
                           { id: 'parent_compras_itens', label: 'Catálogo e Inventário' },
                           { id: 'parent_compras_dados', label: 'Importar Planilha' }
@@ -1041,14 +1106,15 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                           { id: 'parent_diarias_novo_evento', label: 'Novo Evento' },
                           { id: 'parent_diarias_lancamentos', label: 'Lançamentos' },
                           { id: 'parent_diarias_gestores', label: 'Gestores' },
-                          { id: 'parent_diarias_viajar', label: 'Viajar' }
+                          { id: 'parent_diarias_viajar', label: 'Viajar' },
+                          { id: 'parent_diarias_adiantamento', label: 'Solicitar Adiantamento' }
                         ],
                         color: 'amber'
                       },
                       {
                         title: 'Gestão de Abastecimento',
                         permissions: [
-                          { id: 'parent_abastecimento', label: 'Módulo Geral' },
+                          { id: 'parent_abastecimento', label: 'Módulo: Abastecimento' },
                           { id: 'parent_abastecimento_novo', label: 'Novo Abastecimento' },
                           { id: 'parent_abastecimento_gestao', label: 'Gestão / Histórico' },
                           { id: 'parent_abastecimento_dashboard', label: 'Dashboard' }
@@ -1058,7 +1124,7 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                       {
                         title: 'Licitação',
                         permissions: [
-                          { id: 'parent_licitacao', label: 'Módulo Geral' },
+                          { id: 'parent_licitacao', label: 'Módulo: Licitação' },
                           { id: 'parent_licitacao_processos', label: 'Processos' },
                           { id: 'parent_licitacao_triagem', label: 'Triagem' }
                         ],
@@ -1073,7 +1139,11 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                         title: 'Veículos & Frotas',
                         permissions: [
                           { id: 'parent_agendamento_veiculo', label: 'Agendamento de Veículos' },
-                          { id: 'parent_frotas', label: 'Gestão de Frotas' }
+                          { id: 'parent_frotas', label: 'Módulo: Frotas' },
+                          { id: 'parent_frotas_dashboard', label: 'Dashboard Frotas' },
+                          { id: 'parent_frotas_leve', label: 'Frota Leve' },
+                          { id: 'parent_frotas_pesado', label: 'Frota Pesada / Máquinas' },
+                          { id: 'parent_frotas_acessorio', label: 'Acessórios & Equipamentos' }
                         ],
                         color: 'rose'
                       },
@@ -1083,7 +1153,9 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                           { id: 'parent_agricultura', label: 'Agricultura' },
                           { id: 'parent_obras', label: 'Obras' },
                           { id: 'parent_calendario', label: 'Calendário' },
-                          { id: 'parent_rh', label: 'Gestão de RH' },
+                          { id: 'parent_rh', label: 'Módulo: RH' },
+                          { id: 'parent_rh_horas_extras', label: 'RH: Horas Extras' },
+                          { id: 'parent_rh_historico', label: 'RH: Histórico' },
                           { id: 'parent_marketing', label: 'Marketing Digital' },
                           { id: 'parent_projetos', label: 'Gestão de Projetos' }
                         ],
@@ -1108,10 +1180,10 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                         title: 'Farmácia Popular',
                         permissions: [
                           { id: 'parent_farmacia', label: 'Módulo: Farmácia Popular' },
-                          { id: 'parent_farmacia_criar', label: 'Registrar Medicamentos / Entradas' },
-                          { id: 'parent_farmacia_editar', label: 'Editar Medicamentos / Limites' },
-                          { id: 'parent_farmacia_excluir', label: 'Excluir Medicamentos' },
-                          { id: 'parent_farmacia_aprovar', label: 'Aprovar Ajustes' }
+                          { id: 'parent_farmacia_consultar', label: 'Consultar' },
+                          { id: 'parent_farmacia_retirar', label: 'Retirar' },
+                          { id: 'parent_farmacia_estoque', label: 'Estoque' },
+                          { id: 'parent_farmacia_dashboard', label: 'Dashboard' }
                         ],
                         color: 'violet'
                       },

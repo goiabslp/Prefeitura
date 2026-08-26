@@ -29,10 +29,10 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
     const isAcompanharActive = moduleStatus['parent_consultas_acompanhar'] !== false;
     const isDadosActive = moduleStatus['parent_consultas_dados'] !== false;
 
-    const isAdmin = currentUser?.role === 'admin';
-    const canAccessNovoAgendamento = (currentUser?.permissions?.includes('parent_consultas_novo_agendamento') || isAdmin) && isNovoAgendamentoActive;
-    const canAccessAcompanhar = (currentUser?.permissions?.includes('parent_consultas_acompanhar') || isAdmin) && isAcompanharActive;
-    const canAccessDados = (currentUser?.permissions?.includes('parent_consultas_dados') || isAdmin) && isDadosActive;
+    const userPerms = currentUser?.permissions || [];
+    const canAccessNovoAgendamento = userPerms.includes('parent_consultas_novo_agendamento') && isNovoAgendamentoActive;
+    const canAccessAcompanhar = userPerms.includes('parent_consultas_acompanhar') && isAcompanharActive;
+    const canAccessDados = userPerms.includes('parent_consultas_dados') && isDadosActive;
 
     const showNovoAgendamento = (subView === 'novo-agendamento' || (subView?.startsWith('novo-agendamento') ?? false) || subView === 'vagas-reservadas') && canAccessNovoAgendamento;
     const showAcompanhar = (subView === 'acompanhar' || subView === 'definir-agenda') && canAccessAcompanhar;

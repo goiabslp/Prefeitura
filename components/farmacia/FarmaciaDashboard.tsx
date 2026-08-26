@@ -18,12 +18,12 @@ export const FarmaciaDashboard: React.FC<FarmaciaDashboardProps> = ({
     const isEstoqueActive = moduleStatus['parent_farmacia_estoque'] !== false;
     const isDashboardActive = moduleStatus['parent_farmacia_dashboard'] !== false;
 
-    const isAdmin = currentUser?.role === 'admin';
-    const canAccessConsultar = (currentUser?.permissions?.includes('parent_farmacia') || isAdmin) && isConsultarActive;
-    const canAccessRetirar = (currentUser?.permissions?.includes('parent_farmacia') || isAdmin) && isRetirarActive;
-    const canAccessEstoque = (currentUser?.permissions?.includes('parent_farmacia') || isAdmin) && isEstoqueActive;
-    const canAccessHistorico = (currentUser?.permissions?.includes('parent_farmacia') || isAdmin);
-    const canAccessDados = (currentUser?.permissions?.includes('parent_farmacia_editar') || currentUser?.permissions?.includes('parent_farmacia_aprovar') || isAdmin) && isDashboardActive;
+    const userPerms = currentUser?.permissions || [];
+    const canAccessConsultar = userPerms.includes('parent_farmacia_consultar') && isConsultarActive;
+    const canAccessRetirar = userPerms.includes('parent_farmacia_retirar') && isRetirarActive;
+    const canAccessEstoque = userPerms.includes('parent_farmacia_estoque') && isEstoqueActive;
+    const canAccessHistorico = userPerms.includes('parent_farmacia');
+    const canAccessDados = userPerms.includes('parent_farmacia_dashboard') && isDashboardActive;
 
     return (
         <div className="flex-1 flex flex-col justify-center items-center w-full max-w-6xl mx-auto px-4 py-8 animate-in fade-in slide-in-from-bottom-6 duration-500">
@@ -32,15 +32,12 @@ export const FarmaciaDashboard: React.FC<FarmaciaDashboardProps> = ({
                 <h1 className="text-3xl md:text-4xl font-extrabold text-slate-900 tracking-tight mb-2 uppercase">
                     Central de Medicamentos
                 </h1>
-                <p className="text-slate-500 text-sm font-medium">
-                    Selecione uma das opções abaixo para gerenciar o estoque municipal, consultar medicamentos ou registrar dispensação para os pacientes.
-                </p>
             </div>
 
             {/* Grid of Main Cards */}
             <div className="w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
                 {/* Card 1: Consultar */}
-                {canAccessConsultar ? (
+                {canAccessConsultar && (
                     <button
                         onClick={() => onNavigate('farmacia:consultar')}
                         className="group relative w-full min-h-[200px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50 border border-slate-100 shadow-[0_10px_35px_rgba(0,0,0,0.03)] hover:shadow-[0_30px_70px_rgba(219,39,119,0.15)] hover:border-pink-200 hover:from-white hover:to-pink-50/20 hover:-translate-y-2 active:scale-98 transition-all duration-300 ease-out flex flex-col items-center justify-center text-center overflow-hidden p-6"
@@ -62,16 +59,10 @@ export const FarmaciaDashboard: React.FC<FarmaciaDashboardProps> = ({
                             Pesquisa instantânea por nome, categoria e disponibilidade em estoque.
                         </p>
                     </button>
-                ) : (
-                    <div className="w-full min-h-[200px] rounded-[2.5rem] bg-slate-100/60 border border-slate-200/50 flex flex-col items-center justify-center text-center p-6 opacity-60">
-                        <Search className="w-8 h-8 text-slate-400 mb-2" />
-                        <h3 className="text-lg font-bold text-slate-400 uppercase">Consulta Bloqueada</h3>
-                        <p className="text-xs text-slate-400 mt-1 max-w-[180px]">Sem permissão de acesso.</p>
-                    </div>
                 )}
 
                 {/* Card 2: Retirar */}
-                {canAccessRetirar ? (
+                {canAccessRetirar && (
                     <button
                         onClick={() => onNavigate('farmacia:retirar')}
                         className="group relative w-full min-h-[200px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50 border border-slate-100 shadow-[0_10px_35px_rgba(0,0,0,0.03)] hover:shadow-[0_30px_70px_rgba(219,39,119,0.15)] hover:border-pink-200 hover:from-white hover:to-pink-50/20 hover:-translate-y-2 active:scale-98 transition-all duration-300 ease-out flex flex-col items-center justify-center text-center overflow-hidden p-6"
@@ -93,16 +84,10 @@ export const FarmaciaDashboard: React.FC<FarmaciaDashboardProps> = ({
                             Validação automatizada de estoque e registro de logs de retirada de pacientes.
                         </p>
                     </button>
-                ) : (
-                    <div className="w-full min-h-[200px] rounded-[2.5rem] bg-slate-100/60 border border-slate-200/50 flex flex-col items-center justify-center text-center p-6 opacity-60">
-                        <ClipboardList className="w-8 h-8 text-slate-400 mb-2" />
-                        <h3 className="text-lg font-bold text-slate-400 uppercase">Retirada Bloqueada</h3>
-                        <p className="text-xs text-slate-400 mt-1 max-w-[180px]">Sem permissão de acesso.</p>
-                    </div>
                 )}
 
                 {/* Card 3: Estoque */}
-                {canAccessEstoque ? (
+                {canAccessEstoque && (
                     <button
                         onClick={() => onNavigate('farmacia:estoque')}
                         className="group relative w-full min-h-[200px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50 border border-slate-100 shadow-[0_10px_35px_rgba(0,0,0,0.03)] hover:shadow-[0_30px_70px_rgba(219,39,119,0.15)] hover:border-pink-200 hover:from-white hover:to-pink-50/20 hover:-translate-y-2 active:scale-98 transition-all duration-300 ease-out flex flex-col items-center justify-center text-center overflow-hidden p-6"
@@ -124,15 +109,10 @@ export const FarmaciaDashboard: React.FC<FarmaciaDashboardProps> = ({
                             Cadastro de novos itens, controle de alertas de vencimento e relatórios de fluxo.
                         </p>
                     </button>
-                ) : (
-                    <div className="w-full min-h-[200px] rounded-[2.5rem] bg-slate-100/60 border border-slate-200/50 flex flex-col items-center justify-center text-center p-6 opacity-60">
-                        <Package className="w-8 h-8 text-slate-400 mb-2" />
-                        <h3 className="text-lg font-bold text-slate-400 uppercase">Estoque Bloqueado</h3>
-                        <p className="text-xs text-slate-400 mt-1 max-w-[180px]">Sem permissão de acesso.</p>
-                    </div>
                 )}
+
                 {/* Card 4: Dashboard */}
-                {canAccessDados ? (
+                {canAccessDados && (
                     <button
                         onClick={() => onNavigate('farmacia:dashboard')}
                         className="group relative w-full min-h-[200px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50 border border-slate-100 shadow-[0_10px_35px_rgba(0,0,0,0.03)] hover:shadow-[0_30px_70px_rgba(219,39,119,0.15)] hover:border-pink-200 hover:from-white hover:to-pink-50/20 hover:-translate-y-2 active:scale-98 transition-all duration-300 ease-out flex flex-col items-center justify-center text-center overflow-hidden p-6"
@@ -154,22 +134,8 @@ export const FarmaciaDashboard: React.FC<FarmaciaDashboardProps> = ({
                             Visão gerencial, gráficos de dispensação e análise de demanda futura.
                         </p>
                     </button>
-                ) : (
-                    <div className="w-full min-h-[200px] rounded-[2.5rem] bg-slate-100/60 border border-slate-200/50 flex flex-col items-center justify-center text-center p-6 opacity-60">
-                        <History className="w-8 h-8 text-slate-400 mb-2" />
-                        <h3 className="text-lg font-bold text-slate-400 uppercase">Dashboard Bloqueado</h3>
-                        <p className="text-xs text-slate-400 mt-1 max-w-[180px]">Sem permissão de acesso.</p>
-                    </div>
                 )}
-             </div>
-
-            {!canAccessConsultar && !canAccessRetirar && !canAccessEstoque && !canAccessDados && (
-                <div className="col-span-full text-center p-8 bg-white border border-slate-200 rounded-[2rem] shadow-sm max-w-md mx-auto">
-                    <Pill className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                    <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Central de Medicamentos</h3>
-                    <p className="text-xs text-slate-500 mt-2">Nenhuma funcionalidade da Farmácia Popular está disponível no momento.</p>
-                </div>
-            )}
+            </div>
         </div>
     );
 };

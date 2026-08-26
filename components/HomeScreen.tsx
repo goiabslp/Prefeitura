@@ -122,20 +122,20 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     const canAccessLicitacao = permissions.includes('parent_licitacao') && isModuleActive('parent_licitacao');
     const canAccessDiarias = permissions.includes('parent_diarias') && isModuleActive('parent_diarias');
     const canAccessScheduling = permissions.includes('parent_agendamento_veiculo') && isModuleActive('parent_agendamento_veiculo');
-    const canAccessFleet = permissions.includes('parent_frotas') && isModuleActive('parent_frotas');
+    const canAccessFleet = (permissions.includes('parent_frotas') || permissions.includes('parent_frotas_dashboard') || permissions.includes('parent_frotas_leve') || permissions.includes('parent_frotas_pesado') || permissions.includes('parent_frotas_acessorio')) && isModuleActive('parent_frotas');
     const canAccessLicitacaoTriagem = permissions.includes('parent_licitacao_triagem');
     const canAccessLicitacaoProcessos = permissions.includes('parent_licitacao_processos');
-    const canAccessAbastecimento = permissions.includes('parent_abastecimento') && isModuleActive('parent_abastecimento');
-    const canAccessAgricultura = (permissions.includes('parent_agricultura') || userRole === 'admin') && isModuleActive('parent_agricultura');
-    const canAccessObras = (permissions.includes('parent_obras') || userRole === 'admin') && isModuleActive('parent_obras');
+    const canAccessAbastecimento = (permissions.includes('parent_abastecimento') || permissions.includes('parent_abastecimento_novo') || permissions.includes('parent_abastecimento_gestao') || permissions.includes('parent_abastecimento_dashboard')) && isModuleActive('parent_abastecimento');
+    const canAccessAgricultura = permissions.includes('parent_agricultura') && isModuleActive('parent_agricultura');
+    const canAccessObras = permissions.includes('parent_obras') && isModuleActive('parent_obras');
     const canAccessTarefas = permissions.includes('parent_tarefas') && isModuleActive('parent_tarefas');
-    const canAccessCalendario = (permissions.includes('parent_calendario') || userRole === 'admin') && isModuleActive('parent_calendario');
-    const canAccessRh = (permissions.includes('parent_rh') || userRole === 'admin') && isModuleActive('parent_rh');
-    const canAccessProjetos = (permissions.includes('parent_projetos') || userRole === 'admin') && isModuleActive('parent_projetos');
-    const canAccessMarketing = (permissions.includes('parent_marketing') || userRole === 'admin') && isModuleActive('parent_marketing');
-    const canAccessConsultas = (permissions.includes('parent_consultas') || userRole === 'admin') && isModuleActive('parent_consultas');
-    const canAccessFarmacia = (permissions.includes('parent_farmacia') || userRole === 'admin') && isModuleActive('parent_farmacia');
-    const canAccessUpload = (permissions.includes('parent_upload') || userRole === 'admin') && isModuleActive('parent_upload');
+    const canAccessCalendario = permissions.includes('parent_calendario') && isModuleActive('parent_calendario');
+    const canAccessRh = (permissions.includes('parent_rh') || permissions.includes('parent_rh_horas_extras') || permissions.includes('parent_rh_historico')) && isModuleActive('parent_rh');
+    const canAccessProjetos = permissions.includes('parent_projetos') && isModuleActive('parent_projetos');
+    const canAccessMarketing = permissions.includes('parent_marketing') && isModuleActive('parent_marketing');
+    const canAccessConsultas = (permissions.includes('parent_consultas') || permissions.includes('parent_consultas_novo_agendamento') || permissions.includes('parent_consultas_acompanhar') || permissions.includes('parent_consultas_dados')) && isModuleActive('parent_consultas');
+    const canAccessFarmacia = (permissions.includes('parent_farmacia') || permissions.includes('parent_farmacia_consultar') || permissions.includes('parent_farmacia_retirar') || permissions.includes('parent_farmacia_estoque') || permissions.includes('parent_farmacia_dashboard')) && isModuleActive('parent_farmacia');
+    const canAccessUpload = permissions.includes('parent_upload') && isModuleActive('parent_upload');
     const firstName = userName.split(' ')[0];
 
     const getPendingCount = (blockType: string) => {
@@ -296,7 +296,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
         // Diárias Specific Buttons
         if (activeBlock === 'diarias') {
-            if ((permissions.includes('parent_diarias_editor') || userRole === 'admin') && isModuleActive('parent_diarias_editor')) {
+            if (permissions.includes('parent_diarias_editor') && isModuleActive('parent_diarias_editor')) {
                 actionButtons.push({
                     label: 'Nova Solicitação',
                     desc: 'Criar novo registro',
@@ -305,7 +305,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                     color: config.color
                 });
             }
-            if ((permissions.includes('parent_diarias_historico') || userRole === 'admin') && isModuleActive('parent_diarias_historico')) {
+            if (permissions.includes('parent_diarias_historico') && isModuleActive('parent_diarias_historico')) {
                 actionButtons.push({
                     label: 'Histórico',
                     desc: 'Consulte registros de Diárias',
@@ -314,7 +314,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                     color: 'purple'
                 });
             }
-            if ((permissions.includes('parent_diarias_novo_evento') || userRole === 'admin') && isModuleActive('parent_diarias_novo_evento')) {
+            if (permissions.includes('parent_diarias_novo_evento') && isModuleActive('parent_diarias_novo_evento')) {
                 actionButtons.push({
                     label: 'Nova Viagem',
                     desc: 'Informar nova viagem',
@@ -326,7 +326,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                     color: 'amber'
                 });
             }
-            if ((permissions.includes('parent_diarias_lancamentos') || userRole === 'admin') && isModuleActive('parent_diarias_lancamentos')) {
+            if (permissions.includes('parent_diarias_lancamentos') && isModuleActive('parent_diarias_lancamentos')) {
                 actionButtons.push({
                     label: 'Lançamentos',
                     desc: 'Acompanhar Eventos',
@@ -338,7 +338,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                     color: 'blue'
                 });
             }
-            if ((permissions.includes('parent_diarias_gestores') || userRole === 'admin') && isModuleActive('parent_diarias_gestores')) {
+            if (permissions.includes('parent_diarias_gestores') && isModuleActive('parent_diarias_gestores')) {
                 actionButtons.push({
                     label: 'Gestores',
                     desc: 'Vincular Gestores',
@@ -350,7 +350,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                     color: 'indigo'
                 });
             }
-            if ((permissions.includes('parent_diarias_viajar') || userRole === 'admin') && isModuleActive('parent_diarias_viajar')) {
+            if (permissions.includes('parent_diarias_viajar') && isModuleActive('parent_diarias_viajar')) {
                 actionButtons.push({
                     label: 'Viajar',
                     desc: 'Iniciar/Finalizar Viagens',
@@ -362,7 +362,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                     color: 'emerald'
                 });
             }
-            if ((permissions.includes('parent_diarias_adiantamento') || userRole === 'admin') && isModuleActive('parent_diarias_adiantamento')) {
+            if (permissions.includes('parent_diarias_adiantamento') && isModuleActive('parent_diarias_adiantamento')) {
                 actionButtons.push({
                     label: 'Adiantamento',
                     desc: 'Solicitar Adiantamento',
@@ -407,7 +407,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             }
         }
         if (activeBlock === 'licitacao') {
-            if (permissions.includes('parent_licitacao_processos') || userRole === 'admin') {
+            if (permissions.includes('parent_licitacao_processos')) {
                 actionButtons.push({ label: 'Processos', desc: 'Todos os Processos', icon: FileSearch, onClick: onTrackOrder, color: 'sky' });
             }
         }

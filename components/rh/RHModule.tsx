@@ -38,8 +38,13 @@ export const RHModule: React.FC<RHModuleProps> = ({
     onSaveForm
 }) => {
     const { moduleStatus } = useSystemSettings();
-    const isHorasExtrasActive = moduleStatus['parent_rh_horas_extras'] !== false;
-    const isHistoricoActive = moduleStatus['parent_rh_historico'] !== false;
+    const currentUser = users.find(u => u.id === userId);
+    const userPerms = currentUser?.permissions || [];
+    const isHorasExtrasAllowed = userPerms.includes('parent_rh_horas_extras');
+    const isHistoricoAllowed = userPerms.includes('parent_rh_historico');
+
+    const isHorasExtrasActive = moduleStatus['parent_rh_horas_extras'] !== false && isHorasExtrasAllowed;
+    const isHistoricoActive = moduleStatus['parent_rh_historico'] !== false && isHistoricoAllowed;
 
     const showHorasExtras = subView === 'horas-extras' && isHorasExtrasActive;
     const showHistorico = subView === 'historico' && isHistoricoActive;

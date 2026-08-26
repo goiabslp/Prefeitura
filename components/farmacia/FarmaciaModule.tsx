@@ -205,17 +205,18 @@ export const FarmaciaModule: React.FC<FarmaciaModuleProps> = ({
     const isEstoqueActive = moduleStatus['parent_farmacia_estoque'] !== false;
     const isDashboardActive = moduleStatus['parent_farmacia_dashboard'] !== false;
 
-    const canAccessConsultar = (currentUser?.permissions?.includes('parent_farmacia') || isAdmin) && isConsultarActive;
-    const canAccessRetirar = (currentUser?.permissions?.includes('parent_farmacia') || isAdmin) && isRetirarActive;
-    const canAccessEstoque = (currentUser?.permissions?.includes('parent_farmacia') || isAdmin) && isEstoqueActive;
-    const canAccessHistorico = (currentUser?.permissions?.includes('parent_farmacia') || isAdmin);
-    const canAccessDados = (currentUser?.permissions?.includes('parent_farmacia_editar') || currentUser?.permissions?.includes('parent_farmacia_aprovar') || isAdmin) && isDashboardActive;
+    const userPerms = currentUser?.permissions || [];
+    const canAccessConsultar = userPerms.includes('parent_farmacia_consultar') && isConsultarActive;
+    const canAccessRetirar = userPerms.includes('parent_farmacia_retirar') && isRetirarActive;
+    const canAccessEstoque = userPerms.includes('parent_farmacia_estoque') && isEstoqueActive;
+    const canAccessHistorico = userPerms.includes('parent_farmacia');
+    const canAccessDados = userPerms.includes('parent_farmacia_dashboard') && isDashboardActive;
 
     const showConsultar = subView === 'consultar' && canAccessConsultar;
     const showRetirar = subView === 'retirar' && canAccessRetirar;
     const showEstoque = subView === 'estoque' && canAccessEstoque;
     const showDashboard = subView === 'dashboard' && canAccessDados;
-    const showDados = subView === 'dados' && (currentUser?.permissions?.includes('parent_farmacia_editar') || isAdmin);
+    const showDados = subView === 'dados' && canAccessDados;
     const showHistorico = subView === 'historico' && canAccessHistorico;
     const showDashboardScreen = subView?.startsWith('dashboard') && canAccessDados;
 
