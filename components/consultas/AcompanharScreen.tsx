@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { User, ConsultaAgendamento, ConsultaProcedimento, AppState, ConsultaPaciente, ConsultaVaga } from '../../types';
-import { ArrowLeft, Search, Filter, Calendar, CheckCircle2, XCircle, Trash2, Loader2, Sparkles, Clock, FileDown, UserX, Repeat, X, Activity, Check } from 'lucide-react';
+import { ArrowLeft, Search, Filter, Calendar, CheckCircle2, XCircle, Trash2, Loader2, Sparkles, Clock, FileDown, UserX, Repeat, X, Activity, Check, Edit2, User as UserIcon } from 'lucide-react';
 import * as db from '../../services/consultasService';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -67,6 +67,26 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     const [cancelReason, setCancelReason] = useState('');
     const [cancelError, setCancelError] = useState('');
     const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+
+    // Edit modal states
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [editTarget, setEditTarget] = useState<ConsultaAgendamento | null>(null);
+    const [editPatientName, setEditPatientName] = useState('');
+    const [editPatientCpf, setEditPatientCpf] = useState('');
+    const [editPatientPhone, setEditPatientPhone] = useState('');
+    const [editPatientNeighborhood, setEditPatientNeighborhood] = useState('');
+    const [editPatientStreet, setEditPatientStreet] = useState('');
+    const [editPatientSusNumber, setEditPatientSusNumber] = useState('');
+    const [editProcedimentoId, setEditProcedimentoId] = useState('');
+    const [editAppointmentDate, setEditAppointmentDate] = useState('');
+    const [editAppointmentTime, setEditAppointmentTime] = useState('');
+    const [editSolicitationDate, setEditSolicitationDate] = useState('');
+    const [editPriority, setEditPriority] = useState<'Normal' | 'Urgência'>('Normal');
+    const [editIsRetorno, setEditIsRetorno] = useState(false);
+    const [editStatus, setEditStatus] = useState<ConsultaAgendamento['status']>('Solicitado');
+    const [editQuantity, setEditQuantity] = useState(1);
+    const [editError, setEditError] = useState('');
+    const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
 
     const matchTime = (t1: string | undefined, t2: string) => {
         if (!t1 || !t2) return false;
@@ -213,6 +233,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     const isGestor = gestorUserIds.includes(currentUser.id);
     const canCancel = currentUser.permissions?.includes('parent_consultas_novo_agendamento') || isAdmin || isGestor;
     const canComplete = currentUser.permissions?.includes('parent_consultas_novo_agendamento') || isAdmin || isGestor;
+    const canEdit = currentUser.permissions?.includes('parent_consultas_novo_agendamento') || isAdmin || isGestor;
     const canDelete = isAdmin || isGestor;
 
     const formatDateBr = (d: string) => {
@@ -458,7 +479,101 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
         } finally {
             setOperatingId(null);
             setRetornoBooking(null);
-            loadData(true);
+        }
+    };
+
+    // Edit modal handlers
+    const handleEditCpfChange = (val: string) => {
+        const clean = val.replace(/\D/g, '');
+        let formatted = '';
+        if (clean.length <= 3) {
+            formatted = clean;
+        } else if (clean.length <= 6) {
+            formatted = `${clean.slice(0, 3)}.${clean.slice(3)}`;
+        } else if (clean.length <= 9) {
+            formatted = `${clean.slice(0, 3)}.${clean.slice(3, 6)}.${clean.slice(6)}`;
+        } else {
+            formatted = `${clean.slice(0, 3)}.${clean.slice(3, 6)}.${clean.slice(6, 9)}-${clean.slice(9, 11)}`;
+        }
+        setEditPatientCpf(formatted);
+    };
+
+    const handleOpenEditModal = (booking: ConsultaAgendamento) => {
+        setEditTarget(booking);
+        setEditPatientName(booking.paciente?.name || '');
+        const rawCpf = booking.paciente?.cpf || '';
+        const cleanCpf = rawCpf.replace(/\D/g, '');
+        let formattedCpf = cleanCpf;
+        if (cleanCpf.length === 11) {
+            formattedCpf = cleanCpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+        }
+        setEditPatientCpf(formattedCpf);
+        setEditPatientPhone(booking.paciente?.phone || '');
+        setEditPatientNeighborhood(booking.paciente?.neighborhood || '');
+        setEditPatientStreet(booking.paciente?.street || '');
+        setEditPatientSusNumber(booking.paciente?.sus_number || '');
+
+        setEditProcedimentoId(booking.procedimento_id || '');
+        setEditAppointmentDate(booking.appointment_date || '');
+        setEditAppointmentTime(booking.appointment_time || '');
+        setEditSolicitationDate(booking.solicitation_date || (booking.created_at ? booking.created_at.split('T')[0] : ''));
+        setEditPriority(booking.priority || 'Normal');
+        setEditIsRetorno(booking.is_retorno || false);
+        setEditStatus(booking.status || 'Solicitado');
+        setEditQuantity(booking.quantity || 1);
+        setEditError('');
+        setIsEditModalOpen(true);
+    };
+
+    const handleSaveEdit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editTarget) return;
+
+        if (!editPatientName.trim()) {
+            setEditError('Por favor, informe o nome do paciente.');
+            return;
+        }
+
+        setIsSubmittingEdit(true);
+        setEditError('');
+
+        try {
+            // 1. Atualizar Paciente (se tiver ID)
+            if (editTarget.patient_id) {
+                await db.updatePaciente(editTarget.patient_id, {
+                    name: editPatientName.trim().toUpperCase(),
+                    cpf: editPatientCpf,
+                    phone: editPatientPhone,
+                    neighborhood: editPatientNeighborhood,
+                    street: editPatientStreet,
+                    sus_number: editPatientSusNumber
+                });
+            }
+
+            // 2. Atualizar Agendamento
+            await db.updateAgendamento(editTarget.id, {
+                procedimento_id: editProcedimentoId,
+                appointment_date: editAppointmentDate || null,
+                appointment_time: editAppointmentTime || '',
+                solicitation_date: editSolicitationDate,
+                priority: editPriority,
+                is_retorno: editIsRetorno,
+                status: editStatus,
+                quantity: editQuantity
+            });
+
+            // Disparar eventos para sincronização em tempo real
+            window.dispatchEvent(new CustomEvent('consultas-agendamentos-changed'));
+            window.dispatchEvent(new CustomEvent('consultas-pacientes-changed'));
+
+            setIsEditModalOpen(false);
+            setEditTarget(null);
+            await loadData(true);
+        } catch (err: any) {
+            console.error("Erro ao atualizar agendamento:", err);
+            setEditError(err.message || 'Ocorreu um erro ao salvar as alterações.');
+        } finally {
+            setIsSubmittingEdit(false);
         }
     };
 
@@ -1001,6 +1116,15 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                                             <Loader2 className="w-5 h-5 text-sky-600 animate-spin" />
                                                         ) : (
                                                             <>
+                                                                {canEdit && (
+                                                                    <button
+                                                                        onClick={() => handleOpenEditModal(booking)}
+                                                                        className="p-1.5 text-amber-600 hover:text-white hover:bg-amber-500 rounded-lg border border-amber-100 hover:border-amber-500 transition-all flex items-center justify-center"
+                                                                        title="Editar Agendamento / Paciente"
+                                                                    >
+                                                                        <Edit2 className="w-4 h-4" />
+                                                                    </button>
+                                                                )}
                                                                 <button
                                                                     onClick={() => handleDownloadPdf(booking)}
                                                                     disabled={isGenerating}
@@ -1584,6 +1708,243 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                 Confirmar Cancelamento
                             </button>
                         </div>
+                    </div>
+                </div>,
+                document.body
+            )}
+
+            {/* MODAL DE EDIÇÃO DE CADASTRO DE AGENDAMENTO */}
+            {isEditModalOpen && editTarget && typeof document !== 'undefined' && createPortal(
+                <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-2xl overflow-hidden border border-slate-100 flex flex-col max-h-[90vh] transform transition-all animate-in zoom-in-95 duration-200">
+                        {/* Header */}
+                        <div className="p-6 border-b border-sky-100 bg-sky-50/60 flex justify-between items-center shrink-0">
+                            <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 rounded-2xl bg-sky-100 flex items-center justify-center text-sky-600 shadow-inner">
+                                    <Edit2 className="w-6 h-6" />
+                                </div>
+                                <div>
+                                    <h3 className="text-base font-black text-slate-900 uppercase tracking-wider">Editar Cadastro do Agendamento</h3>
+                                    <p className="text-xs text-sky-700/80 font-bold uppercase tracking-wider mt-0.5">
+                                        Protocolo: #{editTarget.id.substring(0, 8).toUpperCase()}
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setIsEditModalOpen(false);
+                                    setEditTarget(null);
+                                }}
+                                className="p-2 hover:bg-slate-200/60 rounded-2xl text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        {/* Form Content */}
+                        <form onSubmit={handleSaveEdit} className="p-6 space-y-6 overflow-y-auto flex-1">
+                            {editError && (
+                                <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-xs font-bold text-rose-700 flex items-center gap-2">
+                                    ⚠️ {editError}
+                                </div>
+                            )}
+
+                            {/* SEÇÃO 1: DADOS DO PACIENTE */}
+                            <div className="space-y-4">
+                                <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+                                    <UserIcon className="w-4 h-4 text-sky-600" />
+                                    <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">Dados do Paciente</h4>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">Nome Completo *</label>
+                                        <input
+                                            type="text"
+                                            value={editPatientName}
+                                            onChange={(e) => setEditPatientName(e.target.value)}
+                                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none uppercase"
+                                            required
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">CPF</label>
+                                        <input
+                                            type="text"
+                                            value={editPatientCpf}
+                                            onChange={(e) => handleEditCpfChange(e.target.value)}
+                                            maxLength={14}
+                                            placeholder="000.000.000-00"
+                                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">Telefone</label>
+                                        <input
+                                            type="text"
+                                            value={editPatientPhone}
+                                            onChange={(e) => setEditPatientPhone(e.target.value)}
+                                            placeholder="(00) 00000-0000"
+                                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">Cartão SUS</label>
+                                        <input
+                                            type="text"
+                                            value={editPatientSusNumber}
+                                            onChange={(e) => setEditPatientSusNumber(e.target.value)}
+                                            placeholder="Número do SUS"
+                                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">Bairro</label>
+                                        <input
+                                            type="text"
+                                            value={editPatientNeighborhood}
+                                            onChange={(e) => setEditPatientNeighborhood(e.target.value)}
+                                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none uppercase"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">Endereço (Rua)</label>
+                                        <input
+                                            type="text"
+                                            value={editPatientStreet}
+                                            onChange={(e) => setEditPatientStreet(e.target.value)}
+                                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none uppercase"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* SEÇÃO 2: DETALHES DO AGENDAMENTO */}
+                            <div className="space-y-4">
+                                <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+                                    <Calendar className="w-4 h-4 text-sky-600" />
+                                    <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">Detalhes do Agendamento</h4>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="md:col-span-2">
+                                        <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">Exame / Consulta *</label>
+                                        <select
+                                            value={editProcedimentoId}
+                                            onChange={(e) => setEditProcedimentoId(e.target.value)}
+                                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none uppercase"
+                                            required
+                                        >
+                                            <option value="">Selecione um procedimento</option>
+                                            {procedures.map(p => (
+                                                <option key={p.id} value={p.id}>
+                                                    {p.name} {p.code ? `(CÓD: ${p.code})` : ''} - [{p.type}]
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">Data Agendada</label>
+                                        <input
+                                            type="date"
+                                            value={editAppointmentDate}
+                                            onChange={(e) => setEditAppointmentDate(e.target.value)}
+                                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">Horário Agendado</label>
+                                        <input
+                                            type="time"
+                                            value={editAppointmentTime}
+                                            onChange={(e) => setEditAppointmentTime(e.target.value)}
+                                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">Data de Solicitação</label>
+                                        <input
+                                            type="date"
+                                            value={editSolicitationDate}
+                                            onChange={(e) => setEditSolicitationDate(e.target.value)}
+                                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">Prioridade</label>
+                                        <select
+                                            value={editPriority}
+                                            onChange={(e) => setEditPriority(e.target.value as 'Normal' | 'Urgência')}
+                                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none"
+                                        >
+                                            <option value="Normal">Normal</option>
+                                            <option value="Urgência">Urgência</option>
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">Status</label>
+                                        <select
+                                            value={editStatus}
+                                            onChange={(e) => setEditStatus(e.target.value as ConsultaAgendamento['status'])}
+                                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none"
+                                        >
+                                            <option value="Solicitado">Solicitado</option>
+                                            <option value="Agendado">Agendado</option>
+                                            <option value="Realizado">Realizado</option>
+                                            <option value="Fila de espera">Fila de espera</option>
+                                            <option value="Aguardando Data">Aguardando Data</option>
+                                            <option value="Retorno">Retorno</option>
+                                            <option value="Não Realizado">Não Realizado</option>
+                                            <option value="Cancelado">Cancelado</option>
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">Quantidade de Vagas</label>
+                                        <input
+                                            type="number"
+                                            min={1}
+                                            value={editQuantity}
+                                            onChange={(e) => setEditQuantity(parseInt(e.target.value) || 1)}
+                                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Modal Footer */}
+                            <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-end gap-3 shrink-0 rounded-b-2xl">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setIsEditModalOpen(false);
+                                        setEditTarget(null);
+                                    }}
+                                    className="px-4 py-2.5 bg-white hover:bg-slate-100 text-slate-600 font-extrabold rounded-xl border border-slate-200 text-xs uppercase tracking-wider transition-all"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={isSubmittingEdit}
+                                    className="px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-extrabold rounded-xl shadow-lg shadow-sky-600/20 text-xs uppercase tracking-wider transition-all flex items-center gap-2 active:scale-95 cursor-pointer disabled:opacity-50"
+                                >
+                                    {isSubmittingEdit ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                                    Salvar Alterações
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>,
                 document.body

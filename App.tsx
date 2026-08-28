@@ -188,6 +188,7 @@ const VIEW_TO_PATH: Record<string, string> = {
   'licitacao:kanban': '/Licitacao/Kanban',
   'licitacao:kanban-view': '/Licitacao/Kanban/view',
   'consultas': '/Consultas',
+  'consultas:pacientes': '/Consultas/Pacientes',
   'consultas:novo-agendamento': '/Consultas/NovoAgendamento',
   'consultas:novo-agendamento-paciente': '/Consultas/NovoAgendamento/Paciente',
   'consultas:novo-agendamento-procedimento': '/Consultas/NovoAgendamento/Procedimento',
@@ -203,6 +204,7 @@ const VIEW_TO_PATH: Record<string, string> = {
   'consultas:dados-historico': '/Consultas/DADOS/Historico',
   'consultas:dados-gestor': '/Consultas/DADOS/Gestor',
   'farmacia': '/FarmaciaPopular',
+  'farmacia:pacientes': '/FarmaciaPopular/Pacientes',
   'farmacia:consultar': '/FarmaciaPopular/Consultar',
   'farmacia:retirar': '/FarmaciaPopular/Retirar',
   'farmacia:estoque': '/FarmaciaPopular/Estoque',
@@ -4900,6 +4902,9 @@ const App: React.FC = () => {
                     setCurrentView('home');
                     setActiveBlock(null);
                     window.history.pushState({}, '', '/PaginaInicial');
+                  } else if (view === 'consultas:pacientes') {
+                    setAppState(prev => ({ ...prev, view: 'pacientes' }));
+                    window.history.pushState({}, '', '/Consultas/Pacientes');
                   } else if (view === 'consultas:novo-agendamento') {
                     setAppState(prev => ({ ...prev, view: 'novo-agendamento' }));
                     window.history.pushState({}, '', '/Consultas/NovoAgendamento');
@@ -4959,6 +4964,9 @@ const App: React.FC = () => {
                     setCurrentView('home');
                     setActiveBlock(null);
                     window.history.pushState({}, '', '/PaginaInicial');
+                  } else if (view === 'farmacia:pacientes') {
+                    setAppState(prev => ({ ...prev, view: 'pacientes' }));
+                    window.history.pushState({}, '', '/FarmaciaPopular/Pacientes');
                   } else if (view === 'farmacia:consultar') {
                     setAppState(prev => ({ ...prev, view: 'consultar' }));
                     window.history.pushState({}, '', '/FarmaciaPopular/Consultar');

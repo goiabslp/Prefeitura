@@ -65,6 +65,34 @@ export const SystemSettingsProvider: React.FC<{ children: React.ReactNode }> = (
                         description: 'Permissão para iniciar e finalizar viagens em tempo real'
                     });
                 }
+
+                const hasConsultasPacientes = fetchedSettings.some(s => s.module_key === 'parent_consultas_pacientes');
+                if (!hasConsultasPacientes) {
+                    fetchedSettings.push({
+                        id: 'fallback_consultas_pacientes',
+                        module_key: 'parent_consultas_pacientes',
+                        label: 'Pacientes',
+                        is_enabled: true,
+                        is_enabled_mobile: true,
+                        parent_key: 'parent_consultas',
+                        order_index: 4,
+                        description: 'Permissão para gestão da base de pacientes no módulo de consultas'
+                    });
+                }
+
+                const hasFarmaciaPacientes = fetchedSettings.some(s => s.module_key === 'parent_farmacia_pacientes');
+                if (!hasFarmaciaPacientes) {
+                    fetchedSettings.push({
+                        id: 'fallback_farmacia_pacientes',
+                        module_key: 'parent_farmacia_pacientes',
+                        label: 'Pacientes',
+                        is_enabled: true,
+                        is_enabled_mobile: true,
+                        parent_key: 'parent_farmacia',
+                        order_index: 5,
+                        description: 'Permissão para gestão da base de pacientes no módulo da farmácia popular'
+                    });
+                }
                 
                 setSettings(fetchedSettings);
                 
@@ -105,12 +133,27 @@ export const SystemSettingsProvider: React.FC<{ children: React.ReactNode }> = (
     const toggleModule = async (key: string, enabled: boolean, channel: 'web' | 'mobile' = 'web') => {
         const fieldName = channel === 'web' ? 'is_enabled' : 'is_enabled_mobile';
         try {
-            const { error } = await supabase
+            const { data: updatedData, error } = await supabase
                 .from('global_module_settings')
                 .update({ [fieldName]: enabled, updated_at: new Date().toISOString() })
-                .eq('module_key', key);
+                .eq('module_key', key)
+                .select();
 
-            if (error) throw error;
+            if (error || !updatedData || updatedData.length === 0) {
+                // Upsert para novos módulos fallback estáticos
+                const existingObj = settings.find(s => s.module_key === key);
+                if (existingObj) {
+                    await supabase.from('global_module_settings').upsert({
+                        module_key: key,
+                        label: existingObj.label,
+                        parent_key: existingObj.parent_key,
+                        order_index: existingObj.order_index,
+                        is_enabled: channel === 'web' ? enabled : true,
+                        is_enabled_mobile: channel === 'mobile' ? enabled : true,
+                        updated_at: new Date().toISOString()
+                    });
+                }
+            }
 
             // Optimistic update
             if (channel === 'web') {

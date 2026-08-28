@@ -442,6 +442,33 @@ export const confirmarDataAgendamento = async (id: string, date: string, time?: 
     }
 };
 
+export const updateAgendamento = async (
+    id: string, 
+    updates: Partial<ConsultaAgendamento>
+): Promise<ConsultaAgendamento | null> => {
+    try {
+        const { paciente, procedimento, responsavel, ...cleanUpdates } = updates as any;
+        const { data, error } = await supabase
+            .from('consultas_agendamentos')
+            .update(cleanUpdates)
+            .eq('id', id)
+            .select(`
+                *,
+                paciente:consultas_pacientes(*),
+                procedimento:consultas_procedimentos(*),
+                responsavel:profiles(name)
+            `)
+            .single();
+
+        if (error) throw error;
+        return data;
+    } catch (error) {
+        const appError = handleSupabaseError(error);
+        console.error('[consultasService] updateAgendamento Error:', appError.message);
+        throw appError;
+    }
+};
+
 export const deleteAgendamento = async (id: string): Promise<boolean> => {
     try {
         const { error, count } = await supabase

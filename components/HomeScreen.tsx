@@ -133,8 +133,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     const canAccessRh = (permissions.includes('parent_rh') || permissions.includes('parent_rh_horas_extras') || permissions.includes('parent_rh_historico')) && isModuleActive('parent_rh');
     const canAccessProjetos = permissions.includes('parent_projetos') && isModuleActive('parent_projetos');
     const canAccessMarketing = permissions.includes('parent_marketing') && isModuleActive('parent_marketing');
-    const canAccessConsultas = (permissions.includes('parent_consultas') || permissions.includes('parent_consultas_novo_agendamento') || permissions.includes('parent_consultas_acompanhar') || permissions.includes('parent_consultas_dados')) && isModuleActive('parent_consultas');
-    const canAccessFarmacia = (permissions.includes('parent_farmacia') || permissions.includes('parent_farmacia_consultar') || permissions.includes('parent_farmacia_retirar') || permissions.includes('parent_farmacia_estoque') || permissions.includes('parent_farmacia_dashboard')) && isModuleActive('parent_farmacia');
+    const canAccessConsultas = (permissions.includes('parent_consultas') || permissions.includes('parent_consultas_novo_agendamento') || permissions.includes('parent_consultas_acompanhar') || permissions.includes('parent_consultas_dados') || permissions.includes('parent_consultas_pacientes')) && isModuleActive('parent_consultas');
+    const canAccessFarmacia = (permissions.includes('parent_farmacia') || permissions.includes('parent_farmacia_consultar') || permissions.includes('parent_farmacia_retirar') || permissions.includes('parent_farmacia_estoque') || permissions.includes('parent_farmacia_dashboard') || permissions.includes('parent_farmacia_pacientes')) && isModuleActive('parent_farmacia');
     const canAccessUpload = permissions.includes('parent_upload') && isModuleActive('parent_upload');
     const firstName = userName.split(' ')[0];
 

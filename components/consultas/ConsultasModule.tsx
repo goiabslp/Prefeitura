@@ -1,10 +1,11 @@
 // Módulo de Consultas e Regulação Municipal
 import React from 'react';
 import { User, AppState } from '../../types';
-import { ArrowLeft, PlusCircle, Activity, History, Database } from 'lucide-react';
+import { ArrowLeft, PlusCircle, Activity, History, Database, Users } from 'lucide-react';
 import { NovoAgendamentoScreen } from './NovoAgendamentoScreen';
 import { AcompanharScreen } from './AcompanharScreen';
 import { DadosScreen } from './DadosScreen';
+import { PacientesTab } from '../common/PacientesTab';
 import { useSystemSettings } from '../../contexts/SystemSettingsContext';
 
 interface ConsultasModuleProps {
@@ -28,17 +29,20 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
     const isNovoAgendamentoActive = moduleStatus['parent_consultas_novo_agendamento'] !== false;
     const isAcompanharActive = moduleStatus['parent_consultas_acompanhar'] !== false;
     const isDadosActive = moduleStatus['parent_consultas_dados'] !== false;
+    const isPacientesActive = moduleStatus['parent_consultas_pacientes'] !== false;
 
     const userPerms = currentUser?.permissions || [];
     const canAccessNovoAgendamento = userPerms.includes('parent_consultas_novo_agendamento') && isNovoAgendamentoActive;
     const canAccessAcompanhar = userPerms.includes('parent_consultas_acompanhar') && isAcompanharActive;
     const canAccessDados = userPerms.includes('parent_consultas_dados') && isDadosActive;
+    const canAccessPacientes = (userPerms.includes('parent_consultas_pacientes') || userPerms.includes('parent_consultas')) && isPacientesActive;
 
     const showNovoAgendamento = (subView === 'novo-agendamento' || (subView?.startsWith('novo-agendamento') ?? false) || subView === 'vagas-reservadas') && canAccessNovoAgendamento;
     const showAcompanhar = (subView === 'acompanhar' || subView === 'definir-agenda') && canAccessAcompanhar;
     const showDados = (subView === 'dados' || (subView?.startsWith('dados') ?? false)) && canAccessDados;
+    const showPacientes = (subView === 'pacientes') && canAccessPacientes;
     
-    const isSubView = showNovoAgendamento || showAcompanhar || showDados;
+    const isSubView = showNovoAgendamento || showAcompanhar || showDados || showPacientes;
 
     const renderMainScreen = () => {
         return (
@@ -66,12 +70,12 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
                     </div>
 
                     {/* Cards Grid */}
-                    <div className="w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 max-w-5xl animate-in zoom-in duration-500 fill-mode-backwards p-2">
+                    <div className="w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 max-w-6xl animate-in zoom-in duration-500 fill-mode-backwards p-2">
                         {/* Novo Agendamento Card */}
                         {canAccessNovoAgendamento && (
                             <button
                                 onClick={() => onNavigate('consultas:novo-agendamento')}
-                                className="group relative w-full min-h-[140px] md:min-h-[180px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-sky-500/30 hover:border-sky-200 hover:from-white hover:to-sky-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden text-center"
+                                className="group relative w-full min-h-[140px] md:min-h-[180px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-sky-500/30 hover:border-sky-200 hover:from-white hover:to-sky-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden text-center cursor-pointer"
                             >
                                 <div className="absolute top-0 right-0 w-32 h-32 bg-sky-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
                                 <div className="absolute bottom-0 left-0 w-24 h-24 bg-sky-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
@@ -89,7 +93,7 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
                         {canAccessAcompanhar && (
                             <button
                                 onClick={() => onNavigate('consultas:acompanhar')}
-                                className="group relative w-full min-h-[140px] md:min-h-[180px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-indigo-500/30 hover:border-indigo-200 hover:from-white hover:to-indigo-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden text-center"
+                                className="group relative w-full min-h-[140px] md:min-h-[180px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-indigo-500/30 hover:border-indigo-200 hover:from-white hover:to-indigo-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden text-center cursor-pointer"
                             >
                                 <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
                                 <div className="absolute bottom-0 left-0 w-24 h-24 bg-indigo-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
@@ -103,11 +107,29 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
                             </button>
                         )}
 
+                        {/* Pacientes Card */}
+                        {canAccessPacientes && (
+                            <button
+                                onClick={() => onNavigate('consultas:pacientes')}
+                                className="group relative w-full min-h-[140px] md:min-h-[180px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-cyan-500/30 hover:border-cyan-200 hover:from-white hover:to-cyan-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden text-center cursor-pointer"
+                            >
+                                <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
+                                <div className="absolute bottom-0 left-0 w-24 h-24 bg-cyan-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
+
+                                <div className="w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-gradient-to-br from-cyan-500 to-cyan-600 flex items-center justify-center mb-3 text-white group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300 shadow-lg shadow-cyan-500/30 ring-4 ring-white">
+                                    <Users className="w-6 h-6 md:w-7 md:h-7 drop-shadow-md" />
+                                </div>
+
+                                <h3 className="text-lg md:text-2xl font-bold text-slate-800 mb-1 group-hover:text-slate-900 tracking-tight uppercase">Pacientes</h3>
+                                <p className="text-[10px] md:text-xs font-bold text-slate-400 group-hover:text-cyan-600 transition-colors uppercase tracking-widest text-center px-4">Farmácia Popular & Consultas</p>
+                            </button>
+                        )}
+
                         {/* Dados & Dashboard Card */}
                         {canAccessDados && (
                             <button
                                 onClick={() => onNavigate('consultas:dados-dashboard')}
-                                className="group relative w-full min-h-[140px] md:min-h-[180px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-emerald-500/30 hover:border-emerald-200 hover:from-white hover:to-emerald-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden text-center"
+                                className="group relative w-full min-h-[140px] md:min-h-[180px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-emerald-500/30 hover:border-emerald-200 hover:from-white hover:to-emerald-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden text-center cursor-pointer"
                             >
                                 <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
                                 <div className="absolute bottom-0 left-0 w-24 h-24 bg-emerald-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
@@ -121,7 +143,7 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
                             </button>
                         )}
 
-                        {!canAccessNovoAgendamento && !canAccessAcompanhar && !canAccessDados && (
+                        {!canAccessNovoAgendamento && !canAccessAcompanhar && !canAccessPacientes && !canAccessDados && (
                             <div className="col-span-full text-center p-8 bg-white border border-slate-200 rounded-[2rem] shadow-sm max-w-md mx-auto">
                                 <Activity className="w-12 h-12 text-slate-300 mx-auto mb-4" />
                                 <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Regulação & Consultas</h3>
@@ -156,6 +178,10 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
                             subView={subView}
                             appState={appState}
                         />
+                    ) : showPacientes ? (
+                        <div className="w-full max-w-[98%] 2xl:max-w-[1536px] mx-auto flex flex-col h-full max-h-full min-h-0 bg-white/95 backdrop-blur-md rounded-[2.5rem] border border-slate-200/80 shadow-[0_20px_60px_rgba(0,0,0,0.06)] overflow-hidden animate-in fade-in duration-300 p-4 md:p-5">
+                            <PacientesTab onBack={() => onNavigate('consultas')} accentColor="sky" />
+                        </div>
                     ) : showDados ? (
                         <DadosScreen
                             currentUser={currentUser}
