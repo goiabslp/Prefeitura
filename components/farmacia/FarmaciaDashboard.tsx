@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { User } from '../../types';
 import { Search, ClipboardList, Package, Settings, History, Pill, Users, ShieldCheck } from 'lucide-react';
 import { useSystemSettings } from '../../contexts/SystemSettingsContext';
@@ -12,13 +12,28 @@ export const FarmaciaDashboard: React.FC<FarmaciaDashboardProps> = ({
     currentUser,
     onNavigate
 }) => {
-    const { moduleStatus } = useSystemSettings();
-    const isConsultarActive = moduleStatus['parent_farmacia_consultar'] !== false;
-    const isRetirarActive = moduleStatus['parent_farmacia_retirar'] !== false;
-    const isEstoqueActive = moduleStatus['parent_farmacia_estoque'] !== false;
-    const isDashboardActive = moduleStatus['parent_farmacia_dashboard'] !== false;
-    const isPacientesActive = moduleStatus['parent_farmacia_pacientes'] !== false;
-    const isGestorActive = moduleStatus['parent_farmacia_gestor'] !== false;
+    const { moduleStatus, mobileModuleStatus } = useSystemSettings();
+    const [isMobileViewport, setIsMobileViewport] = useState(typeof window !== 'undefined' ? window.innerWidth < 768 : false);
+
+    useEffect(() => {
+        const handleResize = () => setIsMobileViewport(window.innerWidth < 768);
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
+    const isModuleActive = (key: string) => {
+        if (isMobileViewport) {
+            return mobileModuleStatus[key] !== false;
+        }
+        return moduleStatus[key] !== false;
+    };
+
+    const isConsultarActive = isModuleActive('parent_farmacia_consultar');
+    const isRetirarActive = isModuleActive('parent_farmacia_retirar');
+    const isEstoqueActive = isModuleActive('parent_farmacia_estoque');
+    const isDashboardActive = isModuleActive('parent_farmacia_dashboard');
+    const isPacientesActive = isModuleActive('parent_farmacia_pacientes');
+    const isGestorActive = isModuleActive('parent_farmacia_gestor');
 
     const userPerms = currentUser?.permissions || [];
     const hasCustomPerms = Array.isArray(currentUser?.permissions) && currentUser.permissions.length > 0;

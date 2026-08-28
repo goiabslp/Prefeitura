@@ -1,5 +1,5 @@
 // Módulo de Consultas e Regulação Municipal
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, AppState } from '../../types';
 import { ArrowLeft, PlusCircle, Activity, History, Database, Users, ShieldCheck } from 'lucide-react';
 import { NovoAgendamentoScreen } from './NovoAgendamentoScreen';
@@ -26,12 +26,27 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
     onLogout,
     appState
 }) => {
-    const { moduleStatus } = useSystemSettings();
-    const isNovoAgendamentoActive = moduleStatus['parent_consultas_novo_agendamento'] !== false;
-    const isAcompanharActive = moduleStatus['parent_consultas_acompanhar'] !== false;
-    const isDadosActive = moduleStatus['parent_consultas_dados'] !== false;
-    const isPacientesActive = moduleStatus['parent_consultas_pacientes'] !== false;
-    const isGestorActive = moduleStatus['parent_consultas_gestor'] !== false;
+    const { moduleStatus, mobileModuleStatus } = useSystemSettings();
+    const [isMobileViewport, setIsMobileViewport] = useState(typeof window !== 'undefined' ? window.innerWidth < 768 : false);
+
+    useEffect(() => {
+        const handleResize = () => setIsMobileViewport(window.innerWidth < 768);
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
+    const isModuleActive = (key: string) => {
+        if (isMobileViewport) {
+            return mobileModuleStatus[key] !== false;
+        }
+        return moduleStatus[key] !== false;
+    };
+
+    const isNovoAgendamentoActive = isModuleActive('parent_consultas_novo_agendamento');
+    const isAcompanharActive = isModuleActive('parent_consultas_acompanhar');
+    const isDadosActive = isModuleActive('parent_consultas_dados');
+    const isPacientesActive = isModuleActive('parent_consultas_pacientes');
+    const isGestorActive = isModuleActive('parent_consultas_gestor');
 
     const userPerms = currentUser?.permissions || [];
     const hasCustomPerms = Array.isArray(currentUser?.permissions) && currentUser.permissions.length > 0;
