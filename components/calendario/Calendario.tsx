@@ -221,14 +221,14 @@ export const Calendario: React.FC<CalendarioProps> = ({ onBack, userRole, curren
                 </div>
 
                 <div className="flex items-center gap-3">
-                    {currentUser?.google_connected && (
+                    {googleCalendarService.getStoredStatus(currentUser || {}).isConnected && (
                         <button
                             onClick={async () => {
                                 if (!currentUser) return;
                                 setIsSyncingGoogle(true);
                                 const result = await googleCalendarService.syncAllUserEvents(currentUser);
                                 setIsSyncingGoogle(false);
-                                showToast(`${result.syncedCount} evento(s) sincronizados com o Google Agenda!`);
+                                showToast(`${result.syncedCount} evento(s) sincronizado(s) com o Google Agenda!`);
                             }}
                             className="flex items-center gap-2 px-4 py-2 rounded-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold border border-indigo-200 text-xs transition-all active:scale-95 cursor-pointer"
                             title="Sincronizar eventos com seu Google Agenda"
