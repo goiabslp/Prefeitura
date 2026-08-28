@@ -398,6 +398,16 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     const [globalSearch, setGlobalSearch] = useState('');
     const [filterDate, setFilterDate] = useState('');
     const [filterStatus, setFilterStatus] = useState('');
+    const [isMobile, setIsMobile] = useState<boolean>(() => typeof window !== 'undefined' ? window.innerWidth < 768 : false);
+    const [expandedBookingId, setExpandedBookingId] = useState<string | null>(null);
+
+    useEffect(() => {
+        const handleResize = () => {
+            setIsMobile(window.innerWidth < 768);
+        };
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
 
     // Operations states
     const [operatingId, setOperatingId] = useState<string | null>(null);
@@ -698,7 +708,13 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
 
             setQueuePositions(positionMap);
 
-            // Apply filters in-memory
+            // Apply filters in-memory (Apenas no Mobile: não exibe resultados antes da pesquisa se não houver filtro)
+            if (isMobile && !globalSearch.trim() && !filterDate && !filterStatus) {
+                setBookings([]);
+                setLoading(false);
+                return;
+            }
+
             let filtered = allBookingData;
             if (globalSearch.trim()) {
                 const rawSearch = globalSearch.toLowerCase().trim();
@@ -1259,7 +1275,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                 <div className="relative w-full">
                     <input
                         type="text"
-                        placeholder="Buscar por Nome, Apelido, CPF, Cartão SUS ou Procedimento..."
+                        placeholder="Buscar por nome, CPF, SUS ou exame..."
                         className="w-full bg-slate-50 border border-slate-200/90 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 rounded-2xl pl-9 pr-9 py-2 text-xs font-bold transition-all text-slate-900 placeholder:text-slate-400 shadow-2xs"
                         value={globalSearch}
                         onChange={(e) => setGlobalSearch(e.target.value)}
@@ -1388,257 +1404,518 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                         <Loader2 className="w-8 h-8 text-sky-600 animate-spin" />
                         <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Carregando agendamentos...</span>
                     </div>
-                ) : bookings.length > 0 ? (
-                    <div className="bg-white border border-slate-200/80 rounded-2xl overflow-hidden shadow-2xs">
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left border-collapse">
-                                <thead className="sticky top-0 bg-slate-50 border-b border-slate-200/80 text-[10px] font-black text-slate-500 uppercase tracking-wider z-10 shadow-2xs">
-                                    <tr>
-                                        <th className="py-3 px-3 text-center w-16">Posição</th>
-                                        <th className="py-3 px-3">Solicitado</th>
-                                        <th className="py-3 px-3">Paciente / CPF</th>
-                                        <th className="py-3 px-3">Exame / Procedimento</th>
-                                        <th className="py-3 px-3">Data Agendada</th>
-                                        <th className="py-3 px-3 text-center">Prioridade</th>
-                                        <th className="py-3 px-3 text-center">Status</th>
-                                        <th className="py-3 px-3">Responsável</th>
-                                        <th className="py-3 px-3 text-right">Ações</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                    {sortedBookings.map((booking) => {
-                                        const isOperating = operatingId === booking.id;
-                                        return (
-                                            <tr key={booking.id} className="hover:bg-sky-50/40 text-xs font-semibold text-slate-700 transition-colors">
-                                                <td className="py-3 px-3 text-center">
-                                                    {booking.status === 'Fila de espera' && queuePositions[booking.id] ? (
-                                                        <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-300 font-black text-[10px] shadow-2xs">
-                                                            {queuePositions[booking.id]}º
-                                                        </span>
-                                                    ) : (
-                                                        <span className="text-slate-300 font-normal">-</span>
-                                                    )}
-                                                </td>
-                                                <td className="py-3 px-3 text-slate-500 whitespace-nowrap">
-                                                    {booking.solicitation_date 
-                                                        ? new Date(booking.solicitation_date + 'T00:00:00').toLocaleDateString('pt-BR') 
-                                                        : (booking.created_at ? new Date(booking.created_at).toLocaleDateString('pt-BR') : '-')}
-                                                </td>
-                                                <td className="py-3 px-3">
-                                                    <div className="font-extrabold text-slate-900 uppercase leading-tight">{booking.paciente ? formatPatientName(booking.paciente) : 'Carregando...'}</div>
-                                                    <div className="text-[10px] text-slate-400 font-bold tracking-wider mt-0.5">
-                                                        CPF: {booking.paciente?.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}
-                                                    </div>
-                                                </td>
-                                                <td className="py-3 px-3">
-                                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                                        <span className="font-extrabold text-slate-800 uppercase">{booking.procedimento?.name || 'Carregando...'}</span>
-                                                        {booking.procedimento?.code && (
-                                                            <span className="text-[9px] text-slate-500 font-extrabold bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
-                                                                {booking.procedimento.code}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                     <span className={`inline-block px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider rounded mt-0.5 ${
-                                                         booking.procedimento?.type === 'Exame' 
-                                                         ? 'bg-sky-50 text-sky-700 border border-sky-200/60' 
-                                                         : booking.procedimento?.type === 'Consulta'
-                                                         ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/60'
-                                                         : 'bg-rose-50 text-rose-700 border border-rose-200/60'
-                                                     }`}>
-                                                        {booking.procedimento?.type}
-                                                     </span>
-                                                </td>
-                                                <td className="py-3 px-3 text-slate-700 font-extrabold whitespace-nowrap">
-                                                    {booking.status !== 'Fila de espera' && booking.status !== 'Aguardando Data' && (booking.appointment_time || booking.status === 'Agendado' || booking.status === 'Realizado') ? (
-                                                        <span>
-                                                            {new Date(booking.appointment_date + 'T12:00:00').toLocaleDateString('pt-BR')}
-                                                            {booking.appointment_time ? ` ${booking.appointment_time.substring(0, 5)}` : ''}
-                                                        </span>
-                                                    ) : (
-                                                        <span className="inline-flex px-2 py-0.5 rounded text-[9px] font-black uppercase text-amber-800 bg-amber-50 border border-amber-300 shadow-2xs">
-                                                            Aguardando Vaga
-                                                        </span>
-                                                    )}
-                                                </td>
-                                                <td className="py-3 px-3 text-center whitespace-nowrap">
-                                                     <span className={`inline-flex px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${
-                                                         booking.priority === 'Urgência'
-                                                         ? 'bg-rose-500 text-white shadow-2xs'
-                                                         : booking.is_retorno
-                                                         ? 'bg-teal-600 text-white shadow-2xs'
-                                                         : 'bg-slate-100 text-slate-600 border border-slate-200'
-                                                     }`}>
-                                                         {booking.priority === 'Urgência' ? 'Urgência' : booking.is_retorno ? 'Retorno' : 'Normal'}
-                                                     </span>
-                                                </td>
-                                                <td className="py-3 px-3 text-center whitespace-nowrap">
-                                                    <div className="flex flex-col items-center gap-1">
-                                                        <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border shadow-2xs ${
-                                                            booking.status === 'Solicitado'
-                                                            ? 'bg-sky-50 text-sky-700 border-sky-300'
-                                                            : booking.status === 'Agendado' 
-                                                            ? 'bg-indigo-50 text-indigo-700 border-indigo-300' 
-                                                            : booking.status === 'Realizado' 
-                                                            ? 'bg-emerald-50 text-emerald-800 border-emerald-300' 
-                                                            : booking.status === 'Não Realizado'
-                                                            ? 'bg-slate-100 text-slate-700 border-slate-300'
-                                                            : booking.status === 'Fila de espera'
-                                                            ? 'bg-amber-50 text-amber-800 border-amber-300'
-                                                            : booking.status === 'Aguardando Data'
-                                                            ? 'bg-violet-50 text-violet-800 border-violet-300'
-                                                            : booking.status === 'Retorno'
-                                                            ? 'bg-teal-50 text-teal-800 border-teal-300'
-                                                            : 'bg-rose-50 text-rose-800 border-rose-300'
-                                                        }`}>
-                                                            {booking.status}
-                                                        </span>
-                                                        {booking.status === 'Fila de espera' && queuePositions[booking.id] && (
-                                                            <span className="text-[9px] text-amber-800 font-extrabold uppercase tracking-wide bg-amber-50 border border-amber-300 px-1.5 py-0.5 rounded shadow-2xs">
-                                                                {queuePositions[booking.id]}º na fila
-                                                            </span>
-                                                        )}
-                                                        {booking.status === 'Cancelado' && (booking.cancellation_reason || booking.canceled_by_name) && (
-                                                            <div className="text-[9px] text-rose-600 font-bold text-center max-w-[130px] truncate" title={`Cancelado por: ${booking.canceled_by_name || 'Usuário'} | Motivo: ${booking.cancellation_reason || 'Sem justificativa'}`}>
-                                                                Motivo: {booking.cancellation_reason || 'Não informado'}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </td>
-                                                <td className="py-3 px-3 text-slate-500 whitespace-nowrap">
-                                                    <div className="font-bold text-slate-700">{booking.responsavel?.name || 'Sistema'}</div>
-                                                    <div className="text-[9px] text-slate-400 mt-0.5 font-semibold">
-                                                        {booking.created_at && new Date(booking.created_at).toLocaleString('pt-BR')}
-                                                    </div>
-                                                </td>
-                                                <td className="py-3 px-3 text-right whitespace-nowrap">
-                                                    <div className="flex items-center justify-end gap-1.5">
-                                                        {isOperating ? (
-                                                            <Loader2 className="w-4 h-4 text-sky-600 animate-spin" />
-                                                        ) : (
-                                                            <>
-                                                                {canEdit && (
-                                                                    <button
-                                                                        onClick={() => handleOpenEditModal(booking)}
-                                                                        className="p-1.5 text-amber-600 hover:text-white hover:bg-amber-500 rounded-lg border border-amber-200 hover:border-amber-500 transition-all flex items-center justify-center cursor-pointer shadow-2xs"
-                                                                        title="Editar Agendamento / Paciente"
-                                                                    >
-                                                                        <Edit2 className="w-3.5 h-3.5" />
-                                                                    </button>
-                                                                )}
-                                                                <button
-                                                                    onClick={() => handleDownloadPdf(booking)}
-                                                                    disabled={isGenerating}
-                                                                    className="p-1.5 text-sky-600 hover:text-white hover:bg-sky-500 rounded-lg border border-sky-200 hover:border-sky-500 transition-all flex items-center justify-center disabled:opacity-50 cursor-pointer shadow-2xs"
-                                                                    title="Baixar Comprovante PDF"
-                                                                >
-                                                                    {isGenerating && printingBooking?.id === booking.id ? (
-                                                                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                                                    ) : (
-                                                                        <FileDown className="w-3.5 h-3.5" />
-                                                                    )}
-                                                                </button>
-                                                                {booking.status === 'Realizado' && (
-                                                                    <button
-                                                                        onClick={() => {
-                                                                            setRetornoBooking(booking);
-                                                                            const tomorrow = new Date();
-                                                                            tomorrow.setDate(tomorrow.getDate() + 1);
-                                                                            setRetornoDate(tomorrow.toISOString().split('T')[0]);
-                                                                            setIsRetornoModalOpen(true);
-                                                                        }}
-                                                                        className="p-1.5 text-teal-600 hover:text-white hover:bg-teal-500 rounded-lg border border-teal-200 hover:border-teal-500 transition-all flex items-center justify-center cursor-pointer shadow-2xs"
-                                                                        title="Agendar Retorno"
-                                                                    >
-                                                                        <Repeat className="w-3.5 h-3.5" />
-                                                                    </button>
-                                                                )}
-                                                                {booking.status === 'Solicitado' && (
-                                                                    <>
-                                                                        {canComplete && (
-                                                                            <button
-                                                                                onClick={() => handleStatusUpdate(booking.id, 'Agendado')}
-                                                                                className="p-1.5 text-emerald-600 hover:text-white hover:bg-emerald-500 rounded-lg border border-emerald-200 hover:border-emerald-500 transition-all flex items-center justify-center cursor-pointer shadow-2xs"
-                                                                                title="Aprovar Agendamento"
-                                                                            >
-                                                                                <CheckCircle2 className="w-3.5 h-3.5" />
-                                                                            </button>
-                                                                        )}
-                                                                        {canCancel && (
-                                                                            <button
-                                                                                onClick={() => handleOpenCancelModal(booking)}
-                                                                                className="p-1.5 text-rose-500 hover:text-white hover:bg-rose-500 rounded-lg border border-rose-200 hover:border-rose-500 transition-all flex items-center justify-center cursor-pointer shadow-2xs"
-                                                                                title="Rejeitar/Cancelar Agendamento"
-                                                                            >
-                                                                                <XCircle className="w-3.5 h-3.5" />
-                                                                            </button>
-                                                                        )}
-                                                                    </>
-                                                                )}
-                                                                {booking.status === 'Agendado' && (
-                                                                    <>
-                                                                        {canComplete && (
-                                                                            <button
-                                                                                onClick={() => handleStatusUpdate(booking.id, 'Realizado')}
-                                                                                className="p-1.5 text-emerald-600 hover:text-white hover:bg-emerald-500 rounded-lg border border-emerald-200 hover:border-emerald-500 transition-all flex items-center justify-center cursor-pointer shadow-2xs"
-                                                                                title="Confirmar Realização"
-                                                                            >
-                                                                                <CheckCircle2 className="w-4 h-4" />
-                                                                            </button>
-                                                                        )}
-                                                                        {canComplete && (
-                                                                            <button
-                                                                                onClick={() => handleStatusUpdate(booking.id, 'Não Realizado')}
-                                                                                className="p-1.5 text-slate-500 hover:text-white hover:bg-slate-500 rounded-lg border border-slate-200 hover:border-slate-500 transition-all flex items-center justify-center"
-                                                                                title="Marcar Falta (Não Realizado)"
-                                                                            >
-                                                                                <UserX className="w-4 h-4" />
-                                                                            </button>
-                                                                        )}
-                                                                        {canCancel && (
-                                                                            <button
-                                                                                onClick={() => handleOpenCancelModal(booking)}
-                                                                                className="p-1.5 text-rose-400 hover:text-white hover:bg-rose-500 rounded-lg border border-rose-100 hover:border-rose-500 transition-all flex items-center justify-center"
-                                                                                title="Cancelar Agendamento"
-                                                                            >
-                                                                                <XCircle className="w-4 h-4" />
-                                                                            </button>
-                                                                        )}
-                                                                    </>
-                                                                )}
-                                                                {(booking.status === 'Fila de espera' || booking.status === 'Aguardando Data') && (
-                                                                    <>
-                                                                        {canCancel && (
-                                                                            <button
-                                                                                onClick={() => handleOpenCancelModal(booking)}
-                                                                                className="p-1.5 text-rose-400 hover:text-white hover:bg-rose-500 rounded-lg border border-rose-100 hover:border-rose-500 transition-all flex items-center justify-center"
-                                                                                title="Cancelar Agendamento"
-                                                                            >
-                                                                                <XCircle className="w-4 h-4" />
-                                                                            </button>
-                                                                        )}
-                                                                    </>
-                                                                )}
-                                                                {canDelete && (
-                                                                    <button
-                                                                        onClick={() => handleDelete(booking.id)}
-                                                                        className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg border border-slate-200 hover:border-slate-700 transition-all"
-                                                                        title="Excluir Registro"
-                                                                    >
-                                                                        <Trash2 className="w-4 h-4" />
-                                                                    </button>
-                                                                )}
-                                                            </>
-                                                        )}
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
+                ) : isMobile && !globalSearch.trim() && !filterDate && !filterStatus ? (
+                    <div className="h-full w-full flex flex-col items-center justify-center p-8 text-center bg-slate-50/20 animate-in fade-in duration-300">
+                        <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-sky-50 via-sky-100/60 to-blue-100 border border-sky-200/80 flex items-center justify-center text-sky-600 shadow-inner mb-4">
+                            <Search className="w-8 h-8" />
                         </div>
+                        <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight mb-1">
+                            Qual agendamento você procura?
+                        </h3>
+                        <p className="text-xs font-semibold text-slate-500 max-w-md">
+                            Digite o nome do paciente, apelido, CPF, Cartão SUS ou procedimento no campo de busca para consultar.
+                        </p>
                     </div>
+                ) : bookings.length > 0 ? (
+                    <>
+                        {/* LAYOUT MOBILE COMPACTO (block md:hidden) - Sem rolagem horizontal, apenas Nome, CPF e Procedimento, expansível para ver tudo */}
+                        <div className="block md:hidden space-y-3 w-full">
+                            {sortedBookings.map((booking) => {
+                                const isExpanded = expandedBookingId === booking.id;
+                                const isOperating = operatingId === booking.id;
+
+                                return (
+                                    <div 
+                                        key={booking.id}
+                                        className={`bg-white border rounded-2xl p-3.5 transition-all shadow-2xs w-full overflow-hidden ${
+                                            isExpanded 
+                                                ? 'border-sky-500 ring-2 ring-sky-500/10 shadow-md' 
+                                                : 'border-slate-200/90 hover:border-slate-300'
+                                        }`}
+                                    >
+                                        {/* Linha Compacta Principal: NOME, CPF, PROCEDIMENTO e STATUS */}
+                                        <div 
+                                            onClick={() => setExpandedBookingId(isExpanded ? null : booking.id)}
+                                            className="flex items-start justify-between gap-2.5 cursor-pointer select-none"
+                                        >
+                                            <div className="min-w-0 flex-1 space-y-1">
+                                                <div className="font-black text-slate-900 text-sm uppercase leading-tight truncate">
+                                                    {booking.paciente ? formatPatientName(booking.paciente) : 'Carregando...'}
+                                                </div>
+                                                <div className="text-[11px] text-slate-500 font-bold flex items-center gap-2 flex-wrap">
+                                                    <span>CPF: <span className="text-slate-800 font-extrabold">{booking.paciente?.cpf ? booking.paciente.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4") : 'Não informado'}</span></span>
+                                                </div>
+                                                <div className="text-xs font-extrabold text-sky-700 uppercase flex items-center gap-1.5 flex-wrap pt-0.5">
+                                                    <span className="truncate">{booking.procedimento?.name || 'Procedimento não informado'}</span>
+                                                    {booking.procedimento?.code && (
+                                                        <span className="text-[9px] text-slate-500 font-black bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200">
+                                                            {booking.procedimento.code}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            <div className="flex flex-col items-end gap-2 shrink-0">
+                                                <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border shadow-2xs ${
+                                                    booking.status === 'Solicitado'
+                                                    ? 'bg-sky-50 text-sky-700 border-sky-300'
+                                                    : booking.status === 'Agendado' 
+                                                    ? 'bg-indigo-50 text-indigo-700 border-indigo-300' 
+                                                    : booking.status === 'Realizado' 
+                                                    ? 'bg-emerald-50 text-emerald-800 border-emerald-300' 
+                                                    : booking.status === 'Não Realizado'
+                                                    ? 'bg-slate-100 text-slate-700 border-slate-300'
+                                                    : booking.status === 'Fila de espera'
+                                                    ? 'bg-amber-50 text-amber-800 border-amber-300'
+                                                    : booking.status === 'Aguardando Data'
+                                                    ? 'bg-violet-50 text-violet-800 border-violet-300'
+                                                    : booking.status === 'Retorno'
+                                                    ? 'bg-teal-50 text-teal-800 border-teal-300'
+                                                    : 'bg-rose-50 text-rose-800 border-rose-300'
+                                                }`}>
+                                                    {booking.status}
+                                                </span>
+
+                                                <div className={`w-7 h-7 rounded-xl flex items-center justify-center transition-transform ${isExpanded ? 'bg-sky-100 text-sky-700 rotate-180' : 'bg-slate-100 text-slate-500'}`}>
+                                                    <ChevronDown className="w-4 h-4" />
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Conteúdo Expandido com TODAS as informações do agendamento (AO ABRIR) */}
+                                        {isExpanded && (
+                                            <div className="mt-3 pt-3 border-t border-slate-100 space-y-3 animate-in fade-in slide-in-from-top-1 duration-200">
+                                                {/* Grid de Informações Detalhadas */}
+                                                <div className="grid grid-cols-2 gap-2 text-xs">
+                                                    <div className="bg-slate-50/80 p-2.5 rounded-xl border border-slate-100">
+                                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider block mb-0.5">Data Agendada</span>
+                                                        <div className="font-bold text-slate-800">
+                                                            {booking.status !== 'Fila de espera' && booking.status !== 'Aguardando Data' && (booking.appointment_time || booking.status === 'Agendado' || booking.status === 'Realizado') ? (
+                                                                <span>
+                                                                    {new Date(booking.appointment_date + 'T12:00:00').toLocaleDateString('pt-BR')}
+                                                                    {booking.appointment_time ? ` ${booking.appointment_time.substring(0, 5)}` : ''}
+                                                                </span>
+                                                            ) : (
+                                                                <span className="text-amber-800 font-black text-[10px]">Aguardando Vaga</span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="bg-slate-50/80 p-2.5 rounded-xl border border-slate-100">
+                                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider block mb-0.5">Data Solicitada</span>
+                                                        <div className="font-bold text-slate-800">
+                                                            {booking.solicitation_date 
+                                                                ? new Date(booking.solicitation_date + 'T00:00:00').toLocaleDateString('pt-BR') 
+                                                                : (booking.created_at ? new Date(booking.created_at).toLocaleDateString('pt-BR') : '-')}
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="bg-slate-50/80 p-2.5 rounded-xl border border-slate-100">
+                                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider block mb-0.5">Prioridade</span>
+                                                        <span className={`inline-flex px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${
+                                                            booking.priority === 'Urgência'
+                                                            ? 'bg-rose-500 text-white'
+                                                            : booking.is_retorno
+                                                            ? 'bg-teal-600 text-white'
+                                                            : 'bg-slate-200 text-slate-700'
+                                                        }`}>
+                                                            {booking.priority === 'Urgência' ? 'Urgência' : booking.is_retorno ? 'Retorno' : 'Normal'}
+                                                        </span>
+                                                    </div>
+
+                                                    <div className="bg-slate-50/80 p-2.5 rounded-xl border border-slate-100">
+                                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider block mb-0.5">Cartão SUS</span>
+                                                        <div className="font-bold text-slate-800 truncate">
+                                                            {booking.paciente?.sus_number || 'Não informado'}
+                                                        </div>
+                                                    </div>
+
+                                                    {booking.status === 'Fila de espera' && queuePositions[booking.id] && (
+                                                        <div className="col-span-2 bg-amber-50 p-2.5 rounded-xl border border-amber-200/80 flex items-center justify-between">
+                                                            <span className="text-[10px] font-black text-amber-800 uppercase tracking-wider">Posição na Fila de Espera</span>
+                                                            <span className="font-black text-amber-700 text-xs px-2.5 py-0.5 bg-amber-100 rounded-full border border-amber-300">
+                                                                {queuePositions[booking.id]}º lugar
+                                                            </span>
+                                                        </div>
+                                                    )}
+
+                                                    {booking.status === 'Cancelado' && (booking.cancellation_reason || booking.canceled_by_name) && (
+                                                        <div className="col-span-2 bg-rose-50 p-2.5 rounded-xl border border-rose-200 text-rose-700 text-xs">
+                                                            <span className="font-black uppercase text-[10px] block mb-0.5">Motivo do Cancelamento:</span>
+                                                            <span>{booking.cancellation_reason || 'Sem justificativa'}</span>
+                                                        </div>
+                                                    )}
+
+                                                    <div className="col-span-2 bg-slate-50/80 p-2.5 rounded-xl border border-slate-100">
+                                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider block mb-0.5">Responsável pelo Cadastro</span>
+                                                        <div className="font-bold text-slate-800">{booking.responsavel?.name || 'Sistema'}</div>
+                                                        {booking.created_at && (
+                                                            <span className="text-[9px] text-slate-400 block">{new Date(booking.created_at).toLocaleString('pt-BR')}</span>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                {/* Ações disponíveis no Mobile */}
+                                                <div className="pt-2 flex items-center justify-end gap-2 flex-wrap border-t border-slate-100">
+                                                    {isOperating ? (
+                                                        <Loader2 className="w-5 h-5 text-sky-600 animate-spin" />
+                                                    ) : (
+                                                        <>
+                                                            {canEdit && (
+                                                                <button
+                                                                    onClick={() => handleOpenEditModal(booking)}
+                                                                    className="px-3 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-xl text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all"
+                                                                >
+                                                                    <Edit2 className="w-3.5 h-3.5" /> Editar
+                                                                </button>
+                                                            )}
+                                                            <button
+                                                                onClick={() => handleDownloadPdf(booking)}
+                                                                disabled={isGenerating}
+                                                                className="px-3 py-1.5 bg-sky-50 text-sky-700 border border-sky-200 rounded-xl text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all"
+                                                            >
+                                                                <FileDown className="w-3.5 h-3.5" /> Comprovante
+                                                            </button>
+                                                            {booking.status === 'Realizado' && (
+                                                                <button
+                                                                    onClick={() => {
+                                                                        setRetornoBooking(booking);
+                                                                        const tomorrow = new Date();
+                                                                        tomorrow.setDate(tomorrow.getDate() + 1);
+                                                                        setRetornoDate(tomorrow.toISOString().split('T')[0]);
+                                                                        setIsRetornoModalOpen(true);
+                                                                    }}
+                                                                    className="px-3 py-1.5 bg-teal-50 text-teal-700 border border-teal-200 rounded-xl text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all"
+                                                                >
+                                                                    <Repeat className="w-3.5 h-3.5" /> Retorno
+                                                                </button>
+                                                            )}
+                                                            {booking.status === 'Solicitado' && (
+                                                                <>
+                                                                    {canComplete && (
+                                                                        <button
+                                                                            onClick={() => handleStatusUpdate(booking.id, 'Agendado')}
+                                                                            className="px-3 py-1.5 bg-emerald-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all"
+                                                                        >
+                                                                            <CheckCircle2 className="w-3.5 h-3.5" /> Aprovar
+                                                                        </button>
+                                                                    )}
+                                                                    {canCancel && (
+                                                                        <button
+                                                                            onClick={() => handleOpenCancelModal(booking)}
+                                                                            className="px-3 py-1.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all"
+                                                                        >
+                                                                            <XCircle className="w-3.5 h-3.5" /> Rejeitar
+                                                                        </button>
+                                                                    )}
+                                                                </>
+                                                            )}
+                                                            {booking.status === 'Agendado' && (
+                                                                <>
+                                                                    {canComplete && (
+                                                                        <button
+                                                                            onClick={() => handleStatusUpdate(booking.id, 'Realizado')}
+                                                                            className="px-3 py-1.5 bg-emerald-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all"
+                                                                        >
+                                                                            <CheckCircle2 className="w-3.5 h-3.5" /> Concluir
+                                                                        </button>
+                                                                    )}
+                                                                    {canComplete && (
+                                                                        <button
+                                                                            onClick={() => handleStatusUpdate(booking.id, 'Não Realizado')}
+                                                                            className="px-3 py-1.5 bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all"
+                                                                        >
+                                                                            <UserX className="w-3.5 h-3.5" /> Faltou
+                                                                        </button>
+                                                                    )}
+                                                                    {canCancel && (
+                                                                        <button
+                                                                            onClick={() => handleOpenCancelModal(booking)}
+                                                                            className="px-3 py-1.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all"
+                                                                        >
+                                                                            <XCircle className="w-3.5 h-3.5" /> Cancelar
+                                                                        </button>
+                                                                    )}
+                                                                </>
+                                                            )}
+                                                            {(booking.status === 'Fila de espera' || booking.status === 'Aguardando Data') && (
+                                                                <>
+                                                                    {canCancel && (
+                                                                        <button
+                                                                            onClick={() => handleOpenCancelModal(booking)}
+                                                                            className="px-3 py-1.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all"
+                                                                        >
+                                                                            <XCircle className="w-3.5 h-3.5" /> Cancelar
+                                                                        </button>
+                                                                    )}
+                                                                </>
+                                                            )}
+                                                            {canDelete && (
+                                                                <button
+                                                                    onClick={() => handleDelete(booking.id)}
+                                                                    className="px-3 py-1.5 bg-slate-100 text-slate-600 border border-slate-200 rounded-xl text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all"
+                                                                >
+                                                                    <Trash2 className="w-3.5 h-3.5" /> Excluir
+                                                                </button>
+                                                            )}
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        {/* TABELA COMPLETA DESKTOP (hidden md:block) */}
+                        <div className="hidden md:block bg-white border border-slate-200/80 rounded-2xl overflow-hidden shadow-2xs">
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left border-collapse">
+                                    <thead className="sticky top-0 bg-slate-50 border-b border-slate-200/80 text-[10px] font-black text-slate-500 uppercase tracking-wider z-10 shadow-2xs">
+                                        <tr>
+                                            <th className="py-3 px-3 text-center w-16">Posição</th>
+                                            <th className="py-3 px-3">Solicitado</th>
+                                            <th className="py-3 px-3">Paciente / CPF</th>
+                                            <th className="py-3 px-3">Exame / Procedimento</th>
+                                            <th className="py-3 px-3">Data Agendada</th>
+                                            <th className="py-3 px-3 text-center">Prioridade</th>
+                                            <th className="py-3 px-3 text-center">Status</th>
+                                            <th className="py-3 px-3">Responsável</th>
+                                            <th className="py-3 px-3 text-right">Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {sortedBookings.map((booking) => {
+                                            const isOperating = operatingId === booking.id;
+                                            return (
+                                                <tr key={booking.id} className="hover:bg-sky-50/40 text-xs font-semibold text-slate-700 transition-colors">
+                                                    <td className="py-3 px-3 text-center">
+                                                        {booking.status === 'Fila de espera' && queuePositions[booking.id] ? (
+                                                            <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-300 font-black text-[10px] shadow-2xs">
+                                                                {queuePositions[booking.id]}º
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-slate-300 font-normal">-</span>
+                                                        )}
+                                                    </td>
+                                                    <td className="py-3 px-3 text-slate-500 whitespace-nowrap">
+                                                        {booking.solicitation_date 
+                                                            ? new Date(booking.solicitation_date + 'T00:00:00').toLocaleDateString('pt-BR') 
+                                                            : (booking.created_at ? new Date(booking.created_at).toLocaleDateString('pt-BR') : '-')}
+                                                    </td>
+                                                    <td className="py-3 px-3">
+                                                        <div className="font-extrabold text-slate-900 uppercase leading-tight">{booking.paciente ? formatPatientName(booking.paciente) : 'Carregando...'}</div>
+                                                        <div className="text-[10px] text-slate-400 font-bold tracking-wider mt-0.5">
+                                                            CPF: {booking.paciente?.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}
+                                                        </div>
+                                                    </td>
+                                                    <td className="py-3 px-3">
+                                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                                            <span className="font-extrabold text-slate-800 uppercase">{booking.procedimento?.name || 'Carregando...'}</span>
+                                                            {booking.procedimento?.code && (
+                                                                <span className="text-[9px] text-slate-500 font-extrabold bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                                                                    {booking.procedimento.code}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                         <span className={`inline-block px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider rounded mt-0.5 ${
+                                                             booking.procedimento?.type === 'Exame' 
+                                                             ? 'bg-sky-50 text-sky-700 border border-sky-200/60' 
+                                                             : booking.procedimento?.type === 'Consulta'
+                                                             ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/60'
+                                                             : 'bg-rose-50 text-rose-700 border border-rose-200/60'
+                                                         }`}>
+                                                            {booking.procedimento?.type}
+                                                         </span>
+                                                    </td>
+                                                    <td className="py-3 px-3 text-slate-700 font-extrabold whitespace-nowrap">
+                                                        {booking.status !== 'Fila de espera' && booking.status !== 'Aguardando Data' && (booking.appointment_time || booking.status === 'Agendado' || booking.status === 'Realizado') ? (
+                                                            <span>
+                                                                {new Date(booking.appointment_date + 'T12:00:00').toLocaleDateString('pt-BR')}
+                                                                {booking.appointment_time ? ` ${booking.appointment_time.substring(0, 5)}` : ''}
+                                                            </span>
+                                                        ) : (
+                                                            <span className="inline-flex px-2 py-0.5 rounded text-[9px] font-black uppercase text-amber-800 bg-amber-50 border border-amber-300 shadow-2xs">
+                                                                Aguardando Vaga
+                                                            </span>
+                                                        )}
+                                                    </td>
+                                                    <td className="py-3 px-3 text-center whitespace-nowrap">
+                                                         <span className={`inline-flex px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${
+                                                             booking.priority === 'Urgência'
+                                                             ? 'bg-rose-500 text-white shadow-2xs'
+                                                             : booking.is_retorno
+                                                             ? 'bg-teal-600 text-white shadow-2xs'
+                                                             : 'bg-slate-100 text-slate-600 border border-slate-200'
+                                                         }`}>
+                                                             {booking.priority === 'Urgência' ? 'Urgência' : booking.is_retorno ? 'Retorno' : 'Normal'}
+                                                         </span>
+                                                    </td>
+                                                    <td className="py-3 px-3 text-center whitespace-nowrap">
+                                                        <div className="flex flex-col items-center gap-1">
+                                                            <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border shadow-2xs ${
+                                                                booking.status === 'Solicitado'
+                                                                ? 'bg-sky-50 text-sky-700 border-sky-300'
+                                                                : booking.status === 'Agendado' 
+                                                                ? 'bg-indigo-50 text-indigo-700 border-indigo-300' 
+                                                                : booking.status === 'Realizado' 
+                                                                ? 'bg-emerald-50 text-emerald-800 border-emerald-300' 
+                                                                : booking.status === 'Não Realizado'
+                                                                ? 'bg-slate-100 text-slate-700 border-slate-300'
+                                                                : booking.status === 'Fila de espera'
+                                                                ? 'bg-amber-50 text-amber-800 border-amber-300'
+                                                                : booking.status === 'Aguardando Data'
+                                                                ? 'bg-violet-50 text-violet-800 border-violet-300'
+                                                                : booking.status === 'Retorno'
+                                                                ? 'bg-teal-50 text-teal-800 border-teal-300'
+                                                                : 'bg-rose-50 text-rose-800 border-rose-300'
+                                                            }`}>
+                                                                {booking.status}
+                                                            </span>
+                                                            {booking.status === 'Fila de espera' && queuePositions[booking.id] && (
+                                                                <span className="text-[9px] text-amber-800 font-extrabold uppercase tracking-wide bg-amber-50 border border-amber-300 px-1.5 py-0.5 rounded shadow-2xs">
+                                                                    {queuePositions[booking.id]}º na fila
+                                                                </span>
+                                                            )}
+                                                            {booking.status === 'Cancelado' && (booking.cancellation_reason || booking.canceled_by_name) && (
+                                                                <div className="text-[9px] text-rose-600 font-bold text-center max-w-[130px] truncate" title={`Cancelado por: ${booking.canceled_by_name || 'Usuário'} | Motivo: ${booking.cancellation_reason || 'Sem justificativa'}`}>
+                                                                    Motivo: {booking.cancellation_reason || 'Não informado'}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                    <td className="py-3 px-3 text-slate-500 whitespace-nowrap">
+                                                        <div className="font-bold text-slate-700">{booking.responsavel?.name || 'Sistema'}</div>
+                                                        <div className="text-[9px] text-slate-400 mt-0.5 font-semibold">
+                                                            {booking.created_at && new Date(booking.created_at).toLocaleString('pt-BR')}
+                                                        </div>
+                                                    </td>
+                                                    <td className="py-3 px-3 text-right whitespace-nowrap">
+                                                        <div className="flex items-center justify-end gap-1.5">
+                                                            {isOperating ? (
+                                                                <Loader2 className="w-4 h-4 text-sky-600 animate-spin" />
+                                                            ) : (
+                                                                <>
+                                                                    {canEdit && (
+                                                                        <button
+                                                                            onClick={() => handleOpenEditModal(booking)}
+                                                                            className="p-1.5 text-amber-600 hover:text-white hover:bg-amber-500 rounded-lg border border-amber-200 hover:border-amber-500 transition-all flex items-center justify-center cursor-pointer shadow-2xs"
+                                                                            title="Editar Agendamento / Paciente"
+                                                                        >
+                                                                            <Edit2 className="w-3.5 h-3.5" />
+                                                                        </button>
+                                                                    )}
+                                                                    <button
+                                                                        onClick={() => handleDownloadPdf(booking)}
+                                                                        disabled={isGenerating}
+                                                                        className="p-1.5 text-sky-600 hover:text-white hover:bg-sky-500 rounded-lg border border-sky-200 hover:border-sky-500 transition-all flex items-center justify-center cursor-pointer shadow-2xs disabled:opacity-50"
+                                                                        title="Imprimir Comprovante de Agendamento (PDF)"
+                                                                    >
+                                                                        <FileDown className="w-3.5 h-3.5" />
+                                                                    </button>
+                                                                    {booking.status === 'Realizado' && (
+                                                                        <button
+                                                                            onClick={() => {
+                                                                                setRetornoBooking(booking);
+                                                                                const tomorrow = new Date();
+                                                                                tomorrow.setDate(tomorrow.getDate() + 1);
+                                                                                setRetornoDate(tomorrow.toISOString().split('T')[0]);
+                                                                                setIsRetornoModalOpen(true);
+                                                                            }}
+                                                                            className="p-1.5 text-teal-600 hover:text-white hover:bg-teal-500 rounded-lg border border-teal-200 hover:border-teal-500 transition-all flex items-center justify-center cursor-pointer shadow-2xs"
+                                                                            title="Marcar Retorno para o Paciente"
+                                                                        >
+                                                                            <Repeat className="w-3.5 h-3.5" />
+                                                                        </button>
+                                                                    )}
+                                                                    {booking.status === 'Solicitado' && (
+                                                                        <>
+                                                                            {canComplete && (
+                                                                                <button
+                                                                                    onClick={() => handleStatusUpdate(booking.id, 'Agendado')}
+                                                                                    className="p-1.5 text-emerald-600 hover:text-white hover:bg-emerald-500 rounded-lg border border-emerald-200 hover:border-emerald-500 transition-all flex items-center justify-center cursor-pointer shadow-2xs"
+                                                                                    title="Aprovar Agendamento"
+                                                                                >
+                                                                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                                                                </button>
+                                                                            )}
+                                                                            {canCancel && (
+                                                                                <button
+                                                                                    onClick={() => handleOpenCancelModal(booking)}
+                                                                                    className="p-1.5 text-rose-500 hover:text-white hover:bg-rose-500 rounded-lg border border-rose-200 hover:border-rose-500 transition-all flex items-center justify-center cursor-pointer shadow-2xs"
+                                                                                    title="Rejeitar/Cancelar Agendamento"
+                                                                                >
+                                                                                    <XCircle className="w-3.5 h-3.5" />
+                                                                                </button>
+                                                                            )}
+                                                                        </>
+                                                                    )}
+                                                                    {booking.status === 'Agendado' && (
+                                                                        <>
+                                                                            {canComplete && (
+                                                                                <button
+                                                                                    onClick={() => handleStatusUpdate(booking.id, 'Realizado')}
+                                                                                    className="p-1.5 text-emerald-600 hover:text-white hover:bg-emerald-500 rounded-lg border border-emerald-200 hover:border-emerald-500 transition-all flex items-center justify-center cursor-pointer shadow-2xs"
+                                                                                    title="Marcar Procedimento como Realizado"
+                                                                                >
+                                                                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                                                                </button>
+                                                                            )}
+                                                                            {canComplete && (
+                                                                                <button
+                                                                                    onClick={() => handleStatusUpdate(booking.id, 'Não Realizado')}
+                                                                                    className="p-1.5 text-slate-500 hover:text-white hover:bg-slate-600 rounded-lg border border-slate-200 hover:border-slate-600 transition-all flex items-center justify-center cursor-pointer shadow-2xs"
+                                                                                    title="Marcar como Não Realizado (Paciente Faltou)"
+                                                                                >
+                                                                                    <UserX className="w-3.5 h-3.5" />
+                                                                                </button>
+                                                                            )}
+                                                                            {canCancel && (
+                                                                                <button
+                                                                                    onClick={() => handleOpenCancelModal(booking)}
+                                                                                    className="p-1.5 text-rose-500 hover:text-white hover:bg-rose-500 rounded-lg border border-rose-200 hover:border-rose-500 transition-all flex items-center justify-center cursor-pointer shadow-2xs"
+                                                                                    title="Cancelar Agendamento"
+                                                                                >
+                                                                                    <XCircle className="w-3.5 h-3.5" />
+                                                                                </button>
+                                                                            )}
+                                                                        </>
+                                                                    )}
+                                                                    {(booking.status === 'Fila de espera' || booking.status === 'Aguardando Data') && (
+                                                                        <>
+                                                                            {canCancel && (
+                                                                                <button
+                                                                                    onClick={() => handleOpenCancelModal(booking)}
+                                                                                    className="p-1.5 text-rose-500 hover:text-white hover:bg-rose-500 rounded-lg border border-rose-200 hover:border-rose-500 transition-all flex items-center justify-center cursor-pointer shadow-2xs"
+                                                                                    title="Cancelar Agendamento"
+                                                                                >
+                                                                                    <XCircle className="w-3.5 h-3.5" />
+                                                                                </button>
+                                                                            )}
+                                                                        </>
+                                                                    )}
+                                                                    {canDelete && (
+                                                                        <button
+                                                                            onClick={() => handleDelete(booking.id)}
+                                                                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all flex items-center justify-center cursor-pointer"
+                                                                            title="Excluir Agendamento"
+                                                                        >
+                                                                            <Trash2 className="w-3.5 h-3.5" />
+                                                                        </button>
+                                                                    )}
+                                                                </>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </>
                 ) : (
                     <div className="h-full flex flex-col items-center justify-center text-slate-400 p-8">
                         <Sparkles className="w-12 h-12 mb-3 opacity-25 text-slate-500" />

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { ConsultaPaciente, ConsultaAgendamento, AGENTES_DE_SAUDE } from '../../types';
 import { Search, Plus, Edit2, Trash2, X, AlertTriangle, Loader2, ChevronDown, Users, ArrowLeft } from 'lucide-react';
@@ -221,17 +221,99 @@ export const PacientesTab: React.FC<PacientesTabProps> = ({
         setIsPatientModalOpen(true);
     };
 
-    const filteredPatients = patients.filter(p => 
-        p.name.toLowerCase().includes(patientSearch.toLowerCase()) || 
-        p.cpf.includes(patientSearch.replace(/\D/g, '')) ||
-        (p.sus_number || '').includes(patientSearch.replace(/\D/g, '')) ||
-        (p.agente_saude || '').toLowerCase().includes(patientSearch.toLowerCase())
-    );
+    const [isMobile, setIsMobile] = useState<boolean>(() => typeof window !== 'undefined' ? window.innerWidth < 768 : false);
+
+    useEffect(() => {
+        const handleResize = () => {
+            setIsMobile(window.innerWidth < 768);
+        };
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
+    const filteredPatients = useMemo(() => {
+        if (isMobile && !patientSearch.trim()) return [];
+        if (!patientSearch.trim()) return patients;
+
+        const searchLower = patientSearch.toLowerCase().trim();
+        const cleanNumbers = searchLower.replace(/\D/g, '');
+
+        return patients.filter(p => {
+            const nameMatch = p.name ? p.name.toLowerCase().includes(searchLower) : false;
+            const nicknameMatch = p.nickname ? p.nickname.toLowerCase().includes(searchLower) : false;
+            
+            const cpfClean = p.cpf ? p.cpf.replace(/\D/g, '') : '';
+            const cpfMatch = cleanNumbers.length > 0 && cpfClean.includes(cleanNumbers);
+            
+            const susClean = p.sus_number ? p.sus_number.replace(/\D/g, '') : '';
+            const susMatch = cleanNumbers.length > 0 && susClean.includes(cleanNumbers);
+            
+            const agenteMatch = p.agente_saude ? p.agente_saude.toLowerCase().includes(searchLower) : false;
+
+            return nameMatch || nicknameMatch || cpfMatch || susMatch || agenteMatch;
+        });
+    }, [patients, patientSearch, isMobile]);
 
     return (
         <div className="flex-1 flex flex-col h-full min-h-0 space-y-3.5 overflow-hidden">
-            {/* Header com Voltar, Título, Busca, Contador e Botão Novo Paciente rigorosamente na MESMA LINHA */}
-            <div className="bg-white rounded-3xl p-3.5 md:px-5 shadow-sm border border-slate-200/80 flex items-center justify-between gap-3 shrink-0">
+            {/* Header Mobile (Limpa, sem cortes, apenas 1 campo de busca) */}
+            <div className="block md:hidden bg-white rounded-3xl p-3 shadow-sm border border-slate-200/80 space-y-2.5 shrink-0 overflow-hidden">
+                <div className="flex items-center justify-between gap-2 w-full min-w-0">
+                    <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
+                        {onBack && (
+                            <button
+                                onClick={onBack}
+                                className="p-2 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-600 transition-all cursor-pointer shrink-0"
+                                title="Voltar"
+                            >
+                                <ArrowLeft className="w-4.5 h-4.5" />
+                            </button>
+                        )}
+                        <div className={`w-8.5 h-8.5 rounded-2xl border flex items-center justify-center shadow-2xs shrink-0 ${
+                            accentColor === 'pink' ? 'bg-pink-50 border-pink-200/80 text-pink-600' : 'bg-sky-50 border-sky-200/80 text-sky-600'
+                        }`}>
+                            <Users className="w-4 h-4" />
+                        </div>
+                        <h2 className="text-xs font-black text-slate-900 uppercase tracking-tight truncate min-w-0">
+                            {title}
+                        </h2>
+                    </div>
+
+                    <button
+                        onClick={() => handleOpenPatientModal()}
+                        className={`px-3 py-1.5 text-white font-black rounded-2xl shadow-md active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center gap-1 cursor-pointer shrink-0 ${
+                            accentColor === 'pink' ? 'bg-pink-600 hover:bg-pink-700 shadow-pink-500/20' : 'bg-sky-600 hover:bg-sky-700 shadow-sky-500/20'
+                        }`}
+                    >
+                        <Plus className="w-3.5 h-3.5" /> <span>Novo</span>
+                    </button>
+                </div>
+
+                {/* 1 Único Campo de Busca Limpo no Mobile */}
+                <div className="relative w-full">
+                    <input
+                        type="text"
+                        placeholder="Buscar por nome, CPF ou SUS..."
+                        className="w-full bg-slate-50 border border-slate-200/90 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 rounded-2xl pl-9 pr-9 py-2 text-xs font-bold transition-all text-slate-900 placeholder:text-slate-400 shadow-2xs"
+                        value={patientSearch}
+                        onChange={(e) => setPatientSearch(e.target.value)}
+                    />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-3.5 h-3.5" />
+                    {patientSearch && (
+                        <button
+                            type="button"
+                            onClick={() => setPatientSearch('')}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-600 p-0.5 rounded-full hover:bg-slate-200/60 transition-colors cursor-pointer"
+                            title="Limpar busca"
+                        >
+                            <X className="w-3.5 h-3.5" />
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            {/* Header Desktop (Rigorosamente na MESMA LINHA) */}
+            <div className="hidden md:flex bg-white rounded-3xl p-3.5 md:px-5 shadow-sm border border-slate-200/80 items-center justify-between gap-3 shrink-0">
                 {/* Esquerda: Voltar + Ícone + Título */}
                 <div className="flex items-center gap-3 shrink-0 min-w-0">
                     {onBack && (
@@ -268,12 +350,22 @@ export const PacientesTab: React.FC<PacientesTabProps> = ({
                     <div className="relative w-44 sm:w-64 lg:w-80">
                         <input
                             type="text"
-                            placeholder="Buscar paciente por nome ou CPF..."
+                            placeholder="Buscar por Nome, Apelido, CPF ou Cartão SUS..."
                             className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs font-semibold placeholder:text-slate-400 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/15 transition-all text-slate-900 shadow-2xs"
                             value={patientSearch}
                             onChange={(e) => setPatientSearch(e.target.value)}
                         />
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+                        {patientSearch && (
+                            <button
+                                type="button"
+                                onClick={() => setPatientSearch('')}
+                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-600 p-0.5 rounded-full hover:bg-slate-200/60 transition-colors cursor-pointer"
+                                title="Limpar busca"
+                            >
+                                <X className="w-3.5 h-3.5" />
+                            </button>
+                        )}
                     </div>
 
                     <div className="px-3.5 py-2 bg-sky-50 border border-sky-200/80 rounded-xl flex items-center gap-1.5 text-sky-700 font-extrabold text-xs shrink-0 shadow-2xs">
@@ -288,7 +380,9 @@ export const PacientesTab: React.FC<PacientesTabProps> = ({
 
                     <button
                         onClick={() => handleOpenPatientModal()}
-                        className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white font-extrabold rounded-xl shadow-md hover:shadow-sky-500/20 active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shrink-0"
+                        className={`px-4 py-2 text-white font-extrabold rounded-xl shadow-md active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                            accentColor === 'pink' ? 'bg-pink-600 hover:bg-pink-700 shadow-pink-500/20' : 'bg-sky-600 hover:bg-sky-700 shadow-sky-500/20'
+                        }`}
                     >
                         <Plus className="w-4 h-4" /> <span className="whitespace-nowrap">Novo Paciente</span>
                     </button>
@@ -296,7 +390,19 @@ export const PacientesTab: React.FC<PacientesTabProps> = ({
             </div>
 
             {/* Tabela de Pacientes com Rolagem Interna */}
-            {filteredPatients.length > 0 ? (
+            {isMobile && !patientSearch.trim() ? (
+                <div className="flex-1 bg-white border border-slate-200/80 rounded-3xl p-8 flex flex-col items-center justify-center text-center animate-in fade-in duration-300">
+                    <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-sky-50 via-sky-100/60 to-blue-100 border border-sky-200/80 flex items-center justify-center text-sky-600 shadow-inner mb-4">
+                        <Search className="w-8 h-8" />
+                    </div>
+                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight mb-1">
+                        Qual paciente você procura?
+                    </h3>
+                    <p className="text-xs font-semibold text-slate-500 max-w-md">
+                        Digite o nome do paciente, apelido, CPF ou número do Cartão SUS no campo de busca para pesquisar.
+                    </p>
+                </div>
+            ) : filteredPatients.length > 0 ? (
                 <div className="flex-1 bg-white border border-slate-200 rounded-2xl overflow-y-auto min-h-0 shadow-sm">
                     <table className="w-full text-left border-collapse">
                         <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-100 shadow-sm">

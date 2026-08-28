@@ -20,12 +20,13 @@ export const FarmaciaDashboard: React.FC<FarmaciaDashboardProps> = ({
     const isPacientesActive = moduleStatus['parent_farmacia_pacientes'] !== false;
 
     const userPerms = currentUser?.permissions || [];
-    const canAccessConsultar = userPerms.includes('parent_farmacia_consultar') && isConsultarActive;
-    const canAccessRetirar = userPerms.includes('parent_farmacia_retirar') && isRetirarActive;
-    const canAccessEstoque = userPerms.includes('parent_farmacia_estoque') && isEstoqueActive;
-    const canAccessHistorico = userPerms.includes('parent_farmacia');
-    const canAccessDados = userPerms.includes('parent_farmacia_dashboard') && isDashboardActive;
-    const canAccessPacientes = (userPerms.includes('parent_farmacia_pacientes') || userPerms.includes('parent_farmacia')) && isPacientesActive;
+    const isAdmin = currentUser?.role === 'admin';
+    const canAccessConsultar = (isAdmin || userPerms.includes('parent_farmacia_consultar')) && isConsultarActive;
+    const canAccessRetirar = (isAdmin || userPerms.includes('parent_farmacia_retirar')) && isRetirarActive;
+    const canAccessEstoque = (isAdmin || userPerms.includes('parent_farmacia_estoque')) && isEstoqueActive;
+    const canAccessHistorico = isAdmin || userPerms.includes('parent_farmacia');
+    const canAccessDados = (isAdmin || userPerms.includes('parent_farmacia_dashboard')) && isDashboardActive;
+    const canAccessPacientes = (isAdmin || userPerms.includes('parent_farmacia_pacientes')) && isPacientesActive;
 
     return (
         <div className="flex-1 flex flex-col justify-center items-center w-full max-w-7xl mx-auto px-4 py-8 animate-in fade-in slide-in-from-bottom-6 duration-500">
