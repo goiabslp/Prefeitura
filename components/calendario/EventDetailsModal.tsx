@@ -30,11 +30,10 @@ export const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
 }) => {
     const [activeTab, setActiveTab] = useState<'details' | 'invites'>('details');
     const [isGenerating, setIsGenerating] = useState(false);
-
-    if (!isOpen || !event) return null;
-
     const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+    if (!isOpen || !event) return null;
 
     const colors: Record<string, { bg: string; text: string; border: string; icon: string }> = {
         Oficial: { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200', icon: 'text-indigo-500' },
