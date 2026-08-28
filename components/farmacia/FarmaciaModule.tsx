@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { User, AppState, FarmaciaMedicamento, FarmaciaMovimentacao } from '../../types';
-import { ArrowLeft, Pill, Search, ClipboardList, Package, Settings, History, AlertTriangle, X, Info, Users } from 'lucide-react';
+import { ArrowLeft, Pill, Search, ClipboardList, Package, Settings, History, AlertTriangle, X, Info, Users, ShieldCheck } from 'lucide-react';
 import { useSystemSettings } from '../../contexts/SystemSettingsContext';
 import * as db from '../../services/farmaciaService';
 import { FarmaciaDashboard } from './FarmaciaDashboard';
@@ -12,6 +12,7 @@ import { HistoricoScreen } from './HistoricoScreen';
 import { DashboardScreen } from './DashboardScreen';
 import { FarmaciaAlertProvider } from './FarmaciaAlertContext';
 import { PacientesTab } from '../common/PacientesTab';
+import { ModuleGestorScreen } from '../common/ModuleGestorScreen';
 
 interface FarmaciaModuleProps {
     currentView: string;
@@ -199,10 +200,11 @@ export const FarmaciaModule: React.FC<FarmaciaModuleProps> = ({
     const isEstoqueActive = moduleStatus['parent_farmacia_estoque'] !== false;
     const isDashboardActive = moduleStatus['parent_farmacia_dashboard'] !== false;
     const isPacientesActive = moduleStatus['parent_farmacia_pacientes'] !== false;
+    const isGestorActive = moduleStatus['parent_farmacia_gestor'] !== false;
 
     const userPerms = currentUser?.permissions || [];
     const hasCustomPerms = Array.isArray(currentUser?.permissions) && currentUser.permissions.length > 0;
-    const isDefaultAdmin = currentUser?.role === 'admin' && !hasCustomPerms;
+    const isDefaultAdmin = isAdmin && !hasCustomPerms;
 
     const canAccessConsultar = (isDefaultAdmin || userPerms.includes('parent_farmacia_consultar')) && isConsultarActive;
     const canAccessRetirar = (isDefaultAdmin || userPerms.includes('parent_farmacia_retirar')) && isRetirarActive;
@@ -210,6 +212,7 @@ export const FarmaciaModule: React.FC<FarmaciaModuleProps> = ({
     const canAccessHistorico = isDefaultAdmin || userPerms.includes('parent_farmacia');
     const canAccessDados = (isDefaultAdmin || userPerms.includes('parent_farmacia_dashboard')) && isDashboardActive;
     const canAccessPacientes = (isDefaultAdmin || userPerms.includes('parent_farmacia_pacientes')) && isPacientesActive;
+    const canAccessGestor = (isDefaultAdmin || userPerms.includes('parent_farmacia_gestor')) && isGestorActive;
 
     const showConsultar = subView === 'consultar' && canAccessConsultar;
     const showRetirar = subView === 'retirar' && canAccessRetirar;
@@ -219,8 +222,9 @@ export const FarmaciaModule: React.FC<FarmaciaModuleProps> = ({
     const showHistorico = subView === 'historico' && canAccessHistorico;
     const showDashboardScreen = subView?.startsWith('dashboard') && canAccessDados;
     const showPacientes = subView === 'pacientes' && canAccessPacientes;
+    const showGestor = subView === 'gestor' && canAccessGestor;
 
-    const isSubView = showConsultar || showRetirar || showEstoque || showDashboard || showDados || showHistorico || showDashboardScreen || showPacientes;
+    const isSubView = showConsultar || showRetirar || showEstoque || showDashboard || showDados || showHistorico || showDashboardScreen || showPacientes || showGestor;
 
     const renderSubNavigation = () => {
         if (!isSubView) return null;
@@ -375,6 +379,13 @@ export const FarmaciaModule: React.FC<FarmaciaModuleProps> = ({
                     <div className="w-full max-w-[98%] 2xl:max-w-[1536px] mx-auto flex flex-col h-full max-h-full min-h-0 bg-white/95 backdrop-blur-md rounded-[2.5rem] border border-slate-200/80 shadow-[0_20px_60px_rgba(0,0,0,0.06)] overflow-hidden animate-in fade-in duration-300 p-4 md:p-5">
                         <PacientesTab onBack={() => onNavigate('farmacia')} accentColor="pink" />
                     </div>
+                ) : showGestor ? (
+                    <ModuleGestorScreen
+                        moduleType="farmacia"
+                        moduleTitle="Farmácia Popular"
+                        currentUser={currentUser || null}
+                        onBack={() => onNavigate('farmacia')}
+                    />
                 ) : (
                     <FarmaciaDashboard
                         currentUser={currentUser}

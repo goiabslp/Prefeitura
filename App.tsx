@@ -203,6 +203,7 @@ const VIEW_TO_PATH: Record<string, string> = {
   'consultas:dados-procedimentos': '/Consultas/DADOS/Exames',
   'consultas:dados-historico': '/Consultas/DADOS/Historico',
   'consultas:dados-gestor': '/Consultas/DADOS/Gestor',
+  'consultas:gestor': '/Consultas/Gestor',
   'farmacia': '/FarmaciaPopular',
   'farmacia:pacientes': '/FarmaciaPopular/Pacientes',
   'farmacia:consultar': '/FarmaciaPopular/Consultar',
@@ -219,6 +220,7 @@ const VIEW_TO_PATH: Record<string, string> = {
   'farmacia:dashboard-rename': '/FarmaciaPopular/Dashboard/Rename',
   'farmacia:dashboard-alto-custo': '/FarmaciaPopular/Dashboard/AltoCusto',
   'farmacia:dashboard-configuracao': '/FarmaciaPopular/Dashboard/Configuracao',
+  'farmacia:gestor': '/FarmaciaPopular/Gestor',
   'upload': '/Upload'
 };
 
@@ -4941,6 +4943,9 @@ const App: React.FC = () => {
                   } else if (view === 'consultas:dados-historico') {
                     setAppState(prev => ({ ...prev, view: 'dados-historico' }));
                     window.history.pushState({}, '', '/Consultas/DADOS/Historico');
+                  } else if (view === 'consultas:gestor') {
+                    setAppState(prev => ({ ...prev, view: 'gestor' }));
+                    window.history.pushState({}, '', '/Consultas/Gestor');
                   } else if (view === 'consultas:dados-gestor') {
                     setAppState(prev => ({ ...prev, view: 'dados-gestor' }));
                     window.history.pushState({}, '', '/Consultas/DADOS/Gestor');
@@ -4982,6 +4987,9 @@ const App: React.FC = () => {
                   } else if (view === 'farmacia:historico') {
                     setAppState(prev => ({ ...prev, view: 'historico' }));
                     window.history.pushState({}, '', '/FarmaciaPopular/Historico');
+                  } else if (view === 'farmacia:gestor') {
+                    setAppState(prev => ({ ...prev, view: 'gestor' }));
+                    window.history.pushState({}, '', '/FarmaciaPopular/Gestor');
                   } else if (view === 'farmacia:dashboard') {
                     setAppState(prev => ({ ...prev, view: 'dashboard-geral' }));
                     window.history.pushState({}, '', '/FarmaciaPopular/Dashboard/VisaoGeral');

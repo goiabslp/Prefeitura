@@ -80,6 +80,20 @@ export const SystemSettingsProvider: React.FC<{ children: React.ReactNode }> = (
                     });
                 }
 
+                const hasConsultasGestor = fetchedSettings.some(s => s.module_key === 'parent_consultas_gestor');
+                if (!hasConsultasGestor) {
+                    fetchedSettings.push({
+                        id: 'fallback_consultas_gestor',
+                        module_key: 'parent_consultas_gestor',
+                        label: 'Gestor',
+                        is_enabled: true,
+                        is_enabled_mobile: true,
+                        parent_key: 'parent_consultas',
+                        order_index: 5,
+                        description: 'Permissão para gestão avançada de permissões no módulo de consultas'
+                    });
+                }
+
                 const hasFarmaciaPacientes = fetchedSettings.some(s => s.module_key === 'parent_farmacia_pacientes');
                 if (!hasFarmaciaPacientes) {
                     fetchedSettings.push({
@@ -91,6 +105,20 @@ export const SystemSettingsProvider: React.FC<{ children: React.ReactNode }> = (
                         parent_key: 'parent_farmacia',
                         order_index: 5,
                         description: 'Permissão para gestão da base de pacientes no módulo da farmácia popular'
+                    });
+                }
+
+                const hasFarmaciaGestor = fetchedSettings.some(s => s.module_key === 'parent_farmacia_gestor');
+                if (!hasFarmaciaGestor) {
+                    fetchedSettings.push({
+                        id: 'fallback_farmacia_gestor',
+                        module_key: 'parent_farmacia_gestor',
+                        label: 'Gestor',
+                        is_enabled: true,
+                        is_enabled_mobile: true,
+                        parent_key: 'parent_farmacia',
+                        order_index: 6,
+                        description: 'Permissão para gestão avançada de permissões no módulo da farmácia popular'
                     });
                 }
                 

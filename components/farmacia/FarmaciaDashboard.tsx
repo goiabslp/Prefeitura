@@ -1,6 +1,6 @@
 import React from 'react';
 import { User } from '../../types';
-import { Search, ClipboardList, Package, Settings, History, Pill, Users } from 'lucide-react';
+import { Search, ClipboardList, Package, Settings, History, Pill, Users, ShieldCheck } from 'lucide-react';
 import { useSystemSettings } from '../../contexts/SystemSettingsContext';
 
 interface FarmaciaDashboardProps {
@@ -18,10 +18,12 @@ export const FarmaciaDashboard: React.FC<FarmaciaDashboardProps> = ({
     const isEstoqueActive = moduleStatus['parent_farmacia_estoque'] !== false;
     const isDashboardActive = moduleStatus['parent_farmacia_dashboard'] !== false;
     const isPacientesActive = moduleStatus['parent_farmacia_pacientes'] !== false;
+    const isGestorActive = moduleStatus['parent_farmacia_gestor'] !== false;
 
     const userPerms = currentUser?.permissions || [];
     const hasCustomPerms = Array.isArray(currentUser?.permissions) && currentUser.permissions.length > 0;
     const isDefaultAdmin = currentUser?.role === 'admin' && !hasCustomPerms;
+    const isAdmin = currentUser?.role === 'admin';
 
     const canAccessConsultar = (isDefaultAdmin || userPerms.includes('parent_farmacia_consultar')) && isConsultarActive;
     const canAccessRetirar = (isDefaultAdmin || userPerms.includes('parent_farmacia_retirar')) && isRetirarActive;
@@ -29,6 +31,7 @@ export const FarmaciaDashboard: React.FC<FarmaciaDashboardProps> = ({
     const canAccessHistorico = isDefaultAdmin || userPerms.includes('parent_farmacia');
     const canAccessDados = (isDefaultAdmin || userPerms.includes('parent_farmacia_dashboard')) && isDashboardActive;
     const canAccessPacientes = (isDefaultAdmin || userPerms.includes('parent_farmacia_pacientes')) && isPacientesActive;
+    const canAccessGestor = (isDefaultAdmin || userPerms.includes('parent_farmacia_gestor')) && isGestorActive;
 
     return (
         <div className="flex-1 flex flex-col justify-center items-center w-full max-w-7xl mx-auto px-4 py-8 animate-in fade-in slide-in-from-bottom-6 duration-500">
@@ -162,6 +165,32 @@ export const FarmaciaDashboard: React.FC<FarmaciaDashboardProps> = ({
                         </p>
                         <p className="text-[10px] text-slate-400 mt-2 max-w-[180px] font-medium leading-normal">
                             Visualização, cadastro, edição e histórico unificado de atendimentos.
+                        </p>
+                    </button>
+                )}
+
+                {/* Card 6: Gestor (Acesso por Permissão ou Admin) */}
+                {canAccessGestor && (
+                    <button
+                        onClick={() => onNavigate('farmacia:gestor')}
+                        className="group relative w-full min-h-[200px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50 border border-slate-100 shadow-[0_10px_35px_rgba(0,0,0,0.03)] hover:shadow-[0_30px_70px_rgba(99,102,241,0.15)] hover:border-indigo-200 hover:from-white hover:to-indigo-50/20 hover:-translate-y-2 active:scale-98 transition-all duration-300 ease-out flex flex-col items-center justify-center text-center overflow-hidden p-6 cursor-pointer"
+                    >
+                        <div className="absolute top-3 right-4 px-2.5 py-0.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 text-[9px] font-black uppercase tracking-wider">
+                            GESTOR
+                        </div>
+
+                        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center mb-4 text-white group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-indigo-500/30 ring-4 ring-white">
+                            <ShieldCheck className="w-6.5 h-6.5" />
+                        </div>
+
+                        <h3 className="text-xl font-extrabold text-slate-800 mb-1.5 group-hover:text-slate-900 tracking-tight uppercase">
+                            Gestor
+                        </h3>
+                        <p className="text-xs font-bold text-slate-400 group-hover:text-indigo-600 transition-colors uppercase tracking-widest leading-relaxed">
+                            Controle de Permissões
+                        </p>
+                        <p className="text-[10px] text-slate-400 mt-2 max-w-[180px] font-medium leading-normal">
+                            Gerenciamento individual de permissões do módulo.
                         </p>
                     </button>
                 )}

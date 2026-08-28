@@ -210,8 +210,8 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
         : currentPerms.filter(p => p !== perm);
 
       const subPermsMap: Record<string, string[]> = {
-        parent_farmacia: ['parent_farmacia_consultar', 'parent_farmacia_retirar', 'parent_farmacia_estoque', 'parent_farmacia_dashboard', 'parent_farmacia_pacientes'],
-        parent_consultas: ['parent_consultas_novo_agendamento', 'parent_consultas_acompanhar', 'parent_consultas_dados', 'parent_consultas_pacientes'],
+        parent_farmacia: ['parent_farmacia_consultar', 'parent_farmacia_retirar', 'parent_farmacia_estoque', 'parent_farmacia_dashboard', 'parent_farmacia_pacientes', 'parent_farmacia_gestor'],
+        parent_consultas: ['parent_consultas_novo_agendamento', 'parent_consultas_acompanhar', 'parent_consultas_dados', 'parent_consultas_pacientes', 'parent_consultas_gestor'],
         parent_abastecimento: ['parent_abastecimento_novo', 'parent_abastecimento_gestao', 'parent_abastecimento_dashboard'],
         parent_frotas: ['parent_frotas_dashboard', 'parent_frotas_leve', 'parent_frotas_pesado', 'parent_frotas_acessorio'],
         parent_compras: ['parent_compras_pedidos', 'parent_compras_itens', 'parent_compras_dados'],
@@ -226,10 +226,12 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
         parent_farmacia_estoque: 'parent_farmacia',
         parent_farmacia_dashboard: 'parent_farmacia',
         parent_farmacia_pacientes: 'parent_farmacia',
+        parent_farmacia_gestor: 'parent_farmacia',
         parent_consultas_novo_agendamento: 'parent_consultas',
         parent_consultas_acompanhar: 'parent_consultas',
         parent_consultas_dados: 'parent_consultas',
         parent_consultas_pacientes: 'parent_consultas',
+        parent_consultas_gestor: 'parent_consultas',
         parent_abastecimento_novo: 'parent_abastecimento',
         parent_abastecimento_gestao: 'parent_abastecimento',
         parent_abastecimento_dashboard: 'parent_abastecimento',
@@ -1175,7 +1177,8 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                           { id: 'parent_consultas_novo_agendamento', label: 'Novo Agendamento' },
                           { id: 'parent_consultas_acompanhar', label: 'Acompanhar' },
                           { id: 'parent_consultas_dados', label: 'Área de Dados' },
-                          { id: 'parent_consultas_pacientes', label: 'Pacientes' }
+                          { id: 'parent_consultas_pacientes', label: 'Pacientes' },
+                          { id: 'parent_consultas_gestor', label: 'Gestor' }
                         ],
                         color: 'sky'
                       },
@@ -1187,7 +1190,8 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                           { id: 'parent_farmacia_retirar', label: 'Retirar' },
                           { id: 'parent_farmacia_estoque', label: 'Estoque' },
                           { id: 'parent_farmacia_dashboard', label: 'Dashboard' },
-                          { id: 'parent_farmacia_pacientes', label: 'Pacientes' }
+                          { id: 'parent_farmacia_pacientes', label: 'Pacientes' },
+                          { id: 'parent_farmacia_gestor', label: 'Gestor' }
                         ],
                         color: 'violet'
                       },
