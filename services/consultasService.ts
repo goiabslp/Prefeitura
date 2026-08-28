@@ -67,16 +67,35 @@ export const createPaciente = async (paciente: Omit<ConsultaPaciente, 'id' | 'cr
             .select()
             .single();
 
-        // Se as colunas novas ainda não existirem na tabela Supabase (erro PGRST204), tenta inserir sem esses campos
-        if (error && error.code === 'PGRST204' && (error.message?.includes('agente_saude') || error.message?.includes('sus_number') || error.message?.includes('column'))) {
-            const { agente_saude, sus_number, ...pacienteWithoutNewCols } = cleanPaciente;
-            const retryRes = await supabase
-                .from('consultas_pacientes')
-                .insert([pacienteWithoutNewCols])
-                .select()
-                .single();
-            data = retryRes.data;
-            error = retryRes.error;
+        // Fallback progressivo: se alguma coluna não existir na tabela Supabase,
+        // tenta remover as colunas problemáticas uma a uma e re-inserir
+        if (error && (error.code === 'PGRST204' || error.message?.includes('column') || error.message?.includes('schema cache'))) {
+            console.warn('[consultasService] Coluna(s) ausente(s) no Supabase. Tentando fallback progressivo...', error.message);
+
+            // Lista de colunas opcionais que podem não existir ainda na tabela
+            const optionalCols = ['agente_saude', 'sus_number', 'phone'];
+            let fallbackPaciente = { ...cleanPaciente };
+            let lastError = error;
+
+            for (const col of optionalCols) {
+                if (lastError && (lastError.code === 'PGRST204' || lastError.message?.includes('column') || lastError.message?.includes('schema cache'))) {
+                    console.warn(`[consultasService] Removendo coluna '${col}' do payload e tentando novamente...`);
+                    delete fallbackPaciente[col];
+
+                    const retryRes = await supabase
+                        .from('consultas_pacientes')
+                        .insert([fallbackPaciente])
+                        .select()
+                        .single();
+
+                    data = retryRes.data;
+                    lastError = retryRes.error;
+
+                    if (!lastError) break; // Inserção bem-sucedida
+                }
+            }
+
+            error = lastError;
         }
 
         if (error) throw error;
