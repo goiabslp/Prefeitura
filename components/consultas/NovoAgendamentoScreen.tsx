@@ -21,6 +21,8 @@ import {
     X,
     ChevronLeft,
     ChevronRight,
+    ChevronsLeft,
+    ChevronsRight,
     Sparkles,
     Info,
     ChevronDown
@@ -2224,35 +2226,65 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                         {/* Conteúdo do Calendário */}
                         <div className="p-5 sm:p-6 space-y-4 flex-1 min-h-0 bg-white">
                             
-                            {/* Seletor de Mês */}
-                            <div className="flex items-center justify-between bg-slate-50 border border-slate-200/80 p-2 rounded-2xl">
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        const prev = new Date(solicitationCalendarMonth);
-                                        prev.setMonth(prev.getMonth() - 1);
-                                        setSolicitationCalendarMonth(prev);
-                                    }}
-                                    className="p-2 hover:bg-white hover:shadow-sm rounded-xl text-slate-600 transition-all active:scale-95 cursor-pointer"
-                                >
-                                    <ChevronLeft className="w-4 h-4" />
-                                </button>
+                            {/* Seletor de Mês e Ano */}
+                            <div className="flex items-center justify-between bg-slate-50 border border-slate-200/80 p-1.5 rounded-2xl">
+                                <div className="flex items-center gap-0.5">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const prev = new Date(solicitationCalendarMonth);
+                                            prev.setFullYear(prev.getFullYear() - 1);
+                                            setSolicitationCalendarMonth(prev);
+                                        }}
+                                        className="p-1.5 hover:bg-white hover:shadow-sm rounded-lg text-slate-400 hover:text-slate-700 transition-all active:scale-95 cursor-pointer"
+                                        title="Ano anterior"
+                                    >
+                                        <ChevronsLeft className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const prev = new Date(solicitationCalendarMonth);
+                                            prev.setMonth(prev.getMonth() - 1);
+                                            setSolicitationCalendarMonth(prev);
+                                        }}
+                                        className="p-1.5 hover:bg-white hover:shadow-sm rounded-lg text-slate-600 transition-all active:scale-95 cursor-pointer"
+                                        title="Mês anterior"
+                                    >
+                                        <ChevronLeft className="w-4 h-4" />
+                                    </button>
+                                </div>
                                 
                                 <span className="text-xs font-black text-slate-800 uppercase tracking-wide">
                                     {solicitationCalendarMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
                                 </span>
 
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        const next = new Date(solicitationCalendarMonth);
-                                        next.setMonth(next.getMonth() + 1);
-                                        setSolicitationCalendarMonth(next);
-                                    }}
-                                    className="p-2 hover:bg-white hover:shadow-sm rounded-xl text-slate-600 transition-all active:scale-95 cursor-pointer"
-                                >
-                                    <ChevronRight className="w-4 h-4" />
-                                </button>
+                                <div className="flex items-center gap-0.5">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const next = new Date(solicitationCalendarMonth);
+                                            next.setMonth(next.getMonth() + 1);
+                                            setSolicitationCalendarMonth(next);
+                                        }}
+                                        className="p-1.5 hover:bg-white hover:shadow-sm rounded-lg text-slate-600 transition-all active:scale-95 cursor-pointer"
+                                        title="Próximo mês"
+                                    >
+                                        <ChevronRight className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const next = new Date(solicitationCalendarMonth);
+                                            next.setFullYear(next.getFullYear() + 1);
+                                            setSolicitationCalendarMonth(next);
+                                        }}
+                                        className="p-1.5 hover:bg-white hover:shadow-sm rounded-lg text-slate-400 hover:text-slate-700 transition-all active:scale-95 cursor-pointer"
+                                        title="Próximo ano"
+                                    >
+                                        <ChevronsRight className="w-4 h-4" />
+                                    </button>
+                                </div>
                             </div>
 
                             {/* Botões de Atalho Rápido */}
