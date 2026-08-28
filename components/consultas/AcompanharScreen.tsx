@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { User, ConsultaAgendamento, ConsultaProcedimento, AppState, ConsultaPaciente, ConsultaVaga } from '../../types';
-import { ArrowLeft, Search, Filter, Calendar, CheckCircle2, XCircle, Trash2, Loader2, Sparkles, Clock, FileDown, UserX, Repeat, X, Activity, Check, Edit2, User as UserIcon } from 'lucide-react';
+import { User, ConsultaPaciente, ConsultaAgendamento, ConsultaProcedimento, AppState, ConsultaVaga } from '../../types';
+import { ArrowLeft, Search, Filter, Calendar, CheckCircle2, XCircle, Trash2, Loader2, Sparkles, Clock, FileDown, UserX, Repeat, X, Activity, Check, Edit2, ChevronDown, ChevronLeft, ChevronRight, User as UserIcon } from 'lucide-react';
 import * as db from '../../services/consultasService';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -11,6 +11,352 @@ import { ConsultasReportPdfGenerator } from './ConsultasReportPdfGenerator';
 const formatPatientName = (patient?: ConsultaPaciente | null) => {
     if (!patient) return '';
     return patient.nickname ? `${patient.name} (${patient.nickname})` : patient.name;
+};
+
+// Componente de Select Customizado Moderno com React Portal (frente de todos os elementos)
+interface OptionItem {
+    value: string;
+    label: string;
+}
+
+interface ModernDropdownProps {
+    value: string;
+    options: OptionItem[];
+    onChange: (val: string) => void;
+    placeholder: string;
+    icon?: React.ReactNode;
+    minWidth?: string;
+}
+
+const ModernDropdown: React.FC<ModernDropdownProps> = ({
+    value,
+    options,
+    onChange,
+    placeholder,
+    icon,
+    minWidth = 'w-44 sm:w-52'
+}) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const buttonRef = useRef<HTMLButtonElement>(null);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+    const [coords, setCoords] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+
+    const selectedOption = options.find(o => o.value === value);
+
+    const updateCoords = () => {
+        if (buttonRef.current) {
+            const rect = buttonRef.current.getBoundingClientRect();
+            let leftPos = rect.left;
+            if (leftPos + 280 > window.innerWidth) {
+                leftPos = Math.max(10, window.innerWidth - 290);
+            }
+            setCoords({
+                top: rect.bottom + 6,
+                left: Math.max(10, leftPos)
+            });
+        }
+    };
+
+    useEffect(() => {
+        if (isOpen) {
+            updateCoords();
+            window.addEventListener('resize', updateCoords);
+            window.addEventListener('scroll', updateCoords, true);
+        }
+        return () => {
+            window.removeEventListener('resize', updateCoords);
+            window.removeEventListener('scroll', updateCoords, true);
+        };
+    }, [isOpen]);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (
+                buttonRef.current && !buttonRef.current.contains(event.target as Node) &&
+                dropdownRef.current && !dropdownRef.current.contains(event.target as Node)
+            ) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    return (
+        <div className={`relative ${minWidth} shrink-0`}>
+            <button
+                ref={buttonRef}
+                type="button"
+                onClick={() => setIsOpen(!isOpen)}
+                className={`w-full bg-slate-50/90 hover:bg-slate-100/90 border transition-all rounded-2xl px-3 py-1.5 text-xs font-extrabold text-slate-800 flex items-center justify-between gap-1.5 shadow-2xs cursor-pointer ${
+                    isOpen ? 'border-sky-500 ring-4 ring-sky-500/10 bg-white text-sky-700' : 'border-slate-200/90'
+                }`}
+            >
+                <div className="flex items-center gap-1.5 min-w-0 truncate">
+                    {icon && <span className="text-slate-400 shrink-0">{icon}</span>}
+                    <span className="truncate uppercase font-extrabold text-slate-800">
+                        {selectedOption && selectedOption.value !== '' ? selectedOption.label : placeholder}
+                    </span>
+                </div>
+                <ChevronDown className={`w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform ${isOpen ? 'rotate-180 text-sky-600' : ''}`} />
+            </button>
+
+            {isOpen && createPortal(
+                <div
+                    ref={dropdownRef}
+                    style={{
+                        position: 'fixed',
+                        top: `${coords.top}px`,
+                        left: `${coords.left}px`,
+                        zIndex: 99999
+                    }}
+                    className="min-w-[260px] max-w-[420px] w-max max-w-sm bg-white rounded-2xl shadow-2xl border border-slate-200/90 p-1.5 animate-in fade-in zoom-in-95 duration-150 max-h-72 overflow-y-auto custom-scrollbar"
+                >
+                    {options.map((opt) => {
+                        const isSelected = opt.value === value;
+                        return (
+                            <button
+                                key={opt.value || 'all'}
+                                type="button"
+                                onClick={() => {
+                                    onChange(opt.value);
+                                    setIsOpen(false);
+                                }}
+                                className={`w-full text-left px-3 py-2 rounded-xl text-xs font-extrabold transition-all flex items-center justify-between gap-3 uppercase cursor-pointer ${
+                                    isSelected 
+                                    ? 'bg-sky-50 text-sky-700 font-black' 
+                                    : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900'
+                                }`}
+                            >
+                                <span className="whitespace-normal leading-tight">{opt.label}</span>
+                                {isSelected && <Check className="w-3.5 h-3.5 text-sky-600 shrink-0" />}
+                            </button>
+                        );
+                    })}
+                </div>,
+                document.body
+            )}
+        </div>
+    );
+};
+
+// Componente de Calendário Customizado Moderno com React Portal
+interface ModernDatePickerProps {
+    value: string;
+    onChange: (val: string) => void;
+    placeholder?: string;
+}
+
+const ModernDatePicker: React.FC<ModernDatePickerProps> = ({
+    value,
+    onChange,
+    placeholder = 'Filtrar Data'
+}) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const buttonRef = useRef<HTMLButtonElement>(null);
+    const calendarRef = useRef<HTMLDivElement>(null);
+    const [coords, setCoords] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+
+    const initialDate = value ? new Date(value + 'T00:00:00') : new Date();
+    const [viewDate, setViewDate] = useState({ year: initialDate.getFullYear(), month: initialDate.getMonth() });
+
+    const updateCoords = () => {
+        if (buttonRef.current) {
+            const rect = buttonRef.current.getBoundingClientRect();
+            let leftPos = rect.left;
+            if (leftPos + 260 > window.innerWidth) {
+                leftPos = Math.max(10, window.innerWidth - 270);
+            }
+            setCoords({
+                top: rect.bottom + 6,
+                left: Math.max(10, leftPos)
+            });
+        }
+    };
+
+    useEffect(() => {
+        if (isOpen) {
+            updateCoords();
+            window.addEventListener('resize', updateCoords);
+            window.addEventListener('scroll', updateCoords, true);
+        }
+        return () => {
+            window.removeEventListener('resize', updateCoords);
+            window.removeEventListener('scroll', updateCoords, true);
+        };
+    }, [isOpen]);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (
+                buttonRef.current && !buttonRef.current.contains(event.target as Node) &&
+                calendarRef.current && !calendarRef.current.contains(event.target as Node)
+            ) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const months = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+    const weekDays = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
+
+    const handlePrevMonth = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setViewDate(prev => {
+            if (prev.month === 0) return { year: prev.year - 1, month: 11 };
+            return { ...prev, month: prev.month - 1 };
+        });
+    };
+
+    const handleNextMonth = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setViewDate(prev => {
+            if (prev.month === 11) return { year: prev.year + 1, month: 0 };
+            return { ...prev, month: prev.month + 1 };
+        });
+    };
+
+    const daysInMonth = new Date(viewDate.year, viewDate.month + 1, 0).getDate();
+    const firstDayIndex = new Date(viewDate.year, viewDate.month, 1).getDay();
+
+    const formattedDisplay = value 
+        ? new Date(value + 'T00:00:00').toLocaleDateString('pt-BR') 
+        : placeholder;
+
+    return (
+        <div className="relative w-32 sm:w-36 shrink-0">
+            <button
+                ref={buttonRef}
+                type="button"
+                onClick={() => setIsOpen(!isOpen)}
+                className={`w-full bg-slate-50/90 hover:bg-slate-100/90 border transition-all rounded-2xl px-3 py-1.5 text-xs font-extrabold text-slate-800 flex items-center justify-between gap-1.5 shadow-2xs cursor-pointer ${
+                    isOpen ? 'border-sky-500 ring-4 ring-sky-500/10 bg-white text-sky-700' : 'border-slate-200/90'
+                }`}
+            >
+                <div className="flex items-center gap-1.5 min-w-0 truncate">
+                    <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <span className="truncate uppercase font-extrabold text-slate-800">{formattedDisplay}</span>
+                </div>
+                {value ? (
+                    <span
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onChange('');
+                        }}
+                        className="text-slate-400 hover:text-rose-600 p-0.5 rounded-full hover:bg-slate-200/60 transition-colors"
+                        title="Limpar Data"
+                    >
+                        <X className="w-3 h-3" />
+                    </span>
+                ) : (
+                    <ChevronDown className={`w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform ${isOpen ? 'rotate-180 text-sky-600' : ''}`} />
+                )}
+            </button>
+
+            {isOpen && createPortal(
+                <div
+                    ref={calendarRef}
+                    style={{
+                        position: 'fixed',
+                        top: `${coords.top}px`,
+                        left: `${coords.left}px`,
+                        zIndex: 99999
+                    }}
+                    className="bg-white rounded-2xl shadow-2xl border border-slate-200/90 p-3 animate-in fade-in zoom-in-95 duration-150 w-64"
+                >
+                    {/* Header: Month & Year Nav */}
+                    <div className="flex items-center justify-between mb-2">
+                        <button
+                            type="button"
+                            onClick={handlePrevMonth}
+                            className="p-1 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                        >
+                            <ChevronLeft className="w-4 h-4" />
+                        </button>
+                        <span className="text-xs font-black text-slate-900 uppercase">
+                            {months[viewDate.month]} {viewDate.year}
+                        </span>
+                        <button
+                            type="button"
+                            onClick={handleNextMonth}
+                            className="p-1 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                        >
+                            <ChevronRight className="w-4 h-4" />
+                        </button>
+                    </div>
+
+                    {/* Weekday Labels */}
+                    <div className="grid grid-cols-7 gap-1 text-center mb-1">
+                        {weekDays.map((wd, i) => (
+                            <span key={i} className="text-[10px] font-black text-slate-400">
+                                {wd}
+                            </span>
+                        ))}
+                    </div>
+
+                    {/* Calendar Days Grid */}
+                    <div className="grid grid-cols-7 gap-1 text-center">
+                        {Array.from({ length: firstDayIndex }).map((_, i) => (
+                            <div key={`empty-${i}`} />
+                        ))}
+                        {Array.from({ length: daysInMonth }).map((_, i) => {
+                            const dayNum = i + 1;
+                            const monthStr = String(viewDate.month + 1).padStart(2, '0');
+                            const dayStr = String(dayNum).padStart(2, '0');
+                            const dateIso = `${viewDate.year}-${monthStr}-${dayStr}`;
+                            const isSelected = value === dateIso;
+
+                            return (
+                                <button
+                                    key={dateIso}
+                                    type="button"
+                                    onClick={() => {
+                                        onChange(dateIso);
+                                        setIsOpen(false);
+                                    }}
+                                    className={`py-1 text-xs font-extrabold rounded-xl transition-all cursor-pointer ${
+                                        isSelected
+                                        ? 'bg-sky-600 text-white shadow-sm font-black'
+                                        : 'hover:bg-sky-50 hover:text-sky-700 text-slate-700'
+                                    }`}
+                                >
+                                    {dayNum}
+                                </button>
+                            );
+                        })}
+                    </div>
+
+                    {/* Quick Footer */}
+                    <div className="flex items-center justify-between pt-2.5 mt-2 border-t border-slate-100 text-[10px] font-black uppercase">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                onChange('');
+                                setIsOpen(false);
+                            }}
+                            className="text-slate-400 hover:text-rose-600 cursor-pointer"
+                        >
+                            Limpar
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                const todayStr = new Date().toISOString().split('T')[0];
+                                onChange(todayStr);
+                                setIsOpen(false);
+                            }}
+                            className="text-sky-600 hover:text-sky-700 cursor-pointer"
+                        >
+                            Hoje
+                        </button>
+                    </div>
+                </div>,
+                document.body
+            )}
+        </div>
+    );
 };
 
 interface AcompanharScreenProps {
@@ -49,9 +395,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     const [reservedProceduresBookings, setReservedProceduresBookings] = useState<Record<string, ConsultaAgendamento[]>>({});
 
     // Filters
-    const [filterName, setFilterName] = useState('');
-    const [filterCpf, setFilterCpf] = useState('');
-    const [filterProcId, setFilterProcId] = useState('');
+    const [globalSearch, setGlobalSearch] = useState('');
     const [filterDate, setFilterDate] = useState('');
     const [filterStatus, setFilterStatus] = useState('');
 
@@ -356,16 +700,25 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
 
             // Apply filters in-memory
             let filtered = allBookingData;
-            if (filterName) {
-                const search = filterName.toLowerCase();
-                filtered = filtered.filter(a => a.paciente?.name.toLowerCase().includes(search));
-            }
-            if (filterCpf) {
-                const search = filterCpf.replace(/\D/g, '');
-                filtered = filtered.filter(a => a.paciente?.cpf.includes(search));
-            }
-            if (filterProcId) {
-                filtered = filtered.filter(a => a.procedimento_id === filterProcId);
+            if (globalSearch.trim()) {
+                const rawSearch = globalSearch.toLowerCase().trim();
+                const cleanNumbers = rawSearch.replace(/\D/g, '');
+
+                filtered = filtered.filter(a => {
+                    const nameMatch = a.paciente?.name ? a.paciente.name.toLowerCase().includes(rawSearch) : false;
+                    const nicknameMatch = a.paciente?.nickname ? a.paciente.nickname.toLowerCase().includes(rawSearch) : false;
+                    
+                    const cpfClean = a.paciente?.cpf ? a.paciente.cpf.replace(/\D/g, '') : '';
+                    const cpfMatch = cleanNumbers.length > 0 && cpfClean.includes(cleanNumbers);
+                    
+                    const susClean = a.paciente?.sus_number ? a.paciente.sus_number.replace(/\D/g, '') : '';
+                    const susMatch = cleanNumbers.length > 0 && susClean.includes(cleanNumbers);
+                    
+                    const procNameMatch = a.procedimento?.name ? a.procedimento.name.toLowerCase().includes(rawSearch) : false;
+                    const procCodeMatch = a.procedimento?.code ? a.procedimento.code.toLowerCase().includes(rawSearch) : false;
+
+                    return nameMatch || nicknameMatch || cpfMatch || susMatch || procNameMatch || procCodeMatch;
+                });
             }
             if (filterDate) {
                 filtered = filtered.filter(a => a.appointment_date === filterDate);
@@ -385,16 +738,16 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     // Trigger loading on filter change
     useEffect(() => {
         loadData();
-    }, [filterProcId, filterDate, filterStatus]);
+    }, [filterDate, filterStatus]);
 
-    // Debounce manual typing filters (Name/CPF)
+    // Debounce manual typing search
     useEffect(() => {
         const delayDebounceFn = setTimeout(() => {
             loadData(true);
-        }, 400);
+        }, 350);
 
         return () => clearTimeout(delayDebounceFn);
-    }, [filterName, filterCpf]);
+    }, [globalSearch]);
 
     // Subscribe to realtime changes via event bus
     useEffect(() => {
@@ -411,7 +764,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
             window.removeEventListener('consultas-pacientes-changed', handleRealtimeChange);
             window.removeEventListener('consultas-procedimentos-changed', handleRealtimeChange);
         };
-    }, [filterName, filterCpf, filterProcId, filterDate, filterStatus]);
+    }, [globalSearch, filterDate, filterStatus]);
 
     const handleStatusUpdate = async (id: string, newStatus: ConsultaAgendamento['status']) => {
         setOperatingId(id);
@@ -873,268 +1226,316 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
         );
     }
 
+
+
     return (
         <div className="w-full mx-auto flex flex-col flex-1 h-full max-h-full min-h-0 bg-white rounded-3xl border border-slate-200/80 shadow-2xl shadow-slate-100 overflow-hidden">
-            {/* Header */}
-            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 shrink-0">
-                <div className="flex items-center gap-3">
+            {/* Mobile Header (Limpa, igual FarmaciaPopular/Consultar, apenas 1 campo de busca) */}
+            <div className="block md:hidden bg-white border-b border-slate-200/80 p-3.5 space-y-3 shrink-0">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                        <button 
+                            onClick={onBack} 
+                            className="p-2 -ml-1 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-2xl active:scale-95 transition-all cursor-pointer"
+                            title="Voltar"
+                        >
+                            <ArrowLeft className="w-5 h-5" />
+                        </button>
+                        <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-sky-50 to-blue-50/80 border border-sky-200/80 flex items-center justify-center text-sky-600 shadow-2xs">
+                            <Activity className="w-4.5 h-4.5" />
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <h3 className="font-black bg-gradient-to-r from-slate-900 via-slate-800 to-slate-700 bg-clip-text text-transparent tracking-tight text-base uppercase leading-none">
+                                Acompanhar
+                            </h3>
+                            <span className="px-2.5 py-0.5 rounded-full bg-gradient-to-r from-sky-50 to-blue-50 text-sky-700 font-black text-[11px] uppercase border border-sky-200/80 shadow-2xs">
+                                {bookings.length}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* 1 Único Campo de Busca Limpo no Mobile */}
+                <div className="relative w-full">
+                    <input
+                        type="text"
+                        placeholder="Buscar por Nome, Apelido, CPF, Cartão SUS ou Procedimento..."
+                        className="w-full bg-slate-50 border border-slate-200/90 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 rounded-2xl pl-9 pr-9 py-2 text-xs font-bold transition-all text-slate-900 placeholder:text-slate-400 shadow-2xs"
+                        value={globalSearch}
+                        onChange={(e) => setGlobalSearch(e.target.value)}
+                    />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-3.5 h-3.5" />
+                    {globalSearch && (
+                        <button
+                            type="button"
+                            onClick={() => setGlobalSearch('')}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-600 p-0.5 rounded-full hover:bg-slate-200/60 transition-colors"
+                            title="Limpar busca"
+                        >
+                            <X className="w-3.5 h-3.5" />
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            {/* Desktop Integrated Single-Line Header */}
+            <div className="hidden md:flex bg-white border-b border-slate-200/80 p-3 md:px-4 shrink-0 items-center justify-between gap-3 overflow-x-auto custom-scrollbar">
+                {/* Left: Voltar + Icon + Title + Counter */}
+                <div className="flex items-center gap-2.5 shrink-0">
                     <button 
                         onClick={onBack} 
-                        className="p-2 -ml-2 text-slate-400 hover:text-slate-800 hover:bg-slate-200 rounded-xl transition-all"
+                        className="p-2 -ml-1 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-2xl active:scale-95 transition-all cursor-pointer shrink-0"
                         title="Voltar"
                     >
                         <ArrowLeft className="w-5 h-5" />
                     </button>
-                    <div>
-                        <h3 className="font-extrabold text-slate-900 tracking-tight text-lg flex items-center gap-2">
-                            Acompanhar Agendamentos 
-                            <span className="flex h-2 w-2 relative">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                            </span>
+                    <div className="w-9.5 h-9.5 rounded-2xl bg-gradient-to-br from-sky-50 to-blue-50/80 border border-sky-200/80 flex items-center justify-center text-sky-600 shadow-2xs shrink-0">
+                        <Activity className="w-5 h-5" />
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                        <h3 className="font-black bg-gradient-to-r from-slate-900 via-slate-800 to-slate-700 bg-clip-text text-transparent tracking-tight text-sm md:text-base uppercase leading-none whitespace-nowrap">
+                            Acompanhar
                         </h3>
-                        <p className="text-xs text-slate-500 font-medium">Lista de agendamentos realizados e andamento em tempo real</p>
+                        <span className="flex h-2 w-2 relative shrink-0">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                        </span>
+                        <span className="px-2.5 py-0.5 rounded-full bg-gradient-to-r from-sky-50 to-blue-50 text-sky-700 font-black text-[11px] uppercase tracking-wider border border-sky-200/80 shadow-2xs shrink-0">
+                            {bookings.length}
+                        </span>
                     </div>
                 </div>
-                <div className="flex items-center gap-2">
+
+                {/* Center / Right: Integrated Modern Single-Line Filters & Actions */}
+                <div className="flex items-center gap-2 flex-1 justify-end min-w-0">
+                    {/* 1 Único Campo de Busca Unificado (Nome, CPF, Cartão SUS ou Procedimento) */}
+                    <div className="relative flex-1 min-w-[200px] max-w-md shrink-0">
+                        <input
+                            type="text"
+                            placeholder="Buscar por Nome, CPF, Cartão SUS ou Procedimento..."
+                            className="w-full bg-slate-50/90 hover:bg-slate-100/80 focus:bg-white border border-slate-200/90 focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 rounded-2xl pl-9 pr-8 py-1.5 text-xs font-semibold transition-all text-slate-900 placeholder:text-slate-400 shadow-2xs"
+                            value={globalSearch}
+                            onChange={(e) => setGlobalSearch(e.target.value)}
+                        />
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-3.5 h-3.5" />
+                        {globalSearch && (
+                            <button
+                                type="button"
+                                onClick={() => setGlobalSearch('')}
+                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-600 p-0.5 rounded-full hover:bg-slate-200/60 transition-colors cursor-pointer"
+                                title="Limpar busca"
+                            >
+                                <X className="w-3.5 h-3.5" />
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Filter: Custom Modern Date Picker */}
+                    <ModernDatePicker
+                        value={filterDate}
+                        onChange={setFilterDate}
+                        placeholder="Data"
+                    />
+
+                    {/* Filter: Status Select (Modern Popover Dropdown) */}
+                    <ModernDropdown
+                        value={filterStatus}
+                        onChange={setFilterStatus}
+                        options={[
+                            { value: '', label: 'Todos os Status' },
+                            { value: 'Solicitado', label: 'Solicitado' },
+                            { value: 'Agendado', label: 'Agendado' },
+                            { value: 'Aguardando Data', label: 'Aguardando Data' },
+                            { value: 'Fila de espera', label: 'Fila de espera' },
+                            { value: 'Realizado', label: 'Realizado' },
+                            { value: 'Não Realizado', label: 'Não Realizado' },
+                            { value: 'Cancelado', label: 'Cancelado' },
+                        ]}
+                        placeholder="Status"
+                        minWidth="w-28 sm:w-32 lg:w-36"
+                    />
+
+                    {/* Action Button 1: Relatório */}
                     <button
                         onClick={() => setIsReportModalOpen(true)}
-                        className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all shadow-sm border bg-white text-sky-600 border-sky-100 hover:bg-sky-50 hover:text-sky-700"
+                        className="px-3.5 py-1.5 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white font-extrabold rounded-2xl shadow-md shadow-sky-500/20 hover:shadow-sky-500/35 active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shrink-0"
                         title="Gerar Relatórios"
                     >
                         <FileDown className="w-3.5 h-3.5" />
-                        Relatório
+                        <span className="hidden xl:inline">Relatório</span>
                     </button>
+
+                    {/* Action Button 2: Fila de Espera */}
                     <button
                         onClick={() => setFilterStatus(prev => prev === 'Fila de espera' ? '' : 'Fila de espera')}
-                        className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all shadow-sm border ${
+                        className={`px-3.5 py-1.5 font-extrabold rounded-2xl active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shrink-0 ${
                             filterStatus === 'Fila de espera'
-                            ? 'bg-amber-500 text-white border-amber-600 shadow-amber-200/50 hover:bg-amber-600'
-                            : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:text-slate-800'
+                            ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-md shadow-amber-500/25'
+                            : 'bg-white hover:bg-amber-50/60 border border-amber-200/80 hover:border-amber-300 text-amber-700 shadow-2xs'
                         }`}
                         title="Filtrar por Pacientes na Fila de Espera"
                     >
                         <Clock className="w-3.5 h-3.5" />
-                        Fila de Espera
+                        <span className="hidden xl:inline">Fila</span>
                     </button>
                 </div>
             </div>
 
-            {/* Filter Bar */}
-            <div className="p-4 bg-slate-50 border-b border-slate-100 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 shrink-0">
-                <div className="relative">
-                    <input
-                        type="text"
-                        placeholder="Filtrar por Paciente..."
-                        className="w-full bg-white border border-slate-200 rounded-xl pl-8 pr-3 py-2 text-xs font-semibold focus:outline-none focus:border-sky-500 transition-all text-slate-900"
-                        value={filterName}
-                        onChange={(e) => setFilterName(e.target.value)}
-                    />
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 w-3.5 h-3.5" />
-                </div>
-                <div className="relative">
-                    <input
-                        type="text"
-                        placeholder="Filtrar por CPF..."
-                        className="w-full bg-white border border-slate-200 rounded-xl pl-8 pr-3 py-2 text-xs font-semibold focus:outline-none focus:border-sky-500 transition-all text-slate-900"
-                        value={filterCpf}
-                        onChange={(e) => setFilterCpf(e.target.value)}
-                    />
-                    <Filter className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 w-3.5 h-3.5" />
-                </div>
-                <div>
-                    <select
-                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:border-sky-500 transition-all text-slate-900 appearance-none cursor-pointer"
-                        value={filterProcId}
-                        onChange={(e) => setFilterProcId(e.target.value)}
-                    >
-                        <option value="">Todos os Exames/Consultas</option>
-                        {procedures.map(p => (
-                            <option key={p.id} value={p.id}>{p.name} {p.code ? `[${p.code}]` : ''} ({p.type})</option>
-                        ))}
-                    </select>
-                </div>
-                <div>
-                    <input
-                        type="date"
-                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-semibold focus:outline-none focus:border-sky-500 transition-all text-slate-900"
-                        value={filterDate}
-                        onChange={(e) => setFilterDate(e.target.value)}
-                    />
-                </div>
-                <div>
-                    <select
-                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:border-sky-500 transition-all text-slate-900 appearance-none cursor-pointer"
-                        value={filterStatus}
-                        onChange={(e) => setFilterStatus(e.target.value)}
-                    >
-                        <option value="">Todos os Status</option>
-                        <option value="Solicitado">Solicitado</option>
-                        <option value="Agendado">Agendado</option>
-                        <option value="Aguardando Data">Aguardando Data</option>
-                        <option value="Fila de espera">Fila de espera</option>
-                        <option value="Realizado">Realizado</option>
-                        <option value="Não Realizado">Não Realizado</option>
-                        <option value="Cancelado">Cancelado</option>
-                    </select>
-                </div>
-            </div>
-
-            {/* List Table Area */}
-            <div className="flex-1 overflow-auto bg-slate-50/35 p-6 min-h-0">
+            {/* List Table Area (Maximizes vertical height) */}
+            <div className="flex-1 overflow-auto bg-slate-50/30 p-3 md:p-4 min-h-0">
                 {loading ? (
                     <div className="h-full w-full flex flex-col items-center justify-center gap-2">
                         <Loader2 className="w-8 h-8 text-sky-600 animate-spin" />
-                        <span className="text-xs font-bold text-slate-500">Carregando agendamentos...</span>
+                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Carregando agendamentos...</span>
                     </div>
                 ) : bookings.length > 0 ? (
-                    <div className="bg-white border border-slate-200/80 rounded-2xl overflow-hidden shadow-sm">
+                    <div className="bg-white border border-slate-200/80 rounded-2xl overflow-hidden shadow-2xs">
                         <div className="overflow-x-auto">
                             <table className="w-full text-left border-collapse">
-                                <thead>
-                                    <tr className="bg-slate-50 border-b border-slate-100 text-[10px] font-black text-slate-400 uppercase tracking-wider">
-                                        <th className="p-4 text-center w-24">Posição</th>
-                                        <th className="p-4">Solicitado</th>
-                                        <th className="p-4">Paciente / CPF</th>
-                                        <th className="p-4">Exame / Procedimento</th>
-                                        <th className="p-4">Data Agendada</th>
-                                        <th className="p-4 text-center">Prioridade</th>
-                                        <th className="p-4 text-center">Status</th>
-                                        <th className="p-4">Responsável</th>
-                                        <th className="p-4 text-right">Ações</th>
+                                <thead className="sticky top-0 bg-slate-50 border-b border-slate-200/80 text-[10px] font-black text-slate-500 uppercase tracking-wider z-10 shadow-2xs">
+                                    <tr>
+                                        <th className="py-3 px-3 text-center w-16">Posição</th>
+                                        <th className="py-3 px-3">Solicitado</th>
+                                        <th className="py-3 px-3">Paciente / CPF</th>
+                                        <th className="py-3 px-3">Exame / Procedimento</th>
+                                        <th className="py-3 px-3">Data Agendada</th>
+                                        <th className="py-3 px-3 text-center">Prioridade</th>
+                                        <th className="py-3 px-3 text-center">Status</th>
+                                        <th className="py-3 px-3">Responsável</th>
+                                        <th className="py-3 px-3 text-right">Ações</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
                                     {sortedBookings.map((booking) => {
                                         const isOperating = operatingId === booking.id;
                                         return (
-                                            <tr key={booking.id} className="hover:bg-slate-50/30 text-xs font-semibold text-slate-700 transition-colors">
-                                                <td className="p-4 text-center">
+                                            <tr key={booking.id} className="hover:bg-sky-50/40 text-xs font-semibold text-slate-700 transition-colors">
+                                                <td className="py-3 px-3 text-center">
                                                     {booking.status === 'Fila de espera' && queuePositions[booking.id] ? (
-                                                        <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full bg-amber-50 text-amber-600 border border-amber-200 font-extrabold text-[11px] shadow-sm animate-pulse">
+                                                        <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-300 font-black text-[10px] shadow-2xs">
                                                             {queuePositions[booking.id]}º
                                                         </span>
                                                     ) : (
                                                         <span className="text-slate-300 font-normal">-</span>
                                                     )}
                                                 </td>
-                                                <td className="p-4 text-slate-500">
+                                                <td className="py-3 px-3 text-slate-500 whitespace-nowrap">
                                                     {booking.solicitation_date 
                                                         ? new Date(booking.solicitation_date + 'T00:00:00').toLocaleDateString('pt-BR') 
                                                         : (booking.created_at ? new Date(booking.created_at).toLocaleDateString('pt-BR') : '-')}
                                                 </td>
-                                                <td className="p-4">
-                                                    <div className="font-extrabold text-slate-900">{booking.paciente ? formatPatientName(booking.paciente) : 'Carregando...'}</div>
-                                                    <div className="text-[10px] text-slate-400 mt-0.5 font-bold">
+                                                <td className="py-3 px-3">
+                                                    <div className="font-extrabold text-slate-900 uppercase leading-tight">{booking.paciente ? formatPatientName(booking.paciente) : 'Carregando...'}</div>
+                                                    <div className="text-[10px] text-slate-400 font-bold tracking-wider mt-0.5">
                                                         CPF: {booking.paciente?.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}
                                                     </div>
                                                 </td>
-                                                <td className="p-4">
-                                                    <div className="flex items-center gap-2">
-                                                        <div className="font-bold text-slate-800">{booking.procedimento?.name || 'Carregando...'}</div>
+                                                <td className="py-3 px-3">
+                                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                                        <span className="font-extrabold text-slate-800 uppercase">{booking.procedimento?.name || 'Carregando...'}</span>
                                                         {booking.procedimento?.code && (
-                                                            <span className="text-[9px] text-slate-400 font-extrabold bg-slate-100 px-1.5 py-0.5 rounded">
+                                                            <span className="text-[9px] text-slate-500 font-extrabold bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
                                                                 {booking.procedimento.code}
                                                             </span>
                                                         )}
                                                     </div>
-                                                     <span className={`inline-block px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded mt-1 ${
+                                                     <span className={`inline-block px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider rounded mt-0.5 ${
                                                          booking.procedimento?.type === 'Exame' 
-                                                         ? 'bg-sky-50 text-sky-600' 
+                                                         ? 'bg-sky-50 text-sky-700 border border-sky-200/60' 
                                                          : booking.procedimento?.type === 'Consulta'
-                                                         ? 'bg-indigo-50 text-indigo-600'
-                                                         : 'bg-rose-50 text-rose-600'
+                                                         ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/60'
+                                                         : 'bg-rose-50 text-rose-700 border border-rose-200/60'
                                                      }`}>
                                                         {booking.procedimento?.type}
                                                      </span>
                                                 </td>
-                                                <td className="p-4 text-slate-500 font-extrabold">
+                                                <td className="py-3 px-3 text-slate-700 font-extrabold whitespace-nowrap">
                                                     {booking.status !== 'Fila de espera' && booking.status !== 'Aguardando Data' && (booking.appointment_time || booking.status === 'Agendado' || booking.status === 'Realizado') ? (
                                                         <span>
                                                             {new Date(booking.appointment_date + 'T12:00:00').toLocaleDateString('pt-BR')}
                                                             {booking.appointment_time ? ` ${booking.appointment_time.substring(0, 5)}` : ''}
                                                         </span>
                                                     ) : (
-                                                        <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-black uppercase text-amber-700 bg-amber-50 border border-amber-200/80">
+                                                        <span className="inline-flex px-2 py-0.5 rounded text-[9px] font-black uppercase text-amber-800 bg-amber-50 border border-amber-300 shadow-2xs">
                                                             Aguardando Vaga
                                                         </span>
                                                     )}
                                                 </td>
-                                                <td className="p-4 text-center">
+                                                <td className="py-3 px-3 text-center whitespace-nowrap">
                                                      <span className={`inline-flex px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${
                                                          booking.priority === 'Urgência'
-                                                         ? 'bg-rose-500 text-white shadow-sm'
+                                                         ? 'bg-rose-500 text-white shadow-2xs'
                                                          : booking.is_retorno
-                                                         ? 'bg-teal-500 text-white shadow-sm'
-                                                         : 'bg-slate-100 text-slate-600'
+                                                         ? 'bg-teal-600 text-white shadow-2xs'
+                                                         : 'bg-slate-100 text-slate-600 border border-slate-200'
                                                      }`}>
                                                          {booking.priority === 'Urgência' ? 'Urgência' : booking.is_retorno ? 'Retorno' : 'Normal'}
                                                      </span>
                                                 </td>
-                                                <td className="p-4 text-center">
+                                                <td className="py-3 px-3 text-center whitespace-nowrap">
                                                     <div className="flex flex-col items-center gap-1">
-                                                        <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border ${
+                                                        <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border shadow-2xs ${
                                                             booking.status === 'Solicitado'
-                                                            ? 'bg-sky-50 text-sky-700 border-sky-100'
+                                                            ? 'bg-sky-50 text-sky-700 border-sky-300'
                                                             : booking.status === 'Agendado' 
-                                                            ? 'bg-indigo-50 text-indigo-700 border-indigo-100' 
+                                                            ? 'bg-indigo-50 text-indigo-700 border-indigo-300' 
                                                             : booking.status === 'Realizado' 
-                                                            ? 'bg-emerald-50 text-emerald-700 border-emerald-100' 
+                                                            ? 'bg-emerald-50 text-emerald-800 border-emerald-300' 
                                                             : booking.status === 'Não Realizado'
-                                                            ? 'bg-slate-100 text-slate-600 border-slate-200'
+                                                            ? 'bg-slate-100 text-slate-700 border-slate-300'
                                                             : booking.status === 'Fila de espera'
-                                                            ? 'bg-amber-50 text-amber-700 border-amber-100'
+                                                            ? 'bg-amber-50 text-amber-800 border-amber-300'
                                                             : booking.status === 'Aguardando Data'
-                                                            ? 'bg-violet-50 text-violet-700 border-violet-100'
+                                                            ? 'bg-violet-50 text-violet-800 border-violet-300'
                                                             : booking.status === 'Retorno'
-                                                            ? 'bg-teal-50 text-teal-700 border-teal-100'
-                                                            : 'bg-rose-50 text-rose-700 border-rose-100'
+                                                            ? 'bg-teal-50 text-teal-800 border-teal-300'
+                                                            : 'bg-rose-50 text-rose-800 border-rose-300'
                                                         }`}>
                                                             {booking.status}
                                                         </span>
                                                         {booking.status === 'Fila de espera' && queuePositions[booking.id] && (
-                                                            <span className="text-[10px] text-amber-600 font-extrabold uppercase tracking-wide bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded shadow-sm">
+                                                            <span className="text-[9px] text-amber-800 font-extrabold uppercase tracking-wide bg-amber-50 border border-amber-300 px-1.5 py-0.5 rounded shadow-2xs">
                                                                 {queuePositions[booking.id]}º na fila
                                                             </span>
                                                         )}
                                                         {booking.status === 'Cancelado' && (booking.cancellation_reason || booking.canceled_by_name) && (
-                                                            <div className="text-[9px] text-rose-600 font-bold mt-1 text-center max-w-[140px] truncate" title={`Cancelado por: ${booking.canceled_by_name || 'Usuário'} | Motivo: ${booking.cancellation_reason || 'Sem justificativa'}`}>
+                                                            <div className="text-[9px] text-rose-600 font-bold text-center max-w-[130px] truncate" title={`Cancelado por: ${booking.canceled_by_name || 'Usuário'} | Motivo: ${booking.cancellation_reason || 'Sem justificativa'}`}>
                                                                 Motivo: {booking.cancellation_reason || 'Não informado'}
                                                             </div>
                                                         )}
                                                     </div>
                                                 </td>
-                                                <td className="p-4 text-slate-500">
-                                                    <div>{booking.responsavel?.name || 'Sistema'}</div>
-                                                    <div className="text-[9px] text-slate-400 mt-0.5">
+                                                <td className="py-3 px-3 text-slate-500 whitespace-nowrap">
+                                                    <div className="font-bold text-slate-700">{booking.responsavel?.name || 'Sistema'}</div>
+                                                    <div className="text-[9px] text-slate-400 mt-0.5 font-semibold">
                                                         {booking.created_at && new Date(booking.created_at).toLocaleString('pt-BR')}
                                                     </div>
                                                 </td>
-                                                <td className="p-4 text-right">
-                                                    <div className="flex items-center justify-end gap-2.5">
+                                                <td className="py-3 px-3 text-right whitespace-nowrap">
+                                                    <div className="flex items-center justify-end gap-1.5">
                                                         {isOperating ? (
-                                                            <Loader2 className="w-5 h-5 text-sky-600 animate-spin" />
+                                                            <Loader2 className="w-4 h-4 text-sky-600 animate-spin" />
                                                         ) : (
                                                             <>
                                                                 {canEdit && (
                                                                     <button
                                                                         onClick={() => handleOpenEditModal(booking)}
-                                                                        className="p-1.5 text-amber-600 hover:text-white hover:bg-amber-500 rounded-lg border border-amber-100 hover:border-amber-500 transition-all flex items-center justify-center"
+                                                                        className="p-1.5 text-amber-600 hover:text-white hover:bg-amber-500 rounded-lg border border-amber-200 hover:border-amber-500 transition-all flex items-center justify-center cursor-pointer shadow-2xs"
                                                                         title="Editar Agendamento / Paciente"
                                                                     >
-                                                                        <Edit2 className="w-4 h-4" />
+                                                                        <Edit2 className="w-3.5 h-3.5" />
                                                                     </button>
                                                                 )}
                                                                 <button
                                                                     onClick={() => handleDownloadPdf(booking)}
                                                                     disabled={isGenerating}
-                                                                    className="p-1.5 text-sky-600 hover:text-white hover:bg-sky-500 rounded-lg border border-sky-100 hover:border-sky-500 transition-all flex items-center justify-center disabled:opacity-50"
+                                                                    className="p-1.5 text-sky-600 hover:text-white hover:bg-sky-500 rounded-lg border border-sky-200 hover:border-sky-500 transition-all flex items-center justify-center disabled:opacity-50 cursor-pointer shadow-2xs"
                                                                     title="Baixar Comprovante PDF"
                                                                 >
                                                                     {isGenerating && printingBooking?.id === booking.id ? (
-                                                                        <Loader2 className="w-4.5 h-4.5 animate-spin" />
+                                                                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
                                                                     ) : (
-                                                                        <FileDown className="w-4 h-4" />
+                                                                        <FileDown className="w-3.5 h-3.5" />
                                                                     )}
                                                                 </button>
                                                                 {booking.status === 'Realizado' && (
@@ -1146,10 +1547,10 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                                                             setRetornoDate(tomorrow.toISOString().split('T')[0]);
                                                                             setIsRetornoModalOpen(true);
                                                                         }}
-                                                                        className="p-1.5 text-teal-600 hover:text-white hover:bg-teal-500 rounded-lg border border-teal-100 hover:border-teal-500 transition-all flex items-center justify-center"
+                                                                        className="p-1.5 text-teal-600 hover:text-white hover:bg-teal-500 rounded-lg border border-teal-200 hover:border-teal-500 transition-all flex items-center justify-center cursor-pointer shadow-2xs"
                                                                         title="Agendar Retorno"
                                                                     >
-                                                                        <Repeat className="w-4 h-4" />
+                                                                        <Repeat className="w-3.5 h-3.5" />
                                                                     </button>
                                                                 )}
                                                                 {booking.status === 'Solicitado' && (
@@ -1157,19 +1558,19 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                                                         {canComplete && (
                                                                             <button
                                                                                 onClick={() => handleStatusUpdate(booking.id, 'Agendado')}
-                                                                                className="p-1.5 text-emerald-500 hover:text-white hover:bg-emerald-500 rounded-lg border border-emerald-100 hover:border-emerald-500 transition-all flex items-center justify-center"
+                                                                                className="p-1.5 text-emerald-600 hover:text-white hover:bg-emerald-500 rounded-lg border border-emerald-200 hover:border-emerald-500 transition-all flex items-center justify-center cursor-pointer shadow-2xs"
                                                                                 title="Aprovar Agendamento"
                                                                             >
-                                                                                <CheckCircle2 className="w-4 h-4" />
+                                                                                <CheckCircle2 className="w-3.5 h-3.5" />
                                                                             </button>
                                                                         )}
                                                                         {canCancel && (
                                                                             <button
                                                                                 onClick={() => handleOpenCancelModal(booking)}
-                                                                                className="p-1.5 text-rose-400 hover:text-white hover:bg-rose-500 rounded-lg border border-rose-100 hover:border-rose-500 transition-all flex items-center justify-center"
+                                                                                className="p-1.5 text-rose-500 hover:text-white hover:bg-rose-500 rounded-lg border border-rose-200 hover:border-rose-500 transition-all flex items-center justify-center cursor-pointer shadow-2xs"
                                                                                 title="Rejeitar/Cancelar Agendamento"
                                                                             >
-                                                                                <XCircle className="w-4 h-4" />
+                                                                                <XCircle className="w-3.5 h-3.5" />
                                                                             </button>
                                                                         )}
                                                                     </>
@@ -1179,7 +1580,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                                                         {canComplete && (
                                                                             <button
                                                                                 onClick={() => handleStatusUpdate(booking.id, 'Realizado')}
-                                                                                className="p-1.5 text-emerald-500 hover:text-white hover:bg-emerald-500 rounded-lg border border-emerald-100 hover:border-emerald-500 transition-all flex items-center justify-center"
+                                                                                className="p-1.5 text-emerald-600 hover:text-white hover:bg-emerald-500 rounded-lg border border-emerald-200 hover:border-emerald-500 transition-all flex items-center justify-center cursor-pointer shadow-2xs"
                                                                                 title="Confirmar Realização"
                                                                             >
                                                                                 <CheckCircle2 className="w-4 h-4" />
