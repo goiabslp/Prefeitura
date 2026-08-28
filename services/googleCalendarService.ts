@@ -7,9 +7,19 @@ export interface GoogleCalendarConnectionStatus {
   googleEmail?: string;
   connectedAt?: string;
   lastSyncAt?: string;
+  accessToken?: string;
 }
 
+const DEFAULT_GOOGLE_CLIENT_ID = "537818796115-n9r3d8gahke9qdjgv8s6n1idv3gp28m9.apps.googleusercontent.com";
+
 export const googleCalendarService = {
+  /**
+   * Obtém o Client ID do Google (da variável de ambiente ou fallback pré-configurado)
+   */
+  getClientId(): string {
+    return (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID || DEFAULT_GOOGLE_CLIENT_ID;
+  },
+
   /**
    * Obtém o status de conexão da conta Google com resiliência a cache local.
    */
@@ -34,7 +44,8 @@ export const googleCalendarService = {
             isConnected: true,
             googleEmail: parsed.google_email,
             connectedAt: parsed.google_connected_at,
-            lastSyncAt: parsed.last_google_sync_at
+            lastSyncAt: parsed.last_google_sync_at,
+            accessToken: parsed.access_token
           };
         }
       }
@@ -46,49 +57,86 @@ export const googleCalendarService = {
   },
 
   /**
-   * Inicia a autenticação OAuth 2.0 para conectar a conta do Google Agenda.
-   * Suporta autenticação oficial com Google Identity Services (GIS) ou simulação interativa segura.
+   * Dispara a janela pop-up oficial do Google OAuth 2.0 (Google Identity Services)
+   */
+  async triggerGoogleOAuth(promptEmail?: string): Promise<{ accessToken: string }> {
+    const clientId = this.getClientId();
+
+    if (typeof window === 'undefined') {
+      throw new Error('Ambiente de execução inválido.');
+    }
+
+    // Aguardar até 3 segundos se o script do Google GIS ainda estiver carregando no DOM
+    let attempts = 0;
+    while (!(window as any).google?.accounts?.oauth2 && attempts < 30) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      attempts++;
+    }
+
+    if (!(window as any).google?.accounts?.oauth2) {
+      throw new Error('O SDK do Google Identity Services não está disponível. Verifique se os bloqueadores de anúncio estão desativados.');
+    }
+
+    return new Promise((resolve, reject) => {
+      try {
+        const client = (window as any).google.accounts.oauth2.initTokenClient({
+          client_id: clientId,
+          scope: 'https://www.googleapis.com/auth/calendar.events',
+          hint: promptEmail,
+          callback: (response: any) => {
+            if (response.error) {
+              reject(new Error(`Autorização do Google cancelada ou recusada (${response.error_description || response.error}).`));
+            } else if (response.access_token) {
+              resolve({ accessToken: response.access_token });
+            } else {
+              reject(new Error('Token de acesso não foi retornado pelo Google.'));
+            }
+          },
+          error_callback: (err: any) => {
+            reject(new Error(err?.message || 'A janela de autenticação do Google foi fechada antes de concluir.'));
+          }
+        });
+
+        // Forçar exibição da tela de consentimento e seleção de conta
+        client.requestAccessToken({ prompt: 'consent' });
+      } catch (err: any) {
+        reject(new Error(err.message || 'Falha ao inicializar janela OAuth do Google.'));
+      }
+    });
+  },
+
+  /**
+   * Inicia a autenticação OAuth 2.0 real para conectar a conta do Google Agenda.
+   * OBRIGA o usuário a concluir o login e a autorização na janela pop-up do Google.
    */
   async connectAccount(user: User, customEmail?: string): Promise<{ success: boolean; googleEmail?: string; error?: string }> {
     try {
-      const clientId = (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID;
-      let googleEmail = (customEmail || user.email || `${user.username?.toLowerCase() || 'usuario'}@saojosedogoiabal.mg.gov.br`).trim();
+      const googleEmail = (customEmail || user.email || `${user.username?.toLowerCase() || 'usuario'}@saojosedogoiabal.mg.gov.br`).trim();
 
-      if (clientId && typeof window !== 'undefined' && (window as any).google?.accounts?.oauth2) {
-        // Fluxo GIS oficial com janela pop-up do Google
-        await new Promise<void>((resolve, reject) => {
-          try {
-            const client = (window as any).google.accounts.oauth2.initTokenClient({
-              client_id: clientId,
-              scope: 'https://www.googleapis.com/auth/calendar.events',
-              callback: (response: any) => {
-                if (response.error) {
-                  reject(new Error(response.error_description || response.error));
-                } else {
-                  resolve();
-                }
-              },
-            });
-            client.requestAccessToken();
-          } catch (e) {
-            reject(e);
-          }
-        });
+      // 1. OBRIGATÓRIO: Abrir janela pop-up oficial do Google para login e autorização de escopo
+      const oauthResult = await this.triggerGoogleOAuth(googleEmail);
+
+      if (!oauthResult.accessToken) {
+        return {
+          success: false,
+          error: 'É necessário realizar o login e aceitar as permissões na janela do Google para autorizar o acesso.'
+        };
       }
 
       const now = new Date().toISOString();
 
-      // 1. Salvar no localStorage para resiliência imediata
+      // 2. Salvar conexão no localStorage com o token retornado pelo Google
       if (user.id) {
         localStorage.setItem(`google_integration_${user.id}`, JSON.stringify({
           google_connected: true,
           google_email: googleEmail,
           google_connected_at: now,
-          last_google_sync_at: now
+          last_google_sync_at: now,
+          access_token: oauthResult.accessToken
         }));
       }
 
-      // 2. Tentar atualizar Supabase (se as colunas existirem no banco)
+      // 3. Tentar atualizar Supabase (se as colunas existirem no banco)
       try {
         const { error } = await supabase
           .from('profiles')
@@ -101,7 +149,7 @@ export const googleCalendarService = {
           .eq('id', user.id);
 
         if (error) {
-          console.warn('Nota: Coluna google_connected ainda não migrada na tabela profiles do Supabase. Operando em modo de resiliência local.', error.message);
+          console.warn('Nota: Coluna google_connected em atualização local.', error.message);
         }
       } catch (dbErr) {
         console.warn('Atualização Supabase ignorada graciosamente:', dbErr);
@@ -115,7 +163,7 @@ export const googleCalendarService = {
       console.error('Erro na conexão com Google Agenda:', err);
       return {
         success: false,
-        error: err.message || 'Falha ao autenticar com o Google Agenda.'
+        error: err.message || 'Falha ao autenticar com a conta do Google.'
       };
     }
   },
@@ -149,7 +197,7 @@ export const googleCalendarService = {
   },
 
   /**
-   * Sincroniza um evento do sistema para o Google Agenda.
+   * Sincroniza um evento do sistema para o Google Agenda via API REST oficial do Google.
    */
   async syncEventToGoogle(event: CalendarEvent, targetUserEmail?: string): Promise<{ success: boolean; googleEventId?: string }> {
     try {
