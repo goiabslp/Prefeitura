@@ -121,6 +121,63 @@ export const SystemSettingsProvider: React.FC<{ children: React.ReactNode }> = (
                         description: 'Permissão para gestão avançada de permissões no módulo da farmácia popular'
                     });
                 }
+
+                // Fallbacks estáticos para Agendamento de Veículos
+                const hasAgendamentoAgendar = fetchedSettings.some(s => s.module_key === 'parent_agendamento_veiculo_agendar');
+                if (!hasAgendamentoAgendar) {
+                    fetchedSettings.push({
+                        id: 'fallback_agendamento_veiculo_agendar',
+                        module_key: 'parent_agendamento_veiculo_agendar',
+                        label: 'Agendar Veículo',
+                        is_enabled: true,
+                        is_enabled_mobile: true,
+                        parent_key: 'parent_agendamento_veiculo',
+                        order_index: 1,
+                        description: 'Permissão para solicitar e agendar novas viagens'
+                    });
+                }
+
+                const hasAgendamentoMeus = fetchedSettings.some(s => s.module_key === 'parent_agendamento_veiculo_meus');
+                if (!hasAgendamentoMeus) {
+                    fetchedSettings.push({
+                        id: 'fallback_agendamento_veiculo_meus',
+                        module_key: 'parent_agendamento_veiculo_meus',
+                        label: 'Meus Agendamentos',
+                        is_enabled: true,
+                        is_enabled_mobile: true,
+                        parent_key: 'parent_agendamento_veiculo',
+                        order_index: 2,
+                        description: 'Permissão para consultar o histórico de solicitações'
+                    });
+                }
+
+                const hasAgendamentoAprovacoes = fetchedSettings.some(s => s.module_key === 'parent_agendamento_veiculo_aprovacoes');
+                if (!hasAgendamentoAprovacoes) {
+                    fetchedSettings.push({
+                        id: 'fallback_agendamento_veiculo_aprovacoes',
+                        module_key: 'parent_agendamento_veiculo_aprovacoes',
+                        label: 'Aprovações',
+                        is_enabled: true,
+                        is_enabled_mobile: true,
+                        parent_key: 'parent_agendamento_veiculo',
+                        order_index: 3,
+                        description: 'Permissão para análise e aprovação de agendamentos'
+                    });
+                }
+
+                const hasAgendamentoDashboard = fetchedSettings.some(s => s.module_key === 'parent_agendamento_veiculo_dashboard');
+                if (!hasAgendamentoDashboard) {
+                    fetchedSettings.push({
+                        id: 'fallback_agendamento_veiculo_dashboard',
+                        module_key: 'parent_agendamento_veiculo_dashboard',
+                        label: 'Dashboard Analítico',
+                        is_enabled: true,
+                        is_enabled_mobile: true,
+                        parent_key: 'parent_agendamento_veiculo',
+                        order_index: 4,
+                        description: 'Permissão para visualização de relatórios e estatísticas da frota'
+                    });
+                }
                 
                 setSettings(fetchedSettings);
                 

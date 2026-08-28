@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { ArrowLeft, ChevronLeft, ChevronRight, Plus, Calendar as CalendarIcon, ChevronsLeft, ChevronsRight, Star, Users, Flag, Gift, Repeat } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { ArrowLeft, ChevronLeft, ChevronRight, Plus, Calendar as CalendarIcon, ChevronsLeft, ChevronsRight, Star, Users, Flag, Gift, Repeat, RefreshCw, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { supabase } from '../../services/supabaseClient';
 import { motion, AnimatePresence } from 'framer-motion';
 import { EventModal } from './EventModal';
@@ -8,10 +9,11 @@ import { EventDetailsModal } from './EventDetailsModal';
 import { generateHolidaysForYear } from './holidays';
 import { getLocalISOData, safelyParseDate } from '../../utils/dateUtils';
 import { calendarService, CalendarEvent } from '../../services/calendarService';
+import { googleCalendarService } from '../../services/googleCalendarService';
 import { MyEventsModal } from './MyEventsModal';
 import { PendingInvitesModal } from './PendingInvitesModal';
 import { MonthEventsModal } from './MonthEventsModal';
-import { AppState } from '../../types';
+import { User, AppState } from '../../types';
 
 // CalendarEvent is now imported from calendarService
 
@@ -19,13 +21,22 @@ interface CalendarioProps {
     onBack: () => void;
     userRole: string;
     currentUserId: string;
+    currentUser?: User | null;
     appState: AppState;
 }
 
-export const Calendario: React.FC<CalendarioProps> = ({ onBack, userRole, currentUserId, appState }) => {
+export const Calendario: React.FC<CalendarioProps> = ({ onBack, userRole, currentUserId, currentUser, appState }) => {
     const [currentDate, setCurrentDate] = useState(new Date());
     const [events, setEvents] = useState<CalendarEvent[]>([]);
     const [loading, setLoading] = useState(true);
+    const [isSyncingGoogle, setIsSyncingGoogle] = useState(false);
+    const [toast, setToast] = useState<{ show: boolean; message: string; type: 'success' | 'error' }>({ show: false, message: '', type: 'success' });
+
+    const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+        setToast({ show: true, message, type });
+        setTimeout(() => setToast({ show: false, message: '', type: 'success' }), 3500);
+    };
+
     const isAdmin = userRole === 'admin';
     const [direction, setDirection] = useState(0); // For animation: -1 left, 1 right
 
@@ -209,15 +220,33 @@ export const Calendario: React.FC<CalendarioProps> = ({ onBack, userRole, curren
                     </div>
                 </div>
 
-                {isAdmin && (
-                    <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3">
+                    {currentUser?.google_connected && (
                         <button
-                            onClick={() => setIsMyEventsOpen(true)}
-                            className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition-all active:scale-95"
+                            onClick={async () => {
+                                if (!currentUser) return;
+                                setIsSyncingGoogle(true);
+                                const result = await googleCalendarService.syncAllUserEvents(currentUser);
+                                setIsSyncingGoogle(false);
+                                showToast(`${result.syncedCount} evento(s) sincronizados com o Google Agenda!`);
+                            }}
+                            className="flex items-center gap-2 px-4 py-2 rounded-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold border border-indigo-200 text-xs transition-all active:scale-95 cursor-pointer"
+                            title="Sincronizar eventos com seu Google Agenda"
                         >
-                            <CalendarIcon className="w-5 h-5" />
-                            <span>Meus Eventos</span>
+                            <RefreshCw className={`w-4 h-4 ${isSyncingGoogle ? 'animate-spin' : ''}`} />
+                            <span className="hidden sm:inline">Google Agenda</span>
                         </button>
+                    )}
+
+                    <button
+                        onClick={() => setIsMyEventsOpen(true)}
+                        className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition-all active:scale-95"
+                    >
+                        <CalendarIcon className="w-5 h-5" />
+                        <span>Meus Eventos</span>
+                    </button>
+
+                    {isAdmin && (
                         <button
                             onClick={() => {
                                 setEventToEdit(null);
@@ -229,17 +258,8 @@ export const Calendario: React.FC<CalendarioProps> = ({ onBack, userRole, curren
                             <Plus className="w-5 h-5" />
                             <span>Novo Evento</span>
                         </button>
-                    </div>
-                )}
-                {!isAdmin && (
-                    <button
-                        onClick={() => setIsMyEventsOpen(true)}
-                        className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition-all active:scale-95"
-                    >
-                        <CalendarIcon className="w-5 h-5" />
-                        <span>Meus Eventos</span>
-                    </button>
-                )}
+                    )}
+                </div>
             </div>
 
             {/* NAVEGAÇÃO E CONTROLES */}
@@ -543,14 +563,13 @@ export const Calendario: React.FC<CalendarioProps> = ({ onBack, userRole, curren
                     setIsModalOpen(true);
                 }}
                 onDeleteEvent={async (evt) => {
-                    // Quick inline delete handler avoiding opening EventModal just to delete
                     try {
                         const { error } = await supabase.from('calendar_events').delete().eq('id', evt.id);
                         if (error) throw error;
                         fetchEvents(currentDate);
                     } catch (e) {
                         console.error(e);
-                        alert("Erro ao remover evento.");
+                        showToast("Erro ao remover evento.", "error");
                     }
                 }}
             />
@@ -562,7 +581,6 @@ export const Calendario: React.FC<CalendarioProps> = ({ onBack, userRole, curren
                 isAdmin={isAdmin || eventDetailsEvent?.created_by === currentUserId}
                 onEditEvent={(ev) => {
                     setEventToEdit(ev);
-                    setSelectedDate(ev.start_date); // Keep this line as it was in the original
                     setIsModalOpen(true);
                 }}
                 onDeleteSuccess={() => {
@@ -584,7 +602,7 @@ export const Calendario: React.FC<CalendarioProps> = ({ onBack, userRole, curren
 
             <PendingInvitesModal
                 currentUserId={currentUserId}
-                onClose={() => { }} // Could be used to track if it's open, but it manages itself
+                onClose={() => { }}
                 onResolved={() => fetchEvents(currentDate)}
             />
 
@@ -596,18 +614,16 @@ export const Calendario: React.FC<CalendarioProps> = ({ onBack, userRole, curren
                     const month = currentDate.getMonth();
                     const eType = (e.type || "").trim();
 
-                    // For recurring/birthdays: check if they match THIS month
                     const isRecurringType = eType === 'Aniversário' || eType === 'Feriado Municipal' || e.is_recurring;
 
                     if (isRecurringType) {
-                        const targetDate = e.type === 'Aniversário' && e.birth_date ? e.birth_date : e.start_date;
+                        const targetDate = eType === 'Aniversário' && e.birth_date ? e.birth_date : e.start_date;
                         const dateObj = safelyParseDate(targetDate);
                         
                         if (!dateObj) return false;
                         return (dateObj.getMonth()) === month;
                     }
 
-                    // For regular events: check overlaps with this month's range strictly using local dates
                     const firstDayOfMonth = getLocalISOData(new Date(year, month, 1)).date;
                     const lastDayOfMonth = getLocalISOData(new Date(year, month + 1, 0)).date;
 
@@ -617,7 +633,14 @@ export const Calendario: React.FC<CalendarioProps> = ({ onBack, userRole, curren
                 currentYear={currentDate.getFullYear()}
                 appState={appState}
             />
+
+            {toast.show && createPortal(
+                <div className={`fixed bottom-8 left-1/2 -translate-x-1/2 z-[3000] px-6 py-3.5 rounded-2xl shadow-2xl border flex items-center gap-3 animate-slide-up ${toast.type === 'success' ? 'bg-emerald-600 border-emerald-500 text-white' : 'bg-rose-600 border-rose-500 text-white'}`}>
+                    {toast.type === 'success' ? <CheckCircle2 className="w-5 h-5" /> : <AlertTriangle className="w-5 h-5" />}
+                    <span className="font-bold text-xs uppercase tracking-wider">{toast.message}</span>
+                </div>,
+                document.body
+            )}
         </div>
     );
 };
-

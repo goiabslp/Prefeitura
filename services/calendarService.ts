@@ -26,6 +26,8 @@ export interface CalendarEvent {
     professional_name?: string; // Virtual field for display
     birth_date?: string; // Birth date from person for recurrence
     is_recurring?: boolean;
+    google_event_id?: string;
+    synced_with_google?: boolean;
     invites?: CalendarEventInvite[];
 }
 

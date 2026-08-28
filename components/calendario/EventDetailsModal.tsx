@@ -33,10 +33,13 @@ export const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
 
     if (!isOpen || !event) return null;
 
-    const colors: Record<string, any> = {
-        Feriado: { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', icon: 'text-red-500' },
-        Reunião: { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200', icon: 'text-indigo-500' },
-        Evento: { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', icon: 'text-emerald-500' },
+    const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+    const colors: Record<string, { bg: string; text: string; border: string; icon: string }> = {
+        Oficial: { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200', icon: 'text-indigo-500' },
+        Reunião: { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', icon: 'text-emerald-500' },
+        Prazo: { bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-200', icon: 'text-rose-500' },
         Aniversário: { bg: 'bg-pink-50', text: 'text-pink-700', border: 'border-pink-200', icon: 'text-pink-500' },
         'Feriado Municipal': { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', icon: 'text-red-500' },
         Pessoal: { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', icon: 'text-amber-500' }
@@ -47,8 +50,9 @@ export const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
     const formatTime = (t: string) => t.slice(0, 5);
     const formatDateBr = (d: string) => d.split('-').reverse().join('/');
 
-    const handleDelete = async () => {
-        if (!confirm('Tem certeza que deseja excluir este evento?')) return;
+    const confirmDelete = async () => {
+        setIsConfirmDeleteOpen(false);
+        setErrorMessage(null);
         try {
             const { error } = await supabase.from('calendar_events').delete().eq('id', event.id);
             if (error) throw error;
@@ -56,12 +60,13 @@ export const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
             onClose();
         } catch (e) {
             console.error(e);
-            alert("Erro ao excluir o evento.");
+            setErrorMessage("Erro ao excluir o evento.");
         }
     };
 
     const handleDownloadPdf = async () => {
         setIsGenerating(true);
+        setErrorMessage(null);
 
         // Allow React to render the invisible portal first
         await new Promise(resolve => setTimeout(resolve, 500));
@@ -99,7 +104,7 @@ export const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
 
         } catch (error) {
             console.error('Erro ao gerar PDF do evento:', error);
-            alert('Não foi possível gerar o PDF no momento.');
+            setErrorMessage('Não foi possível gerar o PDF no momento.');
         } finally {
             setIsGenerating(false);
         }
@@ -280,13 +285,11 @@ export const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
                             {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
                             {isGenerating ? 'Gerando...' : 'Gerar PDF'}
                         </button>
-
-                        {/* Admin Actions */}
                         {isAdmin && !event.id.startsWith('system-') && (
                             <div className="flex gap-3">
                                 <button
-                                    onClick={handleDelete}
-                                    className="flex items-center gap-2 px-4 py-2 text-rose-600 hover:bg-rose-50 rounded-xl font-bold uppercase tracking-wider text-xs transition-colors"
+                                    onClick={() => setIsConfirmDeleteOpen(true)}
+                                    className="flex items-center gap-2 px-4 py-2 text-rose-600 hover:bg-rose-50 rounded-xl font-bold uppercase tracking-wider text-xs transition-colors cursor-pointer"
                                 >
                                     <Trash2 className="w-4 h-4" />
                                     Excluir
@@ -296,7 +299,7 @@ export const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
                                         onClose();
                                         onEditEvent(event);
                                     }}
-                                    className="flex items-center gap-2 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white shadow shadow-indigo-200 rounded-xl font-bold uppercase tracking-wider text-xs transition-colors"
+                                    className="flex items-center gap-2 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white shadow shadow-indigo-200 rounded-xl font-bold uppercase tracking-wider text-xs transition-colors cursor-pointer"
                                 >
                                     <Edit2 className="w-4 h-4" />
                                     Editar
@@ -305,6 +308,35 @@ export const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
                         )}
                     </div>
                 </motion.div>
+
+                {/* Modal de Confirmação Customizado (Substituindo confirm()) */}
+                {isConfirmDeleteOpen && (
+                    <div className="fixed inset-0 z-[3000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-fade-in">
+                        <div className="bg-white rounded-[2rem] p-6 max-w-sm w-full space-y-4 shadow-2xl border border-slate-100 text-center">
+                            <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+                                <Trash2 className="w-6 h-6" />
+                            </div>
+                            <h3 className="text-base font-extrabold text-slate-800">Excluir Evento?</h3>
+                            <p className="text-xs text-slate-500">
+                                Tem certeza que deseja remover este compromisso? Esta ação não poderá ser desfeita.
+                            </p>
+                            <div className="flex items-center gap-3 pt-2">
+                                <button
+                                    onClick={() => setIsConfirmDeleteOpen(false)}
+                                    className="flex-1 py-3 text-slate-500 hover:text-slate-700 font-bold text-xs uppercase tracking-wider rounded-xl hover:bg-slate-100 transition-colors"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={confirmDelete}
+                                    className="flex-1 py-3 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-rose-500/20 active:scale-95 transition-all"
+                                >
+                                    Confirmar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
             {isGenerating && <EventPdfGenerator event={event} state={appState} />}
         </AnimatePresence>

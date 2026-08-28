@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Calendar as CalendarIcon, Clock, CalendarDays, Check, MessageSquareX, AlertCircle, Loader2 } from 'lucide-react';
 import { calendarService } from '../../services/calendarService';
+import { googleCalendarService } from '../../services/googleCalendarService';
 
 interface PendingInvitesModalProps {
     currentUserId: string;
@@ -21,6 +22,7 @@ export const PendingInvitesModal: React.FC<PendingInvitesModalProps> = ({ curren
 
     useEffect(() => {
         const fetchInvites = async () => {
+            setLoading(true);
             try {
                 const pending = await calendarService.fetchPendingInvites(currentUserId);
                 if (pending && pending.length > 0) {
@@ -36,17 +38,25 @@ export const PendingInvitesModal: React.FC<PendingInvitesModalProps> = ({ curren
         fetchInvites();
     }, [currentUserId]);
 
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
     const handleAccept = async (inviteId: string) => {
         setSubmittingId(inviteId);
+        setErrorMessage(null);
         try {
+            const targetInvite = invites.find(i => i.id === inviteId);
             const res = await calendarService.respondToInvite(inviteId, 'Aceito');
             if (res.success) {
+                if (targetInvite?.calendar_events) {
+                    await googleCalendarService.syncEventToGoogle(targetInvite.calendar_events);
+                }
                 removeInvite(inviteId);
             } else {
-                alert("Erro ao aceitar: " + res.error);
+                setErrorMessage("Erro ao aceitar: " + res.error);
             }
         } catch (e) {
             console.error(e);
+            setErrorMessage("Erro ao processar aceitação.");
         } finally {
             setSubmittingId(null);
         }
@@ -55,12 +65,14 @@ export const PendingInvitesModal: React.FC<PendingInvitesModalProps> = ({ curren
     const handleDeclineRequest = (inviteId: string) => {
         setDecliningInviteId(inviteId);
         setDeclineReason('');
+        setErrorMessage(null);
     };
 
     const confirmDecline = async () => {
         if (!decliningInviteId) return;
+        setErrorMessage(null);
         if (!declineReason.trim()) {
-            alert("A justificativa é obrigatória.");
+            setErrorMessage("A justificativa é obrigatória.");
             return;
         }
 
@@ -71,10 +83,11 @@ export const PendingInvitesModal: React.FC<PendingInvitesModalProps> = ({ curren
                 removeInvite(decliningInviteId);
                 setDecliningInviteId(null);
             } else {
-                alert("Erro ao recusar: " + res.error);
+                setErrorMessage("Erro ao recusar: " + res.error);
             }
         } catch (e) {
             console.error(e);
+            setErrorMessage("Erro ao processar recusa.");
         } finally {
             setSubmittingId(null);
         }
@@ -136,6 +149,13 @@ export const PendingInvitesModal: React.FC<PendingInvitesModalProps> = ({ curren
                             <X className="w-5 h-5" />
                         </button>
                     </div>
+
+                    {errorMessage && (
+                        <div className="mx-6 mt-3 p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-bold flex items-center justify-between animate-fade-in">
+                            <span>{errorMessage}</span>
+                            <button onClick={() => setErrorMessage(null)} className="text-rose-500 hover:text-rose-700 font-black">✕</button>
+                        </div>
+                    )}
 
                     {/* Content List */}
                     <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-4">

@@ -5240,6 +5240,7 @@ const App: React.FC = () => {
                   onBack={handleGoHome}
                   userRole={currentUser?.role || 'collaborator'}
                   currentUserId={currentUser?.id || ''}
+                  currentUser={currentUser}
                   appState={appState}
                 />
               ) : (

@@ -3,6 +3,7 @@ import { X, Calendar as CalendarIcon, Save, Trash2, Loader2, Users, CheckSquare,
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../../services/supabaseClient';
 import { calendarService, CalendarEventInvite, CalendarEvent } from '../../services/calendarService';
+import { googleCalendarService } from '../../services/googleCalendarService';
 import { getPersons } from '../../services/entityService';
 import { getLocalISOData } from '../../utils/dateUtils';
 import { Person } from '../../types';
@@ -35,6 +36,8 @@ export const EventModal: React.FC<Props> = ({
     const [isRecurring, setIsRecurring] = useState(false);
     const [loading, setLoading] = useState(false);
     const [deleting, setDeleting] = useState(false);
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
     const [isTypeDropdownOpen, setIsTypeDropdownOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -114,20 +117,21 @@ export const EventModal: React.FC<Props> = ({
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
+        setErrorMessage(null);
         if (!title.trim() || !startDate || !endDate) return;
 
         if (startDate > endDate) {
-            alert('A data de término não pode ser anterior à data de início.');
+            setErrorMessage('A data de término não pode ser anterior à data de início.');
             return;
         }
 
         if (!isAllDay) {
             if (!startTime || !endTime) {
-                alert('Informe os horários de início e término.');
+                setErrorMessage('Informe os horários de início e término.');
                 return;
             }
             if (startDate === endDate && startTime >= endTime) {
-                alert('O horário de término deve ser posterior ao horário de início.');
+                setErrorMessage('O horário de término deve ser posterior ao horário de início.');
                 return;
             }
         }
@@ -157,35 +161,43 @@ export const EventModal: React.FC<Props> = ({
             if (eventToEdit) {
                 // Update Basic Event
                 await calendarService.updateEvent(eventToEdit.id, payload);
-                // Note: Updating existing invites list deeply is omitted for simplicity in this phase
-                // unless instructed, usually creating events with invites is the core focus here.
+                if (eventToEdit.google_event_id) {
+                    await googleCalendarService.updateGoogleEvent(eventToEdit.google_event_id, { ...eventToEdit, ...payload } as CalendarEvent);
+                } else {
+                    await googleCalendarService.syncEventToGoogle({ id: eventToEdit.id, ...payload } as CalendarEvent);
+                }
                 onSaved();
             } else {
                 // Create new event with Invites
                 const result = await calendarService.createEventWithInvites(payload, invitesPayload);
                 if (!result.success) throw new Error(result.error);
+                if (result.id) {
+                    await googleCalendarService.syncEventToGoogle({ id: result.id, ...payload } as CalendarEvent);
+                }
                 onSaved();
             }
         } catch (err) {
             console.error('Error saving event:', err);
-            alert('Erro ao salvar o evento.');
+            setErrorMessage('Erro ao salvar o evento.');
         } finally {
             setLoading(false);
         }
     };
 
-    const handleDelete = async () => {
+    const confirmDelete = async () => {
         if (!eventToEdit) return;
-        if (!confirm('Tem certeza que deseja excluir este registro?')) return;
-
+        setIsConfirmDeleteOpen(false);
         setDeleting(true);
         try {
+            if (eventToEdit.google_event_id) {
+                await googleCalendarService.deleteGoogleEvent(eventToEdit.google_event_id);
+            }
             const success = await calendarService.deleteEvent(eventToEdit.id);
             if (!success) throw new Error('Delete failed');
             onSaved();
         } catch (err) {
             console.error('Error deleting event:', err);
-            alert('Erro ao excluir o evento.');
+            setErrorMessage('Erro ao excluir o evento.');
         } finally {
             setDeleting(false);
         }
@@ -246,19 +258,20 @@ export const EventModal: React.FC<Props> = ({
                             {/* Tabs */}
                             <div className="flex items-center gap-2 mt-4 bg-white/10 p-1 rounded-xl w-fit">
                                 <button
+                                    type="button"
                                     onClick={() => setActiveTab('details')}
-                                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${activeTab === 'details' ? 'bg-white text-rose-600 shadow-sm' : 'text-white hover:bg-white/10'}`}
+                                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${activeTab === 'details' ? 'bg-white text-rose-600 shadow' : 'text-white/80 hover:text-white'}`}
                                 >
                                     Detalhes
                                 </button>
                                 <button
+                                    type="button"
                                     onClick={() => setActiveTab('invites')}
-                                    className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${activeTab === 'invites' ? 'bg-white text-rose-600 shadow-sm' : 'text-white hover:bg-white/10'}`}
+                                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${activeTab === 'invites' ? 'bg-white text-rose-600 shadow' : 'text-white/80 hover:text-white'}`}
                                 >
-                                    <Users className="w-3.5 h-3.5" />
                                     Convidados
                                     {selectedInvites.length > 0 && (
-                                        <span className={`px-1.5 py-0.5 rounded-full text-[9px] ${activeTab === 'invites' ? 'bg-rose-100 text-rose-600' : 'bg-white/20'}`}>
+                                        <span className="w-4 h-4 rounded-full bg-rose-500 text-white text-[10px] flex items-center justify-center font-black">
                                             {selectedInvites.length}
                                         </span>
                                     )}
@@ -268,11 +281,19 @@ export const EventModal: React.FC<Props> = ({
 
                         <button
                             onClick={onClose}
-                            className="relative z-10 w-8 h-8 flex items-center justify-center rounded-full bg-black/10 text-white hover:bg-black/20 transition-colors"
+                            className="w-8 h-8 rounded-full bg-black/20 hover:bg-black/40 flex items-center justify-center text-white transition-colors relative z-10 shrink-0"
                         >
                             <X className="w-5 h-5" />
                         </button>
                     </div>
+
+                    {/* Banner de Erro Customizado */}
+                    {errorMessage && (
+                        <div className="mx-6 mt-4 p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-bold flex items-center justify-between animate-fade-in">
+                            <span>{errorMessage}</span>
+                            <button onClick={() => setErrorMessage(null)} className="text-rose-500 hover:text-rose-700 font-black">✕</button>
+                        </div>
+                    )}
 
                     {/* Form / Content */}
                     <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
@@ -562,9 +583,9 @@ export const EventModal: React.FC<Props> = ({
                         {eventToEdit ? (
                             <button
                                 type="button"
-                                onClick={handleDelete}
+                                onClick={() => setIsConfirmDeleteOpen(true)}
                                 disabled={deleting || loading}
-                                className="flex items-center gap-2 px-4 py-3 text-rose-500 hover:bg-rose-100 rounded-xl font-bold uppercase tracking-widest text-xs transition-colors"
+                                className="flex items-center gap-2 px-4 py-3 text-rose-500 hover:bg-rose-100 rounded-xl font-bold uppercase tracking-widest text-xs transition-colors cursor-pointer"
                             >
                                 {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                                 Excluir
@@ -575,15 +596,15 @@ export const EventModal: React.FC<Props> = ({
                             <button
                                 type="button"
                                 onClick={onClose}
-                                className="px-6 py-3 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl font-bold uppercase tracking-widest text-xs transition-colors"
+                                className="px-6 py-3 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl font-bold uppercase tracking-widest text-xs transition-colors cursor-pointer"
                             >
                                 Cancelar
                             </button>
                             <button
-                                type="button" // Change to type button and explicitly call form submit because the form might not wrap this
+                                type="button"
                                 onClick={(e) => handleSave(e)}
                                 disabled={loading || deleting}
-                                className="flex items-center gap-2 px-6 py-3 bg-rose-600 hover:bg-rose-700 text-white rounded-xl shadow-lg shadow-rose-500/30 hover:shadow-rose-600/40 font-bold uppercase tracking-widest text-xs transition-all active:scale-95 disabled:opacity-50"
+                                className="flex items-center gap-2 px-6 py-3 bg-rose-600 hover:bg-rose-700 text-white rounded-xl shadow-lg shadow-rose-500/30 hover:shadow-rose-600/40 font-bold uppercase tracking-widest text-xs transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
                             >
                                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                                 Salvar
@@ -591,6 +612,35 @@ export const EventModal: React.FC<Props> = ({
                         </div>
                     </div>
                 </motion.div>
+
+                {/* Modal de Confirmação Customizado (Substituindo confirm()) */}
+                {isConfirmDeleteOpen && (
+                    <div className="fixed inset-0 z-[2600] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-fade-in">
+                        <div className="bg-white rounded-[2rem] p-6 max-w-sm w-full space-y-4 shadow-2xl border border-slate-100 text-center">
+                            <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+                                <Trash2 className="w-6 h-6" />
+                            </div>
+                            <h3 className="text-base font-extrabold text-slate-800">Excluir Evento?</h3>
+                            <p className="text-xs text-slate-500">
+                                Tem certeza que deseja remover este compromisso? Esta ação não poderá ser desfeita.
+                            </p>
+                            <div className="flex items-center gap-3 pt-2">
+                                <button
+                                    onClick={() => setIsConfirmDeleteOpen(false)}
+                                    className="flex-1 py-3 text-slate-500 hover:text-slate-700 font-bold text-xs uppercase tracking-wider rounded-xl hover:bg-slate-100 transition-colors"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={confirmDelete}
+                                    className="flex-1 py-3 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-rose-500/20 active:scale-95 transition-all"
+                                >
+                                    Confirmar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         </AnimatePresence >
     );

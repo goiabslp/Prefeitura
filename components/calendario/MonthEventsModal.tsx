@@ -65,10 +65,15 @@ export const MonthEventsModal: React.FC<MonthEventsModalProps> = ({
         }
     };
 
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
     const handleDownloadPdf = async () => {
+        setErrorMessage(null);
+        setSuccessMessage(null);
         const count = selectedEventIds.size;
         if (count === 0) {
-            alert('Por favor, selecione ao menos um evento para exportar.');
+            setErrorMessage('Por favor, selecione ao menos um evento para exportar.');
             return;
         }
 
@@ -105,10 +110,10 @@ export const MonthEventsModal: React.FC<MonthEventsModalProps> = ({
             }
 
             pdf.save(`Eventos_${monthNames[currentMonth]}_${currentYear}.pdf`);
-            alert(`PDF gerado com sucesso contendo ${count} registros selecionados.`);
+            setSuccessMessage(`PDF gerado com sucesso contendo ${count} registros selecionados.`);
         } catch (error) {
             console.error('Erro ao gerar PDF:', error);
-            alert('Erro ao gerar PDF.');
+            setErrorMessage('Erro ao gerar PDF.');
         } finally {
             setIsGenerating(false);
         }
@@ -166,6 +171,20 @@ export const MonthEventsModal: React.FC<MonthEventsModalProps> = ({
                             <X className="w-6 h-6" />
                         </button>
                     </div>
+
+                    {errorMessage && (
+                        <div className="mx-8 mt-4 p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-bold flex items-center justify-between animate-fade-in">
+                            <span>{errorMessage}</span>
+                            <button onClick={() => setErrorMessage(null)} className="text-rose-500 hover:text-rose-700 font-black">✕</button>
+                        </div>
+                    )}
+
+                    {successMessage && (
+                        <div className="mx-8 mt-4 p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-700 text-xs font-bold flex items-center justify-between animate-fade-in">
+                            <span>{successMessage}</span>
+                            <button onClick={() => setSuccessMessage(null)} className="text-emerald-500 hover:text-emerald-700 font-black">✕</button>
+                        </div>
+                    )}
 
                     {/* Toolbar */}
                     <div className="px-8 py-4 bg-slate-50 border-b border-slate-100 flex flex-wrap items-center justify-between gap-4 shrink-0">

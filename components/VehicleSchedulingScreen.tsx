@@ -17,6 +17,7 @@ import { VehicleScheduleHistory } from './VehicleScheduleHistory';
 import { VehicleScheduleApprovals } from './VehicleScheduleApprovals';
 import { SelectionModal } from './SelectionModal';
 import { VehicleScheduleDashboard } from './VehicleScheduleDashboard';
+import { useSystemSettings } from '../contexts/SystemSettingsContext';
 
 interface VehicleSchedulingScreenProps {
   schedules: VehicleSchedule[];
@@ -180,6 +181,35 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
     );
     return isVehicleManager || isVehicleResponsible;
   }, [currentUserRole, currentUserPermissions, vehicles, currentUserPersonId]);
+
+  const { moduleStatus, mobileModuleStatus } = useSystemSettings();
+  const [isMobileViewport, setIsMobileViewport] = useState(typeof window !== 'undefined' ? window.innerWidth < 768 : false);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobileViewport(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const isModuleActive = (key: string) => {
+    if (isMobileViewport) {
+      return mobileModuleStatus[key] !== false;
+    }
+    return moduleStatus[key] !== false;
+  };
+
+  const isAgendarActive = isModuleActive('parent_agendamento_veiculo_agendar');
+  const isMeusActive = isModuleActive('parent_agendamento_veiculo_meus');
+  const isAprovacoesActive = isModuleActive('parent_agendamento_veiculo_aprovacoes');
+  const isDashboardActive = isModuleActive('parent_agendamento_veiculo_dashboard');
+
+  const hasCustomPerms = Array.isArray(currentUserPermissions) && currentUserPermissions.length > 0;
+  const isDefaultAdmin = currentUserRole === 'admin' && !hasCustomPerms;
+
+  const canAccessAgendar = (isDefaultAdmin || currentUserPermissions.includes('parent_agendamento_veiculo_agendar')) && isAgendarActive;
+  const canAccessMeus = (isDefaultAdmin || currentUserPermissions.includes('parent_agendamento_veiculo_meus')) && isMeusActive;
+  const canAccessAprovacoes = (isDefaultAdmin || currentUserPermissions.includes('parent_agendamento_veiculo_aprovacoes')) && isAprovacoesActive && canViewApprovals;
+  const canAccessDashboard = (isDefaultAdmin || currentUserPermissions.includes('parent_agendamento_veiculo_dashboard')) && isDashboardActive;
 
 
   useEffect(() => {
@@ -569,41 +599,45 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
             <div className="w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 max-w-7xl animate-in zoom-in duration-500 fill-mode-backwards p-2">
 
               {/* Card: Agendar Veículo */}
-              <button
-                onClick={() => handleSubViewChange('calendar')}
-                className="group relative w-full min-h-[140px] md:min-h-[180px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-indigo-500/30 hover:border-indigo-200 hover:from-white hover:to-indigo-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden"
-                style={{ animationDelay: '0ms' }}
-              >
-                <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
-                <div className="absolute bottom-0 left-0 w-24 h-24 bg-indigo-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
+              {canAccessAgendar && (
+                <button
+                  onClick={() => handleSubViewChange('calendar')}
+                  className="group relative w-full min-h-[140px] md:min-h-[180px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-indigo-500/30 hover:border-indigo-200 hover:from-white hover:to-indigo-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden"
+                  style={{ animationDelay: '0ms' }}
+                >
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
+                  <div className="absolute bottom-0 left-0 w-24 h-24 bg-indigo-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
 
-                <div className="w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center mb-3 text-white group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300 shadow-lg shadow-indigo-500/30 ring-4 ring-white">
-                  <Calendar className="w-6 h-6 md:w-7 md:h-7 drop-shadow-md" />
-                </div>
+                  <div className="w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center mb-3 text-white group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300 shadow-lg shadow-indigo-500/30 ring-4 ring-white">
+                    <Calendar className="w-6 h-6 md:w-7 md:h-7 drop-shadow-md" />
+                  </div>
 
-                <h3 className="text-lg md:text-2xl font-bold text-slate-800 mb-1 group-hover:text-slate-900 tracking-tight">Agendar Veículo</h3>
-                <p className="text-[10px] md:text-xs font-bold text-slate-400 group-hover:text-indigo-600 transition-colors uppercase tracking-widest">Solicitar nova viagem</p>
-              </button>
+                  <h3 className="text-lg md:text-2xl font-bold text-slate-800 mb-1 group-hover:text-slate-900 tracking-tight">Agendar Veículo</h3>
+                  <p className="text-[10px] md:text-xs font-bold text-slate-400 group-hover:text-indigo-600 transition-colors uppercase tracking-widest">Solicitar nova viagem</p>
+                </button>
+              )}
 
               {/* Card: Meus Agendamentos */}
-              <button
-                onClick={() => handleSubViewChange('history')}
-                className="group relative w-full min-h-[140px] md:min-h-[180px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-emerald-500/30 hover:border-emerald-200 hover:from-white hover:to-emerald-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden"
-                style={{ animationDelay: '100ms' }}
-              >
-                <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
-                <div className="absolute bottom-0 left-0 w-24 h-24 bg-emerald-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
+              {canAccessMeus && (
+                <button
+                  onClick={() => handleSubViewChange('history')}
+                  className="group relative w-full min-h-[140px] md:min-h-[180px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-emerald-500/30 hover:border-emerald-200 hover:from-white hover:to-emerald-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden"
+                  style={{ animationDelay: '100ms' }}
+                >
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
+                  <div className="absolute bottom-0 left-0 w-24 h-24 bg-emerald-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
 
-                <div className="w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center mb-3 text-white group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300 shadow-lg shadow-emerald-500/30 ring-4 ring-white">
-                  <History className="w-6 h-6 md:w-7 md:h-7 drop-shadow-md" />
-                </div>
+                  <div className="w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center mb-3 text-white group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300 shadow-lg shadow-emerald-500/30 ring-4 ring-white">
+                    <History className="w-6 h-6 md:w-7 md:h-7 drop-shadow-md" />
+                  </div>
 
-                <h3 className="text-lg md:text-2xl font-bold text-slate-800 mb-1 group-hover:text-slate-900 tracking-tight">Meus Agendamentos</h3>
-                <p className="text-[10px] md:text-xs font-bold text-slate-400 group-hover:text-emerald-600 transition-colors uppercase tracking-widest">Histórico e Status</p>
-              </button>
+                  <h3 className="text-lg md:text-2xl font-bold text-slate-800 mb-1 group-hover:text-slate-900 tracking-tight">Meus Agendamentos</h3>
+                  <p className="text-[10px] md:text-xs font-bold text-slate-400 group-hover:text-emerald-600 transition-colors uppercase tracking-widest">Histórico e Status</p>
+                </button>
+              )}
 
               {/* Card: Aprovações (Conditional) */}
-              {canViewApprovals && (
+              {canAccessAprovacoes && (
                 <button
                   onClick={() => handleSubViewChange('approvals')}
                   className="group relative w-full min-h-[140px] md:min-h-[180px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-amber-500/30 hover:border-amber-200 hover:from-white hover:to-amber-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden"
@@ -622,21 +656,31 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
               )}
 
               {/* Card: Dashboard Analítico */}
-              <button
-                onClick={() => handleSubViewChange('dashboard')}
-                className="group relative w-full min-h-[140px] md:min-h-[180px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-cyan-500/30 hover:border-cyan-200 hover:from-white hover:to-cyan-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden"
-                style={{ animationDelay: '300ms' }}
-              >
-                <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
-                <div className="absolute bottom-0 left-0 w-24 h-24 bg-cyan-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
+              {canAccessDashboard && (
+                <button
+                  onClick={() => handleSubViewChange('dashboard')}
+                  className="group relative w-full min-h-[140px] md:min-h-[180px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-cyan-500/30 hover:border-cyan-200 hover:from-white hover:to-cyan-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden"
+                  style={{ animationDelay: '300ms' }}
+                >
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
+                  <div className="absolute bottom-0 left-0 w-24 h-24 bg-cyan-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
 
-                <div className="w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-gradient-to-br from-cyan-500 to-cyan-600 flex items-center justify-center mb-3 text-white group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300 shadow-lg shadow-cyan-500/30 ring-4 ring-white">
-                  <Activity className="w-6 h-6 md:w-7 md:h-7 drop-shadow-md" />
+                  <div className="w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-gradient-to-br from-cyan-500 to-cyan-600 flex items-center justify-center mb-3 text-white group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300 shadow-lg shadow-cyan-500/30 ring-4 ring-white">
+                    <Activity className="w-6 h-6 md:w-7 md:h-7 drop-shadow-md" />
+                  </div>
+
+                  <h3 className="text-lg md:text-2xl font-bold text-slate-800 mb-1 group-hover:text-slate-900 tracking-tight">Dashboard Analítico</h3>
+                  <p className="text-[10px] md:text-xs font-bold text-slate-400 group-hover:text-cyan-600 transition-colors uppercase tracking-widest">Indicadores de Frota</p>
+                </button>
+              )}
+
+              {!canAccessAgendar && !canAccessMeus && !canAccessAprovacoes && !canAccessDashboard && (
+                <div className="col-span-full text-center p-8 bg-white border border-slate-200 rounded-[2rem] shadow-sm max-w-md mx-auto">
+                  <Car className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+                  <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Gestão de Veículos</h3>
+                  <p className="text-xs text-slate-500 mt-2">Nenhuma funcionalidade deste módulo está disponível para o seu perfil ou dispositivo.</p>
                 </div>
-
-                <h3 className="text-lg md:text-2xl font-bold text-slate-800 mb-1 group-hover:text-slate-900 tracking-tight">Dashboard Analítico</h3>
-                <p className="text-[10px] md:text-xs font-bold text-slate-400 group-hover:text-cyan-600 transition-colors uppercase tracking-widest">Indicadores de Frota</p>
-              </button>
+              )}
 
             </div>
           </div>
@@ -1165,9 +1209,23 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
   return (
     <div className="flex-1 flex flex-col overflow-hidden font-sans h-full bg-slate-50">
       {activeSubView === 'menu' && renderDashboard()}
-      {activeSubView === 'calendar' && renderCalendar()}
-      {activeSubView === 'day' && renderDayView()}
-      {activeSubView === 'history' && (
+      {activeSubView === 'calendar' && (canAccessAgendar ? renderCalendar() : (
+        <div className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-50 text-center">
+          <Lock className="w-12 h-12 text-slate-300 mb-4" />
+          <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Acesso Indisponível</h3>
+          <p className="text-xs text-slate-500 mt-2 mb-4">Você não possui permissão para agendar veículos ou este recurso está desabilitado.</p>
+          <button onClick={() => handleSubViewChange('menu')} className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold uppercase">Voltar ao Menu</button>
+        </div>
+      ))}
+      {activeSubView === 'day' && (canAccessAgendar ? renderDayView() : (
+        <div className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-50 text-center">
+          <Lock className="w-12 h-12 text-slate-300 mb-4" />
+          <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Acesso Indisponível</h3>
+          <p className="text-xs text-slate-500 mt-2 mb-4">Você não possui permissão para visualizar o dia ou este recurso está desabilitado.</p>
+          <button onClick={() => handleSubViewChange('menu')} className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold uppercase">Voltar ao Menu</button>
+        </div>
+      ))}
+      {activeSubView === 'history' && (canAccessMeus ? (
         <VehicleScheduleHistory
           schedules={schedules}
           vehicles={vehicles}
@@ -1184,8 +1242,15 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
           userRole={currentUserRole}
           currentUserSector={currentUserSector}
         />
-      )}
-      {activeSubView === 'approvals' && canViewApprovals && (
+      ) : (
+        <div className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-50 text-center">
+          <Lock className="w-12 h-12 text-slate-300 mb-4" />
+          <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Acesso Indisponível</h3>
+          <p className="text-xs text-slate-500 mt-2 mb-4">Você não possui permissão para visualizar Meus Agendamentos ou este recurso está desabilitado.</p>
+          <button onClick={() => handleSubViewChange('menu')} className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold uppercase">Voltar ao Menu</button>
+        </div>
+      ))}
+      {activeSubView === 'approvals' && (canAccessAprovacoes ? (
         <VehicleScheduleApprovals
           schedules={schedules}
           vehicles={vehicles}
@@ -1199,8 +1264,15 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
           currentUserRole={currentUserRole}
           state={state}
         />
-      )}
-{activeSubView === 'dashboard' && (
+      ) : (
+        <div className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-50 text-center">
+          <Lock className="w-12 h-12 text-slate-300 mb-4" />
+          <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Acesso Indisponível</h3>
+          <p className="text-xs text-slate-500 mt-2 mb-4">Você não possui permissão para aprovações ou este recurso está desabilitado.</p>
+          <button onClick={() => handleSubViewChange('menu')} className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold uppercase">Voltar ao Menu</button>
+        </div>
+      ))}
+      {activeSubView === 'dashboard' && (canAccessDashboard ? (
         <VehicleScheduleDashboard
           schedules={schedules}
           vehicles={vehicles}
@@ -1208,7 +1280,14 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
           sectors={sectors}
           onBack={() => handleSubViewChange('menu')}
         />
-      )}
+      ) : (
+        <div className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-50 text-center">
+          <Lock className="w-12 h-12 text-slate-300 mb-4" />
+          <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Acesso Indisponível</h3>
+          <p className="text-xs text-slate-500 mt-2 mb-4">Você não possui permissão para visualizar o Dashboard Analítico ou este recurso está desabilitado.</p>
+          <button onClick={() => handleSubViewChange('menu')} className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold uppercase">Voltar ao Menu</button>
+        </div>
+      ))}
 
       {isModalOpen && createPortal(
         <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center sm:p-4 bg-slate-900/80 backdrop-blur-xl animate-fade-in">

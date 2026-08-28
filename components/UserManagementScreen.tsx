@@ -5,8 +5,9 @@ import { User, UserRole, Signature, AppPermission, Job, Sector, Person } from '.
 import {
   Plus, Search, Edit2, Trash2, ShieldCheck, Users, Save, X, Key,
   PenTool, LayoutGrid, User as UserIcon, CheckCircle2, Gavel, ShoppingCart, Briefcase, Network,
-  Eye, EyeOff, RotateCcw, AlertTriangle, Clock, Lock, Copy, Check, Info, Trash, ToggleRight, ArrowLeft, RefreshCw, Megaphone, FlaskConical
+  Eye, EyeOff, RotateCcw, AlertTriangle, Clock, Lock, Copy, Check, Info, Trash, ToggleRight, ArrowLeft, RefreshCw, Megaphone, FlaskConical, Calendar
 } from 'lucide-react';
+import { googleCalendarService } from '../services/googleCalendarService';
 
 const generateStrongPassword = () => {
   const lower = "abcdefghijkmnopqrstuvwxyz";
@@ -92,6 +93,9 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
     isOpen: false, title: '', message: '', onConfirm: () => { }, type: 'info'
   });
   const [toast, setToast] = useState<{ show: boolean, message: string, type: 'success' | 'error' }>({ show: false, message: '', type: 'success' });
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [isGoogleConnectModalOpen, setIsGoogleConnectModalOpen] = useState(false);
+  const [connectGoogleEmail, setConnectGoogleEmail] = useState('');
 
   const isAdmin = currentUser.role === 'admin' || currentUser.realRole === 'admin';
 
@@ -142,9 +146,14 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
       // Garantindo que agendamento de veículo esteja sempre presente no carregamento
       const basePerms = user.permissions || [];
       const perms = basePerms;
+      const googleStatus = googleCalendarService.getStoredStatus(user);
 
       setFormData({
         ...user,
+        google_connected: googleStatus.isConnected,
+        google_email: googleStatus.googleEmail || user.google_email,
+        google_connected_at: googleStatus.connectedAt || user.google_connected_at,
+        last_google_sync_at: googleStatus.lastSyncAt || user.last_google_sync_at,
         allowedSignatureIds: user.allowedSignatureIds || [],
         permissions: perms,
         password: '' // Clear password to avoid validation error on existing users
@@ -212,6 +221,7 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
       const subPermsMap: Record<string, string[]> = {
         parent_farmacia: ['parent_farmacia_consultar', 'parent_farmacia_retirar', 'parent_farmacia_estoque', 'parent_farmacia_dashboard', 'parent_farmacia_pacientes', 'parent_farmacia_gestor'],
         parent_consultas: ['parent_consultas_novo_agendamento', 'parent_consultas_acompanhar', 'parent_consultas_dados', 'parent_consultas_pacientes', 'parent_consultas_gestor'],
+        parent_agendamento_veiculo: ['parent_agendamento_veiculo_agendar', 'parent_agendamento_veiculo_meus', 'parent_agendamento_veiculo_aprovacoes', 'parent_agendamento_veiculo_dashboard'],
         parent_abastecimento: ['parent_abastecimento_novo', 'parent_abastecimento_gestao', 'parent_abastecimento_dashboard'],
         parent_frotas: ['parent_frotas_dashboard', 'parent_frotas_leve', 'parent_frotas_pesado', 'parent_frotas_acessorio'],
         parent_compras: ['parent_compras_pedidos', 'parent_compras_itens', 'parent_compras_dados'],
@@ -232,6 +242,10 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
         parent_consultas_dados: 'parent_consultas',
         parent_consultas_pacientes: 'parent_consultas',
         parent_consultas_gestor: 'parent_consultas',
+        parent_agendamento_veiculo_agendar: 'parent_agendamento_veiculo',
+        parent_agendamento_veiculo_meus: 'parent_agendamento_veiculo',
+        parent_agendamento_veiculo_aprovacoes: 'parent_agendamento_veiculo',
+        parent_agendamento_veiculo_dashboard: 'parent_agendamento_veiculo',
         parent_abastecimento_novo: 'parent_abastecimento',
         parent_abastecimento_gestao: 'parent_abastecimento',
         parent_abastecimento_dashboard: 'parent_abastecimento',
@@ -1081,6 +1095,112 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                   </div>
                 </div>
 
+                {/* Seção: Integração com Google Agenda */}
+                <div className="border-t border-slate-100 pt-6">
+                  <div className="p-6 rounded-2xl bg-gradient-to-br from-slate-50 to-indigo-50/30 border border-slate-200/80 shadow-sm space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-3 rounded-xl bg-white border border-slate-200 text-indigo-600 shadow-sm">
+                          <Calendar className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <h4 className="font-extrabold text-slate-800 text-sm flex items-center gap-2">
+                            Integração com Google Agenda
+                            {formData.google_connected ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                Conectado
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-slate-100 text-slate-500 border border-slate-200">
+                                Não Conectado
+                              </span>
+                            )}
+                          </h4>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            Sincronize automaticamente os eventos do sistema com a conta pessoal do Google Agenda.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Botões de Ação */}
+                      <div className="flex items-center gap-2 shrink-0">
+                        {formData.google_connected ? (
+                          <>
+                            <button
+                              type="button"
+                              disabled={googleLoading}
+                              onClick={async () => {
+                                setGoogleLoading(true);
+                                const res = await googleCalendarService.syncAllUserEvents(formData as User);
+                                setGoogleLoading(false);
+                                setFormData(prev => ({ ...prev, last_google_sync_at: new Date().toISOString() }));
+                                showToast(`${res.syncedCount} evento(s) sincronizado(s) com o Google Agenda!`);
+                              }}
+                              className="px-3.5 py-2 bg-white hover:bg-slate-50 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer"
+                            >
+                              <RefreshCw className={`w-3.5 h-3.5 ${googleLoading ? 'animate-spin' : ''}`} />
+                              Sincronizar Agora
+                            </button>
+
+                            <button
+                              type="button"
+                              disabled={googleLoading}
+                              onClick={async () => {
+                                if (!formData.id) return;
+                                setGoogleLoading(true);
+                                await googleCalendarService.disconnectAccount(formData.id);
+                                setGoogleLoading(false);
+                                setFormData(prev => ({ ...prev, google_connected: false, google_email: undefined }));
+                                showToast('Conta Google Agenda desconectada.');
+                              }}
+                              className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                              Desconectar
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={googleLoading}
+                            onClick={() => {
+                              setConnectGoogleEmail(formData.email || (formData.username ? `${formData.username.toLowerCase()}@saojosedogoiabal.mg.gov.br` : ''));
+                              setIsGoogleConnectModalOpen(true);
+                            }}
+                            className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-extrabold flex items-center gap-2 shadow-md shadow-indigo-500/20 active:scale-95 transition-all cursor-pointer uppercase tracking-wider"
+                          >
+                            <Calendar className="w-4 h-4" />
+                            Conectar Google Agenda
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Detalhes de Conexão */}
+                    {formData.google_connected && (
+                      <div className="pt-3 border-t border-slate-200/60 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                        <div className="bg-white p-2.5 rounded-xl border border-slate-100">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase block">Conta Vinculada</span>
+                          <span className="font-bold text-slate-700 truncate block">{formData.google_email || 'Não informado'}</span>
+                        </div>
+                        <div className="bg-white p-2.5 rounded-xl border border-slate-100">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase block">Data de Conexão</span>
+                          <span className="font-bold text-slate-700 block">
+                            {formData.google_connected_at ? new Date(formData.google_connected_at).toLocaleDateString('pt-BR') : 'Hoje'}
+                          </span>
+                        </div>
+                        <div className="bg-white p-2.5 rounded-xl border border-slate-100">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase block">Última Sincronização</span>
+                          <span className="font-bold text-slate-700 block">
+                            {formData.last_google_sync_at ? new Date(formData.last_google_sync_at).toLocaleString('pt-BR') : 'Agora'}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 <div className="border-t border-slate-100 pt-8">
                   <label className={`${labelClass} mb-6 flex items-center gap-2 text-indigo-600 text-sm`}><LayoutGrid className="w-5 h-5" /> Módulos Autorizados</label>
 
@@ -1142,7 +1262,11 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                       {
                         title: 'Veículos & Frotas',
                         permissions: [
-                          { id: 'parent_agendamento_veiculo', label: 'Agendamento de Veículos' },
+                          { id: 'parent_agendamento_veiculo', label: 'Módulo: Agendamento de Veículos' },
+                          { id: 'parent_agendamento_veiculo_agendar', label: 'Agendar Veículo' },
+                          { id: 'parent_agendamento_veiculo_meus', label: 'Meus Agendamentos' },
+                          { id: 'parent_agendamento_veiculo_aprovacoes', label: 'Aprovações' },
+                          { id: 'parent_agendamento_veiculo_dashboard', label: 'Dashboard Analítico' },
                           { id: 'parent_frotas', label: 'Módulo: Frotas' },
                           { id: 'parent_frotas_dashboard', label: 'Dashboard Frotas' },
                           { id: 'parent_frotas_leve', label: 'Frota Leve' },
@@ -1311,6 +1435,98 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                     className="w-full py-4 bg-white text-slate-400 font-black text-xs uppercase tracking-[0.2em] rounded-2xl border border-slate-200 hover:bg-slate-50 hover:text-slate-600 transition-all"
                   >
                     Voltar / Cancelar
+                  </button>
+                </div>
+              </div>
+            </div>,
+            document.body
+          )
+        }
+
+        {/* MODAL CONECTAR GOOGLE AGENDA (SEM WINDOW.PROMPT) */}
+        {
+          isGoogleConnectModalOpen && createPortal(
+            <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-md animate-fade-in">
+              <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-md overflow-hidden border border-white/20 p-6 md:p-8 space-y-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-3 bg-indigo-50 border border-indigo-100 text-indigo-600 rounded-2xl">
+                      <Calendar className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-black text-slate-800 tracking-tight">Conectar Google Agenda</h3>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Autorização OAuth 2.0</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setIsGoogleConnectModalOpen(false)}
+                    className="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
+                      E-mail da Conta Google
+                    </label>
+                    <input
+                      type="email"
+                      value={connectGoogleEmail}
+                      onChange={(e) => setConnectGoogleEmail(e.target.value)}
+                      className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 font-medium text-sm text-slate-800"
+                      placeholder="seu.email@gmail.com"
+                    />
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-2 text-xs text-slate-500">
+                    <div className="flex items-center gap-2 font-extrabold text-slate-700">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                      Permissões Solicitadas:
+                    </div>
+                    <p className="text-[11px] leading-relaxed">
+                      • Leitura e escrita de eventos no Google Calendar (<span className="font-mono text-slate-600">calendar.events</span>).<br />
+                      • Eventos do sistema serão sincronizados com seu celular.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsGoogleConnectModalOpen(false)}
+                    className="flex-1 py-3 text-slate-500 hover:text-slate-700 font-extrabold text-xs uppercase tracking-wider rounded-xl hover:bg-slate-100 transition-all cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={googleLoading || !connectGoogleEmail.trim()}
+                    onClick={async () => {
+                      setGoogleLoading(true);
+                      const result = await googleCalendarService.connectAccount(formData as User, connectGoogleEmail);
+                      setGoogleLoading(false);
+                      setIsGoogleConnectModalOpen(false);
+
+                      if (result.success) {
+                        const now = new Date().toISOString();
+                        setFormData(prev => ({
+                          ...prev,
+                          google_connected: true,
+                          google_email: result.googleEmail,
+                          google_connected_at: now,
+                          last_google_sync_at: now
+                        }));
+                        showToast('Google Agenda conectado com sucesso!');
+                      } else if (result.error) {
+                        showToast(result.error, 'error');
+                      }
+                    }}
+                    className="flex-1 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-indigo-500/20 active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    {googleLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Calendar className="w-4 h-4" />}
+                    Autorizar e Conectar
                   </button>
                 </div>
               </div>
