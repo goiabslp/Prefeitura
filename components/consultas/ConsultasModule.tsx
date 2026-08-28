@@ -32,11 +32,13 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
     const isPacientesActive = moduleStatus['parent_consultas_pacientes'] !== false;
 
     const userPerms = currentUser?.permissions || [];
-    const isAdmin = currentUser?.role === 'admin';
-    const canAccessNovoAgendamento = (isAdmin || userPerms.includes('parent_consultas_novo_agendamento')) && isNovoAgendamentoActive;
-    const canAccessAcompanhar = (isAdmin || userPerms.includes('parent_consultas_acompanhar')) && isAcompanharActive;
-    const canAccessDados = (isAdmin || userPerms.includes('parent_consultas_dados')) && isDadosActive;
-    const canAccessPacientes = (isAdmin || userPerms.includes('parent_consultas_pacientes')) && isPacientesActive;
+    const hasCustomPerms = Array.isArray(currentUser?.permissions) && currentUser.permissions.length > 0;
+    const isDefaultAdmin = currentUser?.role === 'admin' && !hasCustomPerms;
+
+    const canAccessNovoAgendamento = (isDefaultAdmin || userPerms.includes('parent_consultas_novo_agendamento')) && isNovoAgendamentoActive;
+    const canAccessAcompanhar = (isDefaultAdmin || userPerms.includes('parent_consultas_acompanhar')) && isAcompanharActive;
+    const canAccessDados = (isDefaultAdmin || userPerms.includes('parent_consultas_dados')) && isDadosActive;
+    const canAccessPacientes = (isDefaultAdmin || userPerms.includes('parent_consultas_pacientes')) && isPacientesActive;
 
     const showNovoAgendamento = (subView === 'novo-agendamento' || (subView?.startsWith('novo-agendamento') ?? false) || subView === 'vagas-reservadas') && canAccessNovoAgendamento;
     const showAcompanhar = (subView === 'acompanhar' || subView === 'definir-agenda') && canAccessAcompanhar;

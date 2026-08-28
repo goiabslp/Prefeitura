@@ -201,12 +201,15 @@ export const FarmaciaModule: React.FC<FarmaciaModuleProps> = ({
     const isPacientesActive = moduleStatus['parent_farmacia_pacientes'] !== false;
 
     const userPerms = currentUser?.permissions || [];
-    const canAccessConsultar = (isAdmin || userPerms.includes('parent_farmacia_consultar')) && isConsultarActive;
-    const canAccessRetirar = (isAdmin || userPerms.includes('parent_farmacia_retirar')) && isRetirarActive;
-    const canAccessEstoque = (isAdmin || userPerms.includes('parent_farmacia_estoque')) && isEstoqueActive;
-    const canAccessHistorico = isAdmin || userPerms.includes('parent_farmacia');
-    const canAccessDados = (isAdmin || userPerms.includes('parent_farmacia_dashboard')) && isDashboardActive;
-    const canAccessPacientes = (isAdmin || userPerms.includes('parent_farmacia_pacientes')) && isPacientesActive;
+    const hasCustomPerms = Array.isArray(currentUser?.permissions) && currentUser.permissions.length > 0;
+    const isDefaultAdmin = currentUser?.role === 'admin' && !hasCustomPerms;
+
+    const canAccessConsultar = (isDefaultAdmin || userPerms.includes('parent_farmacia_consultar')) && isConsultarActive;
+    const canAccessRetirar = (isDefaultAdmin || userPerms.includes('parent_farmacia_retirar')) && isRetirarActive;
+    const canAccessEstoque = (isDefaultAdmin || userPerms.includes('parent_farmacia_estoque')) && isEstoqueActive;
+    const canAccessHistorico = isDefaultAdmin || userPerms.includes('parent_farmacia');
+    const canAccessDados = (isDefaultAdmin || userPerms.includes('parent_farmacia_dashboard')) && isDashboardActive;
+    const canAccessPacientes = (isDefaultAdmin || userPerms.includes('parent_farmacia_pacientes')) && isPacientesActive;
 
     const showConsultar = subView === 'consultar' && canAccessConsultar;
     const showRetirar = subView === 'retirar' && canAccessRetirar;
