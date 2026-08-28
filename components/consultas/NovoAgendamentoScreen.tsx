@@ -1144,7 +1144,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                         ) : (
                             /* BUSCAR OU CADASTRAR PACIENTE */
                             <div className="flex-1 flex flex-col min-h-0">
-                                <div className="flex items-center justify-between mb-5 shrink-0">
+                                <div className="flex items-center justify-between mb-2 shrink-0">
                                     <div>
                                         <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">Identificação</h4>
                                         <h3 className="text-base font-black text-slate-800 uppercase tracking-tight mt-0.5">Vincular Paciente</h3>
@@ -1229,34 +1229,37 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                 ) : (
                                     /* REGISTER PACIENTE */
                                     <form onSubmit={handleRegisterPatient} className="flex-1 flex flex-col min-h-0 justify-between">
-                                        <div className="space-y-5 overflow-y-auto flex-1 min-h-0 pr-1 custom-scrollbar">
+                                        <div className="flex-1 flex flex-col justify-center gap-2 min-h-0">
+                                            {/* Nome Completo */}
                                             <div>
-                                                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5 ml-1">Nome Completo</label>
+                                                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1 ml-1">Nome Completo</label>
                                                 <input
                                                     type="text"
-                                                    className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all text-xs font-semibold uppercase placeholder:text-slate-300 shadow-inner"
+                                                    className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-2.5 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all text-xs font-semibold uppercase placeholder:text-slate-300 shadow-inner"
                                                     placeholder="Ex: Maria das Graças Silva"
                                                     value={newPatientName}
                                                     onChange={(e) => setNewPatientName(e.target.value.toUpperCase())}
                                                     required
                                                 />
                                             </div>
+                                            {/* Apelido */}
                                             <div>
-                                                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5 ml-1">Apelido</label>
+                                                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1 ml-1">Apelido</label>
                                                 <input
                                                     type="text"
-                                                    className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all text-xs font-semibold uppercase placeholder:text-slate-300 shadow-inner"
+                                                    className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-2.5 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all text-xs font-semibold uppercase placeholder:text-slate-300 shadow-inner"
                                                     placeholder="Ex: Netinho"
                                                     value={newPatientNickname}
                                                     onChange={(e) => setNewPatientNickname(e.target.value.toUpperCase())}
                                                 />
                                             </div>
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                                            {/* CPF + Data de Nascimento */}
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                                 <div>
-                                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5 ml-1">CPF</label>
+                                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1 ml-1">CPF</label>
                                                     <input
                                                         type="text"
-                                                        className={`w-full rounded-xl border bg-slate-50/50 p-3.5 text-slate-900 focus:bg-white focus:outline-none focus:ring-4 outline-none transition-all text-xs font-bold tracking-wider shadow-inner ${
+                                                        className={`w-full rounded-xl border bg-slate-50/50 p-2.5 text-slate-900 focus:bg-white focus:outline-none focus:ring-4 outline-none transition-all text-xs font-bold tracking-wider shadow-inner ${
                                                             cpfError 
                                                             ? 'border-rose-300 focus:border-rose-500 focus:ring-rose-500/10' 
                                                             : 'border-slate-200 focus:border-sky-500 focus:ring-sky-500/10'
@@ -1266,57 +1269,59 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                                         onChange={(e) => handleCpfChange(e.target.value)}
                                                         required
                                                     />
-                                                    {cpfError && <span className="text-[9px] text-rose-500 font-extrabold ml-1 mt-1 block uppercase tracking-wider">{cpfError}</span>}
+                                                    {cpfError && <span className="text-[9px] text-rose-500 font-extrabold ml-1 mt-0.5 block uppercase tracking-wider">{cpfError}</span>}
                                                 </div>
                                                 <div>
-                                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5 ml-1">Data de Nascimento</label>
+                                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1 ml-1">Data de Nascimento</label>
                                                     <input
                                                         type="date"
-                                                        className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all text-xs font-bold shadow-inner"
+                                                        className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-2.5 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all text-xs font-bold shadow-inner"
                                                         value={newPatientBirthDate}
                                                         onChange={(e) => setNewPatientBirthDate(e.target.value)}
                                                         required
                                                     />
                                                 </div>
                                             </div>
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                                            {/* Telefone + Bairro */}
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                                 <div>
-                                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5 ml-1">Telefone</label>
+                                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1 ml-1">Telefone</label>
                                                     <input
                                                         type="text"
-                                                        className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all text-xs font-bold tracking-wider shadow-inner"
+                                                        className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-2.5 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all text-xs font-bold tracking-wider shadow-inner"
                                                         placeholder="(00) 00000-0000"
                                                         value={newPatientPhone}
                                                         onChange={(e) => handlePhoneChange(e.target.value)}
                                                     />
                                                 </div>
                                                 <div>
-                                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5 ml-1">Bairro</label>
+                                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1 ml-1">Bairro</label>
                                                     <input
                                                         type="text"
-                                                        className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all text-xs font-semibold uppercase placeholder:text-slate-300 shadow-inner"
+                                                        className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-2.5 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all text-xs font-semibold uppercase placeholder:text-slate-300 shadow-inner"
                                                         placeholder="Ex: Centro"
                                                         value={newPatientNeighborhood}
                                                         onChange={(e) => setNewPatientNeighborhood(e.target.value.toUpperCase())}
                                                     />
                                                 </div>
                                             </div>
-                                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-5">
+                                            {/* SUS + ACS + Rua + Cidade */}
+                                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                                                 <div>
-                                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5 ml-1">Número do SUS (Opcional)</label>
+                                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1 ml-1">Número do SUS (Opcional)</label>
                                                     <input
                                                         type="text"
-                                                        className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all text-xs font-bold tracking-wider shadow-inner"
+                                                        className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-2.5 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all text-xs font-bold tracking-wider shadow-inner"
                                                         placeholder="000 0000 0000 0000"
                                                         value={newPatientSusNumber}
                                                         onChange={(e) => setNewPatientSusNumber(e.target.value.replace(/\D/g, '').slice(0, 15))}
                                                     />
                                                 </div>
                                                 <div>
-                                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5 ml-1">Agente de Saúde (ACS)</label>
+                                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1 ml-1">Agente de Saúde (ACS)</label>
                                                     <div className="relative">
                                                         <select
-                                                            className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 pr-8 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all text-xs font-semibold uppercase cursor-pointer appearance-none shadow-inner"
+                                                            className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-2.5 pr-8 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all text-xs font-semibold uppercase cursor-pointer appearance-none shadow-inner"
                                                             value={newPatientAgenteSaude}
                                                             onChange={(e) => setNewPatientAgenteSaude(e.target.value)}
                                                         >
@@ -1331,20 +1336,20 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                                     </div>
                                                 </div>
                                                 <div>
-                                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5 ml-1">Rua</label>
+                                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1 ml-1">Rua</label>
                                                     <input
                                                         type="text"
-                                                        className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all text-xs font-semibold uppercase placeholder:text-slate-300 shadow-inner"
+                                                        className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-2.5 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all text-xs font-semibold uppercase placeholder:text-slate-300 shadow-inner"
                                                         placeholder="Ex: Rua Principal, 10"
                                                         value={newPatientStreet}
                                                         onChange={(e) => setNewPatientStreet(e.target.value.toUpperCase())}
                                                     />
                                                 </div>
                                                 <div>
-                                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5 ml-1">Cidade</label>
+                                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1 ml-1">Cidade</label>
                                                     <input
                                                         type="text"
-                                                        className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-3.5 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all text-xs font-semibold uppercase placeholder:text-slate-300 shadow-inner"
+                                                        className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-2.5 text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all text-xs font-semibold uppercase placeholder:text-slate-300 shadow-inner"
                                                         placeholder="Ex: São José do Goiabal - MG"
                                                         value={newPatientCity}
                                                         onChange={(e) => setNewPatientCity(e.target.value.toUpperCase())}
@@ -1353,11 +1358,11 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                                 </div>
                                             </div>
                                         </div>
-                                        <div className="mt-5 flex justify-end shrink-0">
+                                        <div className="pt-2 flex justify-end shrink-0">
                                             <button
                                                 type="submit"
                                                 disabled={loading}
-                                                className="px-8 py-3.5 bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-extrabold rounded-2xl shadow-lg shadow-sky-600/10 hover:shadow-sky-600/20 active:scale-95 transition-all text-xs uppercase tracking-widest flex items-center gap-2 cursor-pointer"
+                                                className="px-8 py-3 bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-extrabold rounded-2xl shadow-lg shadow-sky-600/10 hover:shadow-sky-600/20 active:scale-95 transition-all text-xs uppercase tracking-widest flex items-center gap-2 cursor-pointer"
                                             >
                                                 {loading && <Loader2 className="w-4 h-4 animate-spin" />}
                                                 Salvar & Avançar
