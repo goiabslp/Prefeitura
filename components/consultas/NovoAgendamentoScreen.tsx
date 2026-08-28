@@ -636,17 +636,34 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
         }
     };
 
-    // Filter procedures: pesquisa pelo valor digitado no início (startsWith), e não por "contém" (includes)
+    // Filtragem de procedimentos: pesquisa por início de qualquer palavra na descrição ou no código (case-insensitive & accent-insensitive)
     const normalizeStr = (str: string) => 
         str ? str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim() : '';
 
-    const cleanQuery = normalizeStr(procedureQuery);
-
     const filteredProcedures = procedures.filter(p => {
+        const cleanQuery = normalizeStr(procedureQuery);
         if (!cleanQuery) return true;
-        const normName = normalizeStr(p.name);
-        const normCode = p.code ? normalizeStr(p.code) : '';
-        return normName.startsWith(cleanQuery) || normCode.startsWith(cleanQuery);
+
+        // Separar a busca por termos/palavras
+        const queryTerms = cleanQuery.split(/\s+/).filter(Boolean);
+        if (queryTerms.length === 0) return true;
+
+        // Palavras da descrição do procedimento
+        const procNameWords = normalizeStr(p.name).split(/[^a-z0-9]+/).filter(Boolean);
+
+        // Código do procedimento normalizado
+        const rawCode = p.code ? normalizeStr(p.code) : '';
+        const cleanCode = p.code ? p.code.replace(/\D/g, '') : '';
+        const procCodeWords = rawCode ? rawCode.split(/[^a-z0-9]+/).filter(Boolean) : [];
+
+        // Cada termo digitado deve bater com o início de alguma palavra do nome ou do código
+        return queryTerms.every(term => {
+            const matchesName = procNameWords.some(word => word.startsWith(term));
+            const matchesCode = rawCode.startsWith(term) || 
+                                cleanCode.startsWith(term) || 
+                                procCodeWords.some(w => w.startsWith(term));
+            return matchesName || matchesCode;
+        });
     });
 
     // Helper functions and waitlist check defined at top
