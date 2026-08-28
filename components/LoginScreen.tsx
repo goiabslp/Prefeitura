@@ -11,9 +11,10 @@ interface LoginScreenProps {
   onLogin: (username: string, password: string) => Promise<{ error?: any; data?: any }>;
   uiConfig: UIConfig;
   onLoginSuccess?: () => void;
+  onNavigateView?: (view: string) => void;
 }
 
-export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, uiConfig, onLoginSuccess }) => {
+export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, uiConfig, onLoginSuccess, onNavigateView }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
@@ -293,8 +294,33 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, uiConfig, onL
             </button>
           </form>
 
-          <div className="mt-8 text-center">
+          <div className="mt-8 text-center space-y-2">
             <p className="text-[9px] text-slate-600 font-bold uppercase tracking-[0.3em]">Ambiente Seguro Certificado</p>
+            <div className="flex flex-wrap items-center justify-center gap-3 text-[11px] text-indigo-400 font-medium pt-1">
+              <a
+                href="/PoliticaPrivacidade"
+                onClick={(e) => {
+                  e.preventDefault();
+                  window.history.pushState({}, '', '/PoliticaPrivacidade');
+                  onNavigateView?.('politica-privacidade');
+                }}
+                className="hover:text-white transition-colors underline cursor-pointer"
+              >
+                Política de Privacidade
+              </a>
+              <span className="text-slate-700">•</span>
+              <a
+                href="/PoliticaPrivacidadeApp"
+                onClick={(e) => {
+                  e.preventDefault();
+                  window.history.pushState({}, '', '/PoliticaPrivacidadeApp');
+                  onNavigateView?.('politica-privacidade-app');
+                }}
+                className="hover:text-white transition-colors underline cursor-pointer"
+              >
+                Política de Privacidade do Aplicativo
+              </a>
+            </div>
           </div>
         </div>
       </div>

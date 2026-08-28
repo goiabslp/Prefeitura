@@ -117,6 +117,8 @@ import { LicitacaoKanban } from './components/licitacao/LicitacaoKanban';
 import { useLicitacaoProcesses, useUpdateLicitacaoProcess } from './hooks/useLicitacaoModule';
 import { remoteAccessService } from './services/remoteAccessService';
 import { startGlobalLocationTracking, stopGlobalLocationTracking } from './services/locationTrackingService';
+import { PoliticaPrivacidadeScreen } from './components/PoliticaPrivacidadeScreen';
+import { PoliticaPrivacidadeAppScreen } from './components/PoliticaPrivacidadeAppScreen';
 
 const VIEW_TO_PATH: Record<string, string> = {
   'login': '/Login',
@@ -221,7 +223,9 @@ const VIEW_TO_PATH: Record<string, string> = {
   'farmacia:dashboard-alto-custo': '/FarmaciaPopular/Dashboard/AltoCusto',
   'farmacia:dashboard-configuracao': '/FarmaciaPopular/Dashboard/Configuracao',
   'farmacia:gestor': '/FarmaciaPopular/Gestor',
-  'upload': '/Upload'
+  'upload': '/Upload',
+  'politica-privacidade': '/PoliticaPrivacidade',
+  'politica-privacidade-app': '/PoliticaPrivacidadeApp'
 };
 
 const PATH_TO_STATE: Record<string, any> = Object.fromEntries(
@@ -291,7 +295,7 @@ const mapLicitacaoProcessToOrder = (process: any): Order => {
 
 const App: React.FC = () => {
   // State controlling the active module view
-  const [currentView, setCurrentView] = useState<'login' | 'home' | 'admin' | 'tracking' | 'editor' | 'vehicle-scheduling' | 'abastecimento' | 'agricultura' | 'obras' | 'order-details' | 'tasks-dashboard' | 'purchase-inventory' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'diarias-novo-evento' | 'diarias-lancamentos' | 'diarias-gestores' | 'diarias-viajar' | 'diarias-adiantamento' | 'diarias-adiantamento-servidor' | 'diarias-adiantamento-viagem' | 'diarias-adiantamento-valores' | 'diarias-adiantamento-bancario' | 'diarias-adiantamento-justificativa' | 'licitacao' | 'licitacao:new' | 'licitacao:view' | 'licitacao:details' | 'licitacao:kanban' | 'licitacao:kanban-view' | 'licitacao-all' | 'licitacao-screening' | 'consultas' | 'farmacia' | 'upload'>(() => {
+  const [currentView, setCurrentView] = useState<'login' | 'home' | 'admin' | 'tracking' | 'editor' | 'vehicle-scheduling' | 'abastecimento' | 'agricultura' | 'obras' | 'order-details' | 'tasks-dashboard' | 'purchase-inventory' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'diarias-novo-evento' | 'diarias-lancamentos' | 'diarias-gestores' | 'diarias-viajar' | 'diarias-adiantamento' | 'diarias-adiantamento-servidor' | 'diarias-adiantamento-viagem' | 'diarias-adiantamento-valores' | 'diarias-adiantamento-bancario' | 'diarias-adiantamento-justificativa' | 'licitacao' | 'licitacao:new' | 'licitacao:view' | 'licitacao:details' | 'licitacao:kanban' | 'licitacao:kanban-view' | 'licitacao-all' | 'licitacao-screening' | 'consultas' | 'farmacia' | 'upload' | 'politica-privacidade' | 'politica-privacidade-app'>(() => {
     if (typeof window !== 'undefined') {
       let rawPath = window.location.pathname;
       try { rawPath = decodeURIComponent(rawPath); } catch (e) {}
@@ -3870,7 +3874,24 @@ const App: React.FC = () => {
     );
   }
 
-  if (currentView === 'login') return <LoginScreen onLogin={handleLogin} uiConfig={appState.ui} onLoginSuccess={() => { setIsLoginTransitioning(false); setCurrentView('home'); }} />;
+  if (currentView === 'politica-privacidade') {
+    return <PoliticaPrivacidadeScreen onBack={() => setCurrentView(currentUser ? 'home' : 'login')} />;
+  }
+
+  if (currentView === 'politica-privacidade-app') {
+    return <PoliticaPrivacidadeAppScreen onBack={() => setCurrentView(currentUser ? 'home' : 'login')} />;
+  }
+
+  if (currentView === 'login') {
+    return (
+      <LoginScreen
+        onLogin={handleLogin}
+        uiConfig={appState.ui}
+        onLoginSuccess={() => { setIsLoginTransitioning(false); setCurrentView('home'); }}
+        onNavigateView={(view) => setCurrentView(view as any)}
+      />
+    );
+  }
 
   if (currentUser && (currentUser.mustChangePassword || (currentUser.tempPassword && currentUser.tempPassword.trim() !== ''))) {
     return (
@@ -5506,6 +5527,38 @@ const App: React.FC = () => {
             Encerrar
           </button>
         </div>
+      )}
+
+      {/* Footer Global com Links das Políticas de Privacidade */}
+      {currentUser && (
+        <footer className="w-full bg-slate-900/90 text-slate-400 py-3 px-4 border-t border-slate-800 text-[11px] flex flex-col sm:flex-row items-center justify-between gap-2 z-10 print:hidden">
+          <p>© 2026 Prefeitura Municipal de São José do Goiabal - MG. Todos os direitos reservados.</p>
+          <div className="flex items-center gap-3">
+            <a
+              href="/PoliticaPrivacidade"
+              onClick={(e) => {
+                e.preventDefault();
+                window.history.pushState({}, '', '/PoliticaPrivacidade');
+                setCurrentView('politica-privacidade');
+              }}
+              className="text-slate-400 hover:text-white transition-colors underline cursor-pointer"
+            >
+              Política de Privacidade
+            </a>
+            <span className="text-slate-700">•</span>
+            <a
+              href="/PoliticaPrivacidadeApp"
+              onClick={(e) => {
+                e.preventDefault();
+                window.history.pushState({}, '', '/PoliticaPrivacidadeApp');
+                setCurrentView('politica-privacidade-app');
+              }}
+              className="text-slate-400 hover:text-white transition-colors underline cursor-pointer"
+            >
+              Política do Aplicativo
+            </a>
+          </div>
+        </footer>
       )}
     </NotificationProvider >
   );
