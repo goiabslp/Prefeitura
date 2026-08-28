@@ -125,17 +125,34 @@ export const updatePaciente = async (id: string, updates: Partial<ConsultaPacien
             .select()
             .single();
 
-        // Se as colunas novas ainda não existirem na tabela Supabase (erro PGRST204), tenta atualizar sem esses campos
-        if (error && error.code === 'PGRST204' && (error.message?.includes('agente_saude') || error.message?.includes('sus_number') || error.message?.includes('column'))) {
-            const { agente_saude, sus_number, ...updatesWithoutNewCols } = cleanUpdates;
-            const retryRes = await supabase
-                .from('consultas_pacientes')
-                .update(updatesWithoutNewCols)
-                .eq('id', id)
-                .select()
-                .single();
-            data = retryRes.data;
-            error = retryRes.error;
+        // Fallback progressivo: se alguma coluna não existir na tabela Supabase
+        if (error && (error.code === 'PGRST204' || error.message?.includes('column') || error.message?.includes('schema cache'))) {
+            console.warn('[consultasService] Coluna(s) ausente(s) no Supabase (update). Tentando fallback progressivo...', error.message);
+
+            const optionalCols = ['agente_saude', 'sus_number', 'phone'];
+            let fallbackUpdates = { ...cleanUpdates };
+            let lastError = error;
+
+            for (const col of optionalCols) {
+                if (lastError && (lastError.code === 'PGRST204' || lastError.message?.includes('column') || lastError.message?.includes('schema cache'))) {
+                    console.warn(`[consultasService] Removendo coluna '${col}' do payload de update e tentando novamente...`);
+                    delete fallbackUpdates[col];
+
+                    const retryRes = await supabase
+                        .from('consultas_pacientes')
+                        .update(fallbackUpdates)
+                        .eq('id', id)
+                        .select()
+                        .single();
+
+                    data = retryRes.data;
+                    lastError = retryRes.error;
+
+                    if (!lastError) break;
+                }
+            }
+
+            error = lastError;
         }
 
         if (error) throw error;
