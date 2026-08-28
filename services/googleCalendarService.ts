@@ -10,7 +10,7 @@ export interface GoogleCalendarConnectionStatus {
   accessToken?: string;
 }
 
-const DEFAULT_GOOGLE_CLIENT_ID = "537818796115-n9r3d8gahke9qdjgv8s6n1idv3gp28m9.apps.googleusercontent.com";
+const DEFAULT_GOOGLE_CLIENT_ID = "123564932214-r1ju938f1h8s3gts5f47f7n0st6h9uom.apps.googleusercontent.com";
 
 export const googleCalendarService = {
   /**
