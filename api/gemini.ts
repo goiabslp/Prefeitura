@@ -130,6 +130,35 @@ export default async function handler(req: Request) {
         - NÃO use formatação Markdown complexa (como **negrito** ou # headers). Use apenas quebras de linha para separar parágrafos.
         - Crie um Título Profissional e conciso para este documento baseado no contexto.
       `;
+    } else if (tipo === 'materia_jornal') {
+      promptText = `
+        Você é o Chefe de Redação e Assessor de Imprensa Oficial da Prefeitura Municipal de São José do Goiabal - Minas Gerais.
+        
+        TAREFA:
+        Escreva uma matéria jornalística institucional vibrante, positiva, profissional e de alto impacto para o Jornal da Prefeitura sobre o seguinte compromisso/evento municipal.
+        
+        DADOS DO EVENTO:
+        - Título do Registro: ${dados.titulo}
+        - Tipo de Evento: ${dados.tipoEvento || 'Compromisso Municipal'}
+        - Setor / Secretaria Responsável: ${dados.setor || 'Gabinete / Administração Geral'}
+        - Data Inicial: ${dados.dataInicio}
+        - Data Final: ${dados.dataFim || dados.dataInicio}
+        - Horário: ${dados.horaInicio ? `${dados.horaInicio} às ${dados.horaFim || ''}` : 'Horário Comercial / Dia Inteiro'}
+        - Descrição / Pauta / Contexto:
+        """
+        ${dados.descricao || 'Ação da administração municipal em prol do desenvolvimento, bem-estar e atendimento à população de São José do Goiabal.'}
+        """
+        
+        DIRETRIZES DA REDAÇÃO:
+        1. A matéria deve exaltar o compromisso público, o trabalho sério da administração municipal, a transparência e os benefícios reais para a população de São José do Goiabal.
+        2. Crie uma MANCHETE marcante, impactante e profissional no estilo de grande jornal.
+        3. Crie um SUBTÍTULO (Lead) que resuma com clareza o objetivo da iniciativa e instigue a leitura.
+        4. O CORPO DA MATÉRIA deve possuir de 2 a 3 parágrafos bem articulados, informativos e fluidos.
+        5. LIMITE DE TAMANHO DO TEXTO: O texto completo do corpo da matéria (campo 'corpo') deve ter NO MÁXIMO 1185 caracteres (ideal entre 800 e 1185 caracteres). Seja completo e rico em detalhes, mas NUNCA ultrapasse o limite estrito de 1185 caracteres.
+        6. Crie uma FRASE DE DESTAQUE inspiradora (aspas institucionais).
+        7. Defina a CATEGORIA considerando o Setor informado (ex: 'SAÚDE PÚBLICA', 'EDUCAÇÃO & ENSINO', 'OBRAS & INFRAESTRUTURA', 'MEIO AMBIENTE', 'GOVERNO & GESTÃO', 'EVENTOS & COMUNIDADE').
+        8. Destaque a atuação e o compromisso do setor "${dados.setor || 'Administração Municipal'}" ao longo de toda a matéria.
+      `;
     } else {
       return new Response(JSON.stringify({ error: 'Tipo de requisição inválido.' }), {
         status: 400,
@@ -158,6 +187,40 @@ export default async function handler(req: Request) {
               },
             },
             required: ['title', 'body'],
+          },
+        }
+      });
+    } else if (tipo === 'materia_jornal') {
+      response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: promptText,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              manchete: {
+                type: Type.STRING,
+                description: 'Manchete principal chamativa e jornalística em estilo de jornal oficial.',
+              },
+              subtitulo: {
+                type: Type.STRING,
+                description: 'Subtítulo / Lead explicativo, engajador e positivo.',
+              },
+              corpo: {
+                type: Type.STRING,
+                description: 'Corpo completo da matéria jornalística em 2 a 3 parágrafos, informativo e bem estruturado, com no máximo 1185 caracteres.',
+              },
+              categoria: {
+                type: Type.STRING,
+                description: 'Categoria temática da notícia em letras maiúsculas.',
+              },
+              destaqueFrase: {
+                type: Type.STRING,
+                description: 'Frase de impacto ou aspas institucionais inspiradoras.',
+              },
+            },
+            required: ['manchete', 'subtitulo', 'corpo', 'categoria', 'destaqueFrase'],
           },
         }
       });

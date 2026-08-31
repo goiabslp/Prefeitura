@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FilePlus, Package, History, FileText, ArrowRight, ArrowLeft, ShoppingCart, Gavel, Wallet, Inbox, CalendarRange, FileSearch, Droplet, Fuel, BarChart3, TrendingUp, LogOut, Sprout, HardHat, Activity, Car, ChevronDown, CalendarDays, Users, LayoutGrid, Megaphone, Database, Pill, Timer, Upload, Banknote } from 'lucide-react';
+import { FilePlus, Package, History, FileText, ArrowRight, ArrowLeft, ShoppingCart, Gavel, Wallet, Inbox, CalendarRange, FileSearch, Droplet, Fuel, BarChart3, TrendingUp, LogOut, Sprout, HardHat, Activity, Car, ChevronDown, CalendarDays, Users, LayoutGrid, Megaphone, Database, Pill, Timer, Upload, Banknote, Newspaper, Sparkles, Star } from 'lucide-react';
 import { UserRole, UIConfig, AppPermission, BlockType, DiariaEvento } from '../types';
 import { TasksDashboard } from './dashboard/TasksDashboard';
 import { QuickTaskCreation } from './dashboard/QuickTaskCreation';
@@ -25,6 +25,7 @@ interface HomeScreenProps {
     onMarketing?: () => void;
     onConsultas?: () => void;
     onFarmacia?: () => void;
+    onNoticias?: () => void;
     onViewTasksDashboard?: () => void;
     userRole: UserRole;
     userName: string;
@@ -70,6 +71,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     onMarketing,
     onConsultas,
     onFarmacia,
+    onNoticias,
     onLogout,
     onViewTasksDashboard,
     orders = [], // Receive orders for Tasks Dashboard
@@ -192,13 +194,20 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         description: string,
         delay: string = '0ms',
         hideOnMobile: boolean = false,
-        badgeCount: number = 0
+        badgeCount: number = 0,
+        isNewBadge: boolean = false
     ) => (
         <button
             onClick={onClick}
-            className={`${getCardClass(color, hideOnMobile)} animate-in fade-in zoom-in duration-500 fill-mode-backwards`}
+            className={`${getCardClass(color, hideOnMobile)} animate-in fade-in zoom-in duration-500 fill-mode-backwards relative`}
             style={{ animationDelay: delay }}
         >
+            {isNewBadge && (
+                <div className="absolute top-2.5 right-2.5 z-20 px-2 py-0.5 rounded-full bg-gradient-to-r from-indigo-600 to-violet-600 text-white text-[9px] font-black uppercase tracking-wider shadow-sm flex items-center gap-0.5 animate-pulse">
+                    <Sparkles className="w-2.5 h-2.5" />
+                    <span>Novo</span>
+                </div>
+            )}
             <div className={`absolute top-0 right-0 w-32 h-32 bg-${color}-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150`}></div>
             <div className={`absolute bottom-0 left-0 w-24 h-24 bg-${color}-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100`}></div>
 
@@ -558,6 +567,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                                 {canAccessMarketing && renderModuleButton(() => onMarketing?.(), 'teal', Megaphone, 'Marketing', 'Criativo', '248ms', false, getPendingCount('marketing'))}
                                 {canAccessConsultas && renderModuleButton(() => onConsultas?.(), 'sky', Activity, 'Consultas', 'Regulação e exames', '249ms', false, getPendingCount('consultas'))}
                                 {canAccessFarmacia && renderModuleButton(() => onFarmacia?.(), 'pink', Pill, 'Farmácia Popular', 'Medicamentos', '252ms', false, getPendingCount('farmacia'))}
+                                {renderModuleButton(() => onNoticias?.(), 'indigo', Newspaper, 'Notícias', 'Boletim & métricas', '255ms', false, 0, true)}
 
                                 {canAccessScheduling && renderModuleButton(() => { setActiveBlock('agendamento'); onVehicleScheduling?.(); }, 'violet', CalendarRange, 'Veículos', 'Agendamento', '250ms', false, getPendingCount('agendamento'))}
                                 {canAccessAbastecimento && renderModuleButton(() => setActiveBlock('abastecimento'), 'cyan', Droplet, 'Abastecimento', 'Combustível', '300ms', false, getPendingCount('abastecimento'))}

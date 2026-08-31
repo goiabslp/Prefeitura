@@ -648,4 +648,88 @@ export interface OperationCode {
   created_at?: string;
 }
 
+// --- BOLETIM DE MÉTRICAS E NOTÍCIAS ---
+
+export interface BoletimFarmaciaMetricas {
+  totalAtendimentos: number;
+  totalMedicamentosDispensados: number;
+  totalPacientesAtendidos: number;
+  totalItensEstoqueAtivos: number;
+  topMedicamentos: { nome: string; quantidade: number }[];
+  comparativoSemanaAnterior?: {
+    atendimentosDiffPerc: number;
+    dispensacoesDiffPerc: number;
+  };
+}
+
+export interface BoletimConsultasMetricas {
+  totalAgendamentos: number;
+  totalPacientesAtendidos: number;
+  totalRealizados: number;
+  totalAgendados: number;
+  totalFilaEspera: number;
+  taxaAtendimento: number;
+  topProcedimentos: { nome: string; quantidade: number; tipo: string }[];
+  comparativoSemanaAnterior?: {
+    agendamentosDiffPerc: number;
+    pacientesDiffPerc: number;
+  };
+}
+
+export interface BoletimVeiculosMetricas {
+  totalSolicitacoes: number;
+  totalViagensRealizadas: number;
+  totalPassageiros: number;
+  veiculosUtilizados: number;
+  veiculosFrotaAtivos: number;
+  topDestinos: { destino: string; viagens: number }[];
+  topSecretarias: { secretaria: string; viagens: number }[];
+  comparativoSemanaAnterior?: {
+    viagensDiffPerc: number;
+    passageirosDiffPerc: number;
+  };
+}
+
+export interface BoletimMetricas {
+  id: string;
+  tipo: 'Semanal' | 'Mensal';
+  titulo: string;
+  subtitulo: string;
+  descricao: string;
+  numeroSemana?: number;
+  mes: number; // 1-12
+  ano: number;
+  dataInicio: string; // YYYY-MM-DD
+  dataFim: string; // YYYY-MM-DD
+  dataGeracao: string; // ISO string
+  isMensalConsolidado: boolean;
+  farmacia: BoletimFarmaciaMetricas;
+  consultas: BoletimConsultasMetricas;
+  veiculos: BoletimVeiculosMetricas;
+}
+
+export interface JornalMateria {
+  id: string;
+  titulo: string; // Manchete gerada pela IA
+  subtitulo: string; // Lead / subtítulo
+  conteudo: string; // Corpo completo da matéria
+  categoria: string; // ex: 'GOVERNO & GESTÃO', 'SAÚDE PÚBLICA', 'EVENTOS & CULTURA', etc.
+  dataPublicacao: string; // ISO string ou formatada
+  dataEvento?: string; // Data do compromisso
+  horaEvento?: string; // Horário
+  imagemUrl?: string; // Imagem inserida no calendário / upload
+  autor: string; // "Assessoria de Comunicação & Imprensa"
+  destaqueFrase?: string; // Frase de impacto / aspas
+  eventoId?: string; // ID do evento no calendário
+  tipoEvento?: string; // 'Pessoal', 'Reunião', 'Evento', etc.
+  setor?: string; // Setor / Secretaria Municipal responsável
+  oculta?: boolean; // Se true, visível apenas para administradores
+  destaque?: boolean; // Se true, postagem / matéria em destaque principal
+  aprovada?: boolean; // Se false, matéria do calendário aguarda aprovação de admin
+  status?: 'pendente' | 'aprovada' | 'publicada';
+  visualizacoes?: number;
+  curtidas?: number;
+}
+
 declare const __LATEST_COMMIT__: string;
+

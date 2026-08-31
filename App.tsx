@@ -102,6 +102,7 @@ import { ProjetosModule } from './components/projetos/ProjetosModule';
 import { MarketingModule } from './components/marketing/MarketingModule';
 import { ConsultasModule } from './components/consultas/ConsultasModule';
 import { FarmaciaModule } from './components/farmacia/FarmaciaModule';
+import { NoticiasModule } from './components/noticias/NoticiasModule';
 import { UploadHub } from './components/upload/UploadHub';
 import { SystemUpdateScreen } from './components/SystemUpdateScreen';
 import { NovoEventoScreen } from './components/diarias/NovoEventoScreen';
@@ -223,6 +224,10 @@ const VIEW_TO_PATH: Record<string, string> = {
   'farmacia:dashboard-alto-custo': '/FarmaciaPopular/Dashboard/AltoCusto',
   'farmacia:dashboard-configuracao': '/FarmaciaPopular/Dashboard/Configuracao',
   'farmacia:gestor': '/FarmaciaPopular/Gestor',
+  'noticias': '/Noticias',
+  'noticias:tour': '/Noticias/Tour',
+  'noticias:boletim-semanal': '/Noticias/BoletimSemanal',
+  'noticias:boletim-mensal': '/Noticias/BoletimMensal',
   'upload': '/Upload',
   'politica-privacidade': '/PoliticaPrivacidade',
   'politica-privacidade-app': '/PoliticaPrivacidadeApp'
@@ -295,7 +300,7 @@ const mapLicitacaoProcessToOrder = (process: any): Order => {
 
 const App: React.FC = () => {
   // State controlling the active module view
-  const [currentView, setCurrentView] = useState<'login' | 'home' | 'admin' | 'tracking' | 'editor' | 'vehicle-scheduling' | 'abastecimento' | 'agricultura' | 'obras' | 'order-details' | 'tasks-dashboard' | 'purchase-inventory' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'diarias-novo-evento' | 'diarias-lancamentos' | 'diarias-gestores' | 'diarias-viajar' | 'diarias-adiantamento' | 'diarias-adiantamento-servidor' | 'diarias-adiantamento-viagem' | 'diarias-adiantamento-valores' | 'diarias-adiantamento-bancario' | 'diarias-adiantamento-justificativa' | 'licitacao' | 'licitacao:new' | 'licitacao:view' | 'licitacao:details' | 'licitacao:kanban' | 'licitacao:kanban-view' | 'licitacao-all' | 'licitacao-screening' | 'consultas' | 'farmacia' | 'upload' | 'politica-privacidade' | 'politica-privacidade-app'>(() => {
+  const [currentView, setCurrentView] = useState<'login' | 'home' | 'admin' | 'tracking' | 'editor' | 'vehicle-scheduling' | 'abastecimento' | 'agricultura' | 'obras' | 'order-details' | 'tasks-dashboard' | 'purchase-inventory' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'diarias-novo-evento' | 'diarias-lancamentos' | 'diarias-gestores' | 'diarias-viajar' | 'diarias-adiantamento' | 'diarias-adiantamento-servidor' | 'diarias-adiantamento-viagem' | 'diarias-adiantamento-valores' | 'diarias-adiantamento-bancario' | 'diarias-adiantamento-justificativa' | 'licitacao' | 'licitacao:new' | 'licitacao:view' | 'licitacao:details' | 'licitacao:kanban' | 'licitacao:kanban-view' | 'licitacao-all' | 'licitacao-screening' | 'consultas' | 'farmacia' | 'noticias' | 'upload' | 'politica-privacidade' | 'politica-privacidade-app'>(() => {
     if (typeof window !== 'undefined') {
       let rawPath = window.location.pathname;
       try { rawPath = decodeURIComponent(rawPath); } catch (e) {}
@@ -4388,6 +4393,11 @@ const App: React.FC = () => {
                   setCurrentView('farmacia');
                   window.history.pushState({}, '', VIEW_TO_PATH['farmacia']);
                 }}
+                onNoticias={() => {
+                  setCurrentView('noticias');
+                  setAppState(prev => ({ ...prev, view: undefined }));
+                  window.history.pushState({}, '', VIEW_TO_PATH['noticias']);
+                }}
                 activeBlock={activeBlock}
                 setActiveBlock={(block) => {
                   if (block === 'licitacao') {
@@ -5041,6 +5051,41 @@ const App: React.FC = () => {
                   }
                 }}
                 onLogout={signOut}
+                appState={appState}
+              />
+            )}
+
+            {currentView === 'noticias' && (
+              <NoticiasModule
+                currentUser={currentUser}
+                subView={appState.view}
+                onBack={() => {
+                  setCurrentView('home');
+                  setActiveBlock(null);
+                  window.history.pushState({}, '', '/PaginaInicial');
+                }}
+                onNavigate={(view) => {
+                  if (view === 'home') {
+                    setCurrentView('home');
+                    setActiveBlock(null);
+                    window.history.pushState({}, '', '/PaginaInicial');
+                  } else if (view === 'calendario') {
+                    setCurrentView('calendario');
+                    window.history.pushState({}, '', '/Calendario');
+                  } else if (view === 'noticias:tour') {
+                    setAppState(prev => ({ ...prev, view: 'tour' }));
+                    window.history.pushState({}, '', '/Noticias/Tour');
+                  } else if (view === 'noticias:boletim-semanal') {
+                    setAppState(prev => ({ ...prev, view: 'boletim-semanal' }));
+                    window.history.pushState({}, '', '/Noticias/BoletimSemanal');
+                  } else if (view === 'noticias:boletim-mensal') {
+                    setAppState(prev => ({ ...prev, view: 'boletim-mensal' }));
+                    window.history.pushState({}, '', '/Noticias/BoletimMensal');
+                  } else if (view === 'noticias') {
+                    setAppState(prev => ({ ...prev, view: undefined }));
+                    window.history.pushState({}, '', '/Noticias');
+                  }
+                }}
                 appState={appState}
               />
             )}

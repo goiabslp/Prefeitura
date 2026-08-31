@@ -69,3 +69,80 @@ export const polishMotivoWithAI = async (rawSpeechText: string): Promise<string>
     return rawSpeechText;
   }
 };
+
+export interface GeneratedMateriaJornal {
+  manchete: string;
+  subtitulo: string;
+  corpo: string;
+  categoria: string;
+  destaqueFrase: string;
+}
+
+export const generateMateriaJornalWithAI = async (dados: {
+  titulo: string;
+  tipoEvento: string;
+  dataInicio: string;
+  dataFim?: string;
+  horaInicio?: string;
+  horaFim?: string;
+  descricao?: string;
+  setor?: string;
+}): Promise<GeneratedMateriaJornal> => {
+  try {
+    const res = await fetch('/api/gemini', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tipo: 'materia_jornal',
+        dados
+      })
+    });
+
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.error || `Erro ao gerar matéria (${res.status}).`);
+    }
+
+    const data = await res.json();
+    if (!data.text) throw new Error("Sem resposta da IA");
+
+    const json = JSON.parse(data.text);
+
+    let rawCorpo = json.corpo || `A Prefeitura Municipal de São José do Goiabal promoveu com sucesso a realização de "${dados.titulo}".\n\nA iniciativa reforça o compromisso contínuo da administração com a transparência, eficiência e a entrega de serviços de excelência para toda a comunidade.`;
+    if (rawCorpo.length > 1185) {
+      rawCorpo = rawCorpo.slice(0, 1185).replace(/\s+\S*$/, '') + '.';
+    }
+
+    return {
+      manchete: json.manchete || `Ação Municipal: ${dados.titulo}`,
+      subtitulo: json.subtitulo || `Administração municipal realiza ${dados.titulo} com foco no atendimento e desenvolvimento dos cidadãos.`,
+      corpo: rawCorpo,
+      categoria: json.categoria || (dados.setor ? dados.setor.toUpperCase() : (dados.tipoEvento === 'Reunião' ? 'GOVERNO & GESTÃO' : 'EVENTOS & COMUNIDADE')),
+      destaqueFrase: json.destaqueFrase || 'Trabalhando com seriedade e dedicação constante pelo progresso de São José do Goiabal.'
+    };
+  } catch (error) {
+    console.error("Erro ao gerar matéria com IA, usando gerador editorial nativo:", error);
+    // Fallback editorial inteligente em caso de indisponibilidade momentânea da chave/API
+    const formatData = (dStr: string) => {
+      if (!dStr) return '';
+      const parts = dStr.split('-');
+      return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : dStr;
+    };
+
+    const dataFormatada = formatData(dados.dataInicio);
+    const cat = dados.setor ? dados.setor.toUpperCase() : (dados.tipoEvento === 'Reunião' ? 'GOVERNO & GESTÃO' : dados.tipoEvento === 'Aniversário' ? 'COMUNIDADE & HOMENAGENS' : 'EVENTOS & CIDADANIA');
+
+    let fallbackCorpo = `Em contínuo esforço para garantir a excelência nos serviços prestados à população de São José do Goiabal, a administração municipal realizou com êxito o compromisso "${dados.titulo}".\n\n${dados.setor ? `A ação foi coordenada diretamente pelo(a) ${dados.setor}. ` : ''}${dados.descricao ? `Durante a atividade, foram destacados pontos estratégicos: "${dados.descricao}". ` : ''}A iniciativa visa aprimorar o fluxo de atendimento, fortalecer as políticas públicas e assegurar resultados positivos diretos para os cidadãos do município.\n\nNovas etapas e desdobramentos operacionais continuarão sendo acompanhados pelos setores responsáveis, demonstrando a gestão participativa e o compromisso da prefeitura.`;
+    if (fallbackCorpo.length > 1185) {
+      fallbackCorpo = fallbackCorpo.slice(0, 1185).replace(/\s+\S*$/, '') + '.';
+    }
+
+    return {
+      manchete: `Avanço e Planejamento: Prefeitura realiza "${dados.titulo}" em benefício do município`,
+      subtitulo: `Compromisso institucional realizado em ${dataFormatada} reforça as ações de desenvolvimento e transparência da administração pública.`,
+      corpo: fallbackCorpo,
+      categoria: cat,
+      destaqueFrase: `"Cada ação planejada e executada reflete o nosso compromisso inegociável com o bem-estar e o futuro de São José do Goiabal."`
+    };
+  }
+};

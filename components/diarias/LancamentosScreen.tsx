@@ -530,6 +530,24 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
     }
   };
 
+  const toDateTimeLocalValue = (dateStr: string | null | undefined): string => {
+    if (!dateStr) return '';
+    if (dateStr.startsWith('2099-12-31')) return '';
+    // Se já for uma string datetime local pura (ex: "2026-08-31T08:30" ou "2026-08-31 08:30")
+    if (!dateStr.endsWith('Z') && !dateStr.includes('+')) {
+      return dateStr.replace(' ', 'T').slice(0, 16);
+    }
+    // Se for ISO com fuso (ex: "2026-08-31T11:30:00.000Z"), converter para o horário local do navegador
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return dateStr.slice(0, 16);
+      const pad = (n: number) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    } catch {
+      return dateStr.slice(0, 16);
+    }
+  };
+
   const getEffectiveDataSaida = (evento: DiariaEvento | null | undefined): string => {
     if (!evento) return '';
     if (evento.pessoas && Array.isArray(evento.pessoas)) {
@@ -546,6 +564,13 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
     // Detectar data sentinela usada quando retorno será registrado pelo servidor em /Diarias/Viajar
     if (dateString.startsWith('2099-12-31')) return 'A definir';
     try {
+      // Se for formato local puro sem Z ou offset, formatar diretamente para manter a hora exata lançada
+      if (dateString.includes('T') && !dateString.endsWith('Z') && !dateString.includes('+')) {
+        const [datePart, timePart] = dateString.split('T');
+        const [y, m, d] = datePart.split('-');
+        const time = timePart ? timePart.slice(0, 5) : '00:00';
+        return `${d}/${m}/${y}, ${time}`;
+      }
       const d = new Date(dateString);
       return new Intl.DateTimeFormat('pt-BR', {
         day: '2-digit', month: '2-digit', year: 'numeric',
@@ -666,14 +691,14 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
     setIsFullEditMode(true);
     setTransferGestorCargo(evento.gestor_transferido_cargo || '');
     
-    // Inicializar todos os campos editáveis da viagem
+    // Inicializar todos os campos editáveis da viagem mantendo a hora exata
     setEditDestino(evento.destino || '');
     setEditMotivo(evento.motivo || '');
     setEditVeiculo(evento.veiculo || 'OUTRO');
     setEditVeiculoOutro(evento.veiculo_outro || '');
     setEditDistancia(evento.distancia !== undefined && evento.distancia !== null ? evento.distancia : '');
-    setEditDataSaida(evento.data_saida ? evento.data_saida.slice(0, 16) : '');
-    setEditDataRetorno(evento.data_retorno ? evento.data_retorno.slice(0, 16) : '');
+    setEditDataSaida(toDateTimeLocalValue(evento.data_saida));
+    setEditDataRetorno(toDateTimeLocalValue(evento.data_retorno));
     setEditHospedagemDias(evento.hospedagem_dias !== undefined && evento.hospedagem_dias !== null ? evento.hospedagem_dias : '');
     // Quando o botão EDITAR for acionado, o valor da diária vem vazio por padrão
     if (isEdit) {
@@ -716,8 +741,8 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
         veiculo: editVeiculo,
         veiculo_outro: editVeiculoOutro,
         distancia: Number(editDistancia) || 0,
-        data_saida: editDataSaida ? new Date(editDataSaida).toISOString() : selectedEvento.data_saida,
-        data_retorno: editDataRetorno ? new Date(editDataRetorno).toISOString() : selectedEvento.data_retorno,
+        data_saida: editDataSaida ? editDataSaida : selectedEvento.data_saida,
+        data_retorno: editDataRetorno ? editDataRetorno : selectedEvento.data_retorno,
         hospedagem_dias: Number(editHospedagemDias) || 0,
         valor_diaria: Number(valorDiaria) || selectedEvento.valor_diaria || 0,
         justificativa_gestor: justificativaGestor,

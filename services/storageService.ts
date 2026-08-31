@@ -21,7 +21,7 @@ export const uploadFile = async (file: File, bucket: string = 'attachments', pat
                 // Try to create it
                 const { data: bucketData, error: bucketError } = await supabase.storage.createBucket(bucket, {
                     public: true,
-                    fileSizeLimit: 10485760, // 10MB
+                    fileSizeLimit: 15728640, // 15MB
                     allowedMimeTypes: ['image/png', 'image/jpeg', 'application/pdf']
                 });
 

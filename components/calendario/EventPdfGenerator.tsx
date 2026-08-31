@@ -7,12 +7,15 @@ import { Calendar as CalendarIcon, Clock, AlignLeft, Users, Star, User, Flag, Lo
 
 interface EventPdfGeneratorProps {
     event: CalendarEvent;
-    state: AppState;
+    state?: AppState;
+    appState?: AppState;
 }
 
-export const EventPdfGenerator: React.FC<EventPdfGeneratorProps> = ({ event, state }) => {
+export const EventPdfGenerator: React.FC<EventPdfGeneratorProps> = ({ event, state, appState }) => {
+    const finalState = appState || state;
     // Cores e Ícones do Evento
     const colors: Record<string, any> = {
+        Notícia: { text: 'text-sky-700', border: 'border-sky-200', icon: 'text-sky-500', iconComp: CalendarIcon },
         Feriado: { text: 'text-red-700', border: 'border-red-200', icon: 'text-red-500', iconComp: Flag },
         Reunião: { text: 'text-indigo-700', border: 'border-indigo-200', icon: 'text-indigo-500', iconComp: Users },
         Evento: { text: 'text-emerald-700', border: 'border-emerald-200', icon: 'text-emerald-500', iconComp: CalendarIcon },
@@ -28,6 +31,8 @@ export const EventPdfGenerator: React.FC<EventPdfGeneratorProps> = ({ event, sta
         return `${day}/${month}/${year}`;
     };
 
+    if (!finalState) return null;
+
     return createPortal(
         <div
             id="event-pdf-content"
@@ -42,18 +47,18 @@ export const EventPdfGenerator: React.FC<EventPdfGeneratorProps> = ({ event, sta
         >
             <PageWrapper
                 state={{
-                    ...state,
+                    ...finalState,
                     branding: {
-                        ...state.branding,
+                        ...finalState.branding,
                         watermark: {
-                            ...state.branding?.watermark,
+                            ...finalState.branding?.watermark,
                             enabled: false
                         }
                     },
                     content: {
-                        ...state.content,
+                        ...finalState.content,
                         title: event.title,
-                        protocol: event.id.substring(0, 8).toUpperCase()
+                        protocol: (event.id || '').substring(0, 8).toUpperCase()
                     }
                 }}
                 pageIndex={0}

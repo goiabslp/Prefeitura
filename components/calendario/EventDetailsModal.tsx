@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
-import { X, Calendar as CalendarIcon, Clock, Edit2, Trash2, CalendarDays, AlignLeft, Users, Star, User, Gift, Repeat } from 'lucide-react';
+import { X, Calendar as CalendarIcon, Clock, Edit2, Trash2, CalendarDays, AlignLeft, Users, Star, User, Gift, Repeat, Building2, ImageIcon, FileDown, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CalendarEvent } from '../../services/calendarService';
+import { CalendarEvent, calendarService } from '../../services/calendarService';
 import { supabase } from '../../services/supabaseClient';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import { EventPdfGenerator } from './EventPdfGenerator';
-import { FileDown, Loader2 } from 'lucide-react';
 import { AppState } from '../../types';
 
 interface EventDetailsModalProps {
@@ -36,8 +35,10 @@ export const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
     if (!isOpen || !event) return null;
 
     const colors: Record<string, { bg: string; text: string; border: string; icon: string }> = {
+        Notícia: { bg: 'bg-sky-50', text: 'text-sky-700', border: 'border-sky-200', icon: 'text-sky-500' },
         Oficial: { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200', icon: 'text-indigo-500' },
         Reunião: { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', icon: 'text-emerald-500' },
+        Evento: { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', icon: 'text-emerald-500' },
         Prazo: { bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-200', icon: 'text-rose-500' },
         Aniversário: { bg: 'bg-pink-50', text: 'text-pink-700', border: 'border-pink-200', icon: 'text-pink-500' },
         'Feriado Municipal': { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', icon: 'text-red-500' },
@@ -53,8 +54,7 @@ export const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
         setIsConfirmDeleteOpen(false);
         setErrorMessage(null);
         try {
-            const { error } = await supabase.from('calendar_events').delete().eq('id', event.id);
-            if (error) throw error;
+            await calendarService.deleteEvent(event.id);
             onDeleteSuccess();
             onClose();
         } catch (e) {
@@ -67,7 +67,6 @@ export const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
         setIsGenerating(true);
         setErrorMessage(null);
 
-        // Allow React to render the invisible portal first
         await new Promise(resolve => setTimeout(resolve, 500));
 
         try {
@@ -98,12 +97,10 @@ export const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
             pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
 
             const sanitaizedName = event.title.replace(/[^a-zA-Z0-9_-]/g, '_');
-            const dataStr = formatDateBr(event.start_date).replace(/\//g, '-');
-            pdf.save(`Evento-${sanitaizedName}-${dataStr}.pdf`);
-
-        } catch (error) {
-            console.error('Erro ao gerar PDF do evento:', error);
-            setErrorMessage('Não foi possível gerar o PDF no momento.');
+            pdf.save(`Evento_${sanitaizedName}.pdf`);
+        } catch (e) {
+            console.error("Error generating event PDF:", e);
+            setErrorMessage("Erro ao gerar o PDF do evento.");
         } finally {
             setIsGenerating(false);
         }
@@ -180,9 +177,29 @@ export const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
                     </div>
 
                     {/* Content */}
-                    <div className="p-6 overflow-y-auto custom-scrollbar flex-1">
+                    <div className="p-6 overflow-y-auto custom-scrollbar flex-1 space-y-6">
                         {activeTab === 'details' ? (
-                            <div className="space-y-6">
+                            <div className="space-y-5">
+                                
+                                {/* Imagem Anexada se houver */}
+                                {event.image_url && (
+                                    <div className="w-full h-44 rounded-2xl overflow-hidden shadow-md border border-slate-200 bg-slate-100 relative">
+                                        <img
+                                            src={event.image_url}
+                                            alt={event.title}
+                                            className="w-full h-full object-cover"
+                                        />
+                                    </div>
+                                )}
+
+                                {/* Setor Municipal se houver */}
+                                {event.sector && (
+                                    <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-700 text-xs font-bold shadow-xs">
+                                        <Building2 className="w-3.5 h-3.5 text-indigo-600" />
+                                        <span>Setor: <strong className="text-indigo-950">{event.sector}</strong></span>
+                                    </div>
+                                )}
+
                                 {/* Time and Date Context */}
                                 <div className="flex flex-col gap-3">
                                     <div className="flex items-center gap-3 text-slate-600">
@@ -192,9 +209,11 @@ export const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
                                         <div>
                                             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-0.5">Datas</p>
                                             <p className="text-sm font-medium">
-                                                {event.start_date === event.end_date
-                                                    ? formatDateBr(event.start_date)
-                                                    : `De ${formatDateBr(event.start_date)} a ${formatDateBr(event.end_date)}`
+                                                {event.is_indefinite
+                                                    ? `A partir de ${formatDateBr(event.start_date)} (Tempo Indeterminado ∞)`
+                                                    : event.start_date === event.end_date
+                                                        ? formatDateBr(event.start_date)
+                                                        : `De ${formatDateBr(event.start_date)} a ${formatDateBr(event.end_date)}`
                                                 }
                                             </p>
                                         </div>
@@ -209,7 +228,9 @@ export const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
                                             <p className="text-sm font-medium">
                                                 {event.is_all_day
                                                     ? 'Dia Inteiro'
-                                                    : `${formatTime(event.start_time!)} às ${formatTime(event.end_time!)}`
+                                                    : (event.start_time && event.end_time)
+                                                        ? `${formatTime(event.start_time)} às ${formatTime(event.end_time)}`
+                                                        : 'Horário Comercial'
                                                 }
                                             </p>
                                         </div>
@@ -234,21 +255,21 @@ export const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
                                 )}
 
                                 <div className="pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400">
-                                    <span>Criado em: {new Date(event.created_at!).toLocaleDateString('pt-BR')}</span>
+                                    <span>Criado em: {new Date(event.created_at || Date.now()).toLocaleDateString('pt-BR')}</span>
                                 </div>
                             </div>
                         ) : (
                             <div className="space-y-3">
                                 <h3 className="text-sm font-bold text-slate-800 mb-4">Lista de Convidados</h3>
                                 {event.invites?.map(inv => (
-                                    <div key={inv.id} className="flex flex-col p-3 border border-slate-200 rounded-xl bg-slate-50/50 hover:bg-white transition-colors">
+                                    <div key={inv.id || inv.user_id} className="flex flex-col p-3 border border-slate-200 rounded-xl bg-slate-50/50 hover:bg-white transition-colors">
                                         <div className="flex items-start justify-between">
                                             <div className="flex items-center gap-3">
                                                 <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${inv.role === 'Colaborador' ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-200 text-slate-500'}`}>
                                                     {inv.role === 'Colaborador' ? <Star className="w-4 h-4" /> : <User className="w-4 h-4" />}
                                                 </div>
                                                 <div>
-                                                    <p className="text-sm font-bold text-slate-800">{inv.user_name || 'Usuário Desconhecido'}</p>
+                                                    <p className="text-sm font-bold text-slate-800">{inv.user_name || 'Usuário do Sistema'}</p>
                                                     <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{inv.role === 'Colaborador' ? 'Organizador' : 'Participante'}</p>
                                                 </div>
                                             </div>
@@ -275,7 +296,6 @@ export const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
 
                     {/* Actions and Footer */}
                     <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between shrink-0">
-                        {/* Download PDF Button - Visible to anyone who can see the event */}
                         <button
                             onClick={handleDownloadPdf}
                             disabled={isGenerating}
@@ -308,36 +328,35 @@ export const EventDetailsModal: React.FC<EventDetailsModalProps> = ({
                     </div>
                 </motion.div>
 
-                {/* Modal de Confirmação Customizado (Substituindo confirm()) */}
+                {/* Confirm Delete Dialog */}
                 {isConfirmDeleteOpen && (
-                    <div className="fixed inset-0 z-[3000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-fade-in">
-                        <div className="bg-white rounded-[2rem] p-6 max-w-sm w-full space-y-4 shadow-2xl border border-slate-100 text-center">
-                            <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
-                                <Trash2 className="w-6 h-6" />
-                            </div>
-                            <h3 className="text-base font-extrabold text-slate-800">Excluir Evento?</h3>
-                            <p className="text-xs text-slate-500">
-                                Tem certeza que deseja remover este compromisso? Esta ação não poderá ser desfeita.
+                    <div className="fixed inset-0 z-[3100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+                        <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-slate-100 space-y-4">
+                            <h3 className="text-lg font-bold text-slate-900">Excluir Evento?</h3>
+                            <p className="text-sm text-slate-500">
+                                Tem certeza que deseja remover este evento? Esta ação não pode ser desfeita.
                             </p>
-                            <div className="flex items-center gap-3 pt-2">
+                            <div className="flex justify-end gap-3 pt-2">
                                 <button
                                     onClick={() => setIsConfirmDeleteOpen(false)}
-                                    className="flex-1 py-3 text-slate-500 hover:text-slate-700 font-bold text-xs uppercase tracking-wider rounded-xl hover:bg-slate-100 transition-colors"
+                                    className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100"
                                 >
                                     Cancelar
                                 </button>
                                 <button
                                     onClick={confirmDelete}
-                                    className="flex-1 py-3 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-rose-500/20 active:scale-95 transition-all"
+                                    className="px-4 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-lg shadow-rose-200"
                                 >
-                                    Confirmar
+                                    Sim, Excluir
                                 </button>
                             </div>
                         </div>
                     </div>
                 )}
+
+                {/* Portal Invisible for PDF Rendering */}
+                <EventPdfGenerator event={event} appState={appState} />
             </div>
-            {isGenerating && <EventPdfGenerator event={event} state={appState} />}
         </AnimatePresence>
     );
 };
