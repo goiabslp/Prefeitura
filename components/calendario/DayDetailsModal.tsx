@@ -9,13 +9,14 @@ interface Props {
     dateStr: string;
     events: CalendarEvent[];
     isAdmin: boolean;
+    currentUserId?: string;
     onAddEvent: () => void;
     onEditEvent: (event: CalendarEvent) => void;
     onDeleteEvent: (event: CalendarEvent) => void;
 }
 
 export const DayDetailsModal: React.FC<Props> = ({
-    isOpen, onClose, dateStr, events, isAdmin, onAddEvent, onEditEvent, onDeleteEvent
+    isOpen, onClose, dateStr, events, isAdmin, currentUserId, onAddEvent, onEditEvent, onDeleteEvent
 }) => {
     if (!isOpen) return null;
 
@@ -146,7 +147,7 @@ export const DayDetailsModal: React.FC<Props> = ({
                                                     </div>
                                                 </div>
 
-                                                {isAdmin && (
+                                                {(isAdmin || (currentUserId && event.created_by === currentUserId)) && (
                                                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                                         <button
                                                             onClick={(e) => { e.stopPropagation(); onEditEvent(event); }}
@@ -179,18 +180,16 @@ export const DayDetailsModal: React.FC<Props> = ({
                         )}
                     </div>
 
-                    {/* Footer Actions (Admin Only) */}
-                    {isAdmin && (
-                        <div className="p-6 border-t border-slate-100 bg-white shrink-0">
-                            <button
-                                onClick={onAddEvent}
-                                className="w-full py-4 bg-slate-900 hover:bg-black text-white rounded-xl font-bold uppercase tracking-widest text-xs flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-lg shadow-slate-900/20"
-                            >
-                                <Plus className="w-5 h-5" />
-                                Adicionar Novo Registro
-                            </button>
-                        </div>
-                    )}
+                    {/* Footer Actions (Disponível para todos os usuários) */}
+                    <div className="p-6 border-t border-slate-100 bg-white shrink-0">
+                        <button
+                            onClick={onAddEvent}
+                            className="w-full py-4 bg-slate-900 hover:bg-black text-white rounded-xl font-bold uppercase tracking-widest text-xs flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-lg shadow-slate-900/20"
+                        >
+                            <Plus className="w-5 h-5" />
+                            Adicionar Novo Registro
+                        </button>
+                    </div>
                 </motion.div>
             </div>
         </AnimatePresence>

@@ -52,34 +52,37 @@ export const StoryMateriaJornalTemplate: React.FC<{ materia: JornalMateria; logo
     .replace(/^["“”']+|["“”']+$/g, '')
     .trim();
 
-  // Ajuste inteligente do tamanho da fonte e espaçamento para que o texto ocupe o espaço com elegância e equilíbrio
+  // Ajuste inteligente do tamanho da fonte e espaçamento para que o texto ocupe o espaço com elegância, equilíbrio e máxima legibilidade
   const contentLength = cleanConteudo.length;
-  let bodyFontSize = '16px';
-  let bodyLineHeight = '1.52';
-  let bodySpacing = 'space-y-3';
+  let bodyFontSize = '21px';
+  let bodyLineHeight = '1.65';
+  let bodySpacing = 'space-y-4';
 
-  if (contentLength > 1050) {
-    bodyFontSize = '14px';
-    bodyLineHeight = '1.42';
-    bodySpacing = 'space-y-2';
+  if (contentLength > 1100) {
+    bodyFontSize = '18px';
+    bodyLineHeight = '1.54';
+    bodySpacing = 'space-y-3';
   } else if (contentLength > 850) {
-    bodyFontSize = '15px';
-    bodyLineHeight = '1.46';
-    bodySpacing = 'space-y-2.5';
-  } else if (contentLength > 650) {
-    bodyFontSize = '16px';
-    bodyLineHeight = '1.5';
-  } else if (contentLength > 450) {
-    bodyFontSize = '17px';
-    bodyLineHeight = '1.56';
+    bodyFontSize = '19.5px';
+    bodyLineHeight = '1.6';
+    bodySpacing = 'space-y-3.5';
+  } else if (contentLength > 600) {
+    bodyFontSize = '21px';
+    bodyLineHeight = '1.65';
+    bodySpacing = 'space-y-4';
+  } else if (contentLength > 400) {
+    bodyFontSize = '23px';
+    bodyLineHeight = '1.72';
+    bodySpacing = 'space-y-4.5';
   } else {
-    bodyFontSize = '18.5px';
-    bodyLineHeight = '1.62';
+    bodyFontSize = '25px';
+    bodyLineHeight = '1.78';
+    bodySpacing = 'space-y-5';
   }
 
   // Ajuste do título com proporção elegante
   const titleLength = (materia.titulo || '').length;
-  const titleFontSize = titleLength > 120 ? '30px' : titleLength > 80 ? '33px' : titleLength > 50 ? '36px' : '40px';
+  const titleFontSize = titleLength > 120 ? '33px' : titleLength > 80 ? '37px' : titleLength > 50 ? '41px' : '45px';
 
   return (
     <div
@@ -90,7 +93,7 @@ export const StoryMateriaJornalTemplate: React.FC<{ materia: JornalMateria; logo
         maxHeight: '1920px',
         backgroundColor: '#fcfaf7',
         color: '#0f172a',
-        padding: '54px 56px 44px 56px',
+        padding: '56px 60px 48px 60px',
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'space-between',
@@ -103,7 +106,7 @@ export const StoryMateriaJornalTemplate: React.FC<{ materia: JornalMateria; logo
       {/* ------------------------------------------------------------- */}
       {/* 1. CABEÇALHO DO JORNAL VERTICAL (MASTHEAD) */}
       {/* ------------------------------------------------------------- */}
-      <div className="space-y-4 shrink-0 pb-2">
+      <div className="space-y-4 shrink-0 pb-3">
         
         {/* Faixa Superior Preta */}
         <div className="bg-slate-900 text-white px-6 py-2.5 rounded-xl flex items-center justify-between text-xs font-sans font-black uppercase tracking-widest">
@@ -113,7 +116,7 @@ export const StoryMateriaJornalTemplate: React.FC<{ materia: JornalMateria; logo
         </div>
 
         {/* Bloco Central do Jornal */}
-        <div className="py-2.5 border-b-4 border-slate-950 flex items-center justify-between gap-6">
+        <div className="py-3 border-b-4 border-slate-950 flex items-center justify-between gap-6">
           
           {/* Logo / Brasão à Esquerda */}
           <div className="flex items-center gap-7 shrink-0">
@@ -144,7 +147,7 @@ export const StoryMateriaJornalTemplate: React.FC<{ materia: JornalMateria; logo
         </div>
 
         {/* Faixa com Data e Editoria */}
-        <div className="flex items-center justify-between font-sans text-xs font-bold text-slate-500 border-b-2 border-slate-300 pb-2.5">
+        <div className="flex items-center justify-between font-sans text-xs font-bold text-slate-500 border-b-2 border-slate-300 pb-3">
           <span className="capitalize">{dataPublicacaoExtensa}</span>
           <span className="px-3.5 py-1 rounded-md bg-indigo-900 text-white font-black text-[11px] uppercase tracking-wider">
             {materia.categoria || 'NOTÍCIA OFICIAL'}
@@ -154,49 +157,50 @@ export const StoryMateriaJornalTemplate: React.FC<{ materia: JornalMateria; logo
       </div>
 
       {/* ------------------------------------------------------------- */}
-      {/* 2. CORPO DA NOTÍCIA TOTALMENTE DISTRIBUÍDO NO STORY VERTICAL */}
+      {/* 2. CORPO DA NOTÍCIA COM ESPAÇAMENTO EQUILIBRADO ENTRE AS SEÇÕES */}
       {/* ------------------------------------------------------------- */}
-      <div className="flex-1 my-5 flex flex-col justify-between overflow-hidden gap-5">
+      <div className="flex-1 my-6 flex flex-col justify-between overflow-hidden gap-7">
         
-        {/* Bloco de Manchete e Lead com Respiro */}
-        <div className="space-y-3.5 shrink-0 pt-1">
-          <div className="flex items-center gap-2.5 font-sans mb-1">
-            <span className="w-3 h-3 rounded-full bg-indigo-600"></span>
-            <span className="text-xs font-black tracking-widest uppercase text-indigo-900">
+        {/* Bloco de Manchete e Lead com Amplo Respiro e Entrelinhamento Arejado */}
+        <div className="space-y-4 shrink-0 pt-1">
+          <div className="flex items-center gap-2.5 font-sans mb-3">
+            <span className="w-3.5 h-3.5 rounded-full bg-indigo-600"></span>
+            <span className="text-[13px] font-black tracking-widest uppercase text-indigo-900">
               {materia.setor ? `AÇÃO MUNICIPAL: ${materia.setor.toUpperCase()}` : 'COMUNICADO OFICIAL'}
             </span>
           </div>
 
-          {/* Manchete Principal */}
+          {/* Manchete Principal com Excelente Espaçamento de Linha */}
           <h2
-            style={{ fontSize: titleFontSize, lineHeight: '1.2' }}
-            className="font-serif font-black text-slate-950 tracking-tight my-2"
+            style={{ fontSize: titleFontSize, lineHeight: '1.4' }}
+            className="font-serif font-black text-slate-950 tracking-tight my-4"
           >
             {materia.titulo}
           </h2>
 
-          {/* Subtítulo / Lead */}
+          {/* Subtítulo / Lead com Linhas Arejadas e Margens Generosas */}
           {materia.subtitulo && (
-            <div className="border-l-4 border-indigo-600 pl-5 py-2.5 bg-indigo-50/70 rounded-r-2xl mt-4 mb-2">
-              <p className="text-[17.5px] font-serif text-slate-800 italic font-medium leading-relaxed">
+            <div className="border-l-4 border-indigo-600 pl-6 pr-4 py-4 bg-indigo-50/70 rounded-r-2xl mt-6 mb-3">
+              <p className="text-[21px] font-serif text-slate-800 italic font-medium leading-[1.65]">
                 "{materia.subtitulo}"
               </p>
             </div>
           )}
         </div>
 
-        {/* Foto do Evento (Preenche totalmente o campo de ponta a ponta - com respiro) */}
+        {/* Foto do Evento (Formato Original Proporcional, Sem Achatar) */}
         {materia.imagemUrl ? (
           <div className="space-y-2 shrink-0 w-full my-2">
-            <div className="w-full h-[460px] rounded-3xl overflow-hidden shadow-md border-2 border-slate-900 bg-slate-200 relative">
+            <div className="w-full max-h-[500px] rounded-3xl overflow-hidden shadow-md border-2 border-slate-900 bg-slate-950/5 relative flex items-center justify-center">
               <img
                 src={materia.imagemUrl}
                 alt={materia.titulo}
-                className="w-full h-full object-cover"
+                className="w-full max-h-[500px] object-contain block mx-auto"
+                style={{ aspectRatio: 'auto' }}
               />
               {logoUrl && (
-                <div className="absolute bottom-4 right-4 p-2 rounded-xl bg-white/95 backdrop-blur-sm shadow-md border border-slate-200">
-                  <img src={logoUrl} alt="Logo" className="h-7 max-w-[100px] object-contain" />
+                <div className="absolute bottom-3.5 right-3.5 p-2 rounded-xl bg-white/95 backdrop-blur-sm shadow-md border border-slate-200">
+                  <img src={logoUrl} alt="Logo" className="h-6 max-w-[90px] object-contain" />
                 </div>
               )}
             </div>
@@ -206,13 +210,13 @@ export const StoryMateriaJornalTemplate: React.FC<{ materia: JornalMateria; logo
           </div>
         ) : null}
 
-        {/* Texto da Matéria em 2 Colunas Jornalísticas com Espaçamento Amplo e Fluido */}
+        {/* Texto da Matéria em 2 Colunas Jornalísticas com Tipografia Encorpada e Legível */}
         <div
           style={{
             fontSize: bodyFontSize,
             lineHeight: bodyLineHeight,
             columnCount: 2,
-            columnGap: '44px',
+            columnGap: '50px',
             textAlign: 'justify'
           }}
           className={`text-slate-900 font-serif flex-1 py-3 my-1 ${bodySpacing}`}
@@ -222,27 +226,12 @@ export const StoryMateriaJornalTemplate: React.FC<{ materia: JornalMateria; logo
           </div>
         </div>
 
-        {/* Citação em Destaque da Administração */}
-        {cleanDestaqueFrase && (
-          <div className="p-5 bg-indigo-950 text-white rounded-3xl space-y-1.5 shadow-md relative overflow-hidden shrink-0 mt-3 mb-1">
-            <div className="absolute top-1 right-3 opacity-10 text-white">
-              <Quote className="w-18 h-18" />
-            </div>
-            <span className="font-sans text-[11px] font-black uppercase tracking-widest text-indigo-300 block">
-              PALAVRA DA ADMINISTRAÇÃO MUNICIPAL
-            </span>
-            <blockquote className="text-[17px] font-serif italic leading-snug relative z-10 text-indigo-50">
-              "{cleanDestaqueFrase}"
-            </blockquote>
-          </div>
-        )}
-
       </div>
 
       {/* ------------------------------------------------------------- */}
       {/* 3. RODAPÉ DO JORNAL VERTICAL COM CERTIFICAÇÃO */}
       {/* ------------------------------------------------------------- */}
-      <div className="pt-5 border-t-2 border-slate-900 flex items-center justify-between font-sans text-xs text-slate-500 font-bold shrink-0 mt-3">
+      <div className="pt-5 border-t-2 border-slate-900 flex items-center justify-between font-sans text-xs text-slate-500 font-bold shrink-0 mt-4">
         <div className="flex items-center gap-2">
           <ShieldCheck className="w-4 h-4 text-emerald-600" />
           <span>Publicado por: <strong className="text-slate-900">{materia.autor || 'Assessoria de Comunicação Oficial'}</strong></span>

@@ -15,8 +15,6 @@ import { PendingInvitesModal } from './PendingInvitesModal';
 import { MonthEventsModal } from './MonthEventsModal';
 import { User, AppState } from '../../types';
 
-// CalendarEvent is now imported from calendarService
-
 interface CalendarioProps {
     onBack: () => void;
     userRole: string;
@@ -122,7 +120,7 @@ export const Calendario: React.FC<CalendarioProps> = ({ onBack, userRole, curren
         const yearDiff = now.getFullYear() - currentDate.getFullYear();
         const monthDiff = now.getMonth() - currentDate.getMonth();
 
-        if (yearDiff === 0 && monthDiff === 0) return; // Algready today
+        if (yearDiff === 0 && monthDiff === 0) return; // Already today
 
         // Determine animation direction
         if (yearDiff > 0 || (yearDiff === 0 && monthDiff > 0)) {
@@ -167,7 +165,6 @@ export const Calendario: React.FC<CalendarioProps> = ({ onBack, userRole, curren
             days.push({ day, isCurrentMonth: true, dateStr, isWeekend });
         }
 
-        // We don't pad the end with next month anymore, let the grid flow naturally.
         return days;
     }, [currentDate]);
 
@@ -240,35 +237,33 @@ export const Calendario: React.FC<CalendarioProps> = ({ onBack, userRole, curren
 
                     <button
                         onClick={() => setIsMyEventsOpen(true)}
-                        className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition-all active:scale-95"
+                        className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition-all active:scale-95 cursor-pointer"
                     >
                         <CalendarIcon className="w-5 h-5" />
                         <span>Meus Eventos</span>
                     </button>
 
-                    {isAdmin && (
-                        <button
-                            onClick={() => {
-                                setEventToEdit(null);
-                                setSelectedDate(getLocalISOData(new Date()).date);
-                                setIsModalOpen(true);
-                            }}
-                            className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-rose-600 hover:bg-rose-700 text-white font-bold shadow-lg shadow-rose-500/30 hover:shadow-rose-500/50 hover:-translate-y-0.5 transition-all active:scale-95"
-                        >
-                            <Plus className="w-5 h-5" />
-                            <span>Novo Evento</span>
-                        </button>
-                    )}
+                    <button
+                        onClick={() => {
+                            setEventToEdit(null);
+                            setSelectedDate(getLocalISOData(new Date()).date);
+                            setIsModalOpen(true);
+                        }}
+                        className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-rose-600 hover:bg-rose-700 text-white font-bold shadow-lg shadow-rose-500/30 hover:shadow-rose-500/50 hover:-translate-y-0.5 transition-all active:scale-95 cursor-pointer"
+                    >
+                        <Plus className="w-5 h-5" />
+                        <span>Novo Evento</span>
+                    </button>
                 </div>
             </div>
 
             {/* NAVEGAÇÃO E CONTROLES */}
             <div className="px-6 desktop:px-10 py-4 flex items-center justify-between bg-white/50 backdrop-blur-sm relative z-[105]">
                 <div className="flex items-center gap-2">
-                    <button onClick={prevYear} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors" title="Ano Anterior">
+                    <button onClick={prevYear} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer" title="Ano Anterior">
                         <ChevronsLeft className="w-5 h-5" />
                     </button>
-                    <button onClick={prevMonth} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors" title="Mês Anterior">
+                    <button onClick={prevMonth} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer" title="Mês Anterior">
                         <ChevronLeft className="w-6 h-6" />
                     </button>
                 </div>
@@ -297,13 +292,13 @@ export const Calendario: React.FC<CalendarioProps> = ({ onBack, userRole, curren
                     <div className="flex items-center gap-3">
                         <button
                             onClick={goToToday}
-                            className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold uppercase tracking-wider rounded-md transition-colors"
+                            className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold uppercase tracking-wider rounded-md transition-colors cursor-pointer"
                         >
                             Hoje
                         </button>
                         <button
                             onClick={() => setIsMonthEventsOpen(true)}
-                            className="px-3 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 text-xs font-bold uppercase tracking-wider rounded-md transition-colors flex items-center gap-1.5"
+                            className="px-3 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 text-xs font-bold uppercase tracking-wider rounded-md transition-colors flex items-center gap-1.5 cursor-pointer"
                             title="Ver todos os eventos deste mês"
                         >
                             <CalendarIcon className="w-3.5 h-3.5" />
@@ -313,10 +308,10 @@ export const Calendario: React.FC<CalendarioProps> = ({ onBack, userRole, curren
                 </div>
 
                 <div className="flex items-center gap-2">
-                    <button onClick={nextMonth} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors" title="Próximo Mês">
+                    <button onClick={nextMonth} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer" title="Próximo Mês">
                         <ChevronRight className="w-6 h-6" />
                     </button>
-                    <button onClick={nextYear} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors" title="Próximo Ano">
+                    <button onClick={nextYear} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer" title="Próximo Ano">
                         <ChevronsRight className="w-5 h-5" />
                     </button>
                 </div>
@@ -333,7 +328,7 @@ export const Calendario: React.FC<CalendarioProps> = ({ onBack, userRole, curren
                     ))}
                 </div>
 
-                {/* Grip principal dinâmico */}
+                {/* Grid principal dinâmico */}
                 <div className="flex-1 grid grid-cols-7 auto-rows-fr gap-2 min-h-0 relative">
                     <AnimatePresence mode="wait">
                         {loading && (
@@ -352,9 +347,7 @@ export const Calendario: React.FC<CalendarioProps> = ({ onBack, userRole, curren
                         }
 
                         const isTodaySlot = isToday(slot.dateStr);
-                        // filter events for this day (if slot date is between start_date and end_date OR if it's recurring)
                         const dayEvents = events.filter(e => {
-                            // Annual recurrence rule: same day/month every year
                             const isRecurringType = e.type === 'Aniversário' || e.type === 'Feriado Municipal' || e.is_recurring;
 
                             if (isRecurringType) {
@@ -371,7 +364,6 @@ export const Calendario: React.FC<CalendarioProps> = ({ onBack, userRole, curren
                             return slot.dateStr >= e.start_date && slot.dateStr <= e.end_date;
                         });
 
-                        // Define styles based on Priority: Today > Weekend > Regular
                         let bgClass = slot.isWeekend ? 'bg-indigo-50/30' : 'bg-white';
                         let borderClass = 'border-slate-100 shadow-sm hover:shadow-md hover:border-indigo-200';
                         let headerBgClass = slot.isWeekend ? 'bg-indigo-50/50 border-b border-indigo-100/50' : 'border-b border-slate-50';
@@ -408,7 +400,6 @@ export const Calendario: React.FC<CalendarioProps> = ({ onBack, userRole, curren
                                         {dayEvents.length > 0 && (
                                             <div className="flex items-center -space-x-1 mr-0.5">
                                                 {(() => {
-                                                    // Group events by type to show only one icon per category
                                                     const displayedTypes = new Set();
                                                     const uniqueTypeEvents = dayEvents.filter(e => {
                                                         if (displayedTypes.has(e.type)) return false;
@@ -438,7 +429,7 @@ export const Calendario: React.FC<CalendarioProps> = ({ onBack, userRole, curren
                                                             <div key={`${e.id}-${idx}`} title={title} className={`w-5 h-5 flex items-center justify-center rounded-full border relative shadow-sm ${colorClass}`} style={{ zIndex: 10 - idx }}>
                                                                 <Icon className="w-[10px] h-[10px]" />
                                                             </div>
-                                                        )
+                                                        );
                                                     });
                                                 })()}
                                                 {dayEvents.length > 3 && (
@@ -449,19 +440,18 @@ export const Calendario: React.FC<CalendarioProps> = ({ onBack, userRole, curren
                                             </div>
                                         )}
 
-                                        {isAdmin && (
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    setSelectedDate(slot.dateStr);
-                                                    setSelectedDayEvents(dayEvents);
-                                                    setIsDayDetailsOpen(true);
-                                                }}
-                                                className="opacity-0 group-hover:opacity-100 w-6 h-6 rounded bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-rose-100 hover:text-rose-600 transition-all shrink-0"
-                                            >
-                                                <Plus className="w-4 h-4" />
-                                            </button>
-                                        )}
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setSelectedDate(slot.dateStr);
+                                                setSelectedDayEvents(dayEvents);
+                                                setIsDayDetailsOpen(true);
+                                            }}
+                                            className="opacity-0 group-hover:opacity-100 w-6 h-6 rounded bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-rose-100 hover:text-rose-600 transition-all shrink-0 cursor-pointer"
+                                            title="Adicionar / Visualizar eventos deste dia"
+                                        >
+                                            <Plus className="w-4 h-4" />
+                                        </button>
                                     </div>
                                 </div>
 
@@ -523,12 +513,7 @@ export const Calendario: React.FC<CalendarioProps> = ({ onBack, userRole, curren
                 onClose={() => setIsModalOpen(false)}
                 onSaved={() => {
                     setIsModalOpen(false);
-                    // Update the day events list if the day details is open
-                    fetchEvents(currentDate).then(() => {
-                        // After fetch closes, we can update selectedDayEvents
-                        // A slightly hacky but simple way: we just let the parent handle the events array, 
-                        // but selectedDayEvents need to react. 
-                    });
+                    fetchEvents(currentDate);
                 }}
                 eventToEdit={eventToEdit}
                 selectedDate={selectedDate}
@@ -539,7 +524,6 @@ export const Calendario: React.FC<CalendarioProps> = ({ onBack, userRole, curren
                 isOpen={isDayDetailsOpen}
                 onClose={() => setIsDayDetailsOpen(false)}
                 dateStr={selectedDate}
-                // Recalculate directly from state so updates bubble gracefully
                 events={events.filter(e => {
                     const isRecurringType = e.type === 'Aniversário' || e.type === 'Feriado Municipal' || e.is_recurring;
                     if (isRecurringType) {
@@ -554,6 +538,7 @@ export const Calendario: React.FC<CalendarioProps> = ({ onBack, userRole, curren
                     return selectedDate >= e.start_date && selectedDate <= e.end_date;
                 })}
                 isAdmin={isAdmin}
+                currentUserId={currentUserId}
                 onAddEvent={() => {
                     setEventToEdit(null);
                     setIsModalOpen(true);
