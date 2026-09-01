@@ -114,8 +114,9 @@ export const createPaciente = async (paciente: Omit<ConsultaPaciente, 'id' | 'cr
 export const updatePaciente = async (id: string, updates: Partial<ConsultaPaciente>): Promise<ConsultaPaciente | null> => {
     try {
         const cleanUpdates: any = { ...updates };
-        if (updates.cpf) {
-            cleanUpdates.cpf = updates.cpf.replace(/\D/g, '');
+        if (updates.cpf !== undefined) {
+            const rawCpf = updates.cpf ? updates.cpf.replace(/\D/g, '') : '';
+            cleanUpdates.cpf = rawCpf.length > 0 ? rawCpf : null;
         }
 
         let { data, error } = await supabase
@@ -129,7 +130,7 @@ export const updatePaciente = async (id: string, updates: Partial<ConsultaPacien
         if (error && (error.code === 'PGRST204' || error.message?.includes('column') || error.message?.includes('schema cache'))) {
             console.warn('[consultasService] Coluna(s) ausente(s) no Supabase (update). Tentando fallback progressivo...', error.message);
 
-            const optionalCols = ['agente_saude', 'sus_number', 'phone'];
+            const optionalCols = ['agente_saude', 'sus_number', 'phone', 'neighborhood', 'street', 'birth_date', 'nickname', 'rg'];
             let fallbackUpdates = { ...cleanUpdates };
             let lastError = error;
 
@@ -484,7 +485,17 @@ export const updateAgendamento = async (
 ): Promise<ConsultaAgendamento | null> => {
     try {
         const { paciente, procedimento, responsavel, ...cleanUpdates } = updates as any;
-        const { data, error } = await supabase
+
+        // Tratar strings vazias para NULL em campos de data e hora do Postgres
+        if (cleanUpdates.appointment_date === '') cleanUpdates.appointment_date = null;
+        if (cleanUpdates.appointment_time === '') cleanUpdates.appointment_time = null;
+        if (cleanUpdates.solicitation_date === '') cleanUpdates.solicitation_date = null;
+        if (cleanUpdates.cancellation_reason === '') cleanUpdates.cancellation_reason = null;
+        if (cleanUpdates.canceled_by === '') cleanUpdates.canceled_by = null;
+        if (cleanUpdates.canceled_by_name === '') cleanUpdates.canceled_by_name = null;
+        if (cleanUpdates.canceled_at === '') cleanUpdates.canceled_at = null;
+
+        let { data, error } = await supabase
             .from('consultas_agendamentos')
             .update(cleanUpdates)
             .eq('id', id)
@@ -495,6 +506,41 @@ export const updateAgendamento = async (
                 responsavel:profiles(name)
             `)
             .single();
+
+        // Fallback progressivo: se alguma coluna não existir ou houver mismatch de schema
+        if (error && (error.code === 'PGRST204' || error.message?.includes('column') || error.message?.includes('schema cache'))) {
+            console.warn('[consultasService] Coluna(s) ausente(s) no Supabase (updateAgendamento). Tentando fallback progressivo...', error.message);
+
+            const optionalCols = ['solicitation_date', 'appointment_time', 'is_retorno', 'cancellation_reason', 'canceled_by', 'canceled_by_name', 'canceled_at'];
+            let fallbackUpdates = { ...cleanUpdates };
+            let lastError = error;
+
+            for (const col of optionalCols) {
+                if (lastError && (lastError.code === 'PGRST204' || lastError.message?.includes('column') || lastError.message?.includes('schema cache'))) {
+                    console.warn(`[consultasService] Removendo coluna '${col}' do payload de updateAgendamento e tentando novamente...`);
+                    delete fallbackUpdates[col];
+
+                    const retryRes = await supabase
+                        .from('consultas_agendamentos')
+                        .update(fallbackUpdates)
+                        .eq('id', id)
+                        .select(`
+                            *,
+                            paciente:consultas_pacientes(*),
+                            procedimento:consultas_procedimentos(*),
+                            responsavel:profiles(name)
+                        `)
+                        .single();
+
+                    data = retryRes.data;
+                    lastError = retryRes.error;
+
+                    if (!lastError) break;
+                }
+            }
+
+            error = lastError;
+        }
 
         if (error) throw error;
         return data;

@@ -903,35 +903,62 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
             return;
         }
 
+        if (!editProcedimentoId) {
+            setEditError('Por favor, selecione o exame ou consulta.');
+            return;
+        }
+
         setIsSubmittingEdit(true);
         setEditError('');
 
         try {
-            // 1. Atualizar Paciente (se tiver ID)
-            if (editTarget.patient_id) {
-                await db.updatePaciente(editTarget.patient_id, {
+            const cleanCpf = editPatientCpf ? editPatientCpf.replace(/\D/g, '') : '';
+            let patientId = editTarget.patient_id;
+
+            // 1. Atualizar ou Criar Paciente
+            if (patientId) {
+                await db.updatePaciente(patientId, {
                     name: editPatientName.trim().toUpperCase(),
-                    cpf: editPatientCpf,
-                    phone: editPatientPhone,
-                    neighborhood: editPatientNeighborhood,
-                    street: editPatientStreet,
-                    sus_number: editPatientSusNumber
+                    cpf: cleanCpf.length > 0 ? cleanCpf : undefined,
+                    phone: editPatientPhone ? editPatientPhone.trim() : '',
+                    neighborhood: editPatientNeighborhood ? editPatientNeighborhood.trim().toUpperCase() : '',
+                    street: editPatientStreet ? editPatientStreet.trim().toUpperCase() : '',
+                    sus_number: editPatientSusNumber ? editPatientSusNumber.trim() : ''
                 });
+            } else {
+                const newPat = await db.createPaciente({
+                    name: editPatientName.trim().toUpperCase(),
+                    cpf: cleanCpf,
+                    phone: editPatientPhone ? editPatientPhone.trim() : '',
+                    neighborhood: editPatientNeighborhood ? editPatientNeighborhood.trim().toUpperCase() : '',
+                    street: editPatientStreet ? editPatientStreet.trim().toUpperCase() : '',
+                    sus_number: editPatientSusNumber ? editPatientSusNumber.trim() : ''
+                });
+                if (newPat) {
+                    patientId = newPat.id;
+                }
             }
 
-            // 2. Atualizar Agendamento
-            await db.updateAgendamento(editTarget.id, {
+            // 2. Atualizar Agendamento de forma segura
+            const updatedBooking = await db.updateAgendamento(editTarget.id, {
+                patient_id: patientId || editTarget.patient_id,
                 procedimento_id: editProcedimentoId,
-                appointment_date: editAppointmentDate || null,
-                appointment_time: editAppointmentTime || '',
-                solicitation_date: editSolicitationDate,
+                appointment_date: editAppointmentDate ? editAppointmentDate : null,
+                appointment_time: editAppointmentTime ? editAppointmentTime : null,
+                solicitation_date: editSolicitationDate ? editSolicitationDate : null,
                 priority: editPriority,
                 is_retorno: editIsRetorno,
                 status: editStatus,
                 quantity: editQuantity
             });
 
-            // Disparar eventos para sincronização em tempo real
+            // 3. Atualizar estado local imediatamente
+            if (updatedBooking) {
+                setAllBookings(prev => prev.map(b => b.id === updatedBooking.id ? updatedBooking : b));
+                setBookings(prev => prev.map(b => b.id === updatedBooking.id ? updatedBooking : b));
+            }
+
+            // Disparar eventos para sincronização em tempo real entre abas e módulos
             window.dispatchEvent(new CustomEvent('consultas-agendamentos-changed'));
             window.dispatchEvent(new CustomEvent('consultas-pacientes-changed'));
 
@@ -2585,6 +2612,18 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                             <option value="Retorno">Retorno</option>
                                             <option value="Não Realizado">Não Realizado</option>
                                             <option value="Cancelado">Cancelado</option>
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">É Retorno?</label>
+                                        <select
+                                            value={editIsRetorno ? 'sim' : 'nao'}
+                                            onChange={(e) => setEditIsRetorno(e.target.value === 'sim')}
+                                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none"
+                                        >
+                                            <option value="nao">Não (Primeiro Atendimento)</option>
+                                            <option value="sim">Sim (Paciente de Retorno)</option>
                                         </select>
                                     </div>
 

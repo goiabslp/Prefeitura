@@ -567,7 +567,7 @@ export interface ConsultaPaciente {
   id: string;
   name: string;
   cpf: string;
-  birth_date: string;
+  birth_date?: string;
   nickname?: string;
   phone?: string;
   neighborhood?: string;
