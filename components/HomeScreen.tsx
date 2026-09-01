@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { FilePlus, Package, History, FileText, ArrowRight, ArrowLeft, ShoppingCart, Gavel, Wallet, Inbox, CalendarRange, FileSearch, Droplet, Fuel, BarChart3, TrendingUp, LogOut, Sprout, HardHat, Activity, Car, ChevronDown, CalendarDays, Users, LayoutGrid, Megaphone, Database, Pill, Timer, Upload, Banknote, Newspaper, Sparkles, Star } from 'lucide-react';
-import { UserRole, UIConfig, AppPermission, BlockType, DiariaEvento } from '../types';
+import { UserRole, UIConfig, AppPermission, BlockType, DiariaEvento, Order, User } from '../types';
 import { TasksDashboard } from './dashboard/TasksDashboard';
 import { QuickTaskCreation } from './dashboard/QuickTaskCreation';
 import { UpcomingEventsNotification } from './calendario/UpcomingEventsNotification';
 import { useSystemSettings } from '../contexts/SystemSettingsContext';
-import { Order, User } from '../types';
 import { ExcelImportModal } from './compras/ExcelImportModal';
+import { NoticiasAnnouncementModal } from './noticias/NoticiasAnnouncementModal';
 
 interface HomeScreenProps {
     onNewOrder: (block?: BlockType, forceReset?: boolean) => void;
@@ -57,6 +57,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     userRole,
     userName,
     userId,
+    uiConfig,
     permissions = [],
     activeBlock,
     setActiveBlock,
@@ -672,6 +673,17 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             )}
 
             <UpcomingEventsNotification />
+
+            {/* Modal Instantâneo de Anúncio: Novo Módulo Notícias */}
+            <NoticiasAnnouncementModal
+                userId={userId}
+                logoUrl={uiConfig?.headerLogoUrl || uiConfig?.loginLogoUrl || localStorage.getItem('prefeitura_logo_url') || ''}
+                onConhecerNoticias={() => {
+                    if (onNoticias) {
+                        onNoticias();
+                    }
+                }}
+            />
         </div>
     );
 };

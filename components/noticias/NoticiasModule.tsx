@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { User, BoletimMetricas, AppState, JornalMateria } from '../../types';
 import { noticiasService, getSemanasDoMes, SemanaPeriodo } from '../../services/noticiasService';
 import { BoletimStoryGenerator } from './BoletimStoryGenerator';
 import { MateriaJornalPngModal, StoryMateriaJornalTemplate, generateAndDownloadStoryPng } from './MateriaJornalPngModal';
+import { NoticiasTourModal } from './NoticiasTourModal';
 import {
   ArrowLeft,
   Newspaper,
@@ -55,6 +56,24 @@ interface NoticiasModuleProps {
 let moduleBoletimCache: BoletimMetricas | null = null;
 let moduleMateriasCache: JornalMateria[] = [];
 
+// Cache global de imagens decodificadas e carregadas na sessão (Zero Flash / Instantâneo)
+const globalLoadedImages = new Set<string>();
+
+const preloadImageSafely = (url?: string | null): Promise<void> => {
+  if (!url || globalLoadedImages.has(url)) return Promise.resolve();
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.src = url;
+    img.onload = () => {
+      globalLoadedImages.add(url);
+      resolve();
+    };
+    img.onerror = () => {
+      resolve();
+    };
+  });
+};
+
 // Componente memoizado e ultra-otimizado para renderização 100% estática e fluida sem piscar
 const PreloadedCardImage = React.memo<{
   src: string;
@@ -65,22 +84,46 @@ const PreloadedCardImage = React.memo<{
   oculta?: boolean;
   aprovada?: boolean;
   isAdmin?: boolean;
-}>(({ src, alt, prefeituraLogoUrl, destaque, categoria, oculta, aprovada, isAdmin }) => {
-  return (
-    <div
-      className="w-full h-48 sm:h-52 overflow-hidden relative bg-slate-200/80 shrink-0 select-none aspect-[16/10]"
-      style={{ contain: 'layout paint' }}
-    >
-      <img
-        src={src}
-        alt={alt}
-        loading="lazy"
-        decoding="async"
-        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 pointer-events-none"
-      />
+  index?: number;
+}>(({ src, alt, prefeituraLogoUrl, destaque, categoria, oculta, aprovada, isAdmin, index = 0 }) => {
+  const isInitiallyCached = globalLoadedImages.has(src);
+  const [isLoaded, setIsLoaded] = useState<boolean>(isInitiallyCached);
+  const [hasError, setHasError] = useState<boolean>(false);
 
-      {/* Badges superiores na imagem */}
-      <div className="absolute top-3 left-3 flex items-center gap-1.5 flex-wrap z-10 pointer-events-none">
+  useEffect(() => {
+    if (!isInitiallyCached && src) {
+      preloadImageSafely(src).then(() => {
+        setIsLoaded(true);
+      });
+    }
+  }, [src, isInitiallyCached]);
+
+  return (
+    <div className="w-full h-48 sm:h-52 overflow-hidden relative bg-slate-100 shrink-0 select-none">
+      {!hasError ? (
+        <img
+          src={src}
+          alt={alt}
+          loading={index < 6 ? 'eager' : 'lazy'}
+          decoding="async"
+          onLoad={() => {
+            globalLoadedImages.add(src);
+            setIsLoaded(true);
+          }}
+          onError={() => setHasError(true)}
+          className={`w-full h-full object-cover transition-transform duration-300 pointer-events-none group-hover:scale-105 ${
+            isLoaded ? 'opacity-100' : 'opacity-95'
+          }`}
+        />
+      ) : (
+        <div className="w-full h-full flex flex-col items-center justify-center bg-slate-200 text-slate-400 gap-1 font-sans">
+          <ImageIcon className="w-6 h-6 opacity-60" />
+          <span className="text-[10px] font-bold uppercase">Foto Oficial</span>
+        </div>
+      )}
+
+      {/* Badges superiores na imagem - ancorados perfeitamente no topo */}
+      <div className="absolute top-3 left-3 flex items-center gap-1.5 flex-wrap z-10 pointer-events-none font-sans">
         {aprovada === false && (
           <span className="px-2.5 py-1 rounded-full bg-rose-600 text-white font-black text-[10px] uppercase flex items-center gap-1 shadow-md">
             <Clock className="w-3 h-3" /> Pendente de Aprovação
@@ -93,7 +136,7 @@ const PreloadedCardImage = React.memo<{
           </span>
         )}
 
-        <span className="px-3 py-1 rounded-full bg-slate-900/85 backdrop-blur-md text-white text-[10px] font-black uppercase tracking-wider shadow-sm">
+        <span className="px-3 py-1 rounded-full bg-slate-900 text-white text-[10px] font-black uppercase tracking-wider shadow-sm">
           {categoria || 'GOVERNO & GESTÃO'}
         </span>
 
@@ -106,11 +149,11 @@ const PreloadedCardImage = React.memo<{
 
       {/* Logo Prefeitura Marca d'água no canto da imagem */}
       {prefeituraLogoUrl && (
-        <div className="absolute bottom-2.5 right-2.5 p-1 rounded-lg bg-white/90 backdrop-blur-sm shadow-sm z-10 pointer-events-none">
+        <div className="absolute bottom-2.5 right-2.5 p-1 rounded-lg bg-white/95 shadow-sm z-10 pointer-events-none">
           <img
             src={prefeituraLogoUrl}
             alt="Logo"
-            loading="lazy"
+            loading="eager"
             decoding="async"
             className="h-4 max-w-[60px] object-contain"
           />
@@ -132,6 +175,7 @@ interface NewsCardItemProps {
   onToggleOcultar: (id: string, e: React.MouseEvent) => void;
   onExcluir: (id: string, e: React.MouseEvent) => void;
   isDownloading: boolean;
+  index?: number;
 }
 
 const NewsCardItem = React.memo<NewsCardItemProps>(({
@@ -144,13 +188,14 @@ const NewsCardItem = React.memo<NewsCardItemProps>(({
   onToggleDestaque,
   onToggleOcultar,
   onExcluir,
-  isDownloading
+  isDownloading,
+  index = 0
 }) => {
   return (
     <article
+      data-tour={index === 0 ? 'card-noticia-item' : undefined}
       onClick={() => onOpen(mat)}
-      style={{ contain: 'layout paint' }}
-      className={`bg-white rounded-3xl border shadow-md hover:shadow-xl transition-shadow duration-200 overflow-hidden flex flex-col justify-between cursor-pointer group relative ${
+      className={`bg-white rounded-3xl border shadow-md hover:shadow-xl transition-all duration-200 overflow-hidden flex flex-col justify-between cursor-pointer group relative transform-gpu ${
         mat.aprovada === false
           ? 'ring-2 ring-rose-500 border-rose-500 bg-gradient-to-b from-rose-50/40 via-rose-50/10 to-white shadow-lg'
           : mat.destaque
@@ -171,6 +216,7 @@ const NewsCardItem = React.memo<NewsCardItemProps>(({
             oculta={mat.oculta}
             aprovada={mat.aprovada}
             isAdmin={isAdmin}
+            index={index}
           />
         ) : (
           <div className="w-full h-24 bg-gradient-to-r from-slate-900 to-indigo-950 p-4 flex items-center justify-between text-white relative">
@@ -416,7 +462,27 @@ export const NoticiasModule: React.FC<NoticiasModuleProps> = ({
 
   // Modal do Gerador de Stories
   const [isStoryModalOpen, setIsStoryModalOpen] = useState<boolean>(false);
-  const [isTourOpen, setIsTourOpen] = useState<boolean>(subView === 'tour');
+  
+  // Tour Interativo do Módulo Notícias (Controle individual e por versão)
+  const tourStorageKey = `prefeitura_noticias_tour_seen_v1_${currentUser?.id || (currentUser as any)?.username || 'guest'}`;
+  const [isTourOpen, setIsTourOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (subView === 'tour') {
+      setIsTourOpen(true);
+      return;
+    }
+    const hasSeen = localStorage.getItem(tourStorageKey);
+    if (!hasSeen) {
+      setIsTourOpen(true);
+    }
+  }, [subView, tourStorageKey]);
+
+  const handleCloseTour = () => {
+    localStorage.setItem(tourStorageKey, 'true');
+    setIsTourOpen(false);
+  };
+
   const [notification, setNotification] = useState<string | null>(null);
 
   // 🛡️ Verificação de Administrador (somente administradores podem excluir, ocultar ou alterar destaques)
@@ -507,7 +573,7 @@ export const NoticiasModule: React.FC<NoticiasModuleProps> = ({
   };
 
   // Excluir Matéria (Exclusivo Administrador)
-  const handleExcluirMateria = async (id: string, e: React.MouseEvent) => {
+  const handleExcluirMateria = useCallback(async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!isAdmin) {
       showNotification('Apenas Administradores podem excluir matérias.');
@@ -519,10 +585,10 @@ export const NoticiasModule: React.FC<NoticiasModuleProps> = ({
       if (materiaAberta?.id === id) setMateriaAberta(null);
       showNotification('Matéria excluída com sucesso.');
     }
-  };
+  }, [isAdmin, materiaAberta?.id]);
 
   // Aprovar e Publicar Matéria no Jornal Oficial (Exclusivo Administrador)
-  const handleAprovarMateria = async (id: string, e?: React.MouseEvent) => {
+  const handleAprovarMateria = useCallback(async (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     if (!isAdmin) {
       showNotification('Apenas Administradores podem aprovar matérias.');
@@ -543,10 +609,10 @@ export const NoticiasModule: React.FC<NoticiasModuleProps> = ({
       console.error('Erro ao aprovar matéria:', err);
       showNotification('Erro ao processar aprovação da matéria.');
     }
-  };
+  }, [isAdmin, materiaAberta]);
 
   // Ocultar / Reexibir Matéria (Exclusivo Administrador)
-  const handleToggleOcultarMateria = async (id: string, e: React.MouseEvent) => {
+  const handleToggleOcultarMateria = useCallback(async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!isAdmin) {
       showNotification('Apenas Administradores podem ocultar matérias.');
@@ -557,9 +623,9 @@ export const NoticiasModule: React.FC<NoticiasModuleProps> = ({
       setMateriasPublicadas(prev => prev.map(m => m.id === id ? { ...m, oculta: res.oculta } : m));
       showNotification(res.oculta ? 'Matéria ocultada do público.' : 'Matéria visível publicamente.');
     }
-  };
+  }, [isAdmin]);
 
-  const handleToggleDestaqueMateria = async (id: string, e?: React.MouseEvent) => {
+  const handleToggleDestaqueMateria = useCallback(async (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     try {
       const matAtual = materiasPublicadas.find(m => m.id === id);
@@ -570,7 +636,6 @@ export const NoticiasModule: React.FC<NoticiasModuleProps> = ({
         setMateriasPublicadas(prev => {
           const updated = prev.map(m => {
             if (m.id === id) return { ...m, destaque: res.destaque };
-            // Se ativou destaque para esta matéria, torna as outras normais para ter uma única Capa de Manchete
             if (res.destaque) return { ...m, destaque: false };
             return m;
           });
@@ -589,7 +654,7 @@ export const NoticiasModule: React.FC<NoticiasModuleProps> = ({
       console.error('Erro ao alternar destaque:', err);
       showNotification('Erro ao atualizar destaque da matéria.');
     }
-  };
+  }, [materiasPublicadas, materiaAberta]);
 
   const handleMudarTipo = (tipo: 'Semanal' | 'Mensal') => {
     if (!isAdmin) {
@@ -607,7 +672,7 @@ export const NoticiasModule: React.FC<NoticiasModuleProps> = ({
   };
 
   // Download Imediato de uma Matéria individual no padrão oficial do jornal
-  const handleDownloadImediato = async (mat: JornalMateria, e: React.MouseEvent) => {
+  const handleDownloadImediato = useCallback(async (mat: JornalMateria, e: React.MouseEvent) => {
     e.stopPropagation();
     if (baixandoMateriaId) return;
 
@@ -629,28 +694,34 @@ export const NoticiasModule: React.FC<NoticiasModuleProps> = ({
         setMateriaParaDownloadDireto(null);
       }
     }, 150);
-  };
+  }, [baixandoMateriaId]);
 
-  // Filtrar matérias: Usuários comuns só vêem as que estão APROVADAS e NÃO estão ocultas. Administradores vêem todas (inclusive pendentes).
-  const materiasParaExibicao = materiasPublicadas.filter(m => {
-    if (isAdmin) return true;
-    return m.aprovada !== false && !m.oculta;
-  });
+  const handleOpenMateria = useCallback((mat: JornalMateria) => {
+    setMateriaAberta(mat);
+  }, []);
+
+  // Filtrar matérias memoizado: Usuários comuns só vêem as que estão APROVADAS e NÃO estão ocultas. Administradores vêem todas.
+  const materiasParaExibicao = useMemo(() => {
+    return materiasPublicadas.filter(m => {
+      if (isAdmin) return true;
+      return m.aprovada !== false && !m.oculta;
+    });
+  }, [materiasPublicadas, isAdmin]);
 
   // Matéria selecionada para ser a Capa da Manchete Principal
-  const materiaDestaqueCapa = materiasParaExibicao.find(m => m.destaque);
+  const materiaDestaqueCapa = useMemo(() => {
+    return materiasParaExibicao.find(m => m.destaque);
+  }, [materiasParaExibicao]);
 
   // Pré-carregamento imediato e em segundo plano de todas as fotos de matérias e logomarca
   useEffect(() => {
     if (prefeituraLogoUrl) {
-      const img = new window.Image();
-      img.src = prefeituraLogoUrl;
+      preloadImageSafely(prefeituraLogoUrl);
     }
     if (materiasPublicadas && materiasPublicadas.length > 0) {
       materiasPublicadas.forEach((mat) => {
         if (mat.imagemUrl) {
-          const img = new window.Image();
-          img.src = mat.imagemUrl;
+          preloadImageSafely(mat.imagemUrl);
         }
       });
     }
@@ -682,7 +753,7 @@ export const NoticiasModule: React.FC<NoticiasModuleProps> = ({
         <div className="w-full max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-2 flex items-center justify-between gap-2 sm:gap-3">
           
           {/* Lado Esquerdo: Voltar + Título Compacto + Data */}
-          <div className="flex items-center gap-2 shrink-0">
+          <div data-tour="noticias-header" className="flex items-center gap-2 shrink-0">
             <button
               onClick={onBack}
               className="p-1.5 sm:p-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 transition-all active:scale-95 cursor-pointer shrink-0"
@@ -709,7 +780,7 @@ export const NoticiasModule: React.FC<NoticiasModuleProps> = ({
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {isAdmin ? (
               /* MODO ADMINISTRADOR: Permite selecionar período e formato */
-              <div className="flex items-center gap-1 bg-indigo-50/70 p-0.5 sm:p-1 rounded-2xl border border-indigo-200/80 animate-in fade-in shrink-0">
+              <div data-tour="seletor-periodo" className="flex items-center gap-1 bg-indigo-50/70 p-0.5 sm:p-1 rounded-2xl border border-indigo-200/80 animate-in fade-in shrink-0">
                 <div className="flex items-center bg-white p-0.5 rounded-xl border border-slate-200 shadow-xs">
                   <button
                     onClick={() => handleMudarTipo('Mensal')}
@@ -761,11 +832,23 @@ export const NoticiasModule: React.FC<NoticiasModuleProps> = ({
               </div>
             ) : (
               /* MODO PÚBLICO / USUÁRIO: Período consolidado fixo mensal */
-              <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-100 rounded-xl border border-slate-200 text-slate-700 text-xs font-bold shrink-0">
+              <div data-tour="seletor-periodo" className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-100 rounded-xl border border-slate-200 text-slate-700 text-xs font-bold shrink-0">
                 <Calendar className="w-3.5 h-3.5 text-indigo-600" />
                 <span>{MESES[selectedMonth]} de {selectedYear}</span>
               </div>
             )}
+
+            {/* Botão Conhecer o Módulo (Abre o Tour Interativo a qualquer momento) */}
+            <button
+              type="button"
+              data-tour="btn-conhecer-modulo"
+              onClick={() => setIsTourOpen(true)}
+              className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 hover:text-indigo-900 border border-indigo-200 text-xs font-bold transition-all active:scale-95 cursor-pointer shadow-xs flex items-center gap-1.5 shrink-0"
+              title="Apresentação e tour interativo do módulo de Notícias"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+              <span className="hidden sm:inline">Conhecer o módulo</span>
+            </button>
 
             {/* Atualizar */}
             <button
@@ -808,7 +891,7 @@ export const NoticiasModule: React.FC<NoticiasModuleProps> = ({
             {/* MANCHETE PRINCIPAL DE CAPA (MAIS RECENTE NO TOPO) */}
             {/* ------------------------------------------------------------------- */}
             {(secoesVisibilidade.manchete || isAdmin) && (
-              <article className={`bg-white rounded-3xl border-2 shadow-lg p-6 sm:p-10 relative overflow-hidden transition-all ${
+              <article data-tour="manchete-capa" className={`bg-white rounded-3xl border-2 shadow-lg p-6 sm:p-10 relative overflow-hidden transition-all ${
                 !secoesVisibilidade.manchete ? 'border-amber-400 bg-amber-50/20' : 'border-slate-900/10'
               }`}>
                 {/* Badge e Botão de Ocultar para Administrador */}
@@ -858,7 +941,7 @@ export const NoticiasModule: React.FC<NoticiasModuleProps> = ({
                         </span>
                       </div>
 
-                      {/* Imagem de Capa compacta e elegante */}
+                      {/* Imagem de Capa compacta e elegante com dimensao estavel */}
                       {materiaDestaqueCapa.imagemUrl && (
                         <div className="w-full h-48 sm:h-64 rounded-2xl overflow-hidden shadow-sm bg-slate-100 relative shrink-0">
                           <img
@@ -866,11 +949,16 @@ export const NoticiasModule: React.FC<NoticiasModuleProps> = ({
                             alt={materiaDestaqueCapa.titulo}
                             loading="eager"
                             decoding="async"
+                            onLoad={() => {
+                              if (materiaDestaqueCapa.imagemUrl) {
+                                globalLoadedImages.add(materiaDestaqueCapa.imagemUrl);
+                              }
+                            }}
                             className="w-full h-full object-cover group-hover:scale-[1.01] transition-transform duration-300 pointer-events-none"
                           />
                           {prefeituraLogoUrl && (
-                            <div className="absolute bottom-2.5 right-2.5 p-1 rounded-lg bg-white/90 backdrop-blur-sm shadow-xs pointer-events-none">
-                              <img src={prefeituraLogoUrl} alt="Logo" className="h-4 max-w-[70px] object-contain" />
+                            <div className="absolute bottom-2.5 right-2.5 p-1 rounded-lg bg-white/95 shadow-xs pointer-events-none">
+                              <img src={prefeituraLogoUrl} alt="Logo" loading="eager" decoding="async" className="h-4 max-w-[70px] object-contain" />
                             </div>
                           )}
                         </div>
@@ -950,7 +1038,7 @@ export const NoticiasModule: React.FC<NoticiasModuleProps> = ({
             {/* REPORTAGENS & ACONTECIMENTOS OFICIAIS PUBLICADOS DO CALENDÁRIO (IA) */}
             {/* ------------------------------------------------------------------- */}
             {materiasParaExibicao.length > 0 && (secoesVisibilidade.reportagensCalendario || isAdmin) && (
-              <section className={`space-y-6 rounded-3xl p-4 sm:p-6 transition-all ${
+              <section data-tour="reportagens-section" className={`space-y-6 rounded-3xl p-4 sm:p-6 transition-all ${
                 !secoesVisibilidade.reportagensCalendario ? 'border-2 border-amber-400 bg-amber-50/20' : ''
               }`}>
                 <div className="flex items-center justify-between border-b-2 border-slate-900/10 pb-3">
@@ -1002,19 +1090,20 @@ export const NoticiasModule: React.FC<NoticiasModuleProps> = ({
                   <NoticiasSkeletonGrid />
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                    {materiasParaExibicao.map((mat) => (
+                    {materiasParaExibicao.map((mat, idx) => (
                       <NewsCardItem
                         key={mat.id}
                         mat={mat}
                         isAdmin={isAdmin}
                         prefeituraLogoUrl={prefeituraLogoUrl}
-                        onOpen={(m) => setMateriaAberta(m)}
+                        onOpen={handleOpenMateria}
                         onAprovar={handleAprovarMateria}
                         onDownload={handleDownloadImediato}
                         onToggleDestaque={handleToggleDestaqueMateria}
                         onToggleOcultar={handleToggleOcultarMateria}
                         onExcluir={handleExcluirMateria}
                         isDownloading={baixandoMateriaId === mat.id}
+                        index={idx}
                       />
                     ))}
                   </div>
@@ -1032,7 +1121,7 @@ export const NoticiasModule: React.FC<NoticiasModuleProps> = ({
                 {/* MATÉRIA 1: CADERNO DE SAÚDE & ASSISTÊNCIA FARMACÊUTICA */}
                 {/* ================================================================= */}
                 {(secoesVisibilidade.farmacia || isAdmin) && (
-                  <article className={`bg-white rounded-3xl border shadow-md p-6 sm:p-8 flex flex-col justify-between h-full space-y-6 hover:shadow-xl transition-all relative ${
+                  <article data-tour="caderno-saude" className={`bg-white rounded-3xl border shadow-md p-6 sm:p-8 flex flex-col justify-between h-full space-y-6 hover:shadow-xl transition-all relative ${
                     !secoesVisibilidade.farmacia ? 'border-amber-400 bg-amber-50/20' : 'border-slate-200/80'
                   }`}>
                     <div className="space-y-4">
@@ -1056,8 +1145,8 @@ export const NoticiasModule: React.FC<NoticiasModuleProps> = ({
                               onClick={() => toggleSecao('farmacia')}
                               className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
                                 !secoesVisibilidade.farmacia
-                                  ? 'text-amber-700 bg-amber-100 hover:bg-amber-200'
-                                  : 'text-slate-400 hover:text-rose-600 hover:bg-rose-50'
+                                   ? 'text-amber-700 bg-amber-100 hover:bg-amber-200'
+                                   : 'text-slate-400 hover:text-rose-600 hover:bg-rose-50'
                               }`}
                               title={!secoesVisibilidade.farmacia ? 'Reexibir matéria para o público' : 'Ocultar matéria do público'}
                             >
@@ -1113,7 +1202,7 @@ export const NoticiasModule: React.FC<NoticiasModuleProps> = ({
                 {/* MATÉRIA 2: CADERNO DE REGULAÇÃO, CONSULTAS & EXAMES */}
                 {/* ================================================================= */}
                 {(secoesVisibilidade.consultas || isAdmin) && (
-                  <article className={`bg-white rounded-3xl border shadow-md p-6 sm:p-8 flex flex-col justify-between h-full space-y-6 hover:shadow-xl transition-all relative ${
+                  <article data-tour="caderno-regulacao" className={`bg-white rounded-3xl border shadow-md p-6 sm:p-8 flex flex-col justify-between h-full space-y-6 hover:shadow-xl transition-all relative ${
                     !secoesVisibilidade.consultas ? 'border-amber-400 bg-amber-50/20' : 'border-slate-200/80'
                   }`}>
                     <div className="space-y-4">
@@ -1431,10 +1520,15 @@ export const NoticiasModule: React.FC<NoticiasModuleProps> = ({
                   alt={materiaAberta.titulo}
                   loading="eager"
                   decoding="async"
+                  onLoad={() => {
+                    if (materiaAberta.imagemUrl) {
+                      globalLoadedImages.add(materiaAberta.imagemUrl);
+                    }
+                  }}
                   className="w-full h-full object-cover"
                 />
                 {prefeituraLogoUrl && (
-                  <div className="absolute bottom-3 right-3 p-1.5 rounded-xl bg-white/90 backdrop-blur-sm shadow-md pointer-events-none">
+                  <div className="absolute bottom-3 right-3 p-1.5 rounded-xl bg-white/95 shadow-md pointer-events-none">
                     <img
                       src={prefeituraLogoUrl}
                       alt="Logo"
@@ -1658,6 +1752,17 @@ export const NoticiasModule: React.FC<NoticiasModuleProps> = ({
           </div>
         </div>
       )}
+
+      {/* Modal do Tour Interativo (8 Passos Conceituais) */}
+      <NoticiasTourModal
+        isOpen={isTourOpen}
+        onClose={handleCloseTour}
+        onGoToCalendario={() => {
+          if (onNavigate) {
+            onNavigate('calendario');
+          }
+        }}
+      />
 
     </div>
   );
