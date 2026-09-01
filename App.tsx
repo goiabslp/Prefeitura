@@ -1432,14 +1432,25 @@ const App: React.FC = () => {
       return;
     }
 
+    const now = Date.now();
+    // Se o target já expirou há mais de 2 minutos, considera a atualização concluída e limpa o estado
+    if (now > systemUpdateTarget + 120000) {
+      setSystemUpdateCountdown(null);
+      return;
+    }
+
     const interval = setInterval(() => {
-      const now = Date.now();
-      const diff = Math.floor((systemUpdateTarget - now) / 1000);
+      const currentNow = Date.now();
+      const diff = Math.floor((systemUpdateTarget - currentNow) / 1000);
 
       if (diff > 0) {
         setSystemUpdateCountdown(diff);
-      } else {
+      } else if (diff >= -5) {
+        // Janela de 5s no momento exato do término
         setSystemUpdateCountdown(0);
+        clearInterval(interval);
+      } else {
+        setSystemUpdateCountdown(null);
         clearInterval(interval);
       }
     }, 1000);
@@ -1447,9 +1458,17 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [systemUpdateTarget]);
 
-  // Forçar Desconexão de todos os Usuários e Limpeza Total do Cache do Navegador ao Final do Countdown
+  // Forçar Desconexão e Limpeza de Cache APENAS para usuários autenticados no momento do término do countdown
   useEffect(() => {
-    if (systemUpdateCountdown === 0) {
+    if (systemUpdateCountdown === 0 && currentUser && systemUpdateTarget) {
+      const FORCED_KEY = 'last_forced_update_target';
+      const alreadyPurged = localStorage.getItem(FORCED_KEY);
+
+      if (alreadyPurged && parseInt(alreadyPurged) >= systemUpdateTarget) {
+        setSystemUpdateCountdown(null);
+        return;
+      }
+
       const performGlobalLogoutAndCachePurge = async () => {
         try {
           const savedUser = localStorage.getItem('remember_user');
@@ -1458,6 +1477,7 @@ const App: React.FC = () => {
           localStorage.clear();
           sessionStorage.clear();
 
+          localStorage.setItem(FORCED_KEY, systemUpdateTarget.toString());
           if (savedUser) localStorage.setItem('remember_user', savedUser);
           if (savedPass) localStorage.setItem('remember_pass', savedPass);
 
@@ -1484,7 +1504,7 @@ const App: React.FC = () => {
 
       performGlobalLogoutAndCachePurge();
     }
-  }, [systemUpdateCountdown, signOut]);
+  }, [systemUpdateCountdown, currentUser, systemUpdateTarget, signOut]);
 
   // Fetch Licitacao Global Protocol Counter
   useEffect(() => {
