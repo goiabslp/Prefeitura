@@ -69,7 +69,7 @@ export const ComprasStepWizard: React.FC<ComprasStepWizardProps> = ({
         // Helper to check validity
         const s1Valid = !!(content.title && content.title.length >= 100 && content.requesterName && content.priority);
         const s2Valid = !!(content.purchaseItems && content.purchaseItems.length > 0);
-        const s3Valid = !!(content.body && content.body.length >= 400);
+        const s3Valid = !!(content.body && content.body.length >= 100);
         const s4Valid = true; // Optional (Anexos)
         const s5Valid = !!(content.fichaOrcamentaria && content.fichaOrcamentaria !== 'N/A' && content.fichaOrcamentaria.trim() !== ''); // Ficha Orçamentária
         const s6Valid = !!(content.resolucaoDescricao && (content.resolucaoDescricao === 'N/A' || content.resolucaoNumero)); // Origem
@@ -78,7 +78,7 @@ export const ComprasStepWizard: React.FC<ComprasStepWizardProps> = ({
         // Helper to check "started" (partial) - simple check if ANY field is filled
         const s1Started = !!(content.title || content.requesterName || content.priority);
         const s2Started = false; // Hard to be "partial" on items list, either have items or not
-        const s3Started = !!(content.body && content.body.length > 0 && content.body.length < 400);
+        const s3Started = !!(content.body && content.body.length > 0 && content.body.length < 100);
         const s5Started = !!(content.fichaOrcamentaria && content.fichaOrcamentaria !== 'N/A' && content.fichaOrcamentaria.trim() !== '');
         const s6Started = !!(content.resolucaoDescricao || content.resolucaoNumero);
         const s7Started = false;
@@ -144,7 +144,7 @@ export const ComprasStepWizard: React.FC<ComprasStepWizardProps> = ({
             }
             if (step === 5) {
                 if (!content.body) { setValidationWarning('Preencha a Justificativa'); return false; }
-                if (content.body.length < 400) { setValidationWarning('A Justificativa do Pedido deve ter no mínimo 400 caracteres.'); return false; }
+                if (content.body.length < 100) { setValidationWarning('A Justificativa do Pedido deve ter no mínimo 100 caracteres.'); return false; }
             }
             if (step === 7) {
                 // Ficha Orçamentária não é obrigatória para finalizar o pedido
@@ -169,7 +169,7 @@ export const ComprasStepWizard: React.FC<ComprasStepWizardProps> = ({
             }
             if (step === 3) {
                 if (!content.body) { setValidationWarning('Preencha a Justificativa'); return false; }
-                if (content.body.length < 400) { setValidationWarning('A Justificativa do Pedido deve ter no mínimo 400 caracteres.'); return false; }
+                if (content.body.length < 100) { setValidationWarning('A Justificativa do Pedido deve ter no mínimo 100 caracteres.'); return false; }
             }
             if (step === 5) {
                 // Ficha Orçamentária não é obrigatória para finalizar o pedido

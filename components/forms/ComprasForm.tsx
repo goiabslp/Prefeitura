@@ -933,16 +933,16 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
                 </button>
               </div>
               <span className={`text-xs font-black tracking-wider uppercase px-3 py-1.5 rounded-full flex items-center gap-1.5 border transition-all duration-300 ${
-                (content.body?.length || 0) >= 400 
+                (content.body?.length || 0) >= 100 
                   ? 'bg-emerald-100 text-emerald-800 border-emerald-200 shadow-sm' 
                   : 'bg-rose-100 text-rose-800 border-rose-200 shadow-sm animate-pulse'
               }`}>
-                {(content.body?.length || 0) >= 400 ? (
+                {(content.body?.length || 0) >= 100 ? (
                   <Check className="w-3.5 h-3.5 text-emerald-600" />
                 ) : (
                   <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
                 )}
-                <span>{(content.body?.length || 0)} / 400 caracteres no mínimo</span>
+                <span>{(content.body?.length || 0)} / 100 caracteres no mínimo</span>
               </span>
             </div>
             <div className="relative">
