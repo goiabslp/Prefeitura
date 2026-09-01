@@ -32,6 +32,15 @@ export const StoryMateriaJornalTemplate: React.FC<{ materia: JornalMateria; logo
   materia,
   logoUrl
 }) => {
+  // Obtenção da Logomarca Oficial da Prefeitura com fallback inteligente
+  const effectiveLogoUrl = logoUrl ||
+    localStorage.getItem('cached_img_branding_logo') ||
+    localStorage.getItem('cached_img_ui_header_logo') ||
+    localStorage.getItem('cached_img_ui_login_logo') ||
+    localStorage.getItem('prefeitura_logo_url') ||
+    localStorage.getItem('cached_img_logoUrl') ||
+    '';
+
   const dataFormatada = materia.dataEvento 
     ? materia.dataEvento.split('-').reverse().join('/') 
     : new Date(materia.dataPublicacao || Date.now()).toLocaleDateString('pt-BR');
@@ -120,8 +129,13 @@ export const StoryMateriaJornalTemplate: React.FC<{ materia: JornalMateria; logo
           
           {/* Logo / Brasão à Esquerda */}
           <div className="flex items-center gap-7 shrink-0">
-            {logoUrl ? (
-              <img src={logoUrl} alt="Logo Prefeitura" className="h-20 w-auto object-contain shrink-0" />
+            {effectiveLogoUrl ? (
+              <img
+                src={effectiveLogoUrl}
+                alt="Logo Prefeitura"
+                className="h-20 w-auto max-w-[170px] object-contain shrink-0"
+                crossOrigin="anonymous"
+              />
             ) : (
               <div className="w-16 h-16 rounded-2xl bg-slate-900 text-white flex items-center justify-center text-2xl font-bold shrink-0">
                 🏛️
@@ -198,9 +212,9 @@ export const StoryMateriaJornalTemplate: React.FC<{ materia: JornalMateria; logo
                 className="w-full max-h-[500px] object-contain block mx-auto"
                 style={{ aspectRatio: 'auto' }}
               />
-              {logoUrl && (
+              {effectiveLogoUrl && (
                 <div className="absolute bottom-3.5 right-3.5 p-2 rounded-xl bg-white/95 backdrop-blur-sm shadow-md border border-slate-200">
-                  <img src={logoUrl} alt="Logo" className="h-6 max-w-[90px] object-contain" />
+                  <img src={effectiveLogoUrl} alt="Logo" className="h-6 max-w-[90px] object-contain" crossOrigin="anonymous" />
                 </div>
               )}
             </div>

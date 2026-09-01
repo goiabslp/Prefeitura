@@ -502,7 +502,11 @@ export const NoticiasModule: React.FC<NoticiasModuleProps> = ({
   const prefeituraLogoUrl = appState?.branding?.logoUrl ||
                            appState?.ui?.headerLogoUrl ||
                            appState?.ui?.loginLogoUrl ||
+                           localStorage.getItem('cached_img_branding_logo') ||
+                           localStorage.getItem('cached_img_ui_header_logo') ||
+                           localStorage.getItem('cached_img_ui_login_logo') ||
                            localStorage.getItem('prefeitura_logo_url') ||
+                           localStorage.getItem('cached_img_logoUrl') ||
                            '';
 
   const MESES = [
