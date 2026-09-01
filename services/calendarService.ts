@@ -30,6 +30,14 @@ export interface CalendarEvent {
     synced_with_google?: boolean;
     invites?: CalendarEventInvite[];
     sector?: string;
+    sector_id?: string;
+    person_ids?: string[];
+    persons_involved?: Array<{
+        id: string;
+        name: string;
+        jobName?: string;
+        sectorName?: string;
+    }>;
     image_url?: string;
     is_indefinite?: boolean;
     publish_to_news?: boolean;
@@ -48,13 +56,21 @@ export interface CalendarEvent {
 const STORAGE_KEY = 'prefeitura_calendar_events_cache';
 
 /**
- * Serializa metadados extras (imagem, setor, indeterminado, publicar jornal, dados da matéria)
+ * Serializa metadados extras (imagem, setor, pessoas, indeterminado, publicar jornal, dados da matéria)
  * dentro do campo description para garantir compatibilidade universal no Supabase
  */
 export const serializeEventMetadata = (
     description?: string,
     extra?: { 
         sector?: string; 
+        sector_id?: string;
+        person_ids?: string[];
+        persons_involved?: Array<{
+            id: string;
+            name: string;
+            jobName?: string;
+            sectorName?: string;
+        }>;
         image_url?: string; 
         is_indefinite?: boolean; 
         publish_to_news?: boolean;
@@ -69,11 +85,14 @@ export const serializeEventMetadata = (
     }
 ): string => {
     let cleanDesc = (description || '').replace(/__PREFEITURA_META__[\s\S]*?__END_META__/g, '').trim();
-    if (!extra || (!extra.sector && !extra.image_url && !extra.is_indefinite && !extra.publish_to_news && !extra.materia_data)) {
+    if (!extra || (!extra.sector && !extra.sector_id && !extra.person_ids?.length && !extra.persons_involved?.length && !extra.image_url && !extra.is_indefinite && !extra.publish_to_news && !extra.materia_data)) {
         return cleanDesc;
     }
     const metaJson = JSON.stringify({
         sector: extra.sector,
+        sector_id: extra.sector_id,
+        person_ids: extra.person_ids,
+        persons_involved: extra.persons_involved,
         image_url: extra.image_url,
         is_indefinite: extra.is_indefinite,
         publish_to_news: extra.publish_to_news,
@@ -90,6 +109,14 @@ export const deserializeEventMetadata = (
 ): { 
     cleanDescription: string; 
     sector?: string; 
+    sector_id?: string;
+    person_ids?: string[];
+    persons_involved?: Array<{
+        id: string;
+        name: string;
+        jobName?: string;
+        sectorName?: string;
+    }>;
     image_url?: string; 
     is_indefinite?: boolean; 
     publish_to_news?: boolean;
@@ -111,6 +138,9 @@ export const deserializeEventMetadata = (
         return {
             cleanDescription,
             sector: meta.sector,
+            sector_id: meta.sector_id,
+            person_ids: meta.person_ids || [],
+            persons_involved: meta.persons_involved || [],
             image_url: meta.image_url || meta.materia_data?.imagemUrl,
             is_indefinite: meta.is_indefinite,
             publish_to_news: meta.publish_to_news,

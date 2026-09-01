@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { ArrowLeft, ChevronLeft, ChevronRight, Plus, Calendar as CalendarIcon, ChevronsLeft, ChevronsRight, Star, Users, Flag, Gift, Repeat, RefreshCw, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { supabase } from '../../services/supabaseClient';
 import { motion, AnimatePresence } from 'framer-motion';
-import { EventModal } from './EventModal';
+import { NovoEventoPage } from './NovoEventoPage';
 import { DayDetailsModal } from './DayDetailsModal';
 import { EventDetailsModal } from './EventDetailsModal';
 import { generateHolidaysForYear } from './holidays';
@@ -38,7 +38,7 @@ export const Calendario: React.FC<CalendarioProps> = ({ onBack, userRole, curren
     const isAdmin = userRole === 'admin';
     const [direction, setDirection] = useState(0); // For animation: -1 left, 1 right
 
-    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isEventPageOpen, setIsEventPageOpen] = useState(false);
     const [eventToEdit, setEventToEdit] = useState<CalendarEvent | null>(null);
     const [selectedDate, setSelectedDate] = useState('');
 
@@ -94,6 +94,22 @@ export const Calendario: React.FC<CalendarioProps> = ({ onBack, userRole, curren
     useEffect(() => {
         fetchEvents(currentDate);
     }, [currentDate.getFullYear(), currentDate.getMonth()]);
+
+    // Detecção e sincronização de Rotas (/Calendario/Novo, /Calendario/Editar)
+    useEffect(() => {
+        const checkRoute = () => {
+            const path = window.location.pathname.toLowerCase();
+            if (path.startsWith('/calendario/novo') || path.startsWith('/calendario/editar')) {
+                setIsEventPageOpen(true);
+            } else if (path === '/calendario') {
+                setIsEventPageOpen(false);
+            }
+        };
+
+        checkRoute();
+        window.addEventListener('popstate', checkRoute);
+        return () => window.removeEventListener('popstate', checkRoute);
+    }, []);
 
     const nextMonth = () => {
         setDirection(1);
@@ -247,7 +263,8 @@ export const Calendario: React.FC<CalendarioProps> = ({ onBack, userRole, curren
                         onClick={() => {
                             setEventToEdit(null);
                             setSelectedDate(getLocalISOData(new Date()).date);
-                            setIsModalOpen(true);
+                            setIsEventPageOpen(true);
+                            window.history.pushState({ page: 'novo-evento' }, '', '/Calendario/Novo/Identificacao');
                         }}
                         className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-rose-600 hover:bg-rose-700 text-white font-bold shadow-lg shadow-rose-500/30 hover:shadow-rose-500/50 hover:-translate-y-0.5 transition-all active:scale-95 cursor-pointer"
                     >
@@ -508,17 +525,26 @@ export const Calendario: React.FC<CalendarioProps> = ({ onBack, userRole, curren
                 </div>
             </div>
 
-            <EventModal
-                isOpen={isModalOpen}
-                onClose={() => setIsModalOpen(false)}
-                onSaved={() => {
-                    setIsModalOpen(false);
-                    fetchEvents(currentDate);
-                }}
-                eventToEdit={eventToEdit}
-                selectedDate={selectedDate}
-                currentUserId={currentUserId}
-            />
+            {/* PÁGINA DEDICADA DE NOVO/EDITAR EVENTO COM ESTEIRA DE ABAS */}
+            {isEventPageOpen && (
+                <div className="fixed inset-0 z-[2500] bg-slate-900 flex flex-col">
+                    <NovoEventoPage
+                        onBack={() => {
+                            setIsEventPageOpen(false);
+                            setEventToEdit(null);
+                        }}
+                        onSaved={() => {
+                            setIsEventPageOpen(false);
+                            setEventToEdit(null);
+                            fetchEvents(currentDate);
+                            showToast("Evento salvo com sucesso no Calendário!");
+                        }}
+                        eventToEdit={eventToEdit}
+                        selectedDate={selectedDate}
+                        currentUserId={currentUserId}
+                    />
+                </div>
+            )}
 
             <DayDetailsModal
                 isOpen={isDayDetailsOpen}
@@ -541,11 +567,16 @@ export const Calendario: React.FC<CalendarioProps> = ({ onBack, userRole, curren
                 currentUserId={currentUserId}
                 onAddEvent={() => {
                     setEventToEdit(null);
-                    setIsModalOpen(true);
+                    setIsDayDetailsOpen(false);
+                    setIsEventPageOpen(true);
+                    window.history.pushState({ page: 'novo-evento' }, '', '/Calendario/Novo/Identificacao');
                 }}
                 onEditEvent={(evt) => {
                     setEventToEdit(evt);
-                    setIsModalOpen(true);
+                    setSelectedDate(evt.start_date || selectedDate);
+                    setIsDayDetailsOpen(false);
+                    setIsEventPageOpen(true);
+                    window.history.pushState({ page: 'editar-evento' }, '', `/Calendario/Editar/${evt.id}/Identificacao`);
                 }}
                 onDeleteEvent={async (evt) => {
                     try {
@@ -566,7 +597,10 @@ export const Calendario: React.FC<CalendarioProps> = ({ onBack, userRole, curren
                 isAdmin={isAdmin || eventDetailsEvent?.created_by === currentUserId}
                 onEditEvent={(ev) => {
                     setEventToEdit(ev);
-                    setIsModalOpen(true);
+                    setSelectedDate(ev.start_date || selectedDate);
+                    setIsEventDetailsOpen(false);
+                    setIsEventPageOpen(true);
+                    window.history.pushState({ page: 'editar-evento' }, '', `/Calendario/Editar/${ev.id}/Identificacao`);
                 }}
                 onDeleteSuccess={() => {
                     fetchEvents(currentDate);

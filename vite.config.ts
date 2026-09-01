@@ -128,33 +128,41 @@ function geminiDevPlugin() {
                 6. NÃO use marcações Markdown (como asteriscos para negrito ou hashtags). Retorne estritamente o texto puro da justificativa administrativa.
               `;
             } else if (tipo === 'materia_jornal') {
+              const pessoasFormatadas = dados.pessoas && Array.isArray(dados.pessoas) && dados.pessoas.length > 0
+                ? dados.pessoas.map((p: any) => (typeof p === 'string' ? p : `${p.name}${p.role ? ` (${p.role})` : ''}`)).join(', ')
+                : 'Equipe do setor responsável';
+
               promptText = `
-                Você é o Chefe de Redação e Assessor de Imprensa Oficial da Prefeitura Municipal de São José do Goiabal - Minas Gerais.
+                Você é o Chefe de Redação e Assessor de Comunicação Oficial da Prefeitura Municipal de São José do Goiabal - Minas Gerais.
                 
                 TAREFA:
-                Escreva uma matéria jornalística institucional vibrante, positiva, profissional e de alto impacto para o Jornal da Prefeitura sobre o seguinte compromisso/evento municipal.
+                Escreva uma matéria jornalística institucional positiva, informativa, profissional e de alto impacto para a Gazeta Municipal sobre a seguinte ação da Prefeitura.
                 
-                DADOS DO EVENTO:
+                DADOS OFICIAIS DO EVENTO:
                 - Título do Registro: ${dados.titulo}
                 - Tipo de Evento: ${dados.tipoEvento || 'Compromisso Municipal'}
-                - Setor / Secretaria Responsável: ${dados.setor || 'Gabinete / Administração Geral'}
+                - Setor / Secretaria Responsável: ${dados.setor || 'Administração Municipal'}
+                - Pessoas / Servidores Envolvidos: ${pessoasFormatadas}
                 - Data Inicial: ${dados.dataInicio}
                 - Data Final: ${dados.dataFim || dados.dataInicio}
                 - Horário: ${dados.horaInicio ? `${dados.horaInicio} às ${dados.horaFim || ''}` : 'Horário Comercial / Dia Inteiro'}
-                - Descrição / Pauta / Contexto:
+                - Descrição / Pauta / Detalhes:
                 """
-                ${dados.descricao || 'Ação da administração municipal em prol do desenvolvimento, bem-estar e atendimento à população de São José do Goiabal.'}
+                ${dados.descricao || 'Ação da administração municipal em benefício dos cidadãos e do desenvolvimento de São José do Goiabal.'}
                 """
                 
-                DIRETRIZES DA REDAÇÃO:
-                1. A matéria deve exaltar o compromisso público, o trabalho sério da administração municipal, a transparência e os benefícios reais para a população de São José do Goiabal.
-                2. Crie uma MANCHETE marcante, impactante e profissional no estilo de grande jornal.
-                3. Crie um SUBTÍTULO (Lead) que resuma com clareza o objetivo da iniciativa e instigue a leitura.
-                4. O CORPO DA MATÉRIA deve possuir de 2 a 3 parágrafos bem articulados, informativos e fluidos.
-                5. LIMITE DE TAMANHO DO TEXTO: O texto completo do corpo da matéria (campo 'corpo') deve ter NO MÁXIMO 1185 caracteres (ideal entre 800 e 1185 caracteres). Seja completo e rico em detalhes, mas NUNCA ultrapasse o limite estrito de 1185 caracteres.
-                6. Crie uma FRASE DE DESTAQUE inspiradora (aspas institucionais).
-                7. Defina a CATEGORIA considerando o Setor informado (ex: 'SAÚDE PÚBLICA', 'EDUCAÇÃO & ENSINO', 'OBRAS & INFRAESTRUTURA', 'MEIO AMBIENTE', 'GOVERNO & GESTÃO', 'EVENTOS & COMUNIDADE').
-                8. Destaque a atuação e o compromisso do setor "${dados.setor || 'Administração Municipal'}" ao longo de toda a matéria.
+                DIRETRIZES INSTITUCIONAIS OBRIGATÓRIAS:
+                1. Valorize as ações da Prefeitura evidenciando resultados práticos, serviços prestados e benefícios diretos para a população.
+                2. Mencione corretamente o setor municipal e as pessoas envolvidas com seus respectivos cargos/funções cadastrados.
+                3. Destaque institucional ao Prefeito Municipal "Ailton Geraldo dos Santos" quando sua participação, direcionamento ou liderança na ação for pertinente.
+                4. Mencione a Secretaria de Administração e o Secretário de Administração e Governo "Guilherme Santos" quando houver relação técnica ou de planejamento com o evento.
+                5. IMPORTANTE: Menções a autoridades devem ocorrer exclusivamente de forma contextualizada e com pertinência factual com o evento, sem inserções artificiais e sem autopromoção indevida.
+                6. Utilize exclusivamente os dados reais fornecidos; NUNCA invente participantes, cargos ou ações não mencionadas.
+                7. Crie uma MANCHETE marcante, impactante e profissional no padrão de grande jornal.
+                8. Crie um SUBTÍTULO (Lead) instigante que resuma a ação e o benefício comunitário.
+                9. O CORPO DA MATÉRIA deve ter entre 2 e 3 parágrafos bem articulados (LIMITE RIGOROSO: máximo de 1180 caracteres).
+                10. Crie uma FRASE DE DESTAQUE inspiradora em tom institucional.
+                11. Defina a CATEGORIA em letras maiúsculas (ex: 'OBRAS & INFRAESTRUTURA', 'SAÚDE PÚBLICA', 'EDUCAÇÃO & ENSINO', 'GOVERNO & GESTÃO', 'MEIO AMBIENTE', 'EVENTOS & CIDADANIA').
               `;
             } else {
               res.statusCode = 400;

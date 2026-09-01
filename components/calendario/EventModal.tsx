@@ -26,14 +26,17 @@ import {
   Layers,
   ArrowRight,
   Building2,
-  ChevronDown
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  CalendarDays
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../../services/supabaseClient';
 import { calendarService, CalendarEventInvite, CalendarEvent } from '../../services/calendarService';
-import { getPersons, getSectors } from '../../services/entityService';
+import { getPersons, getSectors, getJobs } from '../../services/entityService';
 import { getLocalISOData } from '../../utils/dateUtils';
-import { Person, JornalMateria, Sector } from '../../types';
+import { Person, JornalMateria, Sector, Job } from '../../types';
 import { generateMateriaJornalWithAI, GeneratedMateriaJornal } from '../../services/geminiService';
 import { noticiasService } from '../../services/noticiasService';
 
@@ -51,6 +54,176 @@ interface UserProfile {
   name: string;
 }
 
+const MONTH_NAMES = [
+  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+];
+const WEEK_DAYS = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
+
+/**
+ * Calendário Popover Dinâmico, Moderno e Interativo
+ */
+const CustomDatePickerPopup: React.FC<{
+  selectedDate: string; // YYYY-MM-DD
+  onSelectDate: (dateStr: string) => void;
+  onClose: () => void;
+  minDate?: string;
+  align?: 'left' | 'right';
+}> = ({ selectedDate, onSelectDate, onClose, minDate, align = 'left' }) => {
+  const initialDate = selectedDate ? new Date(selectedDate + 'T12:00:00') : new Date();
+  const [viewYear, setViewYear] = useState(initialDate.getFullYear());
+  const [viewMonth, setViewMonth] = useState(initialDate.getMonth());
+
+  const handlePrevMonth = () => {
+    if (viewMonth === 0) {
+      setViewMonth(11);
+      setViewYear(viewYear - 1);
+    } else {
+      setViewMonth(viewMonth - 1);
+    }
+  };
+
+  const handleNextMonth = () => {
+    if (viewMonth === 11) {
+      setViewMonth(0);
+      setViewYear(viewYear + 1);
+    } else {
+      setViewMonth(viewMonth + 1);
+    }
+  };
+
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const firstDayOfWeek = new Date(viewYear, viewMonth, 1).getDay();
+
+  const daysInPrevMonth = new Date(viewYear, viewMonth, 0).getDate();
+  const prevMonthDays = [];
+  for (let i = firstDayOfWeek - 1; i >= 0; i--) {
+    prevMonthDays.push(daysInPrevMonth - i);
+  }
+
+  const todayStr = getLocalISOData(new Date()).date;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: 6, scale: 0.98 }}
+      transition={{ duration: 0.15 }}
+      className={`absolute z-[3300] top-full mt-2 ${
+        align === 'right' ? 'right-0' : 'left-0'
+      } bg-white rounded-3xl shadow-2xl border border-slate-200/90 p-4 w-[280px] font-sans select-none`}
+      onClick={e => e.stopPropagation()}
+    >
+      {/* Header com Navegação */}
+      <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+        <button
+          type="button"
+          onClick={handlePrevMonth}
+          className="w-7 h-7 rounded-xl hover:bg-slate-100 text-slate-600 flex items-center justify-center transition-colors cursor-pointer"
+        >
+          <ChevronLeft className="w-4 h-4" />
+        </button>
+
+        <div className="text-xs font-black text-slate-900 tracking-tight">
+          {MONTH_NAMES[viewMonth]} {viewYear}
+        </div>
+
+        <button
+          type="button"
+          onClick={handleNextMonth}
+          className="w-7 h-7 rounded-xl hover:bg-slate-100 text-slate-600 flex items-center justify-center transition-colors cursor-pointer"
+        >
+          <ChevronRight className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Dias da Semana */}
+      <div className="grid grid-cols-7 gap-1 pt-2 pb-1 text-center">
+        {WEEK_DAYS.map((d, i) => (
+          <span key={i} className={`text-[10px] font-black ${i === 0 || i === 6 ? 'text-rose-500' : 'text-slate-400'}`}>
+            {d}
+          </span>
+        ))}
+      </div>
+
+      {/* Grade de Dias */}
+      <div className="grid grid-cols-7 gap-1 text-center">
+        {prevMonthDays.map((d, i) => (
+          <div key={`prev-${i}`} className="h-8 flex items-center justify-center text-[11px] text-slate-300 font-medium">
+            {d}
+          </div>
+        ))}
+
+        {Array.from({ length: daysInMonth }).map((_, idx) => {
+          const dayNum = idx + 1;
+          const dateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+          const isSelected = selectedDate === dateStr;
+          const isToday = todayStr === dateStr;
+          const isDisabled = minDate && dateStr < minDate;
+
+          return (
+            <button
+              key={dayNum}
+              type="button"
+              disabled={Boolean(isDisabled)}
+              onClick={() => {
+                onSelectDate(dateStr);
+                onClose();
+              }}
+              className={`h-8 w-8 mx-auto rounded-xl text-xs font-black transition-all flex items-center justify-center cursor-pointer ${
+                isSelected
+                  ? 'bg-gradient-to-tr from-indigo-600 to-indigo-500 text-white shadow-md shadow-indigo-500/30 ring-2 ring-indigo-500/20'
+                  : isToday
+                  ? 'bg-indigo-50 text-indigo-700 font-black border border-indigo-200'
+                  : isDisabled
+                  ? 'text-slate-300 opacity-40 cursor-not-allowed'
+                  : 'text-slate-700 hover:bg-slate-100'
+              }`}
+            >
+              {dayNum}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Ações Rápidas no Rodapé */}
+      <div className="pt-2.5 mt-2 border-t border-slate-100 flex items-center justify-between text-[11px] font-bold">
+        <button
+          type="button"
+          onClick={() => {
+            onSelectDate(todayStr);
+            onClose();
+          }}
+          className="text-indigo-600 hover:text-indigo-800 transition-colors cursor-pointer px-1.5 py-0.5 rounded-lg hover:bg-indigo-50"
+        >
+          Hoje
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            const tom = new Date();
+            tom.setDate(tom.getDate() + 1);
+            onSelectDate(getLocalISOData(tom).date);
+            onClose();
+          }}
+          className="text-slate-600 hover:text-slate-900 transition-colors cursor-pointer px-1.5 py-0.5 rounded-lg hover:bg-slate-100"
+        >
+          Amanhã
+        </button>
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-slate-400 hover:text-rose-500 transition-colors cursor-pointer px-1.5 py-0.5 rounded-lg hover:bg-rose-50"
+        >
+          Fechar
+        </button>
+      </div>
+    </motion.div>
+  );
+};
+
 export const EventModal: React.FC<Props> = ({
   isOpen,
   onClose,
@@ -62,9 +235,15 @@ export const EventModal: React.FC<Props> = ({
   const [title, setTitle] = useState('');
   const [type, setType] = useState('Pessoal');
   const [sector, setSector] = useState('');
+  const [sectorId, setSectorId] = useState('');
+  const [sectorSearch, setSectorSearch] = useState('');
+  const [showSectorDropdown, setShowSectorDropdown] = useState(false);
   const [sectorsList, setSectorsList] = useState<Sector[]>([]);
+  const [jobsList, setJobsList] = useState<Job[]>([]);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [showStartDatePicker, setShowStartDatePicker] = useState(false);
+  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
   const [isAllDay, setIsAllDay] = useState(true);
   const [isIndefinite, setIsIndefinite] = useState(false);
   const [startTime, setStartTime] = useState('08:00');
@@ -84,46 +263,62 @@ export const EventModal: React.FC<Props> = ({
   const [showAiPreviewModal, setShowAiPreviewModal] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Invites State
+  // Invites & Pessoas Envolvidas (Admin/Entidades)
   const [activeTab, setActiveTab] = useState<'details' | 'invites'>('details');
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [persons, setPersons] = useState<Person[]>([]);
+  const [selectedPersonIds, setSelectedPersonIds] = useState<string[]>([]);
+  const [personSearchMulti, setPersonSearchMulti] = useState('');
+  const [showPersonsDropdown, setShowPersonsDropdown] = useState(false);
   const [professionalId, setProfessionalId] = useState('');
   const [personSearch, setPersonSearch] = useState('');
   const [showPersonDropdown, setShowPersonDropdown] = useState(false);
   const [selectedInvites, setSelectedInvites] = useState<{ user_id: string; role: 'Colaborador' | 'Participante' }[]>([]);
 
-  const DEFAULT_SECTORES = [
-    'Gabinete do Prefeito',
-    'Secretaria de Saúde',
-    'Secretaria de Educação',
-    'Secretaria de Obras & Infraestrutura',
-    'Secretaria de Administração & Fazenda',
-    'Secretaria de Assistência Social',
-    'Departamento de Transporte & Frotas',
-    'Departamento de Meio Ambiente',
-    'Departamento de Agricultura & Pecuária',
-    'Departamento de Cultura & Turismo',
-    'Departamento de Esporte & Lazer',
-    'Departamento de Compras & Licitação',
-    'Departamento de Recursos Humanos',
-    'Assessoria de Comunicação & Imprensa',
-    'Controladoria Geral do Município'
-  ];
+  // Refs para fechar os selects/popovers ao clicar fora
+  const sectorDropdownRef = useRef<HTMLDivElement>(null);
+  const personsDropdownRef = useRef<HTMLDivElement>(null);
+  const personBirthDropdownRef = useRef<HTMLDivElement>(null);
+  const startDatePickerRef = useRef<HTMLDivElement>(null);
+  const endDatePickerRef = useRef<HTMLDivElement>(null);
 
-  const allSectorOptions = Array.from(new Set([
-    ...sectorsList.map(s => s.name),
-    ...DEFAULT_SECTORES
-  ])).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (sectorDropdownRef.current && !sectorDropdownRef.current.contains(target)) {
+        setShowSectorDropdown(false);
+      }
+      if (personsDropdownRef.current && !personsDropdownRef.current.contains(target)) {
+        setShowPersonsDropdown(false);
+      }
+      if (personBirthDropdownRef.current && !personBirthDropdownRef.current.contains(target)) {
+        setShowPersonDropdown(false);
+      }
+      if (startDatePickerRef.current && !startDatePickerRef.current.contains(target)) {
+        setShowStartDatePicker(false);
+      }
+      if (endDatePickerRef.current && !endDatePickerRef.current.contains(target)) {
+        setShowEndDatePicker(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   useEffect(() => {
     if (isOpen) {
       fetchUsers();
       fetchSectors();
+      fetchJobsData();
+      fetchPersons();
       if (eventToEdit) {
         setTitle(eventToEdit.title);
         setType(eventToEdit.type);
         setSector((eventToEdit as any).sector || '');
+        setSectorId((eventToEdit as any).sector_id || '');
         setStartDate(eventToEdit.start_date);
         setEndDate(eventToEdit.end_date || eventToEdit.start_date);
         setIsAllDay(eventToEdit.is_all_day);
@@ -134,6 +329,11 @@ export const EventModal: React.FC<Props> = ({
         setIsRecurring(eventToEdit.is_recurring || false);
         setProfessionalId(eventToEdit.professional_id || '');
         setImageUrl((eventToEdit as any).image_url || '');
+
+        // Recuperar pessoas envolvidas vinculadas ao evento
+        const savedPersonIds = (eventToEdit as any).person_ids || 
+          (eventToEdit as any).persons_involved?.map((p: any) => p.id) || [];
+        setSelectedPersonIds(savedPersonIds);
 
         // Manter o estado de publicação no jornal exatamente igual à criação
         const wasPublished = (eventToEdit as any).publish_to_news ?? (eventToEdit.type === 'Notícia');
@@ -163,6 +363,8 @@ export const EventModal: React.FC<Props> = ({
         setTitle('');
         setType('Pessoal');
         setSector('');
+        setSectorId('');
+        setSelectedPersonIds([]);
         const defaultDate = getLocalISOData(new Date()).date;
         setStartDate(selectedDate || defaultDate);
         setEndDate(selectedDate || defaultDate);
@@ -179,9 +381,17 @@ export const EventModal: React.FC<Props> = ({
         setSelectedInvites([]);
         setActiveTab('details');
       }
-      fetchPersons();
     }
   }, [isOpen, eventToEdit, selectedDate]);
+
+  const fetchJobsData = async () => {
+    try {
+      const data = await getJobs();
+      if (data) setJobsList(data);
+    } catch (e) {
+      console.warn('Erro ao carregar cargos:', e);
+    }
+  };
 
   const fetchSectors = async () => {
     try {
@@ -283,7 +493,24 @@ export const EventModal: React.FC<Props> = ({
     }
   };
 
-  // Gerar Prévia da Matéria com IA (considerando o Setor)
+  // Montar lista de pessoas envolvidas estruturadas com seus cargos e setores
+  const getPessoasEnvolvidasData = () => {
+    return selectedPersonIds.map(id => {
+      const p = persons.find(x => x.id === id);
+      const j = jobsList.find(job => job.id === p?.jobId);
+      const s = sectorsList.find(sec => sec.id === p?.sectorId);
+      return {
+        id,
+        name: p?.name || '',
+        jobName: j?.name || p?.role || '',
+        role: j?.name || p?.role || '',
+        sectorName: s?.name || sector || '',
+        sector: s?.name || sector || ''
+      };
+    }).filter(p => p.name);
+  };
+
+  // Gerar Prévia da Matéria com IA (considerando o Setor e as Pessoas envolvidas)
   const handleGeneratePreviewAI = async () => {
     if (!title.trim()) {
       setErrorMessage('Informe o título do registro para a IA gerar a matéria.');
@@ -293,6 +520,7 @@ export const EventModal: React.FC<Props> = ({
     setIsGeneratingAI(true);
     setErrorMessage(null);
     try {
+      const pessoasParaIA = getPessoasEnvolvidasData();
       const generated = await generateMateriaJornalWithAI({
         titulo: title,
         tipoEvento: type,
@@ -301,7 +529,8 @@ export const EventModal: React.FC<Props> = ({
         horaInicio: isAllDay ? undefined : startTime,
         horaFim: isAllDay ? undefined : endTime,
         descricao: description,
-        setor: sector
+        setor: sector,
+        pessoas: pessoasParaIA
       });
 
       setAiPreview(generated);
@@ -344,6 +573,8 @@ export const EventModal: React.FC<Props> = ({
 
     setLoading(true);
     try {
+      const pessoasParaIA = getPessoasEnvolvidasData();
+
       // 1. Se marcado para publicar no jornal, gerar ou usar prévia da IA
       let finalMateriaData = aiPreview;
       if (publishToNews && !finalMateriaData) {
@@ -355,7 +586,8 @@ export const EventModal: React.FC<Props> = ({
           horaInicio: isAllDay ? undefined : startTime,
           horaFim: isAllDay ? undefined : endTime,
           descricao: description,
-          setor: sector
+          setor: sector,
+          pessoas: pessoasParaIA
         });
       }
 
@@ -374,6 +606,9 @@ export const EventModal: React.FC<Props> = ({
         image_url: imageUrl || undefined,
         is_indefinite: isIndefinite,
         sector: sector || undefined,
+        sector_id: sectorId || undefined,
+        person_ids: selectedPersonIds,
+        persons_involved: pessoasParaIA,
         publish_to_news: publishToNews,
         materia_data: finalMateriaData ? {
           manchete: finalMateriaData.manchete,
@@ -420,6 +655,9 @@ export const EventModal: React.FC<Props> = ({
           eventoId: savedEventId,
           tipoEvento: type,
           setor: sector || undefined,
+          setorId: sectorId || undefined,
+          person_ids: selectedPersonIds,
+          pessoasEnvolvidas: pessoasParaIA,
           oculta: false,
           aprovada: false, // Fica pendente de aprovação de administrador
           status: 'pendente',
@@ -506,65 +744,65 @@ export const EventModal: React.FC<Props> = ({
           onClick={onClose}
         />
 
-        {/* Modal Card Ultra-Moderno */}
+        {/* Modal Card Ultra-Moderno e Amplo */}
         <motion.div
           initial={{ opacity: 0, scale: 0.96, y: 10 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.96, y: 10 }}
           transition={{ duration: 0.2, ease: 'easeOut' }}
-          className="w-[94vw] max-w-5xl h-[84vh] min-h-[580px] max-h-[820px] bg-white rounded-[2rem] shadow-2xl relative z-10 flex flex-col border border-slate-200/80 overflow-hidden font-sans my-auto"
+          className="w-[96vw] max-w-6xl max-h-[92vh] bg-white rounded-[2.25rem] shadow-2xl relative z-10 flex flex-col border border-slate-200/80 overflow-hidden font-sans my-auto"
         >
           
           {/* Header Elegante em Dark Indigo Gradient */}
-          <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 px-6 py-4 flex items-center justify-between gap-4 shrink-0 border-b border-white/10 relative overflow-hidden">
-            <div className="relative z-10 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-white shadow-lg shrink-0">
-                <CalendarIcon className="w-5 h-5 text-indigo-300" />
+          <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 px-7 py-4.5 flex items-center justify-between gap-4 shrink-0 border-b border-white/10 relative overflow-hidden">
+            <div className="relative z-10 flex items-center gap-3.5">
+              <div className="w-11 h-11 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-white shadow-lg shrink-0">
+                <CalendarIcon className="w-5.5 h-5.5 text-indigo-300" />
               </div>
               <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-base sm:text-lg font-black tracking-tight text-white uppercase leading-tight">
+                <div className="flex items-center gap-2.5">
+                  <h2 className="text-base sm:text-xl font-black tracking-tight text-white uppercase leading-tight">
                     {eventToEdit ? 'Editar Compromisso' : 'Novo Registro no Calendário'}
                   </h2>
-                  <span className="px-2.5 py-0.5 rounded-full bg-indigo-500/20 border border-indigo-400/30 text-indigo-200 text-[10px] font-black uppercase">
+                  <span className="px-3 py-0.5 rounded-full bg-indigo-500/25 border border-indigo-400/30 text-indigo-200 text-[11px] font-black uppercase">
                     {type}
                   </span>
                 </div>
-                <p className="text-[11px] text-slate-300 font-medium">
+                <p className="text-xs text-slate-300 font-medium">
                   Prefeitura Municipal • Gestão Integrada de Agenda & Publicação no Jornal
                 </p>
               </div>
             </div>
 
             {/* Abas e Botão Fechar */}
-            <div className="relative z-10 flex items-center gap-2.5">
-              <div className="flex items-center gap-1 bg-white/10 backdrop-blur-md p-1 rounded-2xl border border-white/15">
+            <div className="relative z-10 flex items-center gap-3">
+              <div className="flex items-center gap-1.5 bg-white/10 backdrop-blur-md p-1.5 rounded-2xl border border-white/15">
                 <button
                   type="button"
                   onClick={() => setActiveTab('details')}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
+                  className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
                     activeTab === 'details'
                       ? 'bg-white text-slate-950 shadow-md font-black'
                       : 'text-white/80 hover:text-white'
                   }`}
                 >
-                  <FileText className="w-3.5 h-3.5" />
+                  <FileText className="w-4 h-4" />
                   <span>Dados do Evento</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setActiveTab('invites')}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
+                  className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
                     activeTab === 'invites'
                       ? 'bg-white text-slate-950 shadow-md font-black'
                       : 'text-white/80 hover:text-white'
                   }`}
                 >
-                  <Users className="w-3.5 h-3.5" />
+                  <Users className="w-4 h-4" />
                   <span>Convidados</span>
                   {selectedInvites.length > 0 && (
-                    <span className="w-4 h-4 rounded-full bg-indigo-600 text-white text-[10px] flex items-center justify-center font-black">
+                    <span className="w-5 h-5 rounded-full bg-indigo-600 text-white text-[11px] flex items-center justify-center font-black">
                       {selectedInvites.length}
                     </span>
                   )}
@@ -573,74 +811,314 @@ export const EventModal: React.FC<Props> = ({
 
               <button
                 onClick={onClose}
-                className="w-9 h-9 rounded-2xl bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/15 flex items-center justify-center text-slate-300 hover:text-white transition-all cursor-pointer shrink-0"
+                className="w-10 h-10 rounded-2xl bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/15 flex items-center justify-center text-slate-300 hover:text-white transition-all cursor-pointer shrink-0"
                 title="Fechar"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
             </div>
           </div>
 
           {/* Banner de Erro */}
           {errorMessage && (
-            <div className="mx-6 mt-2.5 p-2.5 bg-rose-50 border border-rose-200 rounded-2xl text-rose-700 text-xs font-bold flex items-center justify-between shrink-0 shadow-sm animate-in fade-in">
-              <div className="flex items-center gap-2">
+            <div className="mx-7 mt-3 p-3 bg-rose-50 border border-rose-200 rounded-2xl text-rose-700 text-xs font-bold flex items-center justify-between shrink-0 shadow-xs animate-in fade-in">
+              <div className="flex items-center gap-2.5">
                 <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
                 <span>{errorMessage}</span>
               </div>
-              <button onClick={() => setErrorMessage(null)} className="text-rose-500 hover:text-rose-700 font-black">✕</button>
+              <button onClick={() => setErrorMessage(null)} className="text-rose-500 hover:text-rose-700 font-black cursor-pointer">✕</button>
             </div>
           )}
 
-          {/* Form Body com 2 Colunas Equilibradas */}
-          <div className="flex-1 px-6 py-4 overflow-hidden flex flex-col justify-between">
+          {/* Form Body com 2 Colunas Equilibradas e Espaçosas */}
+          <div className="flex-1 px-7 py-5 overflow-y-auto custom-scrollbar">
             {activeTab === 'details' ? (
-              <form id="event-form" onSubmit={handleSave} className="grid grid-cols-1 lg:grid-cols-12 gap-5 h-full">
+              <form id="event-form" onSubmit={handleSave} className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
                 
                 {/* --------------------------------------------------------------- */}
-                {/* COLUNA ESQUERDA (7 colunas): Título, Tipos, Imagem, Descrição */}
+                {/* COLUNA ESQUERDA (7 colunas): Título, Setor, Pessoas, Tipos, Imagem, Descrição */}
                 {/* --------------------------------------------------------------- */}
-                <div className="lg:col-span-7 flex flex-col justify-between space-y-3">
+                <div className="lg:col-span-7 flex flex-col space-y-4">
                   
-                  {/* Linha 1: Título do Registro + Setor Responsável */}
-                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
-                    <div className="sm:col-span-7 space-y-1">
-                      <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 block">
-                        Título do Registro <span className="text-rose-500">*</span>
+                  {/* Linha 1: Título do Registro SOZINHO em Linha Inteira */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-black uppercase tracking-wider text-slate-600 block">
+                      Título do Registro <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={title}
+                      onChange={e => setTitle(e.target.value)}
+                      placeholder="Ex: Inauguração da Nova Unidade de Saúde Central"
+                      className="w-full px-4.5 py-3.5 rounded-2xl border border-slate-200 bg-slate-50/70 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-slate-900 font-bold placeholder:text-slate-400 outline-none text-sm shadow-xs"
+                    />
+                  </div>
+
+                  {/* Linha 2: Setor Municipal Oficial + Pessoas / Servidores Envolvidos na Mesma Linha */}
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-3.5">
+                    
+                    {/* Coluna 1 (6 colunas): Setor Municipal Oficial */}
+                    <div ref={sectorDropdownRef} className="sm:col-span-6 space-y-1.5 relative">
+                      <label className="text-xs font-black uppercase tracking-wider text-slate-600 block flex items-center justify-between">
+                        <span className="flex items-center gap-1.5">
+                          <Building2 className="w-4 h-4 text-indigo-600" />
+                          Setor Municipal Oficial
+                        </span>
+                        {sector && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSector('');
+                              setSectorId('');
+                              setSectorSearch('');
+                            }}
+                            className="text-[11px] text-slate-400 hover:text-rose-500 font-bold cursor-pointer transition-colors"
+                          >
+                            Limpar
+                          </button>
+                        )}
                       </label>
-                      <input
-                        type="text"
-                        required
-                        value={title}
-                        onChange={e => setTitle(e.target.value)}
-                        placeholder="Ex: Inauguração da Nova Unidade de Saúde Central"
-                        className="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200 bg-slate-50/70 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-slate-800 font-bold placeholder:text-slate-400 outline-none text-xs shadow-xs"
-                      />
+
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowSectorDropdown(!showSectorDropdown);
+                            setShowPersonsDropdown(false);
+                            setShowStartDatePicker(false);
+                            setShowEndDatePicker(false);
+                          }}
+                          className="w-full pl-4 pr-9 py-3 rounded-2xl border border-slate-200 bg-slate-50/70 hover:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-left text-xs sm:text-sm font-bold shadow-xs flex items-center justify-between cursor-pointer"
+                        >
+                          <span className={sector ? 'text-slate-900 font-black truncate' : 'text-slate-400'}>
+                            {sector || 'Selecione o setor municipal...'}
+                          </span>
+                          <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${showSectorDropdown ? 'rotate-180 text-indigo-600' : ''}`} />
+                        </button>
+
+                        <AnimatePresence>
+                          {showSectorDropdown && (
+                            <motion.div
+                              initial={{ opacity: 0, y: 5 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, y: 5 }}
+                              className="absolute z-[3200] top-full left-0 right-0 mt-1.5 bg-white rounded-2xl shadow-2xl border border-slate-200 p-2.5 overflow-hidden"
+                            >
+                              <div className="relative mb-2">
+                                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                                <input
+                                  type="text"
+                                  autoFocus
+                                  value={sectorSearch}
+                                  onChange={e => setSectorSearch(e.target.value)}
+                                  placeholder="Buscar setor municipal..."
+                                  className="w-full pl-9 pr-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs sm:text-sm font-bold text-slate-800 outline-none focus:border-indigo-500 focus:bg-white"
+                                />
+                              </div>
+
+                              <div className="max-h-56 overflow-y-auto custom-scrollbar space-y-1">
+                                {sectorsList
+                                  .filter(s => s.name.toLowerCase().includes(sectorSearch.toLowerCase()))
+                                  .map(sec => {
+                                    const isSelected = sectorId === sec.id || sector === sec.name;
+                                    return (
+                                      <button
+                                        key={sec.id}
+                                        type="button"
+                                        onClick={() => {
+                                          setSector(sec.name);
+                                          setSectorId(sec.id);
+                                          setSectorSearch('');
+                                          setShowSectorDropdown(false);
+                                        }}
+                                        className={`w-full px-4 py-2.5 rounded-xl text-left text-xs sm:text-sm font-bold transition-colors flex items-center gap-2.5 cursor-pointer leading-snug ${
+                                          isSelected
+                                            ? 'bg-indigo-600 text-white shadow-xs font-black'
+                                            : 'hover:bg-indigo-50 text-slate-700'
+                                        }`}
+                                      >
+                                        <Building2 className={`w-4 h-4 shrink-0 ${isSelected ? 'text-white' : 'text-indigo-500'}`} />
+                                        <span className="whitespace-normal leading-tight">{sec.name}</span>
+                                      </button>
+                                    );
+                                  })}
+                                {sectorsList.filter(s => s.name.toLowerCase().includes(sectorSearch.toLowerCase())).length === 0 && (
+                                  <div className="py-4 text-center text-xs text-slate-400 font-medium">
+                                    Nenhum setor cadastrado com este nome em /Admin/Entidades.
+                                  </div>
+                                )}
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
                     </div>
 
-                    <div className="sm:col-span-5 space-y-1">
-                      <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 block flex items-center gap-1">
-                        <Building2 className="w-3.5 h-3.5 text-indigo-600" />
-                        Setor Municipal
-                      </label>
-                      <div className="relative">
-                        <select
-                          value={sector}
-                          onChange={e => setSector(e.target.value)}
-                          className="w-full pl-3.5 pr-8 py-2.5 rounded-2xl border border-slate-200 bg-slate-50/70 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-slate-800 font-bold outline-none text-xs shadow-xs cursor-pointer appearance-none"
-                        >
-                          <option value="">Selecione o setor...</option>
-                          {allSectorOptions.map((sec, idx) => (
-                            <option key={idx} value={sec}>{sec}</option>
-                          ))}
-                        </select>
-                        <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    {/* Coluna 2 (6 colunas): Pessoas / Servidores Envolvidos */}
+                    <div ref={personsDropdownRef} className="sm:col-span-6 space-y-1.5 relative">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-black uppercase tracking-wider text-slate-600 block flex items-center gap-1.5">
+                          <Users className="w-4 h-4 text-indigo-600" />
+                          Pessoas / Servidores
+                          {selectedPersonIds.length > 0 && (
+                            <span className="text-[10px] font-mono font-bold text-indigo-600 bg-indigo-50 px-2 py-0.2 rounded-full border border-indigo-200/60">
+                              {selectedPersonIds.length}
+                            </span>
+                          )}
+                        </label>
+
+                        {selectedPersonIds.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedPersonIds([])}
+                            className="text-[11px] text-slate-400 hover:text-rose-500 font-bold transition-colors cursor-pointer"
+                          >
+                            Limpar
+                          </button>
+                        )}
                       </div>
+
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={personSearchMulti}
+                          onChange={e => {
+                            setPersonSearchMulti(e.target.value);
+                            setShowPersonsDropdown(true);
+                            setShowSectorDropdown(false);
+                          }}
+                          onFocus={() => {
+                            setShowPersonsDropdown(true);
+                            setShowSectorDropdown(false);
+                          }}
+                          placeholder={sector ? `Buscar em "${sector.length > 22 ? sector.substring(0, 20) + '...' : sector}"` : 'Buscar servidor ou cargo...'}
+                          className="w-full px-4 py-3 pl-10 rounded-2xl border border-slate-200 bg-slate-50/70 focus:bg-white text-slate-800 font-bold text-xs sm:text-sm outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-xs"
+                        />
+                        <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                      </div>
+
+                      <AnimatePresence>
+                        {showPersonsDropdown && (
+                          <motion.div
+                            initial={{ opacity: 0, y: 5 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: 5 }}
+                            className="absolute z-[3200] top-full left-0 right-0 sm:-right-8 sm:min-w-[360px] mt-1 bg-white rounded-2xl shadow-xl border border-slate-200 p-1.5 overflow-hidden"
+                          >
+                            <div className="max-h-52 overflow-y-auto custom-scrollbar space-y-0.5">
+                              {persons
+                                .filter(p => {
+                                  const matchesSector = !sectorId || p.sectorId === sectorId;
+                                  const jobName = jobsList.find(j => j.id === p.jobId)?.name || p.role || '';
+                                  const matchesSearch = p.name.toLowerCase().includes(personSearchMulti.toLowerCase()) ||
+                                    jobName.toLowerCase().includes(personSearchMulti.toLowerCase());
+                                  return matchesSector && matchesSearch;
+                                })
+                                .map(p => {
+                                  const isSelected = selectedPersonIds.includes(p.id);
+                                  const jobName = jobsList.find(j => j.id === p.jobId)?.name || p.role || 'Servidor';
+                                  const personSectorName = sectorsList.find(s => s.id === p.sectorId)?.name || '';
+
+                                  return (
+                                    <button
+                                      key={p.id}
+                                      type="button"
+                                      onClick={() => {
+                                        if (isSelected) {
+                                          setSelectedPersonIds(prev => prev.filter(id => id !== p.id));
+                                        } else {
+                                          setSelectedPersonIds(prev => [...prev, p.id]);
+                                        }
+                                        setPersonSearchMulti('');
+                                      }}
+                                      className={`w-full px-2.5 py-1.5 rounded-xl text-left transition-colors flex items-center justify-between gap-2 cursor-pointer ${
+                                        isSelected
+                                          ? 'bg-indigo-50/90 text-indigo-950 font-bold'
+                                          : 'hover:bg-slate-50 text-slate-700'
+                                      }`}
+                                    >
+                                      {/* Checkbox e Nome */}
+                                      <div className="flex items-center gap-2 min-w-0">
+                                        <div className={`w-4 h-4 rounded flex items-center justify-center border transition-colors shrink-0 ${
+                                          isSelected ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-slate-300 bg-white'
+                                        }`}>
+                                          {isSelected && <CheckSquare className="w-3 h-3" />}
+                                        </div>
+                                        <span className="text-xs font-bold text-slate-800 truncate">
+                                          {p.name}
+                                        </span>
+                                      </div>
+
+                                      {/* Badge de Cargo Compacto */}
+                                      <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 font-bold shrink-0 border border-indigo-100/60 max-w-[140px] truncate">
+                                        {jobName}
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+
+                              {persons.filter(p => (!sectorId || p.sectorId === sectorId) && (
+                                p.name.toLowerCase().includes(personSearchMulti.toLowerCase()) ||
+                                (jobsList.find(j => j.id === p.jobId)?.name || p.role || '').toLowerCase().includes(personSearchMulti.toLowerCase())
+                              )).length === 0 && (
+                                <div className="py-3 text-center text-xs text-slate-400 font-medium">
+                                  {sector
+                                    ? `Nenhum servidor no setor "${sector}".`
+                                    : 'Nenhum servidor encontrado.'}
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="pt-1.5 border-t border-slate-100 mt-1 flex justify-end">
+                              <button
+                                type="button"
+                                onClick={() => setShowPersonsDropdown(false)}
+                                className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[10px] font-bold cursor-pointer transition-colors"
+                              >
+                                Concluir Seleção
+                              </button>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </div>
                   </div>
 
+                  {/* Tags das Pessoas Selecionadas (Abaixo da linha de forma compacta) */}
+                  {selectedPersonIds.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 -mt-1 max-h-20 overflow-y-auto custom-scrollbar p-1.5 bg-slate-50/80 rounded-2xl border border-slate-200/80">
+                      {selectedPersonIds.map(id => {
+                        const p = persons.find(x => x.id === id);
+                        if (!p) return null;
+                        const jobName = jobsList.find(j => j.id === p.jobId)?.name || p.role;
+                        return (
+                          <span
+                            key={id}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white text-indigo-900 border border-indigo-200/80 text-[11px] font-bold shadow-2xs animate-in fade-in"
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-indigo-600"></span>
+                            <span>{p.name}</span>
+                            {jobName && (
+                              <span className="text-[9px] font-medium text-indigo-700 bg-indigo-50 px-1.5 py-0.2 rounded-md border border-indigo-100">
+                                {jobName}
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => setSelectedPersonIds(prev => prev.filter(x => x !== id))}
+                              className="ml-1 text-indigo-400 hover:text-rose-600 cursor-pointer transition-colors"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+
                   {/* Seletor de Tipos em Grid Harmônico e Proporcional de 7 Itens */}
-                  <div className="space-y-1.5">
+                  <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 block">
                         Tipo de Evento
@@ -650,7 +1128,7 @@ export const EventModal: React.FC<Props> = ({
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-1.5">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
                       {EVENT_TYPES.map(opt => {
                         const Icon = opt.icon;
                         const isSelected = type === opt.value;
@@ -664,16 +1142,16 @@ export const EventModal: React.FC<Props> = ({
                                 setPublishToNews(true);
                               }
                             }}
-                            className={`py-2 px-1.5 rounded-2xl border text-center transition-all flex flex-col items-center justify-center gap-1 cursor-pointer active:scale-95 select-none ${
+                            className={`py-2.5 px-2 rounded-2xl border text-center transition-all flex flex-col items-center justify-center gap-1.5 cursor-pointer active:scale-95 select-none ${
                               isSelected
                                 ? `${opt.active} border-transparent shadow-md font-black ring-2 ring-indigo-500/20`
                                 : 'bg-slate-50/90 hover:bg-white text-slate-700 border-slate-200/90 hover:border-slate-300 shadow-2xs'
                             }`}
                           >
-                            <div className={`w-6 h-6 rounded-xl flex items-center justify-center shrink-0 ${
+                            <div className={`w-7 h-7 rounded-xl flex items-center justify-center shrink-0 ${
                               isSelected ? 'bg-white/20 text-white' : `${opt.bg} ${opt.color}`
                             }`}>
-                              <Icon className="w-3.5 h-3.5" />
+                              <Icon className="w-4 h-4" />
                             </div>
                             <span className="text-[10px] font-bold tracking-tight text-center leading-tight whitespace-nowrap">
                               {opt.label === 'Feriado Municipal' ? 'Feriado Mun.' : opt.label}
@@ -686,9 +1164,9 @@ export const EventModal: React.FC<Props> = ({
 
                   {/* Aniversariante / Servidor se for Aniversário */}
                   {type === 'Aniversário' && (
-                    <div className="p-2.5 bg-pink-50/80 rounded-2xl border border-pink-200 space-y-1 animate-in fade-in">
+                    <div ref={personBirthDropdownRef} className="p-3 bg-pink-50/80 rounded-2xl border border-pink-200 space-y-1.5 animate-in fade-in">
                       <label className="text-[10px] font-black uppercase tracking-wider text-pink-900 block flex items-center gap-1.5">
-                        <Gift className="w-3 h-3 text-pink-600" />
+                        <Gift className="w-3.5 h-3.5 text-pink-600" />
                         Vincular Servidor Municipal
                       </label>
                       <div className="relative">
@@ -701,12 +1179,12 @@ export const EventModal: React.FC<Props> = ({
                           }}
                           onFocus={() => setShowPersonDropdown(true)}
                           placeholder="Pesquise o nome do servidor..."
-                          className="w-full px-3 py-1.5 pl-8 rounded-xl border border-pink-200 bg-white text-slate-800 font-bold text-xs outline-none focus:border-pink-500"
+                          className="w-full px-3.5 py-2 pl-9 rounded-xl border border-pink-200 bg-white text-slate-800 font-bold text-xs outline-none focus:border-pink-500"
                         />
-                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-pink-400" />
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-pink-400" />
 
                         {professionalId && !personSearch && (
-                          <div className="absolute left-8 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                          <div className="absolute left-9 top-1/2 -translate-y-1/2 flex items-center gap-2">
                             <span className="text-xs font-black text-pink-700 bg-pink-100 px-2 py-0.5 rounded-lg">
                               {persons.find(p => p.id === professionalId)?.name}
                             </span>
@@ -719,7 +1197,7 @@ export const EventModal: React.FC<Props> = ({
                               initial={{ opacity: 0, y: 5 }}
                               animate={{ opacity: 1, y: 0 }}
                               exit={{ opacity: 0, y: 5 }}
-                              className="absolute z-[3100] top-full left-0 right-0 mt-1 bg-white rounded-xl shadow-xl border border-pink-100 max-h-36 overflow-y-auto custom-scrollbar"
+                              className="absolute z-[3100] top-full left-0 right-0 mt-1.5 bg-white rounded-xl shadow-xl border border-pink-100 max-h-40 overflow-y-auto custom-scrollbar"
                             >
                               {persons.filter(p => p.name.toLowerCase().includes(personSearch.toLowerCase())).map(p => (
                                 <button
@@ -738,11 +1216,11 @@ export const EventModal: React.FC<Props> = ({
                                       setEndDate(calculatedDate);
                                     }
                                   }}
-                                  className="w-full text-left px-3 py-1.5 hover:bg-pink-50 text-xs font-bold text-slate-700 border-b border-pink-50 last:border-0 flex items-center justify-between"
+                                  className="w-full text-left px-3.5 py-2 hover:bg-pink-50 text-xs font-bold text-slate-700 border-b border-pink-50 last:border-0 flex items-center justify-between cursor-pointer"
                                 >
                                   <span>{p.name}</span>
                                   {p.birth_date && (
-                                    <span className="text-[10px] text-pink-600 font-mono font-bold bg-pink-100 px-1.5 py-0.5 rounded">
+                                    <span className="text-[10px] text-pink-600 font-mono font-bold bg-pink-100 px-2 py-0.5 rounded">
                                       {new Date(p.birth_date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
                                     </span>
                                   )}
@@ -756,7 +1234,7 @@ export const EventModal: React.FC<Props> = ({
                   )}
 
                   {/* Descrição & Botão de Upload Integrado */}
-                  <div className="space-y-1.5 flex-1 flex flex-col">
+                  <div className="space-y-2 flex-1 flex flex-col">
                     <div className="flex items-center justify-between">
                       <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 block">
                         Pauta & Descrição do Evento (Opcional)
@@ -791,7 +1269,7 @@ export const EventModal: React.FC<Props> = ({
                           <button
                             type="button"
                             onClick={() => fileInputRef.current?.click()}
-                            className={`px-3 py-1 border rounded-xl text-[11px] font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 ${
+                            className={`px-3 py-1.5 border rounded-xl text-[11px] font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 ${
                               publishToNews
                                 ? 'bg-rose-50 hover:bg-rose-100 border-rose-300 text-rose-700 ring-2 ring-rose-500/20 animate-pulse'
                                 : 'bg-white hover:bg-indigo-50 border-slate-200 hover:border-indigo-200 text-slate-700 hover:text-indigo-600'
@@ -808,7 +1286,7 @@ export const EventModal: React.FC<Props> = ({
                       value={description}
                       onChange={e => setDescription(e.target.value)}
                       placeholder="Descreva o que será abordado, detalhes do evento ou objetivos para a matéria institucional..."
-                      className="w-full px-4 py-2.5 rounded-2xl border border-slate-200 bg-slate-50/70 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-slate-700 font-medium placeholder:text-slate-400 outline-none resize-none flex-1 min-h-[90px] text-xs shadow-inner"
+                      className="w-full px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50/70 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-slate-700 font-medium placeholder:text-slate-400 outline-none resize-none flex-1 min-h-[110px] text-xs shadow-inner"
                     />
                   </div>
 
@@ -817,29 +1295,29 @@ export const EventModal: React.FC<Props> = ({
                 {/* --------------------------------------------------------------- */}
                 {/* COLUNA DIREITA (5 colunas): Datas, Publicar no Jornal, Equipe */}
                 {/* --------------------------------------------------------------- */}
-                <div className="lg:col-span-5 flex flex-col justify-between space-y-2.5">
+                <div className="lg:col-span-5 flex flex-col space-y-4">
                   
                   {/* Bloco de Agendamento Moderno & Dinâmico */}
-                  <div className="bg-gradient-to-b from-slate-50/90 to-slate-100/50 p-3.5 rounded-3xl border border-slate-200/90 space-y-3 shadow-xs">
+                  <div className="bg-gradient-to-b from-slate-50/90 to-slate-100/50 p-4.5 rounded-3xl border border-slate-200/90 space-y-3.5 shadow-xs">
                     
                     {/* Header com Ícone e Toggles em Pílula (Pill Switchers) */}
-                    <div className="flex items-center justify-between gap-2 border-b border-slate-200/70 pb-2">
+                    <div className="flex items-center justify-between gap-2 border-b border-slate-200/70 pb-2.5">
                       <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center shadow-xs">
-                          <Clock className="w-3.5 h-3.5" />
+                        <div className="w-7 h-7 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs">
+                          <Clock className="w-4 h-4" />
                         </div>
-                        <span className="text-[11px] font-black uppercase tracking-wider text-slate-800">
+                        <span className="text-xs font-black uppercase tracking-wider text-slate-800">
                           Programação
                         </span>
                       </div>
 
                       {/* Pill Toggles Dinâmicos */}
-                      <div className="flex items-center gap-1.5 bg-slate-200/70 p-0.5 rounded-xl border border-slate-300/40">
+                      <div className="flex items-center gap-1.5 bg-slate-200/70 p-1 rounded-xl border border-slate-300/40">
                         {/* Switch Dia Inteiro */}
                         <button
                           type="button"
                           onClick={() => setIsAllDay(!isAllDay)}
-                          className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition-all cursor-pointer select-none flex items-center gap-1 ${
+                          className={`px-3 py-1 rounded-lg text-[10px] font-black transition-all cursor-pointer select-none flex items-center gap-1 ${
                             isAllDay
                               ? 'bg-white text-indigo-700 shadow-xs'
                               : 'text-slate-500 hover:text-slate-800'
@@ -856,7 +1334,7 @@ export const EventModal: React.FC<Props> = ({
                             setIsIndefinite(next);
                             if (next) setEndDate(startDate);
                           }}
-                          className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition-all cursor-pointer select-none flex items-center gap-1 ${
+                          className={`px-3 py-1 rounded-lg text-[10px] font-black transition-all cursor-pointer select-none flex items-center gap-1 ${
                             isIndefinite
                               ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-xs'
                               : 'text-slate-500 hover:text-slate-800'
@@ -868,44 +1346,88 @@ export const EventModal: React.FC<Props> = ({
                       </div>
                     </div>
 
-                    {/* Datas Início e Término em Cards Estilizados */}
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="space-y-1 bg-white p-2 rounded-2xl border border-slate-200/80 shadow-xs">
-                        <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">
+                    {/* Datas Início e Término em Cards Estilizados com Calendário Dinâmico Popover */}
+                    <div className="grid grid-cols-2 gap-2.5">
+                      {/* Data de Início */}
+                      <div ref={startDatePickerRef} className="space-y-1 bg-white p-3 rounded-2xl border border-slate-200/80 shadow-xs relative">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
                           Data de Início
                         </span>
-                        <input
-                          type="date"
-                          required
-                          value={startDate}
-                          onChange={e => {
-                            const val = e.target.value;
-                            setStartDate(val);
-                            if (isIndefinite || !endDate || endDate < val) {
-                              setEndDate(val);
-                            }
+                        
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowStartDatePicker(!showStartDatePicker);
+                            setShowEndDatePicker(false);
+                            setShowSectorDropdown(false);
+                            setShowPersonsDropdown(false);
                           }}
-                          className="w-full bg-transparent font-black text-xs text-slate-800 outline-none cursor-pointer"
-                        />
+                          className="w-full flex items-center justify-between text-left font-black text-xs sm:text-sm text-slate-800 outline-none cursor-pointer group py-0.5"
+                        >
+                          <span>
+                            {startDate ? startDate.split('-').reverse().join('/') : 'Selecionar data'}
+                          </span>
+                          <CalendarDays className={`w-4 h-4 transition-colors ${showStartDatePicker ? 'text-indigo-600' : 'text-slate-400 group-hover:text-indigo-500'}`} />
+                        </button>
+
+                        <AnimatePresence>
+                          {showStartDatePicker && (
+                            <CustomDatePickerPopup
+                              selectedDate={startDate}
+                              onSelectDate={(newDate) => {
+                                setStartDate(newDate);
+                                if (isIndefinite || !endDate || endDate < newDate) {
+                                  setEndDate(newDate);
+                                }
+                              }}
+                              onClose={() => setShowStartDatePicker(false)}
+                            />
+                          )}
+                        </AnimatePresence>
                       </div>
 
-                      <div className="space-y-1 bg-white p-2 rounded-2xl border border-slate-200/80 shadow-xs">
-                        <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">
+                      {/* Data de Término */}
+                      <div ref={endDatePickerRef} className="space-y-1 bg-white p-3 rounded-2xl border border-slate-200/80 shadow-xs relative">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
                           Data de Término
                         </span>
                         {isIndefinite ? (
-                          <div className="flex items-center justify-between text-indigo-700 py-0.5">
-                            <span className="text-[11px] font-black">Sem Término</span>
-                            <span className="text-xs font-mono font-black bg-indigo-100 text-indigo-800 px-1.5 py-0.2 rounded-md">∞</span>
+                          <div className="flex items-center justify-between text-indigo-700 py-1">
+                            <span className="text-xs sm:text-sm font-black">Sem Término</span>
+                            <span className="text-xs font-mono font-black bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-md">∞</span>
                           </div>
                         ) : (
-                          <input
-                            type="date"
-                            required
-                            value={endDate}
-                            onChange={e => setEndDate(e.target.value)}
-                            className="w-full bg-transparent font-black text-xs text-slate-800 outline-none cursor-pointer"
-                          />
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowEndDatePicker(!showEndDatePicker);
+                                setShowStartDatePicker(false);
+                                setShowSectorDropdown(false);
+                                setShowPersonsDropdown(false);
+                              }}
+                              className="w-full flex items-center justify-between text-left font-black text-xs sm:text-sm text-slate-800 outline-none cursor-pointer group py-0.5"
+                            >
+                              <span>
+                                {endDate ? endDate.split('-').reverse().join('/') : 'Selecionar data'}
+                              </span>
+                              <CalendarDays className={`w-4 h-4 transition-colors ${showEndDatePicker ? 'text-indigo-600' : 'text-slate-400 group-hover:text-indigo-500'}`} />
+                            </button>
+
+                            <AnimatePresence>
+                              {showEndDatePicker && (
+                                <CustomDatePickerPopup
+                                  selectedDate={endDate || startDate}
+                                  minDate={startDate}
+                                  align="right"
+                                  onSelectDate={(newDate) => {
+                                    setEndDate(newDate);
+                                  }}
+                                  onClose={() => setShowEndDatePicker(false)}
+                                />
+                              )}
+                            </AnimatePresence>
+                          </>
                         )}
                       </div>
                     </div>
@@ -917,26 +1439,26 @@ export const EventModal: React.FC<Props> = ({
                           initial={{ opacity: 0, height: 0 }}
                           animate={{ opacity: 1, height: 'auto' }}
                           exit={{ opacity: 0, height: 0 }}
-                          className="grid grid-cols-2 gap-2 p-2 bg-indigo-50/80 rounded-2xl border border-indigo-100/90 overflow-hidden"
+                          className="grid grid-cols-2 gap-2.5 p-2.5 bg-indigo-50/80 rounded-2xl border border-indigo-100/90 overflow-hidden"
                         >
-                          <div className="space-y-0.5">
-                            <label className="text-[9px] font-black uppercase tracking-wider text-indigo-950 block">Hora Início</label>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black uppercase tracking-wider text-indigo-950 block">Hora Início</label>
                             <input
                               type="time"
                               required={!isAllDay}
                               value={startTime}
                               onChange={e => setStartTime(e.target.value)}
-                              className="w-full px-2 py-1 rounded-xl border border-indigo-200 bg-white font-bold text-xs text-slate-800 outline-none shadow-xs"
+                              className="w-full px-2.5 py-1.5 rounded-xl border border-indigo-200 bg-white font-bold text-xs text-slate-800 outline-none shadow-xs"
                             />
                           </div>
-                          <div className="space-y-0.5">
-                            <label className="text-[9px] font-black uppercase tracking-wider text-indigo-950 block">Hora Término</label>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black uppercase tracking-wider text-indigo-950 block">Hora Término</label>
                             <input
                               type="time"
                               required={!isAllDay}
                               value={endTime}
                               onChange={e => setEndTime(e.target.value)}
-                              className="w-full px-2 py-1 rounded-xl border border-indigo-200 bg-white font-bold text-xs text-slate-800 outline-none shadow-xs"
+                              className="w-full px-2.5 py-1.5 rounded-xl border border-indigo-200 bg-white font-bold text-xs text-slate-800 outline-none shadow-xs"
                             />
                           </div>
                         </motion.div>
@@ -947,31 +1469,31 @@ export const EventModal: React.FC<Props> = ({
                     {(type !== 'Aniversário' && type !== 'Feriado Municipal') ? (
                       <div
                         onClick={() => setIsRecurring(!isRecurring)}
-                        className={`flex items-center justify-between p-2.5 rounded-2xl border transition-all cursor-pointer select-none ${
+                        className={`flex items-center justify-between p-3 rounded-2xl border transition-all cursor-pointer select-none ${
                           isRecurring
                             ? 'bg-indigo-50/90 border-indigo-300 text-indigo-900 shadow-xs'
                             : 'bg-white border-slate-200/80 text-slate-700 hover:border-slate-300'
                         }`}
                       >
-                        <div className="flex items-center gap-2">
-                          <Repeat className={`w-3.5 h-3.5 ${isRecurring ? 'text-indigo-600' : 'text-slate-400'}`} />
-                          <span className="text-[11px] font-bold">Repetir Anualmente</span>
+                        <div className="flex items-center gap-2.5">
+                          <Repeat className={`w-4 h-4 ${isRecurring ? 'text-indigo-600' : 'text-slate-400'}`} />
+                          <span className="text-xs font-bold">Repetir Anualmente</span>
                         </div>
 
                         {/* Switch estilo iOS */}
-                        <div className={`w-8 h-4.5 flex items-center rounded-full p-0.5 transition-colors ${
+                        <div className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors ${
                           isRecurring ? 'bg-indigo-600' : 'bg-slate-300'
                         }`}>
-                          <div className={`bg-white w-3.5 h-3.5 rounded-full shadow-md transform transition-transform ${
-                            isRecurring ? 'translate-x-3.5' : 'translate-x-0'
+                          <div className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                            isRecurring ? 'translate-x-4' : 'translate-x-0'
                           }`} />
                         </div>
                       </div>
                     ) : (
-                      <div className="p-2.5 bg-rose-50/80 rounded-2xl border border-rose-100 flex items-center justify-between text-rose-800">
-                        <div className="flex items-center gap-2">
-                          <Repeat className="w-3.5 h-3.5 text-rose-500 shrink-0" />
-                          <span className="text-[11px] font-bold">Recorrência Anual Automática</span>
+                      <div className="p-3 bg-rose-50/80 rounded-2xl border border-rose-100 flex items-center justify-between text-rose-800">
+                        <div className="flex items-center gap-2.5">
+                          <Repeat className="w-4 h-4 text-rose-500 shrink-0" />
+                          <span className="text-xs font-bold">Recorrência Anual Automática</span>
                         </div>
                         <span className="text-[10px] font-black uppercase bg-rose-100 px-2 py-0.5 rounded-md">Ativo</span>
                       </div>
@@ -980,93 +1502,102 @@ export const EventModal: React.FC<Props> = ({
                   </div>
 
                   {/* Card "Publicar no Jornal" Ultra-Moderno com IA */}
-                  <div className={`p-3 rounded-3xl border transition-all ${
+                  <div className={`p-4 rounded-3xl border transition-all ${
                     publishToNews
-                      ? 'bg-gradient-to-br from-indigo-50/90 via-sky-50/80 to-indigo-50/90 border-indigo-300 shadow-sm ring-2 ring-indigo-500/15'
-                      : 'bg-slate-50/80 border-slate-200/90'
+                      ? 'bg-gradient-to-br from-indigo-50/90 via-sky-50/80 to-indigo-50/90 border-indigo-400 shadow-md ring-2 ring-indigo-500/20'
+                      : 'bg-white border-slate-300/80 shadow-xs hover:border-slate-400'
                   }`}>
-                    <div className="flex items-center justify-between gap-2.5">
-                      <div className="flex items-center gap-2.5">
-                        <div className={`w-8 h-8 rounded-2xl flex items-center justify-center shrink-0 transition-all ${
-                          publishToNews ? 'bg-gradient-to-br from-indigo-600 to-sky-600 text-white shadow-md' : 'bg-slate-200 text-slate-600'
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 transition-all ${
+                          publishToNews ? 'bg-gradient-to-br from-indigo-600 to-sky-600 text-white shadow-md shadow-indigo-500/25' : 'bg-slate-100 text-slate-500 border border-slate-200'
                         }`}>
-                          <Newspaper className="w-4 h-4" />
+                          <Newspaper className="w-5 h-5" />
                         </div>
                         <div>
                           <div className="flex items-center gap-1.5">
-                            <span className="text-xs font-black text-slate-900 block">
+                            <span className="text-xs sm:text-sm font-black text-slate-900 block">
                               Publicar no Jornal
                             </span>
-                            <span className="px-1.5 py-0.2 rounded-md bg-indigo-100 text-indigo-800 text-[8px] font-black uppercase flex items-center gap-0.5">
-                              <Sparkles className="w-2.5 h-2.5 text-indigo-600" /> IA
+                            <span className="px-1.5 py-0.2 rounded-md bg-indigo-100 text-indigo-800 text-[9px] font-black uppercase flex items-center gap-0.5">
+                              <Sparkles className="w-3 h-3 text-indigo-600" /> IA
                             </span>
                           </div>
-                          <p className="text-[10px] text-slate-500 font-medium leading-tight">
+                          <p className="text-[10px] sm:text-[11px] text-slate-500 font-medium leading-tight">
                             Redige automaticamente a matéria institucional
                           </p>
                         </div>
                       </div>
 
-                      {/* Switch Estilo iOS para Publicação */}
-                      <div
+                      {/* Botão de Toggle Super Visível e Destacado */}
+                      <button
+                        type="button"
                         onClick={() => setPublishToNews(!publishToNews)}
-                        className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer select-none shrink-0 ${
-                          publishToNews ? 'bg-gradient-to-r from-indigo-600 to-sky-600' : 'bg-slate-300'
+                        className={`px-3.5 py-2 rounded-2xl font-black text-xs transition-all flex items-center gap-2 cursor-pointer shadow-sm active:scale-95 select-none shrink-0 ${
+                          publishToNews
+                            ? 'bg-gradient-to-r from-indigo-600 via-blue-600 to-sky-600 text-white shadow-indigo-500/30 ring-2 ring-indigo-400/40 hover:brightness-105'
+                            : 'bg-slate-100 hover:bg-slate-200/80 text-slate-700 border-2 border-slate-300 hover:border-slate-400'
                         }`}
                       >
-                        <div className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
-                          publishToNews ? 'translate-x-4' : 'translate-x-0'
-                        }`} />
-                      </div>
+                        {/* Switch Visual */}
+                        <div className={`w-8 h-4.5 rounded-full p-0.5 transition-colors flex items-center ${
+                          publishToNews ? 'bg-white/30 justify-end' : 'bg-slate-300 justify-start'
+                        }`}>
+                          <div className="w-3.5 h-3.5 rounded-full bg-white shadow-sm" />
+                        </div>
+                        <span className="tracking-wide uppercase text-[10px] sm:text-[11px]">
+                          {publishToNews ? 'Publicar Ativo' : 'Ativar Publicação'}
+                        </span>
+                      </button>
                     </div>
 
                     {publishToNews && (
-                      <div className="mt-2.5 pt-2.5 border-t border-indigo-200/60 space-y-2 animate-in fade-in">
+                      <div className="mt-3 pt-3 border-t border-indigo-200/60 space-y-2.5 animate-in fade-in">
                         {/* Status da Imagem Obrigatória para o Jornal */}
                         {!imageUrl ? (
                           <div
                             onClick={() => fileInputRef.current?.click()}
-                            className="p-2 rounded-2xl bg-rose-50/90 border border-rose-200 flex items-center justify-between gap-2 cursor-pointer hover:bg-rose-100/80 transition-all group"
+                            className="p-2.5 rounded-2xl bg-rose-50/90 border border-rose-200 flex items-center justify-between gap-2 cursor-pointer hover:bg-rose-100/80 transition-all group"
                           >
                             <div className="flex items-center gap-2">
-                              <div className="w-6 h-6 rounded-lg bg-rose-500/15 text-rose-600 flex items-center justify-center shrink-0">
-                                <Camera className="w-3.5 h-3.5" />
+                              <div className="w-7 h-7 rounded-lg bg-rose-500/15 text-rose-600 flex items-center justify-center shrink-0">
+                                <Camera className="w-4 h-4" />
                               </div>
                               <div>
-                                <p className="text-[10px] font-black text-rose-800 leading-tight">
+                                <p className="text-[11px] font-black text-rose-800 leading-tight">
                                   Foto Oficial Obrigatória *
                                 </p>
-                                <p className="text-[9px] text-rose-600/90 font-medium">
+                                <p className="text-[10px] text-rose-600/90 font-medium">
                                   Clique para anexar a foto da matéria
                                 </p>
                               </div>
                             </div>
-                            <span className="text-[9px] font-black uppercase tracking-wider bg-rose-600 text-white px-2 py-0.5 rounded-md shrink-0 shadow-xs group-hover:bg-rose-700">
+                            <span className="text-[10px] font-black uppercase tracking-wider bg-rose-600 text-white px-2.5 py-1 rounded-lg shrink-0 shadow-xs group-hover:bg-rose-700">
                               Enviar Foto
                             </span>
                           </div>
                         ) : (
-                          <div className="p-1.5 px-2 rounded-2xl bg-emerald-50/90 border border-emerald-200 flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-2 truncate">
-                              <div className="w-6 h-6 rounded-lg overflow-hidden border border-emerald-300 shrink-0">
+                          <div className="p-2 px-2.5 rounded-2xl bg-emerald-50/90 border border-emerald-200 flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2.5 truncate">
+                              <div className="w-7 h-7 rounded-lg overflow-hidden border border-emerald-300 shrink-0">
                                 <img src={imageUrl} alt="Foto oficial" className="w-full h-full object-cover" />
                               </div>
-                              <p className="text-[10px] font-black text-emerald-800 truncate">
+                              <p className="text-[11px] font-black text-emerald-800 truncate">
                                 Foto oficial vinculada à matéria
                               </p>
                             </div>
                             <button
                               type="button"
                               onClick={() => fileInputRef.current?.click()}
-                              className="text-[9px] font-bold text-emerald-700 hover:text-emerald-900 underline cursor-pointer shrink-0"
+                              className="text-[10px] font-bold text-emerald-700 hover:text-emerald-900 underline cursor-pointer shrink-0"
                             >
                               Trocar
                             </button>
                           </div>
                         )}
 
-                        <div className="flex items-center justify-between gap-2 pt-0.5">
-                          <span className="text-[10px] font-black text-indigo-900 truncate">
+                        <div className="flex items-center justify-between gap-2 pt-1">
+                          <span className="text-[11px] font-black text-indigo-900 truncate">
                             {aiPreview ? '✨ Matéria gerada com sucesso!' : 'Geração com IA ao salvar'}
                           </span>
                           
@@ -1074,12 +1605,12 @@ export const EventModal: React.FC<Props> = ({
                             type="button"
                             onClick={handleGeneratePreviewAI}
                             disabled={isGeneratingAI}
-                            className="px-2.5 py-1 bg-gradient-to-r from-indigo-600 to-sky-600 hover:from-indigo-700 hover:to-sky-700 text-white rounded-xl text-[10px] font-black transition-all flex items-center gap-1 shadow-xs active:scale-95 cursor-pointer disabled:opacity-50 shrink-0"
+                            className="px-3 py-1.5 bg-gradient-to-r from-indigo-600 to-sky-600 hover:from-indigo-700 hover:to-sky-700 text-white rounded-xl text-[11px] font-black transition-all flex items-center gap-1.5 shadow-xs active:scale-95 cursor-pointer disabled:opacity-50 shrink-0"
                           >
                             {isGeneratingAI ? (
-                              <Loader2 className="w-3 h-3 animate-spin" />
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
                             ) : (
-                              <Wand2 className="w-3 h-3" />
+                              <Wand2 className="w-3.5 h-3.5" />
                             )}
                             <span>{aiPreview ? 'Ver Matéria' : 'Prévia com IA'}</span>
                           </button>
@@ -1088,37 +1619,13 @@ export const EventModal: React.FC<Props> = ({
                     )}
                   </div>
 
-                  {/* Card de Convidados Minimalista & Moderno */}
-                  <div className="p-3 bg-slate-50/80 rounded-3xl border border-slate-200/90 flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-7 h-7 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-black shrink-0">
-                        <Users className="w-3.5 h-3.5" />
-                      </div>
-                      <div>
-                        <span className="text-xs font-extrabold text-slate-800 block">
-                          {selectedInvites.length === 0
-                            ? 'Nenhum convidado vinculado'
-                            : `${selectedInvites.length} participante(s)`}
-                        </span>
-                        <span className="text-[10px] text-slate-400 font-medium">Agenda compartilhada</span>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('invites')}
-                      className="px-3 py-1 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 hover:text-indigo-600 rounded-xl text-[11px] font-bold transition-all shadow-xs cursor-pointer active:scale-95"
-                    >
-                      Gerenciar
-                    </button>
-                  </div>
-
                 </div>
 
               </form>
             ) : (
               /* ABA DE CONVIDADOS */
-              <div className="flex flex-col h-full justify-between space-y-3">
-                <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <div className="flex flex-col h-full justify-between space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                   <div>
                     <h3 className="text-sm font-black text-slate-900 uppercase">
                       Participantes & Equipe
@@ -1131,13 +1638,13 @@ export const EventModal: React.FC<Props> = ({
                   <button
                     type="button"
                     onClick={selectAll}
-                    className="px-3.5 py-1.5 text-xs font-black text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-colors cursor-pointer"
+                    className="px-4 py-2 text-xs font-black text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-colors cursor-pointer"
                   >
                     {selectedInvites.length === allUsers.length ? 'Desmarcar Todos' : 'Selecionar Todos'}
                   </button>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 flex-1 overflow-y-auto custom-scrollbar pr-1">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 flex-1 overflow-y-auto custom-scrollbar pr-1 max-h-[50vh]">
                   {allUsers.map(user => {
                     const invite = selectedInvites.find(i => i.user_id === user.id);
                     const isSelected = !!invite;
@@ -1145,7 +1652,7 @@ export const EventModal: React.FC<Props> = ({
                     return (
                       <div
                         key={user.id}
-                        className={`flex items-center justify-between p-3 border rounded-2xl transition-all ${
+                        className={`flex items-center justify-between p-3.5 border rounded-2xl transition-all ${
                           isSelected
                             ? 'border-indigo-300 bg-indigo-50/70 shadow-xs'
                             : 'border-slate-200 bg-white hover:border-slate-300'
@@ -1167,7 +1674,7 @@ export const EventModal: React.FC<Props> = ({
                           <select
                             value={invite.role}
                             onChange={(e) => setRole(user.id, e.target.value as 'Colaborador' | 'Participante')}
-                            className="text-[9px] font-black bg-white border border-indigo-200 text-indigo-700 rounded-lg px-1.5 py-0.5 outline-none ml-1.5 shrink-0 cursor-pointer"
+                            className="text-[10px] font-black bg-white border border-indigo-200 text-indigo-700 rounded-lg px-2 py-1 outline-none ml-2 shrink-0 cursor-pointer"
                           >
                             <option value="Participante">Participante</option>
                             <option value="Colaborador">Organizador</option>
@@ -1182,24 +1689,24 @@ export const EventModal: React.FC<Props> = ({
           </div>
 
           {/* Footer de Ações Moderno */}
-          <div className="px-6 py-3 bg-slate-50/90 border-t border-slate-200/90 flex items-center justify-between shrink-0">
+          <div className="px-7 py-4 bg-slate-50/90 border-t border-slate-200/90 flex items-center justify-between shrink-0">
             {eventToEdit ? (
               <button
                 type="button"
                 onClick={() => setIsConfirmDeleteOpen(true)}
                 disabled={deleting || loading}
-                className="flex items-center gap-1.5 px-3 py-2 text-rose-600 hover:bg-rose-100 rounded-xl font-bold uppercase tracking-wider text-[11px] transition-colors cursor-pointer"
+                className="flex items-center gap-2 px-3.5 py-2.5 text-rose-600 hover:bg-rose-100 rounded-xl font-bold uppercase tracking-wider text-xs transition-colors cursor-pointer"
               >
-                {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                 <span>Excluir</span>
               </button>
             ) : <div />}
 
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-3">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 text-slate-600 hover:text-slate-900 hover:bg-slate-200/70 rounded-xl font-bold uppercase tracking-wider text-xs transition-all cursor-pointer"
+                className="px-5 py-2.5 text-slate-600 hover:text-slate-900 hover:bg-slate-200/70 rounded-xl font-bold uppercase tracking-wider text-xs transition-all cursor-pointer"
               >
                 Cancelar
               </button>
@@ -1209,9 +1716,9 @@ export const EventModal: React.FC<Props> = ({
                 form="event-form"
                 onClick={(e) => activeTab === 'invites' && handleSave(e)}
                 disabled={loading || deleting}
-                className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-rose-500 via-pink-600 to-rose-600 hover:from-rose-600 hover:to-pink-700 text-white rounded-xl shadow-lg shadow-rose-500/20 font-black uppercase tracking-wider text-xs transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+                className="flex items-center gap-2 px-7 py-3 bg-gradient-to-r from-rose-500 via-pink-600 to-rose-600 hover:from-rose-600 hover:to-pink-700 text-white rounded-xl shadow-lg shadow-rose-500/20 font-black uppercase tracking-wider text-xs transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
               >
-                {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 <span>
                   {publishToNews
                     ? 'Salvar & Publicar no Jornal'

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { JornalMateria } from '../../types';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
@@ -32,6 +32,23 @@ export const StoryMateriaJornalTemplate: React.FC<{ materia: JornalMateria; logo
   materia,
   logoUrl
 }) => {
+  // Estado para detecção de orientação da imagem (horizontal vs vertical)
+  const [imageRatio, setImageRatio] = useState<number>(1.5);
+  const [isLandscape, setIsLandscape] = useState<boolean>(true);
+
+  useEffect(() => {
+    if (materia.imagemUrl) {
+      const img = new Image();
+      img.src = materia.imagemUrl;
+      img.onload = () => {
+        const ratio = (img.naturalWidth || 1) / (img.naturalHeight || 1);
+        setImageRatio(ratio);
+        // Se a proporção for >= 1.15, consideramos imagem horizontal (landscape); senão vertical/quadrada (portrait)
+        setIsLandscape(ratio >= 1.15);
+      };
+    }
+  }, [materia.imagemUrl]);
+
   // Obtenção da Logomarca Oficial da Prefeitura com fallback inteligente
   const effectiveLogoUrl = logoUrl ||
     localStorage.getItem('cached_img_branding_logo') ||
@@ -61,37 +78,147 @@ export const StoryMateriaJornalTemplate: React.FC<{ materia: JornalMateria; logo
     .replace(/^["“”']+|["“”']+$/g, '')
     .trim();
 
-  // Ajuste inteligente do tamanho da fonte e espaçamento para que o texto ocupe o espaço com elegância, equilíbrio e máxima legibilidade
-  const contentLength = cleanConteudo.length;
-  let bodyFontSize = '21px';
-  let bodyLineHeight = '1.65';
-  let bodySpacing = 'space-y-4';
+  // -------------------------------------------------------------
+  // ALGORITMO RIGOROSO DE CALIBRAÇÃO TIPOGRÁFICA E BLINDAGEM DO RODAPÉ
+  // Garante que o texto e a imagem fiquem no MAIOR tamanho possível SEM NUNCA ultrapassar ou tocar o rodapé
+  // -------------------------------------------------------------
+  const hasImage = !!materia.imagemUrl;
+  const hasSubtitle = !!materia.subtitulo;
+  const titleLength = (materia.titulo || '').length;
 
-  if (contentLength > 1100) {
-    bodyFontSize = '18px';
-    bodyLineHeight = '1.54';
-    bodySpacing = 'space-y-3';
-  } else if (contentLength > 850) {
-    bodyFontSize = '19.5px';
-    bodyLineHeight = '1.6';
-    bodySpacing = 'space-y-3.5';
-  } else if (contentLength > 600) {
-    bodyFontSize = '21px';
-    bodyLineHeight = '1.65';
-    bodySpacing = 'space-y-4';
-  } else if (contentLength > 400) {
-    bodyFontSize = '23px';
-    bodyLineHeight = '1.72';
-    bodySpacing = 'space-y-4.5';
-  } else {
-    bodyFontSize = '25px';
-    bodyLineHeight = '1.78';
-    bodySpacing = 'space-y-5';
+  // 1. Cálculo de espaço ocupado pela Manchete (Título)
+  let titleFontSizeNum = 48;
+  let titleLines = Math.ceil(titleLength / 34);
+  if (titleLength > 115) {
+    titleFontSizeNum = 37;
+    titleLines = Math.ceil(titleLength / 44);
+  } else if (titleLength > 70) {
+    titleFontSizeNum = 42;
+    titleLines = Math.ceil(titleLength / 38);
+  }
+  const titleEstimatedHeight = (titleLines * titleFontSizeNum * 1.38) + 48;
+
+  // 2. Cálculo de espaço ocupado pelo Subtítulo (Lead)
+  let subtitleHeight = 0;
+  let subtitleFontSizeNum = 24;
+  if (hasSubtitle && materia.subtitulo) {
+    const subLen = materia.subtitulo.length;
+    subtitleFontSizeNum = subLen > 110 ? 20 : 23;
+    const subLines = Math.ceil(subLen / (subLen > 110 ? 54 : 46));
+    subtitleHeight = (subLines * subtitleFontSizeNum * 1.62) + 42;
   }
 
-  // Ajuste do título com proporção elegante
-  const titleLength = (materia.titulo || '').length;
-  const titleFontSize = titleLength > 120 ? '33px' : titleLength > 80 ? '37px' : titleLength > 50 ? '41px' : '45px';
+  // Altura máxima real útil para o corpo dentro dos 1920px
+  // 1920px - 104px (padding vertical) - 255px (masthead completo) - 85px (rodapé completo) - 75px (gaps e margens estruturais) = 1401px
+  const availableBodyHeight = 1401 - titleEstimatedHeight - subtitleHeight;
+
+  // Parágrafos do texto limpo
+  const rawParagraphs = cleanConteudo.split('\n').map(p => p.trim()).filter(p => p.length > 0);
+  const paragraphs = rawParagraphs.length > 0 ? rawParagraphs : [cleanConteudo];
+  const numParagraphs = paragraphs.length;
+  const totalChars = cleanConteudo.length;
+
+  // Altura da imagem calculada conforme orientação e volume de texto
+  let estimatedImageHeight = 0;
+  if (hasImage) {
+    if (isLandscape) {
+      // Horizontal: largura total de 960px. Altura proporcional com teto de segurança
+      const naturalAspectHeight = 960 / Math.max(1, imageRatio);
+      if (totalChars > 1100 || numParagraphs >= 4) {
+        estimatedImageHeight = Math.min(availableBodyHeight * 0.40, naturalAspectHeight, 440);
+      } else if (totalChars > 650) {
+        estimatedImageHeight = Math.min(availableBodyHeight * 0.48, naturalAspectHeight, 520);
+      } else {
+        estimatedImageHeight = Math.min(availableBodyHeight * 0.58, naturalAspectHeight, 620);
+      }
+    } else {
+      // Vertical: fica à esquerda com float
+      if (totalChars > 1200 || numParagraphs >= 5) {
+        estimatedImageHeight = Math.min(availableBodyHeight * 0.44, 480);
+      } else if (totalChars > 750 || numParagraphs >= 3) {
+        estimatedImageHeight = Math.min(availableBodyHeight * 0.52, 580);
+      } else {
+        estimatedImageHeight = Math.min(availableBodyHeight * 0.68, 760);
+      }
+    }
+  }
+
+  // Lista decrescente de opções tipográficas calibradas
+  const candidateFontSizes = [
+    { size: 34, lineHeight: 1.80, spacing: 26, spacingClass: 'space-y-6.5' },
+    { size: 31, lineHeight: 1.76, spacing: 22, spacingClass: 'space-y-6' },
+    { size: 28, lineHeight: 1.72, spacing: 19, spacingClass: 'space-y-5' },
+    { size: 25, lineHeight: 1.68, spacing: 16, spacingClass: 'space-y-4.5' },
+    { size: 22.5, lineHeight: 1.62, spacing: 14, spacingClass: 'space-y-4' },
+    { size: 20.5, lineHeight: 1.56, spacing: 12, spacingClass: 'space-y-3.5' },
+    { size: 19, lineHeight: 1.50, spacing: 10, spacingClass: 'space-y-3' },
+    { size: 17.5, lineHeight: 1.45, spacing: 8, spacingClass: 'space-y-2.5' },
+    { size: 16, lineHeight: 1.40, spacing: 6, spacingClass: 'space-y-2' },
+    { size: 14.5, lineHeight: 1.36, spacing: 5, spacingClass: 'space-y-1.5' }
+  ];
+
+  let chosenTypography = candidateFontSizes[candidateFontSizes.length - 1];
+
+  for (const candidate of candidateFontSizes) {
+    const fs = candidate.size;
+    const lh = candidate.lineHeight;
+    const linePixelHeight = fs * lh;
+
+    if (hasImage && isLandscape) {
+      // Horizontal: o texto fica inteiramente abaixo da imagem
+      const charsPerLine = Math.max(25, Math.floor(960 / (fs * 0.60)));
+      let totalTextLines = 0;
+      for (const p of paragraphs) {
+        totalTextLines += Math.max(1, Math.ceil(p.length / charsPerLine));
+      }
+      const textHeight = (totalTextLines * linePixelHeight) + (Math.max(0, numParagraphs - 1) * candidate.spacing);
+      const totalOccupied = estimatedImageHeight + textHeight + 40;
+
+      if (totalOccupied <= (availableBodyHeight - 45)) {
+        chosenTypography = candidate;
+        break;
+      }
+    } else {
+      // Vertical ou sem imagem: texto ao lado e fluindo abaixo
+      const charsPerLineSide = Math.max(12, Math.floor(420 / (fs * 0.60)));
+      const charsPerLineFull = Math.max(25, Math.floor(960 / (fs * 0.60)));
+
+      const sideLinesMax = hasImage ? Math.floor(estimatedImageHeight / linePixelHeight) : 0;
+      let usedSideLines = 0;
+      let linesBelowImage = 0;
+
+      for (let pIdx = 0; pIdx < paragraphs.length; pIdx++) {
+        const pLen = paragraphs[pIdx].length;
+        let remainingChars = pLen;
+
+        while (remainingChars > 0 && usedSideLines < sideLinesMax) {
+          remainingChars -= charsPerLineSide;
+          usedSideLines++;
+        }
+
+        while (remainingChars > 0) {
+          remainingChars -= charsPerLineFull;
+          linesBelowImage++;
+        }
+      }
+
+      const textHeightBelowImage = (linesBelowImage * linePixelHeight) + (Math.max(0, numParagraphs - 1) * candidate.spacing);
+      const totalOccupiedHeight = hasImage
+        ? estimatedImageHeight + textHeightBelowImage + (linesBelowImage > 0 ? 16 : 0)
+        : (usedSideLines + linesBelowImage) * linePixelHeight + (Math.max(0, numParagraphs - 1) * candidate.spacing);
+
+      if (totalOccupiedHeight <= (availableBodyHeight - 50)) {
+        chosenTypography = candidate;
+        break;
+      }
+    }
+  }
+
+  const bodyFontSize = `${chosenTypography.size}px`;
+  const bodyLineHeight = `${chosenTypography.lineHeight}`;
+  const bodySpacing = chosenTypography.spacingClass;
+  const titleFontSize = `${titleFontSizeNum}px`;
+  const subtitleFontSize = `${subtitleFontSizeNum}px`;
 
   return (
     <div
@@ -171,81 +298,144 @@ export const StoryMateriaJornalTemplate: React.FC<{ materia: JornalMateria; logo
       </div>
 
       {/* ------------------------------------------------------------- */}
-      {/* 2. CORPO DA NOTÍCIA COM ESPAÇAMENTO EQUILIBRADO ENTRE AS SEÇÕES */}
+      {/* 2. CORPO DA NOTÍCIA COM DIAGRAMAÇÃO JORNALÍSTICA */}
       {/* ------------------------------------------------------------- */}
-      <div className="flex-1 my-6 flex flex-col justify-between overflow-hidden gap-7">
+      <div className="flex-1 my-3 pb-2 flex flex-col justify-between overflow-hidden gap-4">
         
-        {/* Bloco de Manchete e Lead com Amplo Respiro e Entrelinhamento Arejado */}
-        <div className="space-y-4 shrink-0 pt-1">
-          <div className="flex items-center gap-2.5 font-sans mb-3">
+        {/* Bloco de Manchete e Lead */}
+        <div className="space-y-3 shrink-0 pt-1">
+          <div className="flex items-center gap-2.5 font-sans mb-2">
             <span className="w-3.5 h-3.5 rounded-full bg-indigo-600"></span>
             <span className="text-[13px] font-black tracking-widest uppercase text-indigo-900">
               {materia.setor ? `AÇÃO MUNICIPAL: ${materia.setor.toUpperCase()}` : 'COMUNICADO OFICIAL'}
             </span>
           </div>
 
-          {/* Manchete Principal com Excelente Espaçamento de Linha */}
+          {/* Manchete Principal */}
           <h2
-            style={{ fontSize: titleFontSize, lineHeight: '1.4' }}
-            className="font-serif font-black text-slate-950 tracking-tight my-4"
+            style={{ fontSize: titleFontSize, lineHeight: '1.35' }}
+            className="font-serif font-black text-slate-950 tracking-tight my-2.5"
           >
             {materia.titulo}
           </h2>
 
-          {/* Subtítulo / Lead com Linhas Arejadas e Margens Generosas */}
+          {/* Subtítulo / Lead com Destaque Editorial */}
           {materia.subtitulo && (
-            <div className="border-l-4 border-indigo-600 pl-6 pr-4 py-4 bg-indigo-50/70 rounded-r-2xl mt-6 mb-3">
-              <p className="text-[21px] font-serif text-slate-800 italic font-medium leading-[1.65]">
+            <div className="border-l-4 border-indigo-600 pl-5 pr-4 py-3 bg-indigo-50/70 rounded-r-2xl mt-3 mb-2">
+              <p
+                style={{ fontSize: subtitleFontSize, lineHeight: '1.58' }}
+                className="font-serif text-slate-800 italic font-medium"
+              >
                 "{materia.subtitulo}"
               </p>
             </div>
           )}
         </div>
 
-        {/* Foto do Evento (Formato Original Proporcional, Sem Achatar) */}
-        {materia.imagemUrl ? (
-          <div className="space-y-2 shrink-0 w-full my-2">
-            <div className="w-full max-h-[500px] rounded-3xl overflow-hidden shadow-md border-2 border-slate-900 bg-slate-950/5 relative flex items-center justify-center">
-              <img
-                src={materia.imagemUrl}
-                alt={materia.titulo}
-                className="w-full max-h-[500px] object-contain block mx-auto"
-                style={{ aspectRatio: 'auto' }}
-              />
-              {effectiveLogoUrl && (
-                <div className="absolute bottom-3.5 right-3.5 p-2 rounded-xl bg-white/95 backdrop-blur-sm shadow-md border border-slate-200">
-                  <img src={effectiveLogoUrl} alt="Logo" className="h-6 max-w-[90px] object-contain" crossOrigin="anonymous" />
-                </div>
-              )}
+        {/* LAYOUT CASO A: IMAGEM HORIZONTAL (LANDSCAPE) - Imagem em foco na largura total e texto abaixo */}
+        {hasImage && isLandscape ? (
+          <div className="flex-1 flex flex-col justify-between overflow-hidden gap-3.5 py-1">
+            {/* Foto Panorâmica em Largura Total */}
+            <div className="w-full space-y-1.5 shrink-0">
+              <div className="relative w-full rounded-2xl overflow-hidden shadow-md border-2 border-slate-900 bg-slate-900/5 flex items-center justify-center">
+                <img
+                  src={materia.imagemUrl}
+                  alt={materia.titulo}
+                  className="w-full h-auto object-contain block"
+                  style={{
+                    maxWidth: '960px',
+                    maxHeight: `${Math.round(estimatedImageHeight)}px`,
+                    width: '100%',
+                    height: 'auto',
+                    display: 'block'
+                  }}
+                  crossOrigin="anonymous"
+                />
+                {effectiveLogoUrl && (
+                  <div className="absolute bottom-3 right-3 p-1.5 rounded-xl bg-white/95 backdrop-blur-sm shadow-md border border-slate-200">
+                    <img src={effectiveLogoUrl} alt="Logo" className="h-5 max-w-[85px] object-contain" crossOrigin="anonymous" />
+                  </div>
+                )}
+              </div>
+              <p className="text-[11px] font-sans text-slate-500 italic text-center font-medium">
+                Foto oficial: Assessoria de Comunicação & Imprensa
+              </p>
             </div>
-            <p className="text-xs font-sans text-slate-500 italic text-center font-medium pt-1">
-              Foto oficial: Assessoria de Comunicação & Imprensa
-            </p>
-          </div>
-        ) : null}
 
-        {/* Texto da Matéria em 2 Colunas Jornalísticas com Tipografia Encorpada e Legível */}
-        <div
-          style={{
-            fontSize: bodyFontSize,
-            lineHeight: bodyLineHeight,
-            columnCount: 2,
-            columnGap: '50px',
-            textAlign: 'justify'
-          }}
-          className={`text-slate-900 font-serif flex-1 py-3 my-1 ${bodySpacing}`}
-        >
-          <div className="whitespace-pre-line font-normal">
-            {cleanConteudo}
+            {/* Texto da Matéria Abaixo da Foto em Largura Total */}
+            <div
+              style={{
+                fontSize: bodyFontSize,
+                lineHeight: bodyLineHeight,
+                textAlign: 'justify'
+              }}
+              className={`text-slate-900 font-serif flex-1 ${bodySpacing} whitespace-pre-line font-normal`}
+            >
+              {cleanConteudo}
+            </div>
           </div>
-        </div>
+        ) : (
+          /* LAYOUT CASO B: IMAGEM VERTICAL (PORTRAIT) OU SEM IMAGEM - Texto fluindo ao lado e abaixo */
+          <div
+            style={{
+              fontSize: bodyFontSize,
+              lineHeight: bodyLineHeight,
+              textAlign: 'justify',
+              columnCount: materia.imagemUrl ? undefined : 2,
+              columnGap: materia.imagemUrl ? undefined : '46px'
+            }}
+            className={`text-slate-900 font-serif flex-1 py-1 my-1 ${bodySpacing}`}
+          >
+            {/* Foto Vertical à Esquerda com Proporção Original */}
+            {hasImage && (
+              <div
+                style={{
+                  float: 'left',
+                  marginRight: '36px',
+                  marginBottom: '20px',
+                  maxWidth: '480px'
+                }}
+                className="space-y-2 shrink-0"
+              >
+                <div className="relative inline-block max-w-full rounded-2xl overflow-hidden shadow-md border-2 border-slate-900 bg-slate-900/5">
+                  <img
+                    src={materia.imagemUrl}
+                    alt={materia.titulo}
+                    className="w-auto h-auto object-contain block"
+                    style={{
+                      maxWidth: '480px',
+                      maxHeight: `${Math.round(estimatedImageHeight || 560)}px`,
+                      width: 'auto',
+                      height: 'auto',
+                      display: 'block'
+                    }}
+                    crossOrigin="anonymous"
+                  />
+                  {effectiveLogoUrl && (
+                    <div className="absolute bottom-3 right-3 p-1.5 rounded-xl bg-white/95 backdrop-blur-sm shadow-md border border-slate-200">
+                      <img src={effectiveLogoUrl} alt="Logo" className="h-5 max-w-[85px] object-contain" crossOrigin="anonymous" />
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs font-sans text-slate-500 italic text-center font-medium pt-0.5">
+                  Foto oficial: Assessoria de Comunicação & Imprensa
+                </p>
+              </div>
+            )}
+
+            {/* Texto da Matéria */}
+            <div className="whitespace-pre-line font-normal">
+              {cleanConteudo}
+            </div>
+          </div>
+        )}
 
       </div>
 
       {/* ------------------------------------------------------------- */}
       {/* 3. RODAPÉ DO JORNAL VERTICAL COM CERTIFICAÇÃO */}
       {/* ------------------------------------------------------------- */}
-      <div className="pt-5 border-t-2 border-slate-900 flex items-center justify-between font-sans text-xs text-slate-500 font-bold shrink-0 mt-4">
+      <div className="pt-4 border-t-2 border-slate-900 flex items-center justify-between font-sans text-xs text-slate-500 font-bold shrink-0 mt-2 relative z-20 bg-[#fcfaf7]">
         <div className="flex items-center gap-2">
           <ShieldCheck className="w-4 h-4 text-emerald-600" />
           <span>Publicado por: <strong className="text-slate-900">{materia.autor || 'Assessoria de Comunicação Oficial'}</strong></span>

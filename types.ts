@@ -723,6 +723,9 @@ export interface JornalMateria {
   eventoId?: string; // ID do evento no calendário
   tipoEvento?: string; // 'Pessoal', 'Reunião', 'Evento', etc.
   setor?: string; // Setor / Secretaria Municipal responsável
+  setorId?: string; // ID do setor oficial
+  person_ids?: string[]; // IDs das pessoas envolvidas
+  pessoasEnvolvidas?: Array<{ id?: string; name: string; jobName?: string; sectorName?: string }>; // Pessoas envolvidas com cargos
   oculta?: boolean; // Se true, visível apenas para administradores
   destaque?: boolean; // Se true, postagem / matéria em destaque principal
   aprovada?: boolean; // Se false, matéria do calendário aguarda aprovação de admin
