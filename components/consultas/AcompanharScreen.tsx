@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { User, ConsultaPaciente, ConsultaAgendamento, ConsultaProcedimento, AppState, ConsultaVaga } from '../../types';
-import { ArrowLeft, Search, Filter, Calendar, CheckCircle2, XCircle, Trash2, Loader2, Sparkles, Clock, FileDown, UserX, Repeat, X, Activity, Check, Edit2, ChevronDown, ChevronLeft, ChevronRight, User as UserIcon } from 'lucide-react';
+import { ArrowLeft, Search, Filter, Calendar, CheckCircle2, XCircle, Trash2, Loader2, Sparkles, Clock, FileDown, UserX, Repeat, X, Activity, Check, Edit2, ChevronDown, ChevronLeft, ChevronRight, User as UserIcon, BarChart3, Users } from 'lucide-react';
 import * as db from '../../services/consultasService';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -378,7 +378,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     const [bookings, setBookings] = useState<ConsultaAgendamento[]>([]);
     const [allBookings, setAllBookings] = useState<ConsultaAgendamento[]>([]);
     const [isReportModalOpen, setIsReportModalOpen] = useState(false);
-    const [reportType, setReportType] = useState<'completo' | 'fila'>('completo');
+    const [reportType, setReportType] = useState<'simplificado' | 'completo'>('simplificado');
     const [isPrintingReport, setIsPrintingReport] = useState(false);
     const [queuePositions, setQueuePositions] = useState<Record<string, number>>({});
     const [procedures, setProcedures] = useState<ConsultaProcedimento[]>([]);
@@ -2031,19 +2031,19 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
             {/* MODAL: RELATÓRIOS */}
             {isReportModalOpen && createPortal(
                 <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-fade-in font-sans">
-                    <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-4xl max-h-[85vh] overflow-hidden border border-slate-100 flex flex-col transform transition-all animate-scale-in">
+                    <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden border border-slate-100 flex flex-col transform transition-all animate-scale-in">
                         {/* Header */}
                         <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 shrink-0">
                             <div>
                                 <h3 className="text-base font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
                                     <FileDown className="w-5 h-5 text-sky-600" />
-                                    Painel de Relatórios Municipais
+                                    Relatório de Agendamentos e Procedimentos
                                 </h3>
-                                <p className="text-xs text-slate-500 font-semibold mt-0.5">Visualize e exporte informações de agendamentos e filas em tempo real</p>
+                                <p className="text-xs text-slate-500 font-semibold mt-0.5">Quantitativo consolidado e listagem detalhada de pacientes por procedimento</p>
                             </div>
                             <button 
                                 onClick={() => setIsReportModalOpen(false)} 
-                                className="p-2 hover:bg-slate-200 rounded-xl text-slate-400 hover:text-slate-700 transition-colors"
+                                className="p-2 hover:bg-slate-200 rounded-xl text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
                             >
                                 <X className="w-5 h-5" />
                             </button>
@@ -2052,252 +2052,248 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                         {/* Tabs Selector */}
                         <div className="px-6 py-3 bg-slate-100/40 border-b border-slate-100 flex gap-2 shrink-0">
                             <button
+                                onClick={() => setReportType('simplificado')}
+                                className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer ${
+                                    reportType === 'simplificado'
+                                    ? 'bg-sky-600 text-white shadow-md shadow-sky-200/50'
+                                    : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+                                }`}
+                            >
+                                <BarChart3 className="w-3.5 h-3.5" />
+                                Relatório Simplificado (Quantitativo)
+                            </button>
+                            <button
                                 onClick={() => setReportType('completo')}
-                                className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 ${
+                                className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer ${
                                     reportType === 'completo'
                                     ? 'bg-sky-600 text-white shadow-md shadow-sky-200/50'
                                     : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
                                 }`}
                             >
-                                <FileDown className="w-3.5 h-3.5" />
-                                Relatório Completo
-                            </button>
-                            <button
-                                onClick={() => setReportType('fila')}
-                                className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 ${
-                                    reportType === 'fila'
-                                    ? 'bg-amber-500 text-white shadow-md shadow-amber-200/50'
-                                    : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
-                                }`}
-                            >
-                                <Clock className="w-3.5 h-3.5" />
-                                Fila de Espera
+                                <Users className="w-3.5 h-3.5" />
+                                Relatório Completo (Procedimentos e Pacientes)
                             </button>
                         </div>
 
                         {/* Modal Body */}
                         <div className="flex-1 overflow-y-auto p-6 space-y-6 min-h-0 bg-slate-50/30">
-                            {reportType === 'completo' ? (
-                                <>
-                                    {/* Stats Grid */}
-                                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3.5">
-                                        <div className="bg-white border border-slate-200/60 p-4 rounded-2xl shadow-sm flex flex-col justify-between">
-                                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Total</span>
-                                            <span className="text-xl font-black text-slate-800 mt-1">{statsCompleto.total}</span>
-                                        </div>
-                                        <div className="bg-white border border-slate-200/60 p-4 rounded-2xl shadow-sm flex flex-col justify-between">
-                                            <span className="text-[10px] font-black uppercase tracking-wider text-sky-500">Solicitados</span>
-                                            <span className="text-xl font-black text-sky-600 mt-1">{statsCompleto.solicitados}</span>
-                                        </div>
-                                        <div className="bg-white border border-slate-200/60 p-4 rounded-2xl shadow-sm flex flex-col justify-between">
-                                            <span className="text-[10px] font-black uppercase tracking-wider text-indigo-500">Agendados</span>
-                                            <span className="text-xl font-black text-indigo-600 mt-1">{statsCompleto.agendados}</span>
-                                        </div>
-                                        <div className="bg-white border border-slate-200/60 p-4 rounded-2xl shadow-sm flex flex-col justify-between">
-                                            <span className="text-[10px] font-black uppercase tracking-wider text-amber-500">Em Fila</span>
-                                            <span className="text-xl font-black text-amber-600 mt-1">{statsCompleto.fila}</span>
-                                        </div>
-                                        <div className="bg-white border border-slate-200/60 p-4 rounded-2xl shadow-sm flex flex-col justify-between col-span-2 md:col-span-1">
-                                            <span className="text-[10px] font-black uppercase tracking-wider text-emerald-500">Realizados</span>
-                                            <span className="text-xl font-black text-emerald-600 mt-1">{statsCompleto.realizados}</span>
-                                        </div>
+                            {/* SEÇÃO 1: QUANTITATIVO POR PROCEDIMENTO (Exibido no Simplificado e no Completo) */}
+                            <div className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-sm">
+                                <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <BarChart3 className="w-4 h-4 text-sky-400" />
+                                        <h4 className="text-xs font-black uppercase tracking-wider">Quantitativo dos Procedimentos</h4>
                                     </div>
-
-                                    {/* Grouped Data Preview */}
-                                    <div className="space-y-6">
-                                        {Object.keys(reportDataCompleto).length === 0 ? (
-                                            <div className="text-center py-12 text-slate-400 font-bold">Nenhum registro encontrado.</div>
-                                        ) : (
-                                            Object.keys(reportDataCompleto).sort().map(type => (
-                                                <div key={type} className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
-                                                    {/* Procedure Type Header */}
-                                                    <div className="px-5 py-3.5 bg-sky-50/60 border-b border-sky-100/50 flex justify-between items-center">
-                                                        <h4 className="text-xs font-black text-sky-800 uppercase tracking-widest flex items-center gap-2">
-                                                            <span className="w-2 h-2 rounded-full bg-sky-500"></span>
-                                                            Procedimento: {type}
-                                                        </h4>
-                                                        <span className="px-2 py-0.5 rounded-full bg-sky-100 text-sky-700 text-[10px] font-black">
-                                                            {Object.values(reportDataCompleto[type]).reduce((acc, curr) => 
-                                                                acc + Object.values(curr).reduce((sAcc, sCurr) => sAcc + sCurr.length, 0)
-                                                            , 0)} reg.
-                                                        </span>
-                                                    </div>
-
-                                                    {/* Priorities Level */}
-                                                    <div className="p-4 space-y-5">
-                                                        {Object.keys(reportDataCompleto[type]).map(priority => (
-                                                            <div key={priority} className="space-y-3 pl-2 border-l-2 border-slate-200">
-                                                                <h5 className="text-[10px] font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-                                                                    <span className={`w-1.5 h-1.5 rounded-full ${
-                                                                        priority === 'Urgência' ? 'bg-rose-500 animate-pulse' : priority === 'Retorno' ? 'bg-teal-500' : 'bg-slate-400'
-                                                                    }`}></span>
-                                                                    Prioridade: {priority}
-                                                                </h5>
-
-                                                                {/* Status Level */}
-                                                                <div className="space-y-3.5 pl-4">
-                                                                    {Object.keys(reportDataCompleto[type][priority]).map(status => {
-                                                                        const bookingsGroup = reportDataCompleto[type][priority][status];
-                                                                        return (
-                                                                            <div key={status} className="space-y-2">
-                                                                                <div className="flex items-center gap-2">
-                                                                                    <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Status:</span>
-                                                                                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase border tracking-wider ${
-                                                                                        status === 'Solicitado'
-                                                                                        ? 'bg-sky-50 text-sky-700 border-sky-100'
-                                                                                        : status === 'Agendado' 
-                                                                                        ? 'bg-indigo-50 text-indigo-700 border-indigo-100' 
-                                                                                        : status === 'Realizado' 
-                                                                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-100' 
-                                                                                        : status === 'Fila de espera'
-                                                                                        ? 'bg-amber-50 text-amber-700 border-amber-100'
-                                                                                        : 'bg-slate-100 text-slate-600 border-slate-200'
-                                                                                    }`}>
-                                                                                        {status}
-                                                                                    </span>
-                                                                                    <span className="text-[9px] font-bold text-slate-400">({bookingsGroup.length})</span>
-                                                                                </div>
-
-                                                                                {/* Bookings List Table */}
-                                                                                <div className="border border-slate-100 rounded-xl overflow-hidden shadow-sm bg-white">
-                                                                                    <table className="w-full text-left border-collapse">
-                                                                                        <thead>
-                                                                                            <tr className="bg-slate-50 border-b border-slate-100 text-[9px] font-extrabold uppercase text-slate-400 tracking-wider">
-                                                                                                <th className="px-4 py-2 w-[45%]">Paciente / CPF</th>
-                                                                                                <th className="px-4 py-2 w-[30%]">Procedimento/Exame</th>
-                                                                                                <th className="px-4 py-2 text-center w-[25%]">Data</th>
-                                                                                            </tr>
-                                                                                        </thead>
-                                                                                        <tbody className="divide-y divide-slate-100 text-[11px] font-semibold text-slate-600 uppercase">
-                                                                                            {bookingsGroup.map(b => (
-                                                                                                <tr key={b.id} className="hover:bg-slate-50/40">
-                                                                                                    <td className="px-4 py-1.5 font-bold">
-                                                                                                        <div className="font-extrabold text-slate-900">{formatPatientName(b.paciente)}</div>
-                                                                                                        <div className="text-[9px] text-slate-400 font-bold mt-0.5">
-                                                                                                            CPF: {b.paciente?.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}
-                                                                                                        </div>
-                                                                                                    </td>
-                                                                                                    <td className="px-4 py-1.5">{b.procedimento?.name}</td>
-                                                                                                    <td className="px-4 py-1.5 text-center font-mono text-slate-500">
-                                                                                                        {formatDateBr(b.appointment_date)}
-                                                                                                    </td>
-                                                                                                </tr>
-                                                                                            ))}
-                                                                                        </tbody>
-                                                                                    </table>
-                                                                                </div>
-                                                                            </div>
-                                                                        );
-                                                                    })}
-                                                                </div>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            ))
-                                        )}
-                                    </div>
-                                </>
-                            ) : (
-                                <>
-                                    {/* Waitlist Stats */}
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="bg-white border border-slate-200/60 p-5 rounded-2xl shadow-sm flex flex-col justify-between">
-                                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Total na Fila de Espera</span>
-                                            <span className="text-2xl font-black text-amber-500 mt-1">{statsFila.total}</span>
-                                        </div>
-                                        <div className="bg-white border border-slate-200/60 p-5 rounded-2xl shadow-sm flex flex-col justify-between">
-                                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Procedimentos com Fila</span>
-                                            <span className="text-2xl font-black text-slate-800 mt-1">{statsFila.proceduresCount}</span>
-                                        </div>
-                                    </div>
-
-                                    {/* Fila De Espera Groups */}
-                                    <div className="space-y-6">
-                                        {Object.keys(reportDataFila).length === 0 ? (
-                                            <div className="text-center py-12 text-slate-400 font-bold bg-white rounded-3xl border border-slate-200">
-                                                Nenhum paciente na fila de espera no momento.
-                                            </div>
-                                        ) : (
-                                            Object.keys(reportDataFila).sort().map(procName => {
-                                                const waitlistGroup = reportDataFila[procName];
-                                                return (
-                                                    <div key={procName} className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
-                                                        <div className="px-5 py-3.5 bg-amber-50/40 border-b border-amber-100 flex justify-between items-center">
-                                                            <h4 className="text-xs font-black text-amber-800 uppercase tracking-widest flex items-center gap-2">
-                                                                <Clock className="w-4 h-4 text-amber-500" />
-                                                                Fila: {procName}
-                                                            </h4>
-                                                            <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-black">
-                                                                {waitlistGroup.length} pacientes
-                                                            </span>
-                                                        </div>
-
-                                                        <div className="p-4">
-                                                            <div className="border border-slate-100 rounded-xl overflow-hidden bg-white shadow-sm">
-                                                                <table className="w-full text-left border-collapse">
-                                                                    <thead>
-                                                                        <tr className="bg-slate-50 border-b border-slate-100 text-[9px] font-extrabold uppercase text-slate-400 tracking-wider">
-                                                                            <th className="px-4 py-2.5 text-center w-[12%]">Posição</th>
-                                                                            <th className="px-4 py-2.5 w-[50%]">Paciente / CPF</th>
-                                                                            <th className="px-4 py-2.5 text-center w-[18%]">Prioridade</th>
-                                                                            <th className="px-4 py-2.5 text-center w-[20%]">Registrado em</th>
-                                                                        </tr>
-                                                                    </thead>
-                                                                    <tbody className="divide-y divide-slate-100 text-[11px] font-semibold text-slate-600 uppercase">
-                                                                        {waitlistGroup.map(b => (
-                                                                            <tr key={b.id} className="hover:bg-slate-50/40">
-                                                                                <td className="px-4 py-2 text-center font-black text-amber-600">
-                                                                                    {queuePositions[b.id]}º
-                                                                                </td>
-                                                                                <td className="px-4 py-2 font-bold">
-                                                                                    <div className="font-extrabold text-slate-900">{formatPatientName(b.paciente)}</div>
-                                                                                    <div className="text-[9px] text-slate-400 font-bold mt-0.5">
-                                                                                        CPF: {b.paciente?.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}
-                                                                                    </div>
-                                                                                </td>
-                                                                                <td className="px-4 py-2 text-center">
-                                                                                    <span className={`inline-flex px-2 py-0.5 rounded text-[8px] font-black uppercase text-white ${
-                                                                                        b.priority === 'Urgência' ? 'bg-rose-500' : b.is_retorno ? 'bg-teal-500' : 'bg-slate-400'
-                                                                                    }`}>
-                                                                                        {b.priority === 'Urgência' ? 'Urgência' : b.is_retorno ? 'Retorno' : 'Normal'}
-                                                                                    </span>
-                                                                                </td>
-                                                                                <td className="px-4 py-2 text-center font-mono text-slate-400">
-                                                                                    {b.created_at ? new Date(b.created_at).toLocaleDateString('pt-BR') : '-'}
-                                                                                </td>
-                                                                            </tr>
-                                                                        ))}
-                                                                    </tbody>
-                                                                </table>
-                                                            </div>
-                                                        </div>
-                                                    </div>
+                                    <span className="text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-slate-800 text-sky-300 border border-slate-700">
+                                        Total Geral: {allBookings.reduce((acc, b) => acc + (b.quantity || 1), 0)} Solicitações
+                                    </span>
+                                </div>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left border-collapse">
+                                        <thead>
+                                            <tr className="bg-slate-100 text-[10px] font-black uppercase text-slate-600 border-b border-slate-200">
+                                                <th className="px-4 py-2.5">Procedimento</th>
+                                                <th className="px-4 py-2.5 text-center w-28">Tipo</th>
+                                                <th className="px-4 py-2.5 text-center w-36">Quantidade</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-700">
+                                            {procedures.map(proc => {
+                                                const procBookings = allBookings.filter(b => 
+                                                    b.procedimento_id === proc.id || b.procedimento?.id === proc.id
                                                 );
-                                            })
-                                        )}
+                                                const totalQty = procBookings.reduce((acc, b) => acc + (b.quantity || 1), 0);
+                                                if (totalQty < 1) return null;
+
+                                                return (
+                                                    <tr key={proc.id} className="hover:bg-slate-50/60 transition-colors">
+                                                        <td className="px-4 py-2">
+                                                            <div className="font-extrabold text-slate-900 uppercase flex items-center gap-2">
+                                                                <span>{proc.name}</span>
+                                                                {proc.code && (
+                                                                    <span className="text-[10px] font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                                                                        {proc.code}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-4 py-2 text-center">
+                                                            <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-black uppercase ${
+                                                                proc.type === 'Exame'
+                                                                    ? 'bg-sky-50 text-sky-700 border border-sky-200'
+                                                                    : proc.type === 'Consulta'
+                                                                    ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                                                                    : 'bg-rose-50 text-rose-700 border border-rose-200'
+                                                            }`}>
+                                                                {proc.type}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-4 py-2 text-center font-mono font-black text-slate-900 text-sm">
+                                                            {totalQty}
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            {/* SEÇÃO 2: LISTA PACIENTE X PROCEDIMENTO (Apenas no Relatório Completo) */}
+                            {reportType === 'completo' && (
+                                <div className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-sm">
+                                    <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <Users className="w-4 h-4 text-sky-400" />
+                                            <h4 className="text-xs font-black uppercase tracking-wider">Lista Paciente x Procedimento (Ordem Alfabética)</h4>
+                                        </div>
+                                        <span className="text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300">
+                                            {allBookings.length} Registros
+                                        </span>
                                     </div>
-                                </>
+                                    <div className="overflow-x-auto max-h-[400px]">
+                                        <table className="w-full text-left border-collapse">
+                                            <thead className="sticky top-0 bg-slate-100 text-[10px] font-black uppercase text-slate-600 border-b border-slate-200 z-10">
+                                                <tr>
+                                                    <th className="px-3 py-2.5 text-center w-16">Posição</th>
+                                                    <th className="px-3 py-2.5 text-center w-28">Solicitado</th>
+                                                    <th className="px-4 py-2.5">Paciente / CPF</th>
+                                                    <th className="px-4 py-2.5">Procedimento</th>
+                                                    <th className="px-3 py-2.5 text-center w-36">Data Agendada</th>
+                                                    <th className="px-3 py-2.5 text-center w-28">Status</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-700 uppercase">
+                                                {allBookings
+                                                    .sort((a, b) => {
+                                                        const nameA = a.paciente?.name || '';
+                                                        const nameB = b.paciente?.name || '';
+                                                        const comp = nameA.localeCompare(nameB, 'pt-BR', { sensitivity: 'base' });
+                                                        if (comp !== 0) return comp;
+                                                        const dateA = a.solicitation_date ? new Date(a.solicitation_date + 'T00:00:00').getTime() : (a.created_at ? new Date(a.created_at).getTime() : 0);
+                                                        const dateB = b.solicitation_date ? new Date(b.solicitation_date + 'T00:00:00').getTime() : (b.created_at ? new Date(b.created_at).getTime() : 0);
+                                                        return dateB - dateA;
+                                                    })
+                                                    .map((booking, idx) => {
+                                                        const isWaitlist = booking.status === 'Fila de espera';
+                                                        const queuePos = queuePositions[booking.id];
+
+                                                        return (
+                                                            <tr key={booking.id} className="hover:bg-slate-50/60 transition-colors">
+                                                                <td className="px-3 py-2 text-center font-black">
+                                                                    {isWaitlist && queuePos ? (
+                                                                        <span className="inline-block px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-300 text-[10px] font-black">
+                                                                            {queuePos}º
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="text-slate-400 font-mono text-xs">
+                                                                            #{idx + 1}
+                                                                        </span>
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-3 py-2 text-center font-mono text-slate-600 text-[11px]">
+                                                                    {formatDateBr(booking.solicitation_date || (booking.created_at ? booking.created_at.split('T')[0] : null))}
+                                                                </td>
+                                                                <td className="px-4 py-2">
+                                                                    <div className="font-extrabold text-slate-900 leading-tight">
+                                                                        {formatPatientName(booking.paciente)}
+                                                                    </div>
+                                                                    <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                                                                        CPF: {booking.paciente?.cpf ? booking.paciente.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4") : 'Não informado'}
+                                                                    </div>
+                                                                </td>
+                                                                <td className="px-4 py-2">
+                                                                    <div className="font-extrabold text-slate-800 leading-tight">
+                                                                        {booking.procedimento?.name || 'Procedimento não informado'}
+                                                                    </div>
+                                                                    {booking.procedimento?.code && (
+                                                                        <span className="text-[9px] font-mono text-slate-500 bg-slate-100 px-1 py-0.2 rounded border border-slate-200 inline-block mt-0.5">
+                                                                            {booking.procedimento.code}
+                                                                        </span>
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-3 py-2 text-center font-mono text-[11px]">
+                                                                    {booking.status !== 'Fila de espera' && booking.status !== 'Aguardando Data' && booking.appointment_date ? (
+                                                                        <span className="font-bold text-slate-800">
+                                                                            {new Date(booking.appointment_date + 'T12:00:00').toLocaleDateString('pt-BR')}
+                                                                            {booking.appointment_time ? ` ${booking.appointment_time.substring(0, 5)}` : ''}
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="inline-block px-2 py-0.5 rounded text-[10px] font-black uppercase text-amber-800 bg-amber-50 border border-amber-200">
+                                                                            Aguardando Vaga
+                                                                        </span>
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-3 py-2 text-center">
+                                                                    <span className={`inline-block px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border ${
+                                                                        booking.status === 'Solicitado'
+                                                                            ? 'bg-sky-50 text-sky-700 border-sky-200'
+                                                                            : booking.status === 'Agendado'
+                                                                            ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                                                                            : booking.status === 'Realizado'
+                                                                            ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                                                            : booking.status === 'Fila de espera'
+                                                                            ? 'bg-amber-50 text-amber-800 border-amber-200'
+                                                                            : booking.status === 'Aguardando Data'
+                                                                            ? 'bg-violet-50 text-violet-800 border-violet-200'
+                                                                            : booking.status === 'Retorno'
+                                                                            ? 'bg-teal-50 text-teal-800 border-teal-200'
+                                                                            : 'bg-rose-50 text-rose-800 border-rose-200'
+                                                                    }`}>
+                                                                        {booking.status}
+                                                                    </span>
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
                             )}
                         </div>
 
                         {/* Footer Actions */}
-                        <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 shrink-0">
+                        <div className="p-6 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-3 shrink-0">
                             <button
                                 type="button"
                                 onClick={() => setIsReportModalOpen(false)}
-                                className="px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-600 font-extrabold rounded-xl text-xs uppercase tracking-wider active:scale-95 transition-all"
+                                className="px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-600 font-extrabold rounded-xl text-xs uppercase tracking-wider active:scale-95 transition-all cursor-pointer"
                             >
                                 Fechar
                             </button>
-                            <button
-                                type="button"
-                                onClick={() => setIsPrintingReport(true)}
-                                className="px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-extrabold rounded-xl text-xs uppercase tracking-wider active:scale-95 transition-all flex items-center gap-1.5 shadow-md"
-                            >
-                                <FileDown className="w-4 h-4" />
-                                Exportar PDF
-                            </button>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setReportType('simplificado');
+                                        setIsPrintingReport(true);
+                                    }}
+                                    className={`px-4 py-2.5 font-extrabold rounded-xl text-xs uppercase tracking-wider active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer ${
+                                        reportType === 'simplificado'
+                                        ? 'bg-sky-600 hover:bg-sky-700 text-white shadow-md shadow-sky-600/20'
+                                        : 'bg-white hover:bg-sky-50 text-sky-700 border border-sky-200'
+                                    }`}
+                                >
+                                    <FileDown className="w-4 h-4" />
+                                    Exportar Simplificado
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setReportType('completo');
+                                        setIsPrintingReport(true);
+                                    }}
+                                    className={`px-4 py-2.5 font-extrabold rounded-xl text-xs uppercase tracking-wider active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer ${
+                                        reportType === 'completo'
+                                        ? 'bg-sky-600 hover:bg-sky-700 text-white shadow-md shadow-sky-600/20'
+                                        : 'bg-white hover:bg-sky-50 text-sky-700 border border-sky-200'
+                                    }`}
+                                >
+                                    <FileDown className="w-4 h-4" />
+                                    Exportar Completo
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>,
