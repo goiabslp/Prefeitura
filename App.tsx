@@ -1447,6 +1447,45 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [systemUpdateTarget]);
 
+  // Forçar Desconexão de todos os Usuários e Limpeza Total do Cache do Navegador ao Final do Countdown
+  useEffect(() => {
+    if (systemUpdateCountdown === 0) {
+      const performGlobalLogoutAndCachePurge = async () => {
+        try {
+          const savedUser = localStorage.getItem('remember_user');
+          const savedPass = localStorage.getItem('remember_pass');
+
+          localStorage.clear();
+          sessionStorage.clear();
+
+          if (savedUser) localStorage.setItem('remember_user', savedUser);
+          if (savedPass) localStorage.setItem('remember_pass', savedPass);
+
+          if ('caches' in window) {
+            const keys = await caches.keys();
+            await Promise.all(keys.map(k => caches.delete(k)));
+          }
+
+          if ('serviceWorker' in navigator) {
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            for (const reg of registrations) {
+              await reg.unregister();
+            }
+          }
+
+          auditLogService.clearCache();
+          await signOut();
+        } catch (e) {
+          console.error('Erro na limpeza de cache/logout:', e);
+        } finally {
+          window.location.href = '/Login';
+        }
+      };
+
+      performGlobalLogoutAndCachePurge();
+    }
+  }, [systemUpdateCountdown, signOut]);
+
   // Fetch Licitacao Global Protocol Counter
   useEffect(() => {
     const fetchLicitacaoCount = async () => {
