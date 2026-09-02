@@ -112,6 +112,49 @@ export const getSemanasDoMes = (year: number, monthZeroIndexed: number): SemanaP
 // Cache em memória compartilhado para carregamento imediato
 let materiasMemoryCache: { data: import('../types').JornalMateria[]; timestamp: number } | null = null;
 
+const EXCLUDED_MATERIAS_STORAGE_KEY = 'prefeitura_materias_excluidas_v1';
+
+export const getExcludedMateriaIds = (): Set<string> => {
+  try {
+    const raw = localStorage.getItem(EXCLUDED_MATERIAS_STORAGE_KEY);
+    if (!raw) return new Set<string>();
+    const list = JSON.parse(raw);
+    return new Set<string>(Array.isArray(list) ? list : []);
+  } catch {
+    return new Set<string>();
+  }
+};
+
+export const addExcludedMateriaId = (id: string, eventId?: string) => {
+  try {
+    const set = getExcludedMateriaIds();
+    if (id) set.add(id);
+    if (eventId) {
+      set.add(eventId);
+      set.add(`materia_evt_${eventId}`);
+    }
+    if (id && id.startsWith('materia_evt_')) {
+      set.add(id.replace('materia_evt_', ''));
+    }
+    localStorage.setItem(EXCLUDED_MATERIAS_STORAGE_KEY, JSON.stringify(Array.from(set)));
+  } catch (e) {}
+};
+
+export const removeExcludedMateriaId = (id: string, eventId?: string) => {
+  try {
+    const set = getExcludedMateriaIds();
+    if (id) set.delete(id);
+    if (eventId) {
+      set.delete(eventId);
+      set.delete(`materia_evt_${eventId}`);
+    }
+    if (id && id.startsWith('materia_evt_')) {
+      set.delete(id.replace('materia_evt_', ''));
+    }
+    localStorage.setItem(EXCLUDED_MATERIAS_STORAGE_KEY, JSON.stringify(Array.from(set)));
+  } catch (e) {}
+};
+
 export const invalidateMateriasCache = () => {
   materiasMemoryCache = null;
 };
@@ -583,6 +626,9 @@ export const noticiasService = {
    */
   async salvarMateria(materia: import('../types').JornalMateria): Promise<boolean> {
     try {
+      // Remove da lista de exclusões caso tenha sido excluída anteriormente
+      removeExcludedMateriaId(materia.id, materia.eventoId);
+
       // 1. Se for vinculada a um evento do calendário, persiste nos metadados do evento
       if (materia.eventoId || materia.id.startsWith('materia_evt_')) {
         const eventId = materia.eventoId || materia.id.replace('materia_evt_', '');
@@ -603,15 +649,25 @@ export const noticiasService = {
                 destaqueFrase: materia.destaqueFrase,
                 imagemUrl: materia.imagemUrl,
                 aprovada: materia.aprovada,
+                status: materia.status || (materia.aprovada ? 'publicada' : 'pendente'),
                 destaque: materia.destaque,
                 oculta: materia.oculta
               }
             });
-            await supabase.from('calendar_events').update({
+
+            // Tentativa 1: update com schema completo
+            const { error: updErr } = await supabase.from('calendar_events').update({
               publish_to_news: true,
               description: newDesc,
               image_url: materia.imagemUrl || evt.image_url
             }).eq('id', eventId);
+
+            // Fallback caso colunas customizadas não existam
+            if (updErr) {
+              await supabase.from('calendar_events').update({
+                description: newDesc
+              }).eq('id', eventId);
+            }
           }
         } catch (calErr) {
           console.warn('Erro ao sincronizar matéria em calendar_events:', calErr);
@@ -827,6 +883,7 @@ export const noticiasService = {
       }
 
       const map = new Map<string, import('../types').JornalMateria>();
+      const excludedIds = getExcludedMateriaIds();
 
       // 1. Busca todas as matérias cadastradas na tabela jornal_materias do Supabase (se existir)
       try {
@@ -837,6 +894,10 @@ export const noticiasService = {
 
         if (!error && data && data.length > 0) {
           data.forEach((d: any) => {
+            if (excludedIds.has(d.id) || (d.evento_id && (excludedIds.has(d.evento_id) || excludedIds.has(`materia_evt_${d.evento_id}`)))) {
+              return;
+            }
+
             map.set(d.id, {
               id: d.id,
               titulo: d.titulo,
@@ -873,6 +934,11 @@ export const noticiasService = {
 
         if (!calErr && calData && calData.length > 0) {
           calData.forEach((evt: any) => {
+            const matId = `materia_evt_${evt.id}`;
+            if (excludedIds.has(matId) || excludedIds.has(evt.id)) {
+              return;
+            }
+
             let isPublish = !!evt.publish_to_news;
             let img = evt.image_url;
             let sec = evt.sector;
@@ -884,7 +950,9 @@ export const noticiasService = {
               if (match) {
                 try {
                   const meta = JSON.parse(match[1]);
-                  if (meta.publish_to_news) isPublish = true;
+                  if (meta.publish_to_news !== undefined) {
+                    isPublish = !!meta.publish_to_news;
+                  }
                   if (meta.image_url) img = meta.image_url;
                   if (meta.sector) sec = meta.sector;
                   if (meta.materia_data) {
@@ -898,62 +966,62 @@ export const noticiasService = {
 
             if (!img && matData?.imagemUrl) img = matData.imagemUrl;
 
-            if (isPublish) {
-              const matId = `materia_evt_${evt.id}`;
-              const existingMat = map.get(matId) || Array.from(map.values()).find(m => m.eventoId === evt.id);
-              const imagemFinal = img || existingMat?.imagemUrl || undefined;
-              const isDestaqueFinal = matData?.destaque !== undefined ? !!matData.destaque : (existingMat?.destaque ?? false);
-              const isOcultaFinal = matData?.oculta !== undefined ? !!matData.oculta : (existingMat?.oculta ?? false);
-              
-              // Status de aprovação: Se não definido explicitamente como aprovado, novas matérias de calendário nascem como 'pendente'
-              const isAprovadaFinal = matData?.aprovada !== undefined
-                ? !!matData.aprovada
-                : (existingMat?.aprovada !== undefined ? !!existingMat.aprovada : false);
-              const statusFinal = isAprovadaFinal ? 'publicada' : 'pendente';
+            // Se não estiver marcado para publicar, não exibe
+            if (!isPublish) return;
 
-              const tituloFinal = matData?.manchete || evt.title;
-              const subtituloFinal = matData?.subtitulo || (cleanDesc ? cleanDesc.slice(0, 140) : `Cobertura oficial do evento ${evt.title} realizado no município de São José do Goiabal.`);
-              const conteudoFinal = matData?.corpo || cleanDesc || `A Prefeitura Municipal de São José do Goiabal informa a realização do evento ${evt.title}. As ações contam com ampla participação e acompanhamento público da comunidade.`;
-              const destaqueFraseFinal = matData?.destaqueFrase || undefined;
-              const categoriaFinal = matData?.categoria || sec || evt.type || 'EVENTO & COMUNIDADE';
+            const existingMat = map.get(matId) || Array.from(map.values()).find(m => m.eventoId === evt.id);
+            const imagemFinal = img || existingMat?.imagemUrl || undefined;
+            const isDestaqueFinal = matData?.destaque !== undefined ? !!matData.destaque : (existingMat?.destaque ?? false);
+            const isOcultaFinal = matData?.oculta !== undefined ? !!matData.oculta : (existingMat?.oculta ?? false);
+            
+            // Status de aprovação: Se não definido explicitamente como aprovado, novas matérias de calendário nascem como 'pendente'
+            const isAprovadaFinal = matData?.aprovada !== undefined
+              ? !!matData.aprovada
+              : (existingMat?.aprovada !== undefined ? !!existingMat.aprovada : false);
+            const statusFinal = isAprovadaFinal ? 'publicada' : 'pendente';
 
-              if (!existingMat) {
-                map.set(matId, {
-                  id: matId,
-                  titulo: tituloFinal,
-                  subtitulo: subtituloFinal,
-                  conteudo: conteudoFinal,
-                  destaqueFrase: destaqueFraseFinal,
-                  categoria: categoriaFinal,
-                  dataPublicacao: evt.created_at || evt.start_date || new Date().toISOString(),
-                  dataEvento: evt.start_date,
-                  horaEvento: evt.is_all_day ? 'Dia Inteiro' : (evt.start_time ? `${evt.start_time}${evt.end_time ? ` às ${evt.end_time}` : ''}` : undefined),
-                  imagemUrl: imagemFinal,
-                  autor: 'Assessoria de Comunicação Oficial',
-                  eventoId: evt.id,
-                  tipoEvento: evt.type,
-                  setor: sec || undefined,
-                  oculta: isOcultaFinal,
-                  destaque: isDestaqueFinal,
-                  aprovada: isAprovadaFinal,
-                  status: statusFinal,
-                  curtidas: 1
-                });
-              } else {
-                map.set(existingMat.id, {
-                  ...existingMat,
-                  titulo: existingMat.titulo || tituloFinal,
-                  subtitulo: existingMat.subtitulo || subtituloFinal,
-                  conteudo: existingMat.conteudo || conteudoFinal,
-                  destaqueFrase: existingMat.destaqueFrase || destaqueFraseFinal,
-                  imagemUrl: imagemFinal,
-                  destaque: isDestaqueFinal,
-                  oculta: isOcultaFinal,
-                  aprovada: isAprovadaFinal,
-                  status: statusFinal,
-                  setor: existingMat.setor || sec
-                });
-              }
+            const tituloFinal = matData?.manchete || evt.title;
+            const subtituloFinal = matData?.subtitulo || (cleanDesc ? cleanDesc.slice(0, 140) : `Cobertura oficial do evento ${evt.title} realizado no município de São José do Goiabal.`);
+            const conteudoFinal = matData?.corpo || cleanDesc || `A Prefeitura Municipal de São José do Goiabal informa a realização do evento ${evt.title}. As ações contam com ampla participação e acompanhamento público da comunidade.`;
+            const destaqueFraseFinal = matData?.destaqueFrase || undefined;
+            const categoriaFinal = matData?.categoria || sec || evt.type || 'EVENTO & COMUNIDADE';
+
+            if (!existingMat) {
+              map.set(matId, {
+                id: matId,
+                titulo: tituloFinal,
+                subtitulo: subtituloFinal,
+                conteudo: conteudoFinal,
+                destaqueFrase: destaqueFraseFinal,
+                categoria: categoriaFinal,
+                dataPublicacao: evt.created_at || evt.start_date || new Date().toISOString(),
+                dataEvento: evt.start_date,
+                horaEvento: evt.is_all_day ? 'Dia Inteiro' : (evt.start_time ? `${evt.start_time}${evt.end_time ? ` às ${evt.end_time}` : ''}` : undefined),
+                imagemUrl: imagemFinal,
+                autor: 'Assessoria de Comunicação Oficial',
+                eventoId: evt.id,
+                tipoEvento: evt.type,
+                setor: sec || undefined,
+                oculta: isOcultaFinal,
+                destaque: isDestaqueFinal,
+                aprovada: isAprovadaFinal,
+                status: statusFinal,
+                curtidas: 1
+              });
+            } else {
+              map.set(existingMat.id, {
+                ...existingMat,
+                titulo: existingMat.titulo || tituloFinal,
+                subtitulo: existingMat.subtitulo || subtituloFinal,
+                conteudo: existingMat.conteudo || conteudoFinal,
+                destaqueFrase: existingMat.destaqueFrase || destaqueFraseFinal,
+                imagemUrl: imagemFinal,
+                destaque: isDestaqueFinal,
+                oculta: isOcultaFinal,
+                aprovada: isAprovadaFinal,
+                status: statusFinal,
+                setor: existingMat.setor || sec
+              });
             }
           });
         }
@@ -986,53 +1054,69 @@ export const noticiasService = {
    */
   async excluirMateria(id: string): Promise<boolean> {
     try {
-      // 1. Tenta excluir da tabela jornal_materias se ela existir
+      let eventId = id.startsWith('materia_evt_') ? id.replace('materia_evt_', '') : '';
+      
+      // Se não encontrou o eventId pelo prefixo, busca no cache atual
+      if (!eventId && materiasMemoryCache?.data) {
+        const mat = materiasMemoryCache.data.find(m => m.id === id);
+        if (mat?.eventoId) {
+          eventId = mat.eventoId;
+        }
+      }
+
+      // 1. Marca imediatamente como excluída de forma persistente (Tombstone)
+      addExcludedMateriaId(id, eventId);
+
+      // 2. Tenta excluir da tabela jornal_materias se ela existir
       try {
         await (supabase as any)
           .from('jornal_materias')
           .delete()
           .eq('id', id);
-      } catch (tableErr) {
-        // Tabela opcional
-      }
+      } catch (tableErr) {}
 
-      // 2. Se for vinculada a um evento do calendário, atualiza o evento no banco removendo a publicação
-      if (id.startsWith('materia_evt_')) {
-        const eventId = id.replace('materia_evt_', '');
-        try {
-          const { data: evt } = await supabase.from('calendar_events').select('*').eq('id', eventId).single();
-          if (evt) {
-            const meta = deserializeEventMetadata(evt.description);
-            const newDesc = serializeEventMetadata(meta.cleanDescription, {
-              ...meta,
+      // 3. Se for vinculada a um evento do calendário (ou tiver ID de evento correspondente)
+      const targetEventId = eventId || id;
+      try {
+        const { data: evt } = await supabase.from('calendar_events').select('*').eq('id', targetEventId).single();
+        if (evt) {
+          const meta = deserializeEventMetadata(evt.description);
+          const newDesc = serializeEventMetadata(meta.cleanDescription, {
+            ...meta,
+            publish_to_news: false,
+            materia_data: undefined
+          });
+
+          // Tentativa 1: update com schema completo
+          const { error: updErr } = await supabase
+            .from('calendar_events')
+            .update({ 
               publish_to_news: false,
-              materia_data: undefined
-            });
+              description: newDesc
+            })
+            .eq('id', evt.id);
+
+          // Fallback caso a coluna publish_to_news não exista fisicamente
+          if (updErr) {
             await supabase
               .from('calendar_events')
               .update({ 
-                publish_to_news: false,
                 description: newDesc
               })
-              .eq('id', eventId);
-          } else {
-            await supabase
-              .from('calendar_events')
-              .update({ publish_to_news: false })
-              .eq('id', eventId);
+              .eq('id', evt.id);
           }
-        } catch (calErr) {
-          console.warn('Erro ao desvincular matéria do calendário:', calErr);
         }
+      } catch (calErr) {
+        console.warn('Erro ao desvincular matéria do calendário:', calErr);
       }
 
-      // 3. Limpeza do storage local caso exista cache persistido
+      // 4. Limpeza do storage local caso exista cache persistido antigo
       try {
         const raw = localStorage.getItem('materias_jornal_storage');
         if (raw) {
           const mats = JSON.parse(raw);
           if (Array.isArray(mats)) {
-            const filtradas = mats.filter((m: any) => m.id !== id);
+            const filtradas = mats.filter((m: any) => m.id !== id && m.eventoId !== id && `materia_evt_${m.eventoId}` !== id);
             localStorage.setItem('materias_jornal_storage', JSON.stringify(filtradas));
           }
         }
