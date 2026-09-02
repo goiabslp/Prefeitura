@@ -143,28 +143,57 @@ export const generateMateriaJornalWithAI = async (dados: {
       textoPessoas = `A atividade contou com a participação e coordenação de ${nomesCargos.join(', ')}, integrando os esforços operacionais do setor. `;
     }
 
-    // Menção institucional ao Prefeito ou Secretaria de Administração quando pertinente
-    const isGabineteOuGoverno = dados.setor?.toLowerCase().includes('gabinete') || dados.setor?.toLowerCase().includes('governo') || dados.tipoEvento === 'Reunião';
-    const isAdministracao = dados.setor?.toLowerCase().includes('administra') || dados.setor?.toLowerCase().includes('fazenda');
+    // Verificação estrita de factualidade para menções institucionais
+    const textoGeral = `${dados.titulo || ''} ${dados.descricao || ''} ${dados.setor || ''} ${JSON.stringify(dados.pessoas || '')}`.toLowerCase();
+    
+    const isEventoFestivo = dados.tipoEvento === 'Evento' ||
+      textoGeral.includes('cavalgada') ||
+      textoGeral.includes('carnaval') ||
+      textoGeral.includes('festival') ||
+      textoGeral.includes('festa') ||
+      textoGeral.includes('show') ||
+      textoGeral.includes('exposição') ||
+      textoGeral.includes('rodeio') ||
+      textoGeral.includes('cultural');
+
+    const temRelacaoPrefeito = textoGeral.includes('prefeito') || 
+      textoGeral.includes('ailton') || 
+      dados.setor?.toLowerCase().includes('gabinete do prefeito');
+
+    const temRelacaoAdmin = dados.setor?.toLowerCase().includes('administra') || 
+      dados.setor?.toLowerCase().includes('governo') ||
+      textoGeral.includes('guilherme') ||
+      textoGeral.includes('secretaria de administração');
 
     let mencaoInstitucional = '';
-    if (isGabineteOuGoverno) {
-      mencaoInstitucional = ' O compromisso contou com o direcionamento estratégico do Prefeito Municipal, Ailton Geraldo dos Santos, reforçando as metas de desenvolvimento sustentável da gestão.';
-    } else if (isAdministracao) {
-      mencaoInstitucional = ' As ações contam com o suporte de planejamento da Secretaria de Administração e Governo, sob a coordenação do Secretário Guilherme Santos, viabilizando o alinhamento técnico do projeto.';
+    if (isEventoFestivo) {
+      if (temRelacaoAdmin) {
+        mencaoInstitucional += ' A organização e a estrutura do evento contaram com a coordenação e planejamento da Secretaria de Administração e Governo, sob a atuação do Secretário Guilherme Santos.';
+      }
+      if (temRelacaoPrefeito) {
+        mencaoInstitucional += ' A realização contou com o apoio institucional e direcionamento do Prefeito Municipal, Ailton Geraldo dos Santos, valorizando as tradições e o lazer da comunidade.';
+      }
+    } else {
+      if (temRelacaoPrefeito) {
+        mencaoInstitucional = ' A iniciativa contou com o direcionamento e acompanhamento institucional do Prefeito Municipal, Ailton Geraldo dos Santos, alinhando as ações às prioridades e ao desenvolvimento de São José do Goiabal.';
+      } else if (temRelacaoAdmin) {
+        mencaoInstitucional = ' Os trabalhos contam com o suporte de planejamento e articulação da Secretaria de Administração e Governo, sob a coordenação do Secretário Guilherme Santos, assegurando eficiência e rigor na execução.';
+      }
     }
 
-    let fallbackCorpo = `Em contínuo esforço para garantir a excelência nos serviços prestados à população de São José do Goiabal, a administração municipal realizou com êxito o compromisso "${dados.titulo}".\n\n${dados.setor ? `A ação foi coordenada pelo(a) ${dados.setor}. ` : ''}${textoPessoas}${dados.descricao ? `Durante a atividade, foram destacados pontos estratégicos: "${dados.descricao}". ` : ''}A iniciativa visa aprimorar o fluxo de atendimento, fortalecer as políticas públicas e assegurar resultados positivos diretos para os cidadãos do município.${mencaoInstitucional}\n\nNovas etapas e desdobramentos operacionais continuarão sendo acompanhados pelos setores responsáveis, demonstrando a gestão participativa e o compromisso da prefeitura.`;
+    let fallbackCorpo = `Em contínuo compromisso com a eficiência da gestão e a entrega de serviços de excelência para a população, a Prefeitura Municipal de São José do Goiabal realizou "${dados.titulo}".\n\n${dados.setor ? `A ação foi conduzida pelo(a) ${dados.setor}. ` : ''}${textoPessoas}${dados.descricao ? `Durante a atividade, foram destacados avanços estratégicos: "${dados.descricao}". ` : ''}A iniciativa evidencia o trabalho constante da administração municipal em gerar resultados práticos, fortalecer o atendimento e proporcionar melhorias concretas para toda a comunidade.${mencaoInstitucional}\n\nOs desdobramentos e próximas etapas continuarão sendo acompanhados pelos setores responsáveis, demonstrando transparência e responsabilidade com o município.`;
     if (fallbackCorpo.length > 1185) {
       fallbackCorpo = fallbackCorpo.slice(0, 1185).replace(/\s+\S*$/, '') + '.';
     }
 
     return {
-      manchete: `Avanço e Planejamento: Prefeitura realiza "${dados.titulo}" em benefício do município`,
-      subtitulo: `Compromisso institucional realizado em ${dataFormatada} reforça as ações de desenvolvimento e transparência da administração pública.`,
+      manchete: isEventoFestivo 
+        ? `Cultura & Lazer: Prefeitura realiza "${dados.titulo}" com grande estrutura e organização`
+        : `Gestão & Resultados: Prefeitura realiza "${dados.titulo}" em benefício de São José do Goiabal`,
+      subtitulo: `Ação institucional realizada em ${dataFormatada} evidencia o compromisso com a eficiência pública e o atendimento à população.`,
       corpo: fallbackCorpo,
-      categoria: cat,
-      destaqueFrase: `"Cada ação planejada e executada reflete o nosso compromisso inegociável com o bem-estar e o futuro de São José do Goiabal."`
+      categoria: isEventoFestivo ? 'EVENTOS & CULTURA' : cat,
+      destaqueFrase: `"Trabalho, compromisso e resultados concretos em favor de toda a população de São José do Goiabal."`
     };
   }
 };
