@@ -10,6 +10,19 @@ export interface CalendarEventInvite {
     user_name?: string; // Fetched from profiles
 }
 
+export interface CalendarMateriaData {
+    manchete?: string;
+    subtitulo?: string;
+    corpo?: string;
+    destaqueFrase?: string;
+    categoria?: string;
+    imagemUrl?: string;
+    aprovada?: boolean;
+    status?: 'pendente' | 'aprovada' | 'publicada';
+    destaque?: boolean;
+    oculta?: boolean;
+}
+
 export interface CalendarEvent {
     id: string;
     title: string;
@@ -22,13 +35,16 @@ export interface CalendarEvent {
     description?: string;
     created_by?: string;
     created_at?: string;
+    updated_at?: string;
     professional_id?: string;
     professional_name?: string; // Virtual field for display
     birth_date?: string; // Birth date from person for recurrence
     is_recurring?: boolean;
+    recurrence_rule?: string;
     google_event_id?: string;
     synced_with_google?: boolean;
     invites?: CalendarEventInvite[];
+    location?: string;
     sector?: string;
     sector_id?: string;
     person_ids?: string[];
@@ -41,16 +57,7 @@ export interface CalendarEvent {
     image_url?: string;
     is_indefinite?: boolean;
     publish_to_news?: boolean;
-    materia_data?: {
-        manchete?: string;
-        subtitulo?: string;
-        corpo?: string;
-        destaqueFrase?: string;
-        categoria?: string;
-        imagemUrl?: string;
-        aprovada?: boolean;
-        status?: 'pendente' | 'aprovada' | 'publicada';
-    };
+    materia_data?: CalendarMateriaData;
 }
 
 const STORAGE_KEY = 'prefeitura_calendar_events_cache';
@@ -74,14 +81,7 @@ export const serializeEventMetadata = (
         image_url?: string; 
         is_indefinite?: boolean; 
         publish_to_news?: boolean;
-        materia_data?: {
-            manchete?: string;
-            subtitulo?: string;
-            corpo?: string;
-            destaqueFrase?: string;
-            categoria?: string;
-            imagemUrl?: string;
-        };
+        materia_data?: CalendarMateriaData;
     }
 ): string => {
     let cleanDesc = (description || '').replace(/__PREFEITURA_META__[\s\S]*?__END_META__/g, '').trim();
@@ -120,14 +120,7 @@ export const deserializeEventMetadata = (
     image_url?: string; 
     is_indefinite?: boolean; 
     publish_to_news?: boolean;
-    materia_data?: {
-        manchete?: string;
-        subtitulo?: string;
-        corpo?: string;
-        destaqueFrase?: string;
-        categoria?: string;
-        imagemUrl?: string;
-    };
+    materia_data?: CalendarMateriaData;
 } => {
     if (!description) return { cleanDescription: '' };
     const match = description.match(/__PREFEITURA_META__([\s\S]*?)__END_META__/);

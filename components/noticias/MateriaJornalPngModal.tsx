@@ -463,6 +463,11 @@ export const generateAndDownloadStoryPng = async (
   onNotify?: (msg: string) => void
 ): Promise<boolean> => {
   try {
+    if (materia.aprovada === false || materia.status === 'pendente') {
+      if (onNotify) onNotify('⚠️ Esta matéria está pendente de aprovação e não pode ser baixada até ser aprovada e publicada.');
+      return false;
+    }
+
     if (onNotify) onNotify('Gerando imagem em alta resolução (1080x1920)...');
     
     // Pequena pausa para garantir renderização de fontes e imagens
@@ -509,7 +514,13 @@ export const MateriaJornalPngModal: React.FC<MateriaJornalPngModalProps> = ({
 
   if (!isOpen || !materia) return null;
 
+  const isPendente = materia.aprovada === false || materia.status === 'pendente';
+
   const handleDownloadPng = async () => {
+    if (isPendente) {
+      if (onNotify) onNotify('⚠️ Esta matéria está pendente de aprovação e não pode ser baixada.');
+      return;
+    }
     if (!offscreenRef.current) return;
     setDownloading(true);
     if (onNotify) onNotify('Renderizando Story em 1080x1920 PNG...');
@@ -546,6 +557,10 @@ export const MateriaJornalPngModal: React.FC<MateriaJornalPngModalProps> = ({
   };
 
   const handleDownloadPdf = async () => {
+    if (isPendente) {
+      if (onNotify) onNotify('⚠️ Esta matéria está pendente de aprovação e não pode ser baixada.');
+      return;
+    }
     if (!offscreenRef.current) return;
     setDownloadingPdf(true);
     if (onNotify) onNotify('Gerando documento PDF vertical...');
@@ -605,23 +620,32 @@ export const MateriaJornalPngModal: React.FC<MateriaJornalPngModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={handleDownloadPdf}
-              disabled={downloadingPdf || downloading}
-              className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border border-slate-700 cursor-pointer disabled:opacity-50"
-            >
-              {downloadingPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4 text-rose-400" />}
-              <span className="hidden sm:inline">Baixar PDF</span>
-            </button>
+            {isPendente ? (
+              <div className="px-3 py-1.5 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs font-black flex items-center gap-1.5 shadow-sm">
+                <Clock className="w-3.5 h-3.5 text-rose-400 animate-pulse" />
+                <span>Download bloqueado (Pendente)</span>
+              </div>
+            ) : (
+              <>
+                <button
+                  onClick={handleDownloadPdf}
+                  disabled={downloadingPdf || downloading}
+                  className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border border-slate-700 cursor-pointer disabled:opacity-50"
+                >
+                  {downloadingPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4 text-rose-400" />}
+                  <span className="hidden sm:inline">Baixar PDF</span>
+                </button>
 
-            <button
-              onClick={handleDownloadPng}
-              disabled={downloading || downloadingPdf}
-              className="px-5 py-2 bg-gradient-to-r from-indigo-600 to-sky-600 hover:from-indigo-500 hover:to-sky-500 text-white rounded-xl text-xs font-black transition-all flex items-center gap-2 shadow-lg shadow-indigo-600/30 cursor-pointer active:scale-95 disabled:opacity-50"
-            >
-              {downloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-              <span>{downloading ? 'Gerando Story PNG...' : 'Baixar Story PNG (1080x1920)'}</span>
-            </button>
+                <button
+                  onClick={handleDownloadPng}
+                  disabled={downloading || downloadingPdf}
+                  className="px-5 py-2 bg-gradient-to-r from-indigo-600 to-sky-600 hover:from-indigo-500 hover:to-sky-500 text-white rounded-xl text-xs font-black transition-all flex items-center gap-2 shadow-lg shadow-indigo-600/30 cursor-pointer active:scale-95 disabled:opacity-50"
+                >
+                  {downloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                  <span>{downloading ? 'Gerando Story PNG...' : 'Baixar Story PNG (1080x1920)'}</span>
+                </button>
+              </>
+            )}
 
             <button
               onClick={onClose}

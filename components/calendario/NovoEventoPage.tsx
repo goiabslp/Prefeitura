@@ -35,6 +35,7 @@ import { calendarService, CalendarEvent } from '../../services/calendarService';
 import { getPersons, getSectors, getJobs } from '../../services/entityService';
 import { getLocalISOData } from '../../utils/dateUtils';
 import { Person, Sector, Job, JornalMateria } from '../../types';
+import { noticiasService } from '../../services/noticiasService';
 import { generateMateriaJornalWithAI, GeneratedMateriaJornal } from '../../services/geminiService';
 
 interface NovoEventoPageProps {
@@ -656,27 +657,23 @@ export const NovoEventoPage: React.FC<NovoEventoPageProps> = ({
           categoria: finalMateriaData.categoria,
           dataPublicacao: new Date().toISOString(),
           dataEvento: startDate,
+          horaEvento: isAllDay ? 'Dia Inteiro' : `${startTime} às ${endTime}`,
           imagemUrl: imageUrl || undefined,
-          destaqueFrase: finalMateriaData.destaqueFrase,
           autor: 'Assessoria de Comunicação Oficial',
-          status: 'aprovada',
+          destaqueFrase: finalMateriaData.destaqueFrase,
+          eventoId: savedEventId,
+          tipoEvento: type,
           setor: primarySectorName || undefined,
-          pessoasEnvolvidas: pessoasParaIA
+          setorId: sectorId || undefined,
+          person_ids: selectedPersonIds,
+          pessoasEnvolvidas: pessoasParaIA,
+          oculta: false,
+          aprovada: false, // Fica pendente de aprovação de administrador
+          status: 'pendente',
+          curtidas: 1
         };
 
-        try {
-          const raw = localStorage.getItem('materias_jornal_storage');
-          const materias: JornalMateria[] = raw ? JSON.parse(raw) : [];
-          const index = materias.findIndex(m => m.id === novaMateria.id);
-          if (index >= 0) {
-            materias[index] = novaMateria;
-          } else {
-            materias.unshift(novaMateria);
-          }
-          localStorage.setItem('materias_jornal_storage', JSON.stringify(materias));
-        } catch (storageErr) {
-          console.warn('Erro ao sincronizar matéria com feed do jornal:', storageErr);
-        }
+        await noticiasService.salvarMateria(novaMateria);
       }
 
       window.history.pushState({}, '', '/Calendario');

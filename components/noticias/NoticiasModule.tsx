@@ -302,20 +302,22 @@ const NewsCardItem = React.memo<NewsCardItemProps>(({
             </button>
           )}
 
-          {/* Botão Baixar Matéria em Formato de Jornal PNG */}
-          <button
-            type="button"
-            onClick={(e) => onDownload(mat, e)}
-            disabled={isDownloading}
-            className="p-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 hover:text-indigo-900 transition-all flex items-center justify-center shadow-2xs cursor-pointer active:scale-95 border border-indigo-100 disabled:opacity-60"
-            title="Baixar matéria em formato de jornal (PNG 1080x1920)"
-          >
-            {isDownloading ? (
-              <Loader2 className="w-4 h-4 text-indigo-600 animate-spin" />
-            ) : (
-              <Download className="w-4 h-4 text-indigo-600" />
-            )}
-          </button>
+          {/* Botão Baixar Matéria em Formato de Jornal PNG (Exclusivo para matérias aprovadas e publicadas) */}
+          {mat.aprovada !== false && mat.status !== 'pendente' && (
+            <button
+              type="button"
+              onClick={(e) => onDownload(mat, e)}
+              disabled={isDownloading}
+              className="p-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 hover:text-indigo-900 transition-all flex items-center justify-center shadow-2xs cursor-pointer active:scale-95 border border-indigo-100 disabled:opacity-60"
+              title="Baixar matéria em formato de jornal (PNG 1080x1920)"
+            >
+              {isDownloading ? (
+                <Loader2 className="w-4 h-4 text-indigo-600 animate-spin" />
+              ) : (
+                <Download className="w-4 h-4 text-indigo-600" />
+              )}
+            </button>
+          )}
 
           {/* Ações Exclusivas do Administrador: Destaque, Ocultar e Excluir */}
           {isAdmin && (
@@ -678,6 +680,10 @@ export const NoticiasModule: React.FC<NoticiasModuleProps> = ({
   // Download Imediato de uma Matéria individual no padrão oficial do jornal
   const handleDownloadImediato = useCallback(async (mat: JornalMateria, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (mat.aprovada === false || mat.status === 'pendente') {
+      showNotification('⚠️ Esta matéria está pendente de aprovação e não pode ser baixada até ser aprovada e publicada.');
+      return;
+    }
     if (baixandoMateriaId) return;
 
     setBaixandoMateriaId(mat.id);
@@ -1466,20 +1472,22 @@ export const NoticiasModule: React.FC<NoticiasModuleProps> = ({
                   </button>
                 )}
 
-                {/* Botão Baixar Imagem Story 1080x1920 (Apenas Ícone) */}
-                <button
-                  type="button"
-                  onClick={(e) => handleDownloadImediato(materiaAberta, e)}
-                  disabled={baixandoMateriaId === materiaAberta.id}
-                  className="p-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 hover:text-indigo-900 transition-all flex items-center justify-center border border-indigo-100 cursor-pointer shadow-2xs active:scale-95 disabled:opacity-60"
-                  title="Baixar matéria em formato de jornal (PNG 1080x1920)"
-                >
-                  {baixandoMateriaId === materiaAberta.id ? (
-                    <Loader2 className="w-4 h-4 text-indigo-600 animate-spin" />
-                  ) : (
-                    <Download className="w-4 h-4 text-indigo-600" />
-                  )}
-                </button>
+                {/* Botão Baixar Imagem Story 1080x1920 (Apenas para matérias aprovadas e publicadas) */}
+                {materiaAberta.aprovada !== false && materiaAberta.status !== 'pendente' && (
+                  <button
+                    type="button"
+                    onClick={(e) => handleDownloadImediato(materiaAberta, e)}
+                    disabled={baixandoMateriaId === materiaAberta.id}
+                    className="p-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 hover:text-indigo-900 transition-all flex items-center justify-center border border-indigo-100 cursor-pointer shadow-2xs active:scale-95 disabled:opacity-60"
+                    title="Baixar matéria em formato de jornal (PNG 1080x1920)"
+                  >
+                    {baixandoMateriaId === materiaAberta.id ? (
+                      <Loader2 className="w-4 h-4 text-indigo-600 animate-spin" />
+                    ) : (
+                      <Download className="w-4 h-4 text-indigo-600" />
+                    )}
+                  </button>
+                )}
 
                 {isAdmin && (
                   <button
@@ -1584,14 +1592,24 @@ export const NoticiasModule: React.FC<NoticiasModuleProps> = ({
                   <span>Imprimir</span>
                 </button>
 
-                {/* Botão Baixar em Formato de Story Vertical PNG 1080x1920 */}
-                <button
-                  onClick={() => setMateriaParaExportarPng(materiaAberta)}
-                  className="px-4 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 hover:text-indigo-900 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer shadow-xs border border-indigo-200"
-                >
-                  <Download className="w-4 h-4 text-indigo-600" />
-                  <span>Baixar Story (PNG 1080x1920)</span>
-                </button>
+                {/* Botão Baixar em Formato de Story Vertical PNG 1080x1920 (Apenas se aprovada e publicada) */}
+                {materiaAberta.aprovada !== false && materiaAberta.status !== 'pendente' ? (
+                  <button
+                    onClick={() => setMateriaParaExportarPng(materiaAberta)}
+                    className="px-4 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 hover:text-indigo-900 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer shadow-xs border border-indigo-200"
+                  >
+                    <Download className="w-4 h-4 text-indigo-600" />
+                    <span>Baixar Story (PNG 1080x1920)</span>
+                  </button>
+                ) : (
+                  <div
+                    className="px-3.5 py-2.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs font-bold flex items-center gap-2 shadow-2xs"
+                    title="Esta matéria está pendente de aprovação e só poderá ser baixada após ser aprovada e publicada."
+                  >
+                    <Clock className="w-4 h-4 text-rose-600 shrink-0 animate-pulse" />
+                    <span>Download bloqueado (Publicação Pendente)</span>
+                  </div>
+                )}
 
                 {/* Botão Ocultar / Reexibir Publicação para Administrador */}
                 {isAdmin && (
