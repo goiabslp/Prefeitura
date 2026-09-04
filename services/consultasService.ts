@@ -723,10 +723,84 @@ export const createVagas = async (vagas: Omit<ConsultaVaga, 'id' | 'created_at' 
             .select();
 
         if (error) throw error;
+
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('consultas-vagas-changed'));
+            window.dispatchEvent(new CustomEvent('consultas-procedimentos-changed'));
+        }
+
         return data;
     } catch (error) {
         const appError = handleSupabaseError(error);
         console.error('[consultasService] createVagas Error:', appError.message);
+        throw appError;
+    }
+};
+
+export const updateVaga = async (id: string, updates: Partial<ConsultaVaga>): Promise<ConsultaVaga | null> => {
+    try {
+        const { data, error } = await supabase
+            .from('consultas_vagas')
+            .update(updates)
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('consultas-vagas-changed'));
+            window.dispatchEvent(new CustomEvent('consultas-procedimentos-changed'));
+        }
+
+        return data;
+    } catch (error) {
+        const appError = handleSupabaseError(error);
+        console.error('[consultasService] updateVaga Error:', appError.message);
+        throw appError;
+    }
+};
+
+export const pauseVaga = async (id: string): Promise<boolean> => {
+    try {
+        const { error } = await supabase
+            .from('consultas_vagas')
+            .update({ status: 'Pausada' })
+            .eq('id', id);
+
+        if (error) throw error;
+
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('consultas-vagas-changed'));
+            window.dispatchEvent(new CustomEvent('consultas-procedimentos-changed'));
+        }
+
+        return true;
+    } catch (error) {
+        const appError = handleSupabaseError(error);
+        console.error('[consultasService] pauseVaga Error:', appError.message);
+        throw appError;
+    }
+};
+
+export const unpauseVaga = async (id: string): Promise<boolean> => {
+    try {
+        const { error } = await supabase
+            .from('consultas_vagas')
+            .update({ status: 'Disponível' })
+            .eq('id', id);
+
+        if (error) throw error;
+
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('consultas-vagas-changed'));
+            window.dispatchEvent(new CustomEvent('consultas-procedimentos-changed'));
+        }
+
+        return true;
+    } catch (error) {
+        const appError = handleSupabaseError(error);
+        console.error('[consultasService] unpauseVaga Error:', appError.message);
         throw appError;
     }
 };
@@ -739,6 +813,12 @@ export const deleteVaga = async (id: string): Promise<boolean> => {
             .eq('id', id);
 
         if (error) throw error;
+
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('consultas-vagas-changed'));
+            window.dispatchEvent(new CustomEvent('consultas-procedimentos-changed'));
+        }
+
         return true;
     } catch (error) {
         const appError = handleSupabaseError(error);

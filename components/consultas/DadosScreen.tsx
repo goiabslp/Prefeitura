@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { User, ConsultaPaciente, ConsultaProcedimento, ConsultaAgendamento, ConsultaVaga } from '../../types';
-import { ArrowLeft, Users, Calendar, Settings, BarChart3, Plus, Edit2, Search, Check, AlertTriangle, Loader2, History, X, ChevronLeft, ChevronRight, Activity, Stethoscope, Sparkles, Trash2, ShieldCheck, UserCheck, FileSpreadsheet, TrendingUp, UserCog } from 'lucide-react';
+import { ArrowLeft, Users, Calendar, Settings, BarChart3, Plus, Edit2, Search, Check, AlertTriangle, Loader2, History, X, ChevronLeft, ChevronRight, Activity, Stethoscope, Sparkles, Trash2, ShieldCheck, UserCheck, FileSpreadsheet, TrendingUp, UserCog, PauseCircle, PlayCircle } from 'lucide-react';
 import * as db from '../../services/consultasService';
 import { seedDefaultProcedures } from '../../services/procedimentosSeed';
 import { ResponsiveContainer, AreaChart, XAxis, YAxis, Tooltip, Area, CartesianGrid } from 'recharts';
@@ -214,6 +214,23 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
         } catch (err) {
             console.error('Error deleting vaga:', err);
             alert('Erro ao deletar vaga.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleTogglePauseSlot = async (slot: ConsultaVaga) => {
+        setLoading(true);
+        try {
+            if (slot.status === 'Pausada') {
+                await db.unpauseVaga(slot.id);
+            } else {
+                await db.pauseVaga(slot.id);
+            }
+            await reloadVagas();
+        } catch (err: any) {
+            console.error('Error toggling pause on slot:', err);
+            alert('Erro ao pausar/despausar vaga.');
         } finally {
             setLoading(false);
         }
@@ -815,7 +832,7 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                                                                 <div className="flex flex-wrap gap-2 items-center">
                                                                     {slots.map(v => {
                                                                         const activeBooking = slotAssignments.get(v.id);
-                                                                        const dynamicStatus = activeBooking ? activeBooking.status : 'Disponível';
+                                                                        const dynamicStatus = activeBooking ? activeBooking.status : (v.status === 'Pausada' ? 'Pausada' : 'Disponível');
                                                                         const patientName = activeBooking?.paciente ? formatPatientName(activeBooking.paciente) : undefined;
 
                                                                         const statusColors = (() => {
@@ -850,6 +867,11 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                                                                                         container: 'bg-amber-50 border-amber-100 text-amber-600',
                                                                                         badge: 'bg-amber-100 text-amber-700'
                                                                                     };
+                                                                                case 'Pausada':
+                                                                                    return {
+                                                                                        container: 'bg-amber-50/70 border-amber-200 text-amber-800',
+                                                                                        badge: 'bg-amber-100 text-amber-700'
+                                                                                    };
                                                                                 case 'Cancelado':
                                                                                 case 'Não Realizado':
                                                                                 case 'Disponível':
@@ -874,16 +896,25 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                                                                                     </span>
                                                                                 )}
                                                                                 <span className={`text-[8px] font-black uppercase px-1.5 py-0.2 rounded ${statusColors.badge}`}>
-                                                                                    {dynamicStatus === 'Disponível' ? 'Disponível' : dynamicStatus}
+                                                                                    {dynamicStatus}
                                                                                 </span>
                                                                                 {!activeBooking && (
-                                                                                    <button
-                                                                                        onClick={() => handleDeleteSlot(v.id)}
-                                                                                        className="p-0.5 hover:bg-slate-200 rounded text-slate-400 hover:text-rose-600 transition-colors ml-0.5"
-                                                                                        title="Excluir Vaga"
-                                                                                    >
-                                                                                        <X className="w-3.5 h-3.5" />
-                                                                                    </button>
+                                                                                    <div className="flex items-center gap-0.5 ml-0.5">
+                                                                                        <button
+                                                                                            onClick={() => handleTogglePauseSlot(v)}
+                                                                                            className={`p-0.5 hover:bg-slate-200 rounded transition-colors ${v.status === 'Pausada' ? 'text-amber-600' : 'text-slate-400 hover:text-amber-600'}`}
+                                                                                            title={v.status === 'Pausada' ? "Reativar Vaga" : "Pausar Vaga"}
+                                                                                        >
+                                                                                            {v.status === 'Pausada' ? <PlayCircle className="w-3.5 h-3.5" /> : <PauseCircle className="w-3.5 h-3.5" />}
+                                                                                        </button>
+                                                                                        <button
+                                                                                            onClick={() => handleDeleteSlot(v.id)}
+                                                                                            className="p-0.5 hover:bg-slate-200 rounded text-slate-400 hover:text-rose-600 transition-colors"
+                                                                                            title="Excluir Vaga"
+                                                                                        >
+                                                                                            <X className="w-3.5 h-3.5" />
+                                                                                        </button>
+                                                                                    </div>
                                                                                 )}
                                                                             </div>
                                                                         );
