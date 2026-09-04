@@ -732,6 +732,7 @@ export interface JornalMateria {
   status?: 'pendente' | 'aprovada' | 'publicada';
   visualizacoes?: number;
   curtidas?: number;
+  imagemPosicao?: string; // Posição do enquadramento da imagem (ex: '50% 25%', 'top', 'center', 'bottom')
 }
 
 declare const __LATEST_COMMIT__: string;

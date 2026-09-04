@@ -5,7 +5,8 @@ import {
     ArrowLeft, Search, Plus, Calendar, Clock, Edit2, Trash2, 
     PauseCircle, PlayCircle, Activity, Stethoscope, Sparkles, 
     ChevronLeft, ChevronRight, X, Loader2, CalendarDays,
-    CheckCircle2, AlertTriangle, Sun, Sunset, Zap, RotateCcw, Check, CalendarCheck
+    CheckCircle2, AlertTriangle, Sun, Sunset, Zap, RotateCcw, Check, CalendarCheck,
+    Users, ChevronDown
 } from 'lucide-react';
 import * as db from '../../services/consultasService';
 
@@ -40,6 +41,7 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
     const [selectedDate, setSelectedDate] = useState<Date | null>(new Date());
     const [selectedTimes, setSelectedTimes] = useState<string[]>([]);
     const [customTime, setCustomTime] = useState('');
+    const [numVagasPorHorario, setNumVagasPorHorario] = useState<number>(1);
 
     // Modal de Editar Vaga
     const [editingVaga, setEditingVaga] = useState<ConsultaVaga | null>(null);
@@ -286,14 +288,23 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
         setActionLoading(true);
         try {
             const formattedDate = formatDateToYYYYMMDD(selectedDate);
-            const newVagas = selectedTimes.map(t => ({
-                procedimento_id: selectedProc.id,
-                data: formattedDate,
-                hora: t
-            }));
+            const qtd = Math.max(1, numVagasPorHorario);
+            const newVagas: Array<{ procedimento_id: string; data: string; hora: string }> = [];
+
+            // Cria individualmente o número de vagas configurado para cada data e horário
+            selectedTimes.forEach(t => {
+                for (let i = 0; i < qtd; i++) {
+                    newVagas.push({
+                        procedimento_id: selectedProc.id,
+                        data: formattedDate,
+                        hora: t
+                    });
+                }
+            });
 
             await db.createVagas(newVagas);
             setSelectedTimes([]);
+            setNumVagasPorHorario(1);
             setIsAddVagasModalOpen(false);
             await reloadProcVagas(selectedProc.id);
         } catch (err: any) {
@@ -446,6 +457,7 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
                                     setSelectedDate(new Date());
                                     setCurrentMonth(new Date());
                                     setSelectedTimes([]);
+                                    setNumVagasPorHorario(1);
                                     setIsAddVagasModalOpen(true);
                                 }}
                                 className="px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs uppercase tracking-wider rounded-lg shadow-xs active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
@@ -747,6 +759,7 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
                                         setSelectedDate(new Date());
                                         setCurrentMonth(new Date());
                                         setSelectedTimes([]);
+                                        setNumVagasPorHorario(1);
                                         setIsAddVagasModalOpen(true);
                                     }}
                                     className="px-3.5 py-1.5 bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs uppercase rounded-lg shadow-xs cursor-pointer inline-flex items-center gap-1.5"
@@ -906,6 +919,57 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
                                     </div>
                                 </div>
 
+                                {/* Botão / Seletor Numeral: Número de Vagas por Horário */}
+                                <div className="bg-slate-50 p-2.5 rounded-2xl border border-slate-200 flex items-center justify-between gap-2 shadow-2xs">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                        <div className="w-8 h-8 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center font-bold shrink-0">
+                                            <Users className="w-4 h-4" />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 block leading-tight">
+                                                Número de Vagas
+                                            </span>
+                                            <span className="text-[11px] font-bold text-slate-700 block truncate">
+                                                Por horário selecionado
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-1 shrink-0">
+                                        <button
+                                            type="button"
+                                            onClick={() => setNumVagasPorHorario(prev => Math.max(1, prev - 1))}
+                                            className="w-7 h-7 bg-white hover:bg-slate-100 active:scale-95 border border-slate-200 rounded-lg text-slate-700 font-black text-sm flex items-center justify-center cursor-pointer transition-all shadow-2xs"
+                                            title="Diminuir vagas (-1)"
+                                        >
+                                            -
+                                        </button>
+                                        <div className="relative">
+                                            <select
+                                                value={numVagasPorHorario}
+                                                onChange={(e) => setNumVagasPorHorario(Math.max(1, Number(e.target.value)))}
+                                                className="bg-white border border-slate-200 rounded-lg pl-2 pr-6 py-1 text-xs font-black font-mono text-sky-700 outline-none focus:border-sky-500 shadow-2xs cursor-pointer appearance-none text-center min-w-[54px]"
+                                                title="Selecione o número de vagas a criar para cada horário"
+                                            >
+                                                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 15, 20, 25, 30, 40, 50].map(n => (
+                                                    <option key={n} value={n}>
+                                                        {n}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            <ChevronDown className="w-3 h-3 text-slate-400 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setNumVagasPorHorario(prev => Math.min(100, prev + 1))}
+                                            className="w-7 h-7 bg-white hover:bg-slate-100 active:scale-95 border border-slate-200 rounded-lg text-slate-700 font-black text-sm flex items-center justify-center cursor-pointer transition-all shadow-2xs"
+                                            title="Aumentar vagas (+1)"
+                                        >
+                                            +
+                                        </button>
+                                    </div>
+                                </div>
+
                                 {/* Atalhos Rápidos Dinâmicos */}
                                 <div>
                                     <div className="flex items-center justify-between mb-1.5">
@@ -1009,8 +1073,8 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
                                     <div className="p-2.5 bg-sky-50 rounded-2xl border border-sky-100 space-y-1.5">
                                         <div className="flex items-center justify-between text-[11px] font-black text-sky-900">
                                             <span>Prontos para Liberar:</span>
-                                            <span className="px-1.5 py-0.2 rounded-full bg-sky-200 text-sky-800 text-[10px]">
-                                                {selectedTimes.length} vaga(s)
+                                            <span className="px-2 py-0.5 rounded-full bg-sky-200 text-sky-800 text-[10px] font-black">
+                                                {selectedTimes.length * numVagasPorHorario} vaga(s) ({selectedTimes.length} horário(s) × {numVagasPorHorario})
                                             </span>
                                         </div>
                                         <div className="flex flex-wrap gap-1 max-h-[60px] overflow-y-auto custom-scrollbar">
@@ -1022,6 +1086,11 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
                                                     title="Clique para remover este horário"
                                                 >
                                                     <span>{t}</span>
+                                                    {numVagasPorHorario > 1 && (
+                                                        <span className="text-[9px] text-sky-600 font-extrabold bg-sky-100 px-1 rounded">
+                                                            ×{numVagasPorHorario}
+                                                        </span>
+                                                    )}
                                                     <X className="w-2.5 h-2.5 group-hover:scale-125 transition-transform" />
                                                 </span>
                                             ))}
@@ -1036,7 +1105,7 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
                             <div className="text-xs font-semibold text-slate-500 truncate">
                                 {selectedTimes.length > 0 ? (
                                     <span>
-                                        Total: <strong className="text-sky-700 font-extrabold">{selectedTimes.length} vaga(s)</strong> para {selectedDate ? selectedDate.toLocaleDateString('pt-BR') : ''}
+                                        Total: <strong className="text-sky-700 font-extrabold">{selectedTimes.length * numVagasPorHorario} vaga(s)</strong> {numVagasPorHorario > 1 ? `(${selectedTimes.length} horário(s) × ${numVagasPorHorario} vagas)` : ''} para {selectedDate ? selectedDate.toLocaleDateString('pt-BR') : ''}
                                     </span>
                                 ) : (
                                     <span>Selecione ao menos 1 horário no painel</span>
@@ -1046,7 +1115,7 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
                             <div className="flex items-center gap-2 shrink-0">
                                 <button
                                     type="button"
-                                    onClick={() => { setIsAddVagasModalOpen(false); setSelectedTimes([]); }}
+                                    onClick={() => { setIsAddVagasModalOpen(false); setSelectedTimes([]); setNumVagasPorHorario(1); }}
                                     className="px-4 py-2 border border-slate-200 hover:bg-white text-slate-600 font-bold rounded-xl text-xs uppercase transition-all cursor-pointer shadow-2xs"
                                 >
                                     Cancelar
@@ -1065,7 +1134,7 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
                                     ) : (
                                         <>
                                             <CheckCircle2 className="w-3.5 h-3.5" />
-                                            <span>Liberar Vagas ({selectedTimes.length})</span>
+                                            <span>Liberar Vagas ({selectedTimes.length * numVagasPorHorario})</span>
                                         </>
                                     )}
                                 </button>

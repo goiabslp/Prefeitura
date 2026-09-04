@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { User, ConsultaPaciente, ConsultaProcedimento, AppState, ConsultaAgendamento, ConsultaVaga, AGENTES_DE_SAUDE } from '../../types';
+import { useAgentesSaude } from '../../services/agentesSaudeService';
 import { 
     ArrowLeft, 
     UserPlus, 
@@ -64,6 +65,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
     subView,
     appState
 }) => {
+    const { items: agentesSaudeItems } = useAgentesSaude();
     // Step state
     const [step, setStep] = useState<1 | 2 | 3>(1);
     
@@ -1328,9 +1330,9 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                                             onChange={(e) => setNewPatientAgenteSaude(e.target.value)}
                                                         >
                                                             <option value="">-- SELECIONE O AGENTE DE SAÚDE (OPCIONAL) --</option>
-                                                            {AGENTES_DE_SAUDE.map((agente) => (
-                                                                <option key={agente} value={agente.toUpperCase()}>
-                                                                    {agente.toUpperCase()}
+                                                            {agentesSaudeItems.map((item) => (
+                                                                <option key={item.nome} value={item.nome}>
+                                                                    {item.nome} {item.psf ? `(${item.psf})` : ''}
                                                                 </option>
                                                             ))}
                                                         </select>
@@ -2622,9 +2624,9 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                         onChange={(e) => setNewPatientAgenteSaude(e.target.value)}
                                     >
                                         <option value="">-- SELECIONE O AGENTE DE SAÚDE (OPCIONAL) --</option>
-                                        {AGENTES_DE_SAUDE.map((agente) => (
-                                            <option key={agente} value={agente.toUpperCase()}>
-                                                {agente.toUpperCase()}
+                                        {agentesSaudeItems.map((item) => (
+                                            <option key={item.nome} value={item.nome}>
+                                                {item.nome} {item.psf ? `(${item.psf})` : ''}
                                             </option>
                                         ))}
                                     </select>

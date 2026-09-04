@@ -213,6 +213,7 @@ const VIEW_TO_PATH: Record<string, string> = {
   'consultas:dados-procedimentos': '/Consultas/DADOS/Exames',
   'consultas:dados-historico': '/Consultas/DADOS/Historico',
   'consultas:dados-gestor': '/Consultas/DADOS/Gestor',
+  'consultas:dados-agentes': '/Consultas/DADOS/AgentesSaude',
   'consultas:gestor': '/Consultas/Gestor',
   'farmacia': '/FarmaciaPopular',
   'farmacia:pacientes': '/FarmaciaPopular/Pacientes',
@@ -5049,6 +5050,9 @@ const App: React.FC = () => {
                   } else if (view === 'consultas:dados-gestor') {
                     setAppState(prev => ({ ...prev, view: 'dados-gestor' }));
                     window.history.pushState({}, '', '/Consultas/DADOS/Gestor');
+                  } else if (view === 'consultas:dados-agentes') {
+                    setAppState(prev => ({ ...prev, view: 'dados-agentes' }));
+                    window.history.pushState({}, '', '/Consultas/DADOS/AgentesSaude');
                   } else if (view === 'consultas') {
                     setAppState(prev => ({ ...prev, view: undefined }));
                     window.history.pushState({}, '', '/Consultas');

@@ -3,6 +3,7 @@ import { User, FarmaciaMedicamento, FarmaciaMovimentacao, ConsultaPaciente, AppS
 import { ArrowLeft, User as UserIcon, Calendar, ClipboardList, CheckCircle2, AlertTriangle, Search, Loader2, History, X, FileDown, Pill, ShieldCheck, FileText, Plus, Trash2, Minus, UserPlus, ChevronDown } from 'lucide-react';
 import * as db from '../../services/farmaciaService';
 import { getPacientes, createPaciente } from '../../services/consultasService';
+import { useAgentesSaude } from '../../services/agentesSaudeService';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import { FarmaciaPdfGenerator } from './FarmaciaPdfGenerator';
@@ -26,6 +27,7 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
     onNavigate,
     appState
 }) => {
+    const { items: agentesSaudeItems } = useAgentesSaude();
     const { showAlert } = useFarmaciaAlert();
 
     // DB Data states
@@ -1178,9 +1180,9 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                         onChange={(e) => setNewPatientAgenteSaude(e.target.value)}
                                     >
                                         <option value="">-- SELECIONE O AGENTE DE SAÚDE (OPCIONAL) --</option>
-                                        {AGENTES_DE_SAUDE.map((agente) => (
-                                            <option key={agente} value={agente.toUpperCase()}>
-                                                {agente.toUpperCase()}
+                                        {agentesSaudeItems.map((item) => (
+                                            <option key={item.nome} value={item.nome}>
+                                                {item.nome} {item.psf ? `(${item.psf})` : ''}
                                             </option>
                                         ))}
                                     </select>

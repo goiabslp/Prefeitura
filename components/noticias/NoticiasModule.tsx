@@ -41,7 +41,11 @@ import {
   Heart,
   Trash2,
   X,
-  Lock
+  Lock,
+  Sliders,
+  Move,
+  RotateCcw,
+  Check
 } from 'lucide-react';
 
 interface NoticiasModuleProps {
@@ -85,7 +89,8 @@ const PreloadedCardImage = React.memo<{
   aprovada?: boolean;
   isAdmin?: boolean;
   index?: number;
-}>(({ src, alt, prefeituraLogoUrl, destaque, categoria, oculta, aprovada, isAdmin, index = 0 }) => {
+  imagemPosicao?: string;
+}>(({ src, alt, prefeituraLogoUrl, destaque, categoria, oculta, aprovada, isAdmin, index = 0, imagemPosicao }) => {
   const isInitiallyCached = globalLoadedImages.has(src);
   const [isLoaded, setIsLoaded] = useState<boolean>(isInitiallyCached);
   const [hasError, setHasError] = useState<boolean>(false);
@@ -106,6 +111,7 @@ const PreloadedCardImage = React.memo<{
           alt={alt}
           loading={index < 6 ? 'eager' : 'lazy'}
           decoding="async"
+          style={{ objectPosition: imagemPosicao || 'center center' }}
           onLoad={() => {
             globalLoadedImages.add(src);
             setIsLoaded(true);
@@ -217,6 +223,7 @@ const NewsCardItem = React.memo<NewsCardItemProps>(({
             aprovada={mat.aprovada}
             isAdmin={isAdmin}
             index={index}
+            imagemPosicao={mat.imagemPosicao}
           />
         ) : (
           <div className="w-full h-24 bg-gradient-to-r from-slate-900 to-indigo-950 p-4 flex items-center justify-between text-white relative">
@@ -412,6 +419,12 @@ export const NoticiasModule: React.FC<NoticiasModuleProps> = ({
   const [baixandoMateriaId, setBaixandoMateriaId] = useState<string | null>(null);
   const [materiaParaDownloadDireto, setMateriaParaDownloadDireto] = useState<JornalMateria | null>(null);
   const directDownloadRef = useRef<HTMLDivElement>(null);
+
+  // Modal de Ajuste de Enquadramento da Imagem da Manchete/Notícia (Exclusivo Administrador)
+  const [materiaAjusteImagem, setMateriaAjusteImagem] = useState<JornalMateria | null>(null);
+  const [posicaoAjusteX, setPosicaoAjusteX] = useState<number>(50);
+  const [posicaoAjusteY, setPosicaoAjusteY] = useState<number>(50);
+  const [salvandoPosicao, setSalvandoPosicao] = useState<boolean>(false);
   
   // Datas para seleção
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
@@ -577,6 +590,71 @@ export const NoticiasModule: React.FC<NoticiasModuleProps> = ({
     setNotification(msg);
     setTimeout(() => setNotification(null), 4000);
   };
+
+  const handleAbrirAjusteImagem = useCallback((mat: JornalMateria) => {
+    if (!isAdmin) {
+      showNotification('Apenas Administradores podem ajustar o enquadramento da foto.');
+      return;
+    }
+    setMateriaAjusteImagem(mat);
+    let x = 50;
+    let y = 50;
+    if (mat.imagemPosicao) {
+      const pos = mat.imagemPosicao.trim().toLowerCase();
+      if (pos === 'top') {
+        y = 15;
+      } else if (pos === 'bottom') {
+        y = 85;
+      } else if (pos === 'center') {
+        y = 50;
+      } else {
+        const parts = pos.split(/\s+/);
+        if (parts.length >= 2) {
+          const px = parseFloat(parts[0]);
+          const py = parseFloat(parts[1]);
+          if (!isNaN(px)) x = Math.max(0, Math.min(100, Math.round(px)));
+          if (!isNaN(py)) y = Math.max(0, Math.min(100, Math.round(py)));
+        } else if (parts.length === 1) {
+          const py = parseFloat(parts[0]);
+          if (!isNaN(py)) y = Math.max(0, Math.min(100, Math.round(py)));
+        }
+      }
+    }
+    setPosicaoAjusteX(x);
+    setPosicaoAjusteY(y);
+  }, [isAdmin]);
+
+  const handleSalvarPosicaoImagem = useCallback(async () => {
+    if (!materiaAjusteImagem) return;
+    setSalvandoPosicao(true);
+    const novaPosicao = `${posicaoAjusteX}% ${posicaoAjusteY}%`;
+
+    try {
+      const ok = await noticiasService.atualizarPosicaoImagem(materiaAjusteImagem.id, novaPosicao);
+      if (ok) {
+        setMateriasPublicadas(prev => prev.map(m => {
+          if (m.id === materiaAjusteImagem.id || (materiaAjusteImagem.eventoId && m.eventoId === materiaAjusteImagem.eventoId)) {
+            return { ...m, imagemPosicao: novaPosicao };
+          }
+          return m;
+        }));
+
+        if (materiaAberta && (materiaAberta.id === materiaAjusteImagem.id || materiaAberta.eventoId === materiaAjusteImagem.eventoId)) {
+          setMateriaAberta(prev => prev ? { ...prev, imagemPosicao: novaPosicao } : null);
+        }
+
+        showNotification('✅ Enquadramento da foto salvo com sucesso!');
+        setMateriaAjusteImagem(null);
+      } else {
+        showNotification('Erro ao salvar o novo enquadramento. Tente novamente.');
+      }
+    } catch (e) {
+      console.error(e);
+      showNotification('Erro ao salvar enquadramento.');
+    } finally {
+      setSalvandoPosicao(false);
+    }
+  }, [materiaAjusteImagem, posicaoAjusteX, posicaoAjusteY, materiaAberta]);
 
   // Excluir Matéria (Exclusivo Administrador)
   const handleExcluirMateria = useCallback(async (id: string, e: React.MouseEvent) => {
@@ -959,6 +1037,7 @@ export const NoticiasModule: React.FC<NoticiasModuleProps> = ({
                             alt={materiaDestaqueCapa.titulo}
                             loading="eager"
                             decoding="async"
+                            style={{ objectPosition: materiaDestaqueCapa.imagemPosicao || 'center center' }}
                             onLoad={() => {
                               if (materiaDestaqueCapa.imagemUrl) {
                                 globalLoadedImages.add(materiaDestaqueCapa.imagemUrl);
@@ -970,6 +1049,22 @@ export const NoticiasModule: React.FC<NoticiasModuleProps> = ({
                             <div className="absolute bottom-2.5 right-2.5 p-1 rounded-lg bg-white/95 shadow-xs pointer-events-none">
                               <img src={prefeituraLogoUrl} alt="Logo" loading="eager" decoding="async" className="h-4 max-w-[70px] object-contain" />
                             </div>
+                          )}
+
+                          {/* Botão para Administrador ajustar o enquadramento da foto */}
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleAbrirAjusteImagem(materiaDestaqueCapa);
+                              }}
+                              className="absolute bottom-3 left-3 z-20 px-3 py-1.5 rounded-xl bg-slate-900/85 hover:bg-slate-950 backdrop-blur-md text-white text-xs font-bold font-sans flex items-center gap-1.5 shadow-md border border-white/20 transition-all active:scale-95 cursor-pointer"
+                              title="Ajustar enquadramento e posição da foto de destaque"
+                            >
+                              <Sliders className="w-3.5 h-3.5 text-amber-400" />
+                              <span>Ajustar Foto</span>
+                            </button>
                           )}
                         </div>
                       )}
@@ -1532,6 +1627,7 @@ export const NoticiasModule: React.FC<NoticiasModuleProps> = ({
                   alt={materiaAberta.titulo}
                   loading="eager"
                   decoding="async"
+                  style={{ objectPosition: materiaAberta.imagemPosicao || 'center center' }}
                   onLoad={() => {
                     if (materiaAberta.imagemUrl) {
                       globalLoadedImages.add(materiaAberta.imagemUrl);
@@ -1549,6 +1645,22 @@ export const NoticiasModule: React.FC<NoticiasModuleProps> = ({
                       className="h-5 max-w-[80px] object-contain"
                     />
                   </div>
+                )}
+
+                {/* Botão para Administrador ajustar o enquadramento na visualização detalhada */}
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleAbrirAjusteImagem(materiaAberta);
+                    }}
+                    className="absolute bottom-3 left-3 z-20 px-3 py-1.5 rounded-xl bg-slate-900/85 hover:bg-slate-950 backdrop-blur-md text-white text-xs font-bold font-sans flex items-center gap-1.5 shadow-md border border-white/20 transition-all active:scale-95 cursor-pointer"
+                    title="Ajustar enquadramento e posição da foto"
+                  >
+                    <Sliders className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Ajustar Foto</span>
+                  </button>
                 )}
               </div>
             )}
@@ -1771,6 +1883,308 @@ export const NoticiasModule: React.FC<NoticiasModuleProps> = ({
             <StoryMateriaJornalTemplate
               materia={materiaParaDownloadDireto}
             />
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 5. MODAL DINÂMICO PARA AJUSTAR ENQUADRAMENTO DA FOTO (ADMINISTRADOR) */}
+      {/* ========================================================================= */}
+      {materiaAjusteImagem && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full border border-slate-200 overflow-hidden flex flex-col font-sans max-h-[92vh]">
+            
+            {/* Topo do Modal */}
+            <div className="p-4 sm:p-5 bg-gradient-to-r from-slate-900 to-indigo-950 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center text-amber-400 border border-white/10 shadow-inner">
+                  <Sliders className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-black tracking-tight flex items-center gap-2">
+                    Ajustar Enquadramento da Foto
+                    <span className="px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[10px] font-black uppercase">
+                      Admin
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-300 truncate max-w-[280px] sm:max-w-md font-serif italic">
+                    "{materiaAjusteImagem.titulo}"
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setMateriaAjusteImagem(null)}
+                className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer"
+                title="Fechar sem salvar"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Conteúdo do Modal */}
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-5 custom-scrollbar">
+              
+              {/* Box de Preview em Proporção Exata da Manchete de Destaque */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+                  <span className="flex items-center gap-1.5">
+                    <Eye className="w-4 h-4 text-indigo-600" />
+                    Pré-visualização em Tempo Real (Manchete de Capa)
+                  </span>
+                  <span className="font-mono text-[11px] bg-slate-100 px-2 py-0.5 rounded text-slate-600">
+                    Posição: X {posicaoAjusteX}% • Y {posicaoAjusteY}%
+                  </span>
+                </div>
+
+                <div
+                  className="w-full h-52 sm:h-64 rounded-2xl overflow-hidden shadow-inner bg-slate-900 border-2 border-indigo-200 relative select-none cursor-crosshair group"
+                  onClick={(e) => {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const clickX = Math.round(((e.clientX - rect.left) / rect.width) * 100);
+                    const clickY = Math.round(((e.clientY - rect.top) / rect.height) * 100);
+                    setPosicaoAjusteX(Math.max(0, Math.min(100, clickX)));
+                    setPosicaoAjusteY(Math.max(0, Math.min(100, clickY)));
+                  }}
+                  title="Clique em qualquer ponto da imagem para posicionar o foco"
+                >
+                  <img
+                    src={materiaAjusteImagem.imagemUrl}
+                    alt={materiaAjusteImagem.titulo}
+                    style={{
+                      objectPosition: `${posicaoAjusteX}% ${posicaoAjusteY}%`,
+                    }}
+                    className="w-full h-full object-cover transition-[object-position] duration-150 pointer-events-none"
+                  />
+
+                  {/* Mira indicadora de foco */}
+                  <div
+                    className="absolute pointer-events-none w-6 h-6 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-amber-400 bg-amber-400/20 shadow-lg flex items-center justify-center transition-all duration-150"
+                    style={{ left: `${posicaoAjusteX}%`, top: `${posicaoAjusteY}%` }}
+                  >
+                    <div className="w-1.5 h-1.5 rounded-full bg-amber-400"></div>
+                  </div>
+
+                  {/* Logo no canto como na manchete original */}
+                  {prefeituraLogoUrl && (
+                    <div className="absolute bottom-2.5 right-2.5 p-1 rounded-lg bg-white/95 shadow-xs pointer-events-none">
+                      <img src={prefeituraLogoUrl} alt="Logo" className="h-4 max-w-[70px] object-contain" />
+                    </div>
+                  )}
+
+                  {/* Aviso sobreposto de clique */}
+                  <div className="absolute top-2 left-2 px-2 py-1 rounded-lg bg-slate-900/80 backdrop-blur-sm text-white text-[10px] font-bold pointer-events-none flex items-center gap-1">
+                    <Move className="w-3 h-3 text-amber-400" />
+                    Clique na imagem ou use os controles abaixo
+                  </div>
+                </div>
+              </div>
+
+              {/* Presets Rápidos com 1 Clique */}
+              <div className="space-y-2">
+                <span className="text-xs font-black text-slate-700 uppercase tracking-wider block">
+                  Atalhos de Enquadramento Rápido:
+                </span>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPosicaoAjusteX(50);
+                      setPosicaoAjusteY(15);
+                    }}
+                    className={`p-2.5 rounded-xl border text-xs font-bold flex flex-col items-center gap-1 transition-all cursor-pointer ${
+                      posicaoAjusteY <= 25 && posicaoAjusteX === 50
+                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                        : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                    }`}
+                  >
+                    <span>⬆️ Foco no Topo</span>
+                    <span className="text-[10px] opacity-80">(Pessoas / Trabalhadores)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPosicaoAjusteX(50);
+                      setPosicaoAjusteY(35);
+                    }}
+                    className={`p-2.5 rounded-xl border text-xs font-bold flex flex-col items-center gap-1 transition-all cursor-pointer ${
+                      posicaoAjusteY > 25 && posicaoAjusteY < 45 && posicaoAjusteX === 50
+                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                        : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                    }`}
+                  >
+                    <span>↗️ Superior Médio</span>
+                    <span className="text-[10px] opacity-80">(Enquadramento Equilibrado)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPosicaoAjusteX(50);
+                      setPosicaoAjusteY(50);
+                    }}
+                    className={`p-2.5 rounded-xl border text-xs font-bold flex flex-col items-center gap-1 transition-all cursor-pointer ${
+                      posicaoAjusteY >= 45 && posicaoAjusteY <= 55 && posicaoAjusteX === 50
+                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                        : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                    }`}
+                  >
+                    <span>⏺️ Centro</span>
+                    <span className="text-[10px] opacity-80">(Padrão 50% 50%)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPosicaoAjusteX(50);
+                      setPosicaoAjusteY(85);
+                    }}
+                    className={`p-2.5 rounded-xl border text-xs font-bold flex flex-col items-center gap-1 transition-all cursor-pointer ${
+                      posicaoAjusteY >= 75 && posicaoAjusteX === 50
+                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                        : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                    }`}
+                  >
+                    <span>⬇️ Foco na Base</span>
+                    <span className="text-[10px] opacity-80">(Piso / Solo / Asfalto)</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Controles Deslizantes Manuais */}
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-4">
+                {/* Altura / Vertical (Y) */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center text-xs font-bold text-slate-700">
+                    <span className="flex items-center gap-1">
+                      ↕️ Posição Vertical (Altura)
+                    </span>
+                    <span className="font-mono text-indigo-600 font-extrabold">{posicaoAjusteY}%</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPosicaoAjusteY(prev => Math.max(0, prev - 5))}
+                      className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold hover:bg-slate-100 text-slate-700 cursor-pointer"
+                      title="-5% (Subir enquadramento)"
+                    >
+                      -5%
+                    </button>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={posicaoAjusteY}
+                      onChange={(e) => setPosicaoAjusteY(Number(e.target.value))}
+                      className="w-full accent-indigo-600 cursor-pointer h-2 bg-slate-200 rounded-lg"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setPosicaoAjusteY(prev => Math.min(100, prev + 5))}
+                      className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold hover:bg-slate-100 text-slate-700 cursor-pointer"
+                      title="+5% (Descer enquadramento)"
+                    >
+                      +5%
+                    </button>
+                  </div>
+                  <div className="flex justify-between text-[10px] font-bold text-slate-400">
+                    <span>0% (Topo)</span>
+                    <span>50% (Centro)</span>
+                    <span>100% (Base)</span>
+                  </div>
+                </div>
+
+                {/* Largura / Horizontal (X) */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center text-xs font-bold text-slate-700">
+                    <span className="flex items-center gap-1">
+                      ↔️ Posição Horizontal (Largura)
+                    </span>
+                    <span className="font-mono text-indigo-600 font-extrabold">{posicaoAjusteX}%</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPosicaoAjusteX(prev => Math.max(0, prev - 5))}
+                      className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold hover:bg-slate-100 text-slate-700 cursor-pointer"
+                      title="-5% (Esquerda)"
+                    >
+                      -5%
+                    </button>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={posicaoAjusteX}
+                      onChange={(e) => setPosicaoAjusteX(Number(e.target.value))}
+                      className="w-full accent-indigo-600 cursor-pointer h-2 bg-slate-200 rounded-lg"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setPosicaoAjusteX(prev => Math.min(100, prev + 5))}
+                      className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold hover:bg-slate-100 text-slate-700 cursor-pointer"
+                      title="+5% (Direita)"
+                    >
+                      +5%
+                    </button>
+                  </div>
+                  <div className="flex justify-between text-[10px] font-bold text-slate-400">
+                    <span>0% (Esquerda)</span>
+                    <span>50% (Centro)</span>
+                    <span>100% (Direita)</span>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            {/* Rodapé do Modal com Ações */}
+            <div className="p-4 sm:p-5 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setPosicaoAjusteX(50);
+                  setPosicaoAjusteY(50);
+                }}
+                className="px-3.5 py-2 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-200 transition-colors flex items-center gap-1.5 cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                Restaurar Centro (50% 50%)
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setMateriaAjusteImagem(null)}
+                  disabled={salvandoPosicao}
+                  className="px-4 py-2 rounded-xl text-xs font-bold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleSalvarPosicaoImagem}
+                  disabled={salvandoPosicao}
+                  className="px-5 py-2 rounded-xl text-xs font-black bg-indigo-600 hover:bg-indigo-700 text-white shadow-md transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {salvandoPosicao ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Salvando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4" />
+                      <span>Salvar Enquadramento</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
           </div>
         </div>
       )}

@@ -17,6 +17,7 @@ export interface CalendarMateriaData {
     destaqueFrase?: string;
     categoria?: string;
     imagemUrl?: string;
+    imagemPosicao?: string;
     aprovada?: boolean;
     status?: 'pendente' | 'aprovada' | 'publicada';
     destaque?: boolean;

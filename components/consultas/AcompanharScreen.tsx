@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { User, ConsultaPaciente, ConsultaAgendamento, ConsultaProcedimento, AppState, ConsultaVaga } from '../../types';
-import { ArrowLeft, Search, Filter, Calendar, CheckCircle2, XCircle, Trash2, Loader2, Sparkles, Clock, FileDown, UserX, Repeat, RotateCcw, X, Activity, Check, Edit2, ChevronDown, ChevronLeft, ChevronRight, User as UserIcon, BarChart3, Users } from 'lucide-react';
+import { ArrowLeft, Search, Filter, Calendar, CheckCircle2, XCircle, Trash2, Loader2, Sparkles, Clock, FileDown, UserX, Repeat, RotateCcw, X, Activity, Check, Edit2, ChevronDown, ChevronLeft, ChevronRight, User as UserIcon, BarChart3, Users, UserCheck, Building2 } from 'lucide-react';
 import * as db from '../../services/consultasService';
+import { useAgentesSaude } from '../../services/agentesSaudeService';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import { ConsultaPdfGenerator } from './ConsultaPdfGenerator';
@@ -375,6 +376,36 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     appState
 }) => {
     // Booking list and state
+    const { items: agentesSaudeItems } = useAgentesSaude();
+    const [agentModalData, setAgentModalData] = useState<{
+        pacienteNome: string;
+        pacienteCpf?: string;
+        agenteNome: string;
+        psf: string;
+        hasAgent: boolean;
+    } | null>(null);
+
+    const handleOpenAgentInfo = (booking: ConsultaAgendamento) => {
+        const rawAgentName = (booking.paciente?.agente_saude || '').trim();
+        const hasAgent = rawAgentName.length > 0;
+        
+        let psf = '';
+        if (hasAgent) {
+            const found = agentesSaudeItems.find(a => a.nome.toUpperCase() === rawAgentName.toUpperCase());
+            if (found && found.psf) {
+                psf = found.psf;
+            }
+        }
+
+        setAgentModalData({
+            pacienteNome: booking.paciente?.name || 'Paciente',
+            pacienteCpf: booking.paciente?.cpf || '',
+            agenteNome: hasAgent ? rawAgentName.toUpperCase() : 'NÃO INFORMADO / SEM ACS',
+            psf: psf || (hasAgent ? 'NÃO ALOCADO EM PSF' : 'SEM PSF VINCULADO'),
+            hasAgent
+        });
+    };
+
     const [bookings, setBookings] = useState<ConsultaAgendamento[]>([]);
     const [allBookings, setAllBookings] = useState<ConsultaAgendamento[]>([]);
     const [isReportModalOpen, setIsReportModalOpen] = useState(false);
@@ -1859,6 +1890,13 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                                                         </button>
                                                                     )}
                                                                     <button
+                                                                        onClick={() => handleOpenAgentInfo(booking)}
+                                                                        className="w-7 h-7 text-teal-700 hover:text-white hover:bg-teal-600 bg-teal-50/90 rounded-lg border border-teal-200 hover:border-teal-600 transition-all flex items-center justify-center cursor-pointer shadow-2xs font-black text-xs select-none"
+                                                                        title="Ver Agente de Saúde (ACS) e PSF"
+                                                                    >
+                                                                        A
+                                                                    </button>
+                                                                    <button
                                                                         onClick={() => handleDownloadPdf(booking)}
                                                                         disabled={isGenerating}
                                                                         className="p-1.5 text-sky-600 hover:text-white hover:bg-sky-500 rounded-lg border border-sky-200 hover:border-sky-500 transition-all flex items-center justify-center cursor-pointer shadow-2xs disabled:opacity-50"
@@ -2692,6 +2730,112 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>,
+                document.body
+            )}
+
+            {/* MODAL: AGENTE DE SAÚDE E PSF DO PACIENTE */}
+            {agentModalData && createPortal(
+                <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden border border-slate-100 flex flex-col animate-slide-up">
+                        {/* Header */}
+                        <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-teal-50/70">
+                            <div className="flex items-center gap-2.5">
+                                <div className="w-8 h-8 rounded-xl bg-teal-600 text-white flex items-center justify-center shadow-xs">
+                                    <UserCheck className="w-4 h-4" />
+                                </div>
+                                <div>
+                                    <h3 className="text-xs font-black text-teal-950 uppercase tracking-wider">
+                                        Agente de Saúde (ACS)
+                                    </h3>
+                                    <p className="text-[10px] text-teal-700 font-bold uppercase">
+                                        Vínculo Territorial do Paciente
+                                    </p>
+                                </div>
+                            </div>
+                            <button 
+                                onClick={() => setAgentModalData(null)} 
+                                className="p-1.5 hover:bg-teal-100 rounded-lg text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+
+                        {/* Body */}
+                        <div className="p-5 space-y-3.5">
+                            {/* Paciente */}
+                            <div className="bg-slate-50 border border-slate-100 rounded-xl p-3">
+                                <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider block">
+                                    Paciente Selecionado
+                                </span>
+                                <span className="text-xs font-extrabold text-slate-800 uppercase block truncate mt-0.5">
+                                    {agentModalData.pacienteNome}
+                                </span>
+                                {agentModalData.pacienteCpf && (
+                                    <span className="text-[10px] font-bold text-slate-400 block mt-0.5">
+                                        CPF: {agentModalData.pacienteCpf}
+                                    </span>
+                                )}
+                            </div>
+
+                            {/* Card do Agente */}
+                            <div className={`p-3.5 rounded-xl border flex flex-col gap-2.5 ${
+                                agentModalData.hasAgent 
+                                ? 'bg-teal-50/40 border-teal-200/70' 
+                                : 'bg-amber-50/50 border-amber-200/70'
+                            }`}>
+                                <div className="flex items-center gap-3">
+                                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-xs shrink-0 border ${
+                                        agentModalData.hasAgent
+                                        ? 'bg-teal-600 text-white border-teal-500 shadow-xs'
+                                        : 'bg-amber-100 text-amber-700 border-amber-200'
+                                    }`}>
+                                        {agentModalData.hasAgent ? (
+                                            agentModalData.agenteNome.split(' ').filter(Boolean).slice(0, 2).map(n => n[0]).join('')
+                                        ) : (
+                                            '!'
+                                        )}
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                        <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider block">
+                                            Agente de Saúde Responsável
+                                        </span>
+                                        <span className="text-xs font-black text-slate-900 uppercase block truncate">
+                                            {agentModalData.agenteNome}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {/* PSF / Unidade Alocada */}
+                                <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-1.5 text-slate-500 shrink-0">
+                                        <Building2 className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                                        <span className="text-[10px] font-extrabold uppercase text-slate-600">
+                                            PSF Alocado:
+                                        </span>
+                                    </div>
+                                    <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md border truncate ${
+                                        agentModalData.hasAgent && agentModalData.psf !== 'NÃO ALOCADO EM PSF'
+                                        ? 'bg-sky-50 text-sky-700 border-sky-200'
+                                        : 'bg-slate-100 text-slate-500 border-slate-200'
+                                    }`}>
+                                        {agentModalData.psf}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-3 border-t border-slate-100 bg-slate-50/50 flex justify-end">
+                            <button
+                                type="button"
+                                onClick={() => setAgentModalData(null)}
+                                className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white font-extrabold rounded-xl text-xs uppercase tracking-wider transition-all shadow-xs cursor-pointer active:scale-95"
+                            >
+                                Fechar
+                            </button>
+                        </div>
                     </div>
                 </div>,
                 document.body

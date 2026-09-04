@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { ConsultaPaciente, ConsultaAgendamento, AGENTES_DE_SAUDE } from '../../types';
 import { Search, Plus, Edit2, Trash2, X, AlertTriangle, Loader2, ChevronDown, Users, ArrowLeft } from 'lucide-react';
 import * as db from '../../services/consultasService';
+import { useAgentesSaude } from '../../services/agentesSaudeService';
 
 export const formatPatientName = (patient?: ConsultaPaciente | null) => {
     if (!patient) return '';
@@ -48,6 +49,7 @@ export const PacientesTab: React.FC<PacientesTabProps> = ({
     title = 'Pacientes Cadastrados',
     subtitle = 'Base Unificada de Pacientes (Farmácia Popular & Regulação/Consultas)'
 }) => {
+    const { items: agentesSaudeItems } = useAgentesSaude();
     const [loading, setLoading] = useState(false);
 
     // Patients States
@@ -679,9 +681,9 @@ export const PacientesTab: React.FC<PacientesTabProps> = ({
                                                     onChange={(e) => setPatAgenteSaude(e.target.value)}
                                                 >
                                                     <option value="">-- SELECIONE O AGENTE DE SAÚDE (OPCIONAL) --</option>
-                                                    {AGENTES_DE_SAUDE.map((agente) => (
-                                                        <option key={agente} value={agente.toUpperCase()}>
-                                                            {agente.toUpperCase()}
+                                                    {agentesSaudeItems.map((item) => (
+                                                        <option key={item.nome} value={item.nome}>
+                                                            {item.nome} {item.psf ? `(${item.psf})` : ''}
                                                         </option>
                                                     ))}
                                                 </select>

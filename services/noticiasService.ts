@@ -648,6 +648,7 @@ export const noticiasService = {
                 categoria: materia.categoria,
                 destaqueFrase: materia.destaqueFrase,
                 imagemUrl: materia.imagemUrl,
+                imagemPosicao: materia.imagemPosicao,
                 aprovada: materia.aprovada,
                 status: materia.status || (materia.aprovada ? 'publicada' : 'pendente'),
                 destaque: materia.destaque,
@@ -674,6 +675,14 @@ export const noticiasService = {
         }
       }
 
+      // Salva no localStorage como cache imediato
+      if (typeof localStorage !== 'undefined' && materia.imagemPosicao) {
+        localStorage.setItem(`noticias_img_pos_${materia.id}`, materia.imagemPosicao);
+        if (materia.eventoId) {
+          localStorage.setItem(`noticias_img_pos_${materia.eventoId}`, materia.imagemPosicao);
+        }
+      }
+
       // 2. Persiste no banco de dados central (jornal_materias) se a tabela existir
       try {
         const { error } = await (supabase as any).from('jornal_materias').upsert({
@@ -686,6 +695,7 @@ export const noticiasService = {
           data_evento: materia.dataEvento,
           hora_evento: materia.horaEvento,
           imagem_url: materia.imagemUrl,
+          imagem_posicao: materia.imagemPosicao,
           autor: materia.autor || 'Assessoria de Comunicação Oficial',
           destaque_frase: materia.destaqueFrase,
           evento_id: materia.eventoId,
@@ -709,6 +719,78 @@ export const noticiasService = {
       return true;
     } catch (err) {
       console.error('Erro ao salvar matéria:', err);
+      return false;
+    }
+  },
+
+  /**
+   * Atualiza especificamente a posição/enquadramento da foto de uma matéria (ex: '50% 20%', '50% 50%', 'top', 'center')
+   */
+  async atualizarPosicaoImagem(id: string, posicao: string): Promise<boolean> {
+    try {
+      // 1. Armazena no localStorage para sincronização e feedback com zero atraso
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(`noticias_img_pos_${id}`, posicao);
+      }
+
+      let eventId = id.startsWith('materia_evt_') ? id.replace('materia_evt_', '') : '';
+      if (!eventId && materiasMemoryCache?.data) {
+        const mat = materiasMemoryCache.data.find(m => m.id === id);
+        if (mat?.eventoId) {
+          eventId = mat.eventoId;
+        }
+      }
+
+      if (eventId && typeof localStorage !== 'undefined') {
+        localStorage.setItem(`noticias_img_pos_${eventId}`, posicao);
+        localStorage.setItem(`noticias_img_pos_materia_evt_${eventId}`, posicao);
+      }
+
+      // Atualiza no cache de memória local imediatamente
+      if (materiasMemoryCache?.data) {
+        const target = materiasMemoryCache.data.find(m => m.id === id || (eventId && m.eventoId === eventId));
+        if (target) {
+          target.imagemPosicao = posicao;
+        }
+      }
+
+      // 2. Persiste em calendar_events se for vinculado a evento
+      const targetEventId = eventId || (id.startsWith('materia_evt_') ? id.replace('materia_evt_', '') : '');
+      if (targetEventId) {
+        try {
+          const { data: evt } = await supabase.from('calendar_events').select('*').eq('id', targetEventId).single();
+          if (evt) {
+            const meta = deserializeEventMetadata(evt.description);
+            const currentMateriaData = meta.materia_data || {};
+            const newDesc = serializeEventMetadata(meta.cleanDescription, {
+              ...meta,
+              materia_data: {
+                ...currentMateriaData,
+                imagemPosicao: posicao
+              }
+            });
+
+            await supabase.from('calendar_events').update({
+              description: newDesc
+            }).eq('id', targetEventId);
+          }
+        } catch (calErr) {
+          console.warn('Erro ao salvar posição da foto em calendar_events:', calErr);
+        }
+      }
+
+      // 3. Persiste na tabela jornal_materias se existir
+      try {
+        await (supabase as any)
+          .from('jornal_materias')
+          .update({ imagem_posicao: posicao })
+          .eq('id', id);
+      } catch (tableErr) {}
+
+      invalidateMateriasCache();
+      return true;
+    } catch (err) {
+      console.error('Erro ao atualizar posição da imagem:', err);
       return false;
     }
   },
@@ -889,7 +971,7 @@ export const noticiasService = {
       try {
         const { data, error } = await (supabase as any)
           .from('jornal_materias')
-          .select('id, titulo, subtitulo, conteudo, categoria, data_publicacao, data_evento, hora_evento, imagem_url, autor, destaque_frase, evento_id, tipo_evento, setor, oculta, destaque, aprovada, status, curtidas, created_at')
+          .select('id, titulo, subtitulo, conteudo, categoria, data_publicacao, data_evento, hora_evento, imagem_url, imagem_posicao, autor, destaque_frase, evento_id, tipo_evento, setor, oculta, destaque, aprovada, status, curtidas, created_at')
           .order('data_publicacao', { ascending: false });
 
         if (!error && data && data.length > 0) {
@@ -897,6 +979,10 @@ export const noticiasService = {
             if (excludedIds.has(d.id) || (d.evento_id && (excludedIds.has(d.evento_id) || excludedIds.has(`materia_evt_${d.evento_id}`)))) {
               return;
             }
+
+            const localPos = typeof localStorage !== 'undefined'
+              ? (localStorage.getItem(`noticias_img_pos_${d.id}`) || (d.evento_id ? localStorage.getItem(`noticias_img_pos_${d.evento_id}`) : null))
+              : null;
 
             map.set(d.id, {
               id: d.id,
@@ -908,6 +994,7 @@ export const noticiasService = {
               dataEvento: d.data_evento,
               horaEvento: d.hora_evento,
               imagemUrl: d.imagem_url,
+              imagemPosicao: d.imagem_posicao || localPos || undefined,
               autor: d.autor || 'Assessoria de Comunicação & Imprensa',
               destaqueFrase: d.destaque_frase,
               eventoId: d.evento_id,
@@ -986,6 +1073,11 @@ export const noticiasService = {
             const destaqueFraseFinal = matData?.destaqueFrase || undefined;
             const categoriaFinal = matData?.categoria || sec || evt.type || 'EVENTO & COMUNIDADE';
 
+            const posLocalEvt = typeof localStorage !== 'undefined'
+              ? (localStorage.getItem(`noticias_img_pos_${matId}`) || localStorage.getItem(`noticias_img_pos_${evt.id}`))
+              : null;
+            const imagemPosicaoFinal = matData?.imagemPosicao || posLocalEvt || existingMat?.imagemPosicao || undefined;
+
             if (!existingMat) {
               map.set(matId, {
                 id: matId,
@@ -998,6 +1090,7 @@ export const noticiasService = {
                 dataEvento: evt.start_date,
                 horaEvento: evt.is_all_day ? 'Dia Inteiro' : (evt.start_time ? `${evt.start_time}${evt.end_time ? ` às ${evt.end_time}` : ''}` : undefined),
                 imagemUrl: imagemFinal,
+                imagemPosicao: imagemPosicaoFinal,
                 autor: 'Assessoria de Comunicação Oficial',
                 eventoId: evt.id,
                 tipoEvento: evt.type,
@@ -1016,6 +1109,7 @@ export const noticiasService = {
                 conteudo: existingMat.conteudo || conteudoFinal,
                 destaqueFrase: existingMat.destaqueFrase || destaqueFraseFinal,
                 imagemUrl: imagemFinal,
+                imagemPosicao: imagemPosicaoFinal || existingMat.imagemPosicao,
                 destaque: isDestaqueFinal,
                 oculta: isOcultaFinal,
                 aprovada: isAprovadaFinal,

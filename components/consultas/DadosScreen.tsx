@@ -5,6 +5,7 @@ import * as db from '../../services/consultasService';
 import { seedDefaultProcedures } from '../../services/procedimentosSeed';
 import { ResponsiveContainer, AreaChart, XAxis, YAxis, Tooltip, Area, CartesianGrid } from 'recharts';
 import { PacientesTab, formatPatientName } from '../common/PacientesTab';
+import { AgentesSaudeTab, AgentesSaudeHeaderMetrics } from './AgentesSaudeTab';
 
 interface DadosScreenProps {
     currentUser: User;
@@ -13,7 +14,7 @@ interface DadosScreenProps {
     onNavigate?: (view: string) => void;
 }
 
-type TabType = 'dashboard' | 'pacientes' | 'historico' | 'procedimentos' | 'gestor';
+type TabType = 'dashboard' | 'pacientes' | 'historico' | 'procedimentos' | 'agentes' | 'gestor';
 
 export const DadosScreen: React.FC<DadosScreenProps> = ({
     currentUser,
@@ -27,6 +28,7 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
         if (subView === 'dados-pacientes') return 'pacientes';
         if (subView === 'dados-procedimentos') return 'procedimentos';
         if (subView === 'dados-historico') return 'historico';
+        if (subView === 'dados-agentes') return 'agentes';
         if (subView === 'dados-gestor' && isAdmin) return 'gestor';
         return 'dashboard';
     })();
@@ -522,7 +524,7 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
         <div className="w-full mx-auto flex flex-col flex-1 h-full max-h-full min-h-0 bg-white rounded-3xl border border-slate-200/80 shadow-2xl shadow-slate-100 overflow-hidden relative">
             
             {/* Header */}
-            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 shrink-0">
+            <div className="px-6 py-3.5 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-3 bg-slate-50/50 shrink-0">
                 <div className="flex items-center gap-3">
                     <button 
                         onClick={onBack} 
@@ -536,6 +538,13 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                         <p className="text-xs text-slate-500 font-medium">Controle de pacientes, exames, quotas e relatórios estatísticos</p>
                     </div>
                 </div>
+
+                {/* Métricas compactas alinhadas na mesma linha do título quando na aba Agentes de Saúde */}
+                {activeTab === 'agentes' && (
+                    <div className="shrink-0">
+                        <AgentesSaudeHeaderMetrics />
+                    </div>
+                )}
             </div>
 
             {/* Tab Selector */}
@@ -564,6 +573,12 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                         label: 'Histórico Completo', 
                         icon: History,
                         activeClass: 'bg-emerald-50/80 text-emerald-700 border-emerald-200/60 shadow-sm shadow-emerald-500/5'
+                    },
+                    { 
+                        id: 'agentes', 
+                        label: 'Agentes de Saúde', 
+                        icon: UserCheck,
+                        activeClass: 'bg-teal-50/80 text-teal-700 border-teal-200/60 shadow-sm shadow-teal-500/5'
                     },
                     ...(isAdmin ? [{ 
                         id: 'gestor', 
@@ -1419,6 +1434,14 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                             </div>
                         </div>
                     </div>
+                )}
+
+                {/* 5. AGENTES DE SAÚDE TAB */}
+                {activeTab === 'agentes' && (
+                    <AgentesSaudeTab 
+                        currentUser={currentUser} 
+                        onRefreshPacientes={fetchTabContent}
+                    />
                 )}
 
             </div>
