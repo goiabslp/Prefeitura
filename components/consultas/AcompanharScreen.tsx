@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { User, ConsultaPaciente, ConsultaAgendamento, ConsultaProcedimento, AppState, ConsultaVaga } from '../../types';
-import { ArrowLeft, Search, Filter, Calendar, CheckCircle2, XCircle, Trash2, Loader2, Sparkles, Clock, FileDown, UserX, Repeat, X, Activity, Check, Edit2, ChevronDown, ChevronLeft, ChevronRight, User as UserIcon, BarChart3, Users } from 'lucide-react';
+import { ArrowLeft, Search, Filter, Calendar, CheckCircle2, XCircle, Trash2, Loader2, Sparkles, Clock, FileDown, UserX, Repeat, RotateCcw, X, Activity, Check, Edit2, ChevronDown, ChevronLeft, ChevronRight, User as UserIcon, BarChart3, Users } from 'lucide-react';
 import * as db from '../../services/consultasService';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -851,6 +851,22 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
         }
     };
 
+    const handleReagendar = async (id: string) => {
+        if (!window.confirm('Deseja realmente reagendar este agendamento? Ele voltará automaticamente para a Fila de Espera.')) {
+            return;
+        }
+        setOperatingId(id);
+        try {
+            await db.reagendarAgendamento(id);
+            await loadData(true);
+        } catch (error: any) {
+            alert(error.message || 'Erro ao reagendar agendamento para a fila de espera.');
+            loadData(true);
+        } finally {
+            setOperatingId(null);
+        }
+    };
+
     // Edit modal handlers
     const handleEditCpfChange = (val: string) => {
         const clean = val.replace(/\D/g, '');
@@ -1603,6 +1619,15 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                                             >
                                                                 <FileDown className="w-3.5 h-3.5" /> Comprovante
                                                             </button>
+                                                            {booking.status === 'Cancelado' && canEdit && (
+                                                                <button
+                                                                    onClick={() => handleReagendar(booking.id)}
+                                                                    className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all shadow-2xs cursor-pointer"
+                                                                    title="Reagendar (Voltar para a Fila de Espera)"
+                                                                >
+                                                                    <RotateCcw className="w-3.5 h-3.5" /> Reagendar
+                                                                </button>
+                                                            )}
                                                             {booking.status === 'Realizado' && (
                                                                 <button
                                                                     onClick={() => {
@@ -1841,6 +1866,15 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                                                     >
                                                                         <FileDown className="w-3.5 h-3.5" />
                                                                     </button>
+                                                                    {booking.status === 'Cancelado' && canEdit && (
+                                                                        <button
+                                                                            onClick={() => handleReagendar(booking.id)}
+                                                                            className="p-1.5 text-amber-600 hover:text-white hover:bg-amber-500 bg-amber-50 rounded-lg border border-amber-300 hover:border-amber-500 transition-all flex items-center justify-center cursor-pointer shadow-2xs"
+                                                                            title="Reagendar Agendamento (Voltar para a Fila de Espera)"
+                                                                        >
+                                                                            <RotateCcw className="w-3.5 h-3.5" />
+                                                                        </button>
+                                                                    )}
                                                                     {booking.status === 'Realizado' && (
                                                                         <button
                                                                             onClick={() => {

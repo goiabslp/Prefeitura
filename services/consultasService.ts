@@ -870,3 +870,58 @@ export const cancelAgendamentoWithReason = async (
         return null;
     }
 };
+
+export const reagendarAgendamento = async (id: string): Promise<ConsultaAgendamento | null> => {
+    try {
+        const { data, error } = await supabase
+            .from('consultas_agendamentos')
+            .update({
+                status: 'Fila de espera',
+                appointment_date: null,
+                appointment_time: null,
+                cancellation_reason: null,
+                canceled_by: null,
+                canceled_by_name: null,
+                canceled_at: null
+            })
+            .eq('id', id)
+            .select(`
+                *,
+                paciente:consultas_pacientes(*),
+                procedimento:consultas_procedimentos(*),
+                responsavel:profiles(name)
+            `)
+            .single();
+
+        // Fallback progressivo se colunas opcionais não existirem
+        if (error && (error.code === 'PGRST204' || error.message?.includes('column') || error.message?.includes('schema cache'))) {
+            const { data: fallbackData, error: fallbackError } = await supabase
+                .from('consultas_agendamentos')
+                .update({
+                    status: 'Fila de espera',
+                    appointment_date: null,
+                    appointment_time: null
+                })
+                .eq('id', id)
+                .select(`
+                    *,
+                    paciente:consultas_pacientes(*),
+                    procedimento:consultas_procedimentos(*),
+                    responsavel:profiles(name)
+                `)
+                .single();
+
+            if (fallbackError) throw fallbackError;
+            window.dispatchEvent(new CustomEvent('consultas-agendamentos-changed'));
+            return fallbackData;
+        }
+
+        if (error) throw error;
+        window.dispatchEvent(new CustomEvent('consultas-agendamentos-changed'));
+        return data;
+    } catch (error: any) {
+        console.error('[consultasService] reagendarAgendamento Error:', error.message);
+        throw error;
+    }
+};
+
