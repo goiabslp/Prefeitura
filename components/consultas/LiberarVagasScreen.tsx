@@ -6,7 +6,7 @@ import {
     PauseCircle, PlayCircle, Activity, Stethoscope, Sparkles, 
     ChevronLeft, ChevronRight, X, Loader2, CalendarDays,
     CheckCircle2, AlertTriangle, Sun, Sunset, Zap, RotateCcw, Check, CalendarCheck,
-    Users, ChevronDown
+    Users, ChevronDown, Moon, Wand2, SlidersHorizontal, Layers, Timer, Flame
 } from 'lucide-react';
 import * as db from '../../services/consultasService';
 
@@ -43,6 +43,25 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
     const [customTime, setCustomTime] = useState('');
     const [numVagasPorHorario, setNumVagasPorHorario] = useState<number>(1);
 
+    // Estados do Select Moderno e Dinâmico de Horários
+    const [isTimeDropdownOpen, setIsTimeDropdownOpen] = useState(false);
+    const [timeSearchTerm, setTimeSearchTerm] = useState('');
+    const timeDropdownRef = React.useRef<HTMLDivElement>(null);
+
+    // Fechar dropdown ao clicar fora
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (timeDropdownRef.current && !timeDropdownRef.current.contains(event.target as Node)) {
+                setIsTimeDropdownOpen(false);
+            }
+        };
+        if (isTimeDropdownOpen) {
+            document.addEventListener('mousedown', handleClickOutside);
+        }
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [isTimeDropdownOpen]);
     // Modal de Editar Vaga
     const [editingVaga, setEditingVaga] = useState<ConsultaVaga | null>(null);
     const [editDate, setEditDate] = useState('');
@@ -241,7 +260,33 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
         return days;
     };
 
-    // Horários no modal
+    // Horários no modal - Lista ampla padronizada por turnos
+    const HORARIOS_PADRAO = [
+        // Manhã
+        '07:00', '07:30', '08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
+        // Tarde
+        '12:00', '12:30', '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00', '17:30',
+        // Noite
+        '18:00', '18:30', '19:00', '19:30', '20:00'
+    ];
+
+    const allDisplayTimes = useMemo(() => {
+        const set = new Set([...HORARIOS_PADRAO, ...selectedTimes]);
+        return Array.from(set).sort();
+    }, [selectedTimes]);
+
+    const filteredSearchTimes = useMemo(() => {
+        if (!timeSearchTerm.trim()) return allDisplayTimes;
+        const clean = timeSearchTerm.trim().toLowerCase();
+        return allDisplayTimes.filter(t => t.toLowerCase().includes(clean));
+    }, [allDisplayTimes, timeSearchTerm]);
+    // Vagas já cadastradas para a data atualmente selecionada no modal
+    const selectedDateStr = selectedDate ? formatDateToYYYYMMDD(selectedDate) : '';
+    const existingSlotsForSelectedDate = useMemo(() => {
+        if (!selectedDateStr) return [];
+        return vagas.filter(v => v.data === selectedDateStr);
+    }, [vagas, selectedDateStr]);
+
     const toggleTime = (time: string) => {
         setSelectedTimes(prev => 
             prev.includes(time) ? prev.filter(t => t !== time) : [...prev, time]
@@ -250,21 +295,6 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
 
     const handleRemoveTime = (time: string) => {
         setSelectedTimes(prev => prev.filter(t => t !== time));
-    };
-
-    const handleSelectPreset = (preset: 'manha' | 'tarde' | 'dia' | 'limpar') => {
-        if (preset === 'manha') {
-            const morningTimes = ['07:00', '08:00', '09:00', '10:00', '11:00'];
-            setSelectedTimes(prev => Array.from(new Set([...prev, ...morningTimes])));
-        } else if (preset === 'tarde') {
-            const afternoonTimes = ['13:00', '14:00', '15:00', '16:00', '17:00'];
-            setSelectedTimes(prev => Array.from(new Set([...prev, ...afternoonTimes])));
-        } else if (preset === 'dia') {
-            const allDay = ['07:00', '08:00', '09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00', '17:00'];
-            setSelectedTimes(prev => Array.from(new Set([...prev, ...allDay])));
-        } else if (preset === 'limpar') {
-            setSelectedTimes([]);
-        }
     };
 
     const handleSetToday = () => {
@@ -775,64 +805,64 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
 
             {/* MODAL MODERNO E DINÂMICO: ADICIONAR VAGAS */}
             {isAddVagasModalOpen && selectedProc && (
-                <div className="fixed inset-0 z-[1000] flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden border border-slate-200 flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-200">
+                <div className="fixed inset-0 z-[1000] flex items-center justify-center p-3 sm:p-5 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200">
+                    <div className="bg-white rounded-[2rem] shadow-2xl shadow-slate-900/20 w-full max-w-5xl lg:max-w-6xl overflow-hidden border border-slate-200/90 flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-200">
                         
-                        {/* Header Moderno */}
-                        <div className="px-5 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50 shrink-0">
-                            <div className="flex items-center gap-3 min-w-0">
-                                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-sky-500 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-sky-500/25 ring-4 ring-white shrink-0">
+                        {/* Header Moderno com Cores e Tipografia Governamental Premium */}
+                        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
+                            <div className="flex items-center gap-3.5 min-w-0">
+                                <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-sky-500 via-indigo-500 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-sky-500/25 ring-4 ring-sky-50 shrink-0">
                                     <CalendarCheck className="w-5 h-5 drop-shadow-xs" />
                                 </div>
                                 <div className="min-w-0">
                                     <div className="flex items-center gap-2 flex-wrap">
-                                        <h3 className="text-sm sm:text-base font-black text-slate-800 uppercase tracking-tight">
+                                        <h3 className="text-base font-black text-slate-800 uppercase tracking-tight">
                                             Liberar Vagas por Horário
                                         </h3>
-                                        <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-sky-50 text-sky-700 border border-sky-200">
+                                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-sky-50 text-sky-700 border border-sky-200 shadow-2xs">
                                             {selectedProc.type}
                                         </span>
                                         {selectedProc.code && (
-                                            <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-200 text-slate-700">
+                                            <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-slate-100 text-slate-700 border border-slate-200">
                                                 CÓD. {selectedProc.code}
                                             </span>
                                         )}
                                     </div>
-                                    <p className="text-xs font-bold text-slate-500 truncate max-w-md mt-0.5">
+                                    <p className="text-xs font-bold text-slate-500 truncate max-w-xl mt-0.5">
                                         {selectedProc.name}
                                     </p>
                                 </div>
                             </div>
 
                             <button 
-                                onClick={() => { setIsAddVagasModalOpen(false); setSelectedTimes([]); }} 
-                                className="w-8 h-8 rounded-xl bg-white border border-slate-200 hover:border-slate-300 text-slate-400 hover:text-slate-700 flex items-center justify-center transition-all cursor-pointer shadow-2xs hover:scale-105 active:scale-95 shrink-0 ml-2"
+                                onClick={() => { setIsAddVagasModalOpen(false); setSelectedTimes([]); setNumVagasPorHorario(1); }} 
+                                className="w-9 h-9 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-400 hover:text-slate-700 flex items-center justify-center transition-all cursor-pointer shadow-2xs hover:scale-105 active:scale-95 shrink-0 ml-2"
                                 title="Fechar modal"
                             >
                                 <X className="w-4 h-4" />
                             </button>
                         </div>
 
-                        {/* Corpo Modal em 2 Colunas */}
-                        <div className="p-4 sm:p-5 overflow-y-auto custom-scrollbar flex-1 flex flex-col md:flex-row gap-5 bg-white">
+                        {/* Corpo Modal Amplo em 2 Colunas */}
+                        <div className="overflow-y-auto custom-scrollbar flex-1 flex flex-col lg:flex-row divide-y lg:divide-y-0 lg:divide-x divide-slate-100 bg-slate-50/20">
                             
-                            {/* Lado Esquerdo: Calendário Moderno */}
-                            <div className="flex-1 space-y-3">
+                            {/* Lado Esquerdo: Calendário Espaçoso e Resumo da Data */}
+                            <div className="w-full lg:w-[410px] shrink-0 p-6 flex flex-col space-y-4 bg-slate-50/40">
                                 <div className="flex items-center justify-between pb-1">
-                                    <div className="flex items-center gap-1.5">
+                                    <div className="flex items-center gap-2">
                                         <span className="text-xs font-black uppercase tracking-wider text-slate-800">
                                             {currentMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
                                         </span>
                                         <button
                                             type="button"
                                             onClick={handleSetToday}
-                                            className="px-2 py-0.5 text-[10px] font-extrabold uppercase bg-sky-50 hover:bg-sky-100 text-sky-700 rounded-md border border-sky-200 transition-colors cursor-pointer"
+                                            className="px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider bg-sky-100 hover:bg-sky-200 text-sky-800 rounded-md transition-colors cursor-pointer"
                                         >
                                             Hoje
                                         </button>
                                     </div>
 
-                                    <div className="flex items-center gap-1">
+                                    <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-slate-200 shadow-2xs">
                                         <button 
                                             type="button"
                                             onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))}
@@ -853,14 +883,14 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
                                 </div>
 
                                 {/* Cabeçalho dos Dias da Semana */}
-                                <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-extrabold text-slate-400 uppercase py-1 bg-slate-50 rounded-lg">
+                                <div className="grid grid-cols-7 gap-1.5 text-center text-[10px] font-black text-slate-400 uppercase py-1.5 bg-white border border-slate-100 rounded-xl shadow-2xs">
                                     <span>Dom</span><span>Seg</span><span>Ter</span><span>Qua</span><span>Qui</span><span>Sex</span><span>Sáb</span>
                                 </div>
 
-                                {/* Grade de Dias */}
-                                <div className="grid grid-cols-7 gap-1">
+                                {/* Grade de Dias Espaçosa */}
+                                <div className="grid grid-cols-7 gap-1.5">
                                     {getDaysInMonth(currentMonth).map((day, idx) => {
-                                        if (!day) return <div key={`empty-${idx}`} className="h-8"></div>;
+                                        if (!day) return <div key={`empty-${idx}`} className="h-9"></div>;
                                         const formattedDay = formatDateToYYYYMMDD(day);
                                         const isSelected = selectedDate && formattedDay === formatDateToYYYYMMDD(selectedDate);
                                         const isToday = formattedDay === formatDateToYYYYMMDD(new Date());
@@ -873,225 +903,351 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
                                                 type="button"
                                                 onClick={() => setSelectedDate(day)}
                                                 disabled={isPast}
-                                                className={`h-8 w-full rounded-xl text-xs font-bold transition-all relative flex flex-col items-center justify-center cursor-pointer ${
+                                                className={`h-9 w-full rounded-xl text-xs font-bold transition-all relative flex flex-col items-center justify-center cursor-pointer ${
                                                     isSelected 
-                                                    ? 'bg-gradient-to-br from-sky-600 to-indigo-600 text-white font-black shadow-md shadow-sky-500/30 scale-105 z-10' 
+                                                    ? 'bg-gradient-to-br from-sky-600 to-indigo-600 text-white font-black shadow-md shadow-sky-500/30 scale-105 z-10 ring-2 ring-white' 
                                                     : isToday
-                                                    ? 'border-2 border-sky-500 text-sky-700 bg-sky-50/50 hover:bg-sky-100'
+                                                    ? 'border-2 border-sky-500 text-sky-700 bg-sky-50/70 hover:bg-sky-100 font-black'
                                                     : isPast
                                                     ? 'text-slate-300 cursor-not-allowed bg-slate-50/50'
-                                                    : 'hover:bg-slate-100 text-slate-700 active:scale-95'
+                                                    : 'hover:bg-white text-slate-700 bg-white/60 hover:shadow-2xs border border-transparent hover:border-slate-200 active:scale-95'
                                                 }`}
                                             >
                                                 <span>{day.getDate()}</span>
                                                 {/* Indicador de vagas existentes no dia */}
                                                 {existingCount > 0 && (
-                                                    <span className={`w-1.5 h-1.5 rounded-full absolute bottom-1 ${isSelected ? 'bg-white' : 'bg-emerald-500'}`} title={`${existingCount} vaga(s) já cadastrada(s)`} />
+                                                    <span 
+                                                        className={`w-1.5 h-1.5 rounded-full absolute bottom-1 ${isSelected ? 'bg-white' : 'bg-emerald-500'}`} 
+                                                        title={`${existingCount} vaga(s) já cadastrada(s)`} 
+                                                    />
                                                 )}
                                             </button>
                                         );
                                     })}
                                 </div>
 
-                                <div className="flex items-center gap-3 pt-1 text-[10px] text-slate-500 font-medium">
-                                    <span className="flex items-center gap-1">
-                                        <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                                        Dia com vagas cadastradas
+                                <div className="flex items-center gap-4 pt-1 text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+                                    <span className="flex items-center gap-1.5">
+                                        <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-xs" />
+                                        Com Vagas
                                     </span>
-                                    <span className="flex items-center gap-1">
+                                    <span className="flex items-center gap-1.5">
                                         <span className="w-2 h-2 rounded-full border-2 border-sky-500" />
                                         Hoje
                                     </span>
                                 </div>
-                            </div>
 
-                            {/* Lado Direito: Horários e Ações Dinâmicas */}
-                            <div className="w-full md:w-[270px] border-t md:border-t-0 md:border-l border-slate-200 pt-4 md:pt-0 md:pl-5 flex flex-col space-y-3">
-                                
-                                {/* Card do Dia Escolhido */}
-                                <div className="p-3 bg-gradient-to-br from-sky-50 to-indigo-50/40 rounded-2xl border border-sky-100 text-left relative overflow-hidden">
-                                    <div className="flex items-center justify-between text-[10px] font-extrabold uppercase text-sky-700 tracking-wider mb-1">
+                                {/* Card da Data Selecionada e Vagas Existentes */}
+                                <div className="mt-2 p-4 bg-white rounded-2xl border border-slate-200 shadow-2xs space-y-3">
+                                    <div className="flex items-center justify-between text-[10px] font-black uppercase text-sky-700 tracking-wider">
                                         <span>Data Selecionada</span>
-                                        <Calendar className="w-3.5 h-3.5 text-sky-600" />
+                                        <Calendar className="w-4 h-4 text-sky-600" />
                                     </div>
-                                    <div className="text-sm font-black text-slate-800 capitalize">
-                                        {selectedDate ? selectedDate.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'short', year: 'numeric' }) : 'Nenhuma data selecionada'}
+                                    <div className="text-sm font-black text-slate-800 capitalize leading-snug">
+                                        {selectedDate ? selectedDate.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }) : 'Nenhuma data selecionada'}
+                                    </div>
+
+                                    {/* Resumo de vagas já abertas neste dia */}
+                                    <div className="pt-2.5 border-t border-slate-100">
+                                        <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 mb-1.5">
+                                            <span>Vagas existentes neste dia:</span>
+                                            <span className={`px-2 py-0.2 rounded-full font-black text-[10px] ${existingSlotsForSelectedDate.length > 0 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-600'}`}>
+                                                {existingSlotsForSelectedDate.length} vaga(s)
+                                            </span>
+                                        </div>
+                                        {existingSlotsForSelectedDate.length > 0 ? (
+                                            <div className="flex flex-wrap gap-1 max-h-[75px] overflow-y-auto custom-scrollbar pt-1">
+                                                {existingSlotsForSelectedDate.map(v => (
+                                                    <span key={v.id} className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                                                        {v.hora.substring(0, 5)} {v.status === 'Ocupada' ? '(Ocupada)' : ''}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <p className="text-[10px] text-slate-400 italic">Grade livre para novos cadastros.</p>
+                                        )}
                                     </div>
                                 </div>
+                            </div>
 
-                                {/* Botão / Seletor Numeral: Número de Vagas por Horário */}
-                                <div className="bg-slate-50 p-2.5 rounded-2xl border border-slate-200 flex items-center justify-between gap-2 shadow-2xs">
-                                    <div className="flex items-center gap-2 min-w-0">
-                                        <div className="w-8 h-8 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center font-bold shrink-0">
-                                            <Users className="w-4 h-4" />
+                            {/* Lado Direito: Seleção Dinâmica e Moderna de Horários */}
+                            <div className="flex-1 p-6 flex flex-col space-y-5 bg-white">
+                                
+                                {/* 1. Controle de Vagas por Horário com Presets Rápidos */}
+                                <div className="bg-gradient-to-r from-sky-50/70 via-indigo-50/40 to-slate-50/70 p-4 rounded-2xl border border-sky-100/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-2xl bg-white text-sky-700 border border-sky-200 flex items-center justify-center font-black shadow-xs shrink-0">
+                                            <Users className="w-5 h-5" />
                                         </div>
-                                        <div className="min-w-0">
+                                        <div>
                                             <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 block leading-tight">
                                                 Número de Vagas
                                             </span>
-                                            <span className="text-[11px] font-bold text-slate-700 block truncate">
-                                                Por horário selecionado
+                                            <span className="text-xs font-bold text-slate-700 block">
+                                                Criadas por cada horário selecionado
                                             </span>
                                         </div>
                                     </div>
 
-                                    <div className="flex items-center gap-1 shrink-0">
-                                        <button
-                                            type="button"
-                                            onClick={() => setNumVagasPorHorario(prev => Math.max(1, prev - 1))}
-                                            className="w-7 h-7 bg-white hover:bg-slate-100 active:scale-95 border border-slate-200 rounded-lg text-slate-700 font-black text-sm flex items-center justify-center cursor-pointer transition-all shadow-2xs"
-                                            title="Diminuir vagas (-1)"
-                                        >
-                                            -
-                                        </button>
-                                        <div className="relative">
-                                            <select
-                                                value={numVagasPorHorario}
-                                                onChange={(e) => setNumVagasPorHorario(Math.max(1, Number(e.target.value)))}
-                                                className="bg-white border border-slate-200 rounded-lg pl-2 pr-6 py-1 text-xs font-black font-mono text-sky-700 outline-none focus:border-sky-500 shadow-2xs cursor-pointer appearance-none text-center min-w-[54px]"
-                                                title="Selecione o número de vagas a criar para cada horário"
+                                    {/* Stepper numérico */}
+                                    <div className="flex items-center self-end sm:self-auto">
+                                        <div className="flex items-center bg-white border border-slate-200 rounded-xl p-0.5 shadow-2xs">
+                                            <button
+                                                type="button"
+                                                onClick={() => setNumVagasPorHorario(prev => Math.max(1, prev - 1))}
+                                                className="w-7 h-7 bg-slate-50 hover:bg-slate-100 active:scale-95 rounded-lg text-slate-700 font-black text-sm flex items-center justify-center cursor-pointer transition-all"
+                                                title="Diminuir (-1)"
                                             >
-                                                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 15, 20, 25, 30, 40, 50].map(n => (
-                                                    <option key={n} value={n}>
-                                                        {n}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                            <ChevronDown className="w-3 h-3 text-slate-400 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                                -
+                                            </button>
+                                            <span className="w-10 text-center font-mono font-black text-xs text-sky-700">
+                                                {numVagasPorHorario}
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onClick={() => setNumVagasPorHorario(prev => Math.min(100, prev + 1))}
+                                                className="w-7 h-7 bg-slate-50 hover:bg-slate-100 active:scale-95 rounded-lg text-slate-700 font-black text-sm flex items-center justify-center cursor-pointer transition-all"
+                                                title="Aumentar (+1)"
+                                            >
+                                                +
+                                            </button>
                                         </div>
-                                        <button
-                                            type="button"
-                                            onClick={() => setNumVagasPorHorario(prev => Math.min(100, prev + 1))}
-                                            className="w-7 h-7 bg-white hover:bg-slate-100 active:scale-95 border border-slate-200 rounded-lg text-slate-700 font-black text-sm flex items-center justify-center cursor-pointer transition-all shadow-2xs"
-                                            title="Aumentar vagas (+1)"
-                                        >
-                                            +
-                                        </button>
                                     </div>
                                 </div>
 
-                                {/* Atalhos Rápidos Dinâmicos */}
-                                <div>
-                                    <div className="flex items-center justify-between mb-1.5">
-                                        <span className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">
-                                            Atalhos Rápidos
+                                {/* 2. Select Moderno e Dinâmico de Horários (Compacto, não ocupa espaço vertical) */}
+                                <div ref={timeDropdownRef} className="relative space-y-2">
+                                    <div className="flex items-center justify-between text-[11px] font-black uppercase tracking-wider text-slate-500">
+                                        <span className="flex items-center gap-1.5">
+                                            <Clock className="w-3.5 h-3.5 text-sky-600" />
+                                            Horários da Agenda
                                         </span>
                                         {selectedTimes.length > 0 && (
                                             <button
                                                 type="button"
-                                                onClick={() => handleSelectPreset('limpar')}
-                                                className="text-[10px] font-bold text-rose-600 hover:text-rose-800 flex items-center gap-0.5 cursor-pointer"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setSelectedTimes([]);
+                                                }}
+                                                className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-2 py-0.5 rounded-lg text-[10px] font-bold uppercase transition-colors cursor-pointer flex items-center gap-1"
+                                                title="Desmarcar todos os horários"
                                             >
-                                                <RotateCcw className="w-2.5 h-2.5" />
-                                                <span>Limpar</span>
+                                                <RotateCcw className="w-3 h-3" />
+                                                <span>Limpar seleção ({selectedTimes.length})</span>
                                             </button>
                                         )}
                                     </div>
-                                    <div className="grid grid-cols-3 gap-1.5">
-                                        <button
-                                            type="button"
-                                            onClick={() => handleSelectPreset('manha')}
-                                            className="px-2 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-[10px] font-bold uppercase transition-all flex items-center justify-center gap-1 cursor-pointer active:scale-95"
-                                        >
-                                            <Sun className="w-3 h-3 text-amber-600" />
-                                            <span>Manhã</span>
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => handleSelectPreset('tarde')}
-                                            className="px-2 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 rounded-lg text-[10px] font-bold uppercase transition-all flex items-center justify-center gap-1 cursor-pointer active:scale-95"
-                                        >
-                                            <Sunset className="w-3 h-3 text-indigo-600" />
-                                            <span>Tarde</span>
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => handleSelectPreset('dia')}
-                                            className="px-2 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 rounded-lg text-[10px] font-bold uppercase transition-all flex items-center justify-center gap-1 cursor-pointer active:scale-95"
-                                        >
-                                            <Zap className="w-3 h-3 text-sky-600" />
-                                            <span>Dia Todo</span>
-                                        </button>
-                                    </div>
-                                </div>
 
-                                {/* Grade de Horários */}
-                                <div>
-                                    <span className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider block mb-1.5">
-                                        Selecione os Horários
-                                    </span>
-                                    <div className="grid grid-cols-3 gap-1.5 max-h-[140px] overflow-y-auto custom-scrollbar pr-0.5">
-                                        {['07:00', '08:00', '09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00', '17:00'].map(t => {
-                                            const isSelected = selectedTimes.includes(t);
-                                            return (
-                                                <button
-                                                    key={t}
-                                                    type="button"
-                                                    onClick={() => toggleTime(t)}
-                                                    className={`py-1.5 rounded-xl text-xs font-mono font-bold transition-all border flex items-center justify-center gap-1 cursor-pointer ${
-                                                        isSelected
-                                                        ? 'bg-sky-600 border-sky-600 text-white font-black shadow-xs scale-95'
-                                                        : 'bg-white border-slate-200 text-slate-700 hover:border-sky-300 hover:bg-sky-50'
-                                                    }`}
-                                                >
-                                                    {isSelected && <Check className="w-3 h-3" />}
-                                                    <span>{t}</span>
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-
-                                {/* Adicionar Horário Customizado */}
-                                <div>
-                                    <span className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider block mb-1">
-                                        Outro Horário
-                                    </span>
-                                    <div className="flex gap-1.5">
-                                        <div className="relative flex-1">
-                                            <input
-                                                type="time"
-                                                value={customTime}
-                                                onChange={(e) => setCustomTime(e.target.value)}
-                                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-mono font-bold text-slate-800 outline-none focus:border-sky-500 focus:bg-white transition-all"
-                                            />
+                                    {/* Botão Trigger do Select */}
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsTimeDropdownOpen(prev => !prev)}
+                                        className={`w-full min-h-[48px] bg-white border rounded-2xl px-3.5 py-2 flex items-center justify-between gap-3 text-left transition-all cursor-pointer shadow-2xs ${
+                                            isTimeDropdownOpen
+                                                ? 'border-sky-500 ring-2 ring-sky-500/20 shadow-md'
+                                                : 'border-slate-200/90 hover:border-sky-300 hover:bg-slate-50/50'
+                                        }`}
+                                    >
+                                        <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
+                                            {selectedTimes.length === 0 ? (
+                                                <div className="flex items-center gap-2.5 text-slate-400 py-0.5">
+                                                    <Clock className="w-4 h-4 text-slate-400 shrink-0" />
+                                                    <span className="text-xs font-semibold">
+                                                        Toque para abrir e selecionar os horários...
+                                                    </span>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    {selectedTimes.slice(0, 5).map(t => (
+                                                        <span
+                                                            key={t}
+                                                            className="inline-flex items-center gap-1 px-2 py-0.5 bg-sky-50 border border-sky-200 text-sky-800 text-xs font-mono font-black rounded-lg shadow-2xs"
+                                                        >
+                                                            <span>{t}</span>
+                                                            <span
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleRemoveTime(t);
+                                                                }}
+                                                                className="hover:text-rose-600 cursor-pointer ml-0.5"
+                                                                title="Remover este horário"
+                                                            >
+                                                                <X className="w-3 h-3" />
+                                                            </span>
+                                                        </span>
+                                                    ))}
+                                                    {selectedTimes.length > 5 && (
+                                                        <span className="px-2 py-0.5 bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg">
+                                                            +{selectedTimes.length - 5} outros
+                                                        </span>
+                                                    )}
+                                                </>
+                                            )}
                                         </div>
-                                        <button
-                                            type="button"
-                                            onClick={handleAddCustomTime}
-                                            disabled={!customTime}
-                                            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 disabled:opacity-40 text-white font-bold rounded-xl text-xs uppercase cursor-pointer transition-all active:scale-95 shrink-0 flex items-center gap-1"
-                                        >
-                                            <Plus className="w-3.5 h-3.5" />
-                                            <span>Incluir</span>
-                                        </button>
-                                    </div>
+
+                                        <div className="flex items-center gap-2 shrink-0">
+                                            {selectedTimes.length > 0 && (
+                                                <span className="px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 text-[10px] font-black uppercase tracking-wider">
+                                                    {selectedTimes.length} selecionado{selectedTimes.length > 1 ? 's' : ''}
+                                                </span>
+                                            )}
+                                            <div className={`w-7 h-7 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600 transition-transform duration-200 ${
+                                                isTimeDropdownOpen ? 'rotate-180 bg-sky-100 text-sky-700' : ''
+                                            }`}>
+                                                <ChevronDown className="w-4 h-4" />
+                                            </div>
+                                        </div>
+                                    </button>
+
+                                    {/* Popover Dropdown Flutuante de Seleção Dinâmica */}
+                                    {isTimeDropdownOpen && (
+                                        <div className="absolute top-full left-0 right-0 mt-2 z-50 bg-white rounded-2xl shadow-2xl shadow-slate-900/20 border border-slate-200/90 p-4 space-y-3.5 animate-in fade-in zoom-in-95 duration-150 ring-1 ring-black/5">
+                                            
+                                            {/* Barra de Filtro e Ações em Lote */}
+                                            <div className="flex items-center gap-2">
+                                                <div className="relative flex-1">
+                                                    <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                                    <input
+                                                        type="text"
+                                                        value={timeSearchTerm}
+                                                        onChange={(e) => setTimeSearchTerm(e.target.value)}
+                                                        placeholder="Filtrar horários (ex: 08, 14:30)..."
+                                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-3 py-1.5 text-xs font-mono font-bold text-slate-800 placeholder:text-slate-400 placeholder:font-sans outline-none focus:border-sky-500 focus:bg-white transition-colors"
+                                                        autoFocus
+                                                    />
+                                                    {timeSearchTerm && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setTimeSearchTerm('')}
+                                                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                                        >
+                                                            <X className="w-3.5 h-3.5" />
+                                                        </button>
+                                                    )}
+                                                </div>
+
+                                                {/* Botão Selecionar Todos os Filtrados */}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const allIncluded = filteredSearchTimes.every(t => selectedTimes.includes(t));
+                                                        if (allIncluded) {
+                                                            setSelectedTimes(prev => prev.filter(t => !filteredSearchTimes.includes(t)));
+                                                        } else {
+                                                            setSelectedTimes(prev => Array.from(new Set([...prev, ...filteredSearchTimes])).sort());
+                                                        }
+                                                    }}
+                                                    className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[10px] uppercase rounded-xl transition-colors cursor-pointer shrink-0"
+                                                >
+                                                    {filteredSearchTimes.every(t => selectedTimes.includes(t)) ? 'Desmarcar' : 'Marcar Todos'}
+                                                </button>
+                                            </div>
+
+                                            {/* Grade Dinâmica com Rolagem Suave */}
+                                            <div className="space-y-1.5">
+                                                <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">
+                                                    <span>Toque para marcar/desmarcar:</span>
+                                                    <span>{filteredSearchTimes.length} horários listados</span>
+                                                </div>
+
+                                                <div className="grid grid-cols-4 sm:grid-cols-6 gap-1.5 max-h-[190px] overflow-y-auto custom-scrollbar p-1">
+                                                    {filteredSearchTimes.length === 0 ? (
+                                                        <div className="col-span-full py-6 text-center text-xs text-slate-400 font-medium">
+                                                            Nenhum horário encontrado para "{timeSearchTerm}".
+                                                        </div>
+                                                    ) : (
+                                                        filteredSearchTimes.map(t => {
+                                                            const isSelected = selectedTimes.includes(t);
+                                                            const hasExisting = existingSlotsForSelectedDate.some(v => v.hora.substring(0, 5) === t);
+
+                                                            return (
+                                                                <button
+                                                                    key={t}
+                                                                    type="button"
+                                                                    onClick={() => toggleTime(t)}
+                                                                    className={`py-2 px-1 rounded-xl text-xs font-mono font-bold transition-all border flex items-center justify-center gap-1 cursor-pointer relative ${
+                                                                        isSelected
+                                                                            ? 'bg-sky-600 border-sky-600 text-white font-black shadow-xs scale-[1.02]'
+                                                                            : 'bg-slate-50/90 border-slate-200/90 text-slate-700 hover:bg-sky-50 hover:border-sky-300 hover:text-sky-700'
+                                                                    }`}
+                                                                >
+                                                                    {isSelected && <Check className="w-3 h-3 shrink-0 stroke-[3]" />}
+                                                                    <span>{t}</span>
+                                                                    {hasExisting && (
+                                                                        <span 
+                                                                            className={`w-1.5 h-1.5 rounded-full absolute top-1 right-1 ${isSelected ? 'bg-amber-300' : 'bg-emerald-500'}`} 
+                                                                            title="Já existe vaga cadastrada para este horário no dia"
+                                                                        />
+                                                                    )}
+                                                                </button>
+                                                            );
+                                                        })
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* Inclusão de Horário Avulso + Botão Concluir */}
+                                            <div className="pt-2.5 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-2.5">
+                                                <div className="flex items-center gap-1.5 w-full sm:w-auto">
+                                                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 shrink-0">
+                                                        Avulso:
+                                                    </span>
+                                                    <input
+                                                        type="time"
+                                                        value={customTime}
+                                                        onChange={(e) => setCustomTime(e.target.value)}
+                                                        className="bg-slate-50 border border-slate-200 rounded-xl px-2 py-1 text-xs font-mono font-bold text-slate-800 outline-none focus:border-sky-500 w-24"
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleAddCustomTime}
+                                                        disabled={!customTime}
+                                                        className="px-2.5 py-1 bg-slate-800 hover:bg-slate-900 disabled:opacity-30 text-white font-bold rounded-xl text-xs uppercase cursor-pointer transition-all shrink-0 flex items-center gap-1"
+                                                    >
+                                                        <Plus className="w-3 h-3" />
+                                                        <span>Incluir</span>
+                                                    </button>
+                                                </div>
+
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setIsTimeDropdownOpen(false)}
+                                                    className="w-full sm:w-auto px-4 py-1.5 bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs uppercase rounded-xl cursor-pointer shadow-xs transition-all active:scale-95"
+                                                >
+                                                    Concluir Seleção ({selectedTimes.length})
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
 
-                                {/* Tags Dinâmicas dos Horários Selecionados */}
+                                {/* 5. Resumo Visual dos Horários Selecionados */}
                                 {selectedTimes.length > 0 && (
-                                    <div className="p-2.5 bg-sky-50 rounded-2xl border border-sky-100 space-y-1.5">
-                                        <div className="flex items-center justify-between text-[11px] font-black text-sky-900">
-                                            <span>Prontos para Liberar:</span>
-                                            <span className="px-2 py-0.5 rounded-full bg-sky-200 text-sky-800 text-[10px] font-black">
-                                                {selectedTimes.length * numVagasPorHorario} vaga(s) ({selectedTimes.length} horário(s) × {numVagasPorHorario})
+                                    <div className="p-3 bg-sky-50/80 rounded-2xl border border-sky-100 space-y-2">
+                                        <div className="flex items-center justify-between text-[11px] font-black text-sky-950">
+                                            <span className="flex items-center gap-1.5">
+                                                <CheckCircle2 className="w-4 h-4 text-sky-600" />
+                                                Horários Prontos para Liberação:
+                                            </span>
+                                            <span className="px-2.5 py-0.5 rounded-full bg-sky-200 text-sky-900 text-[10px] font-black tracking-wider shadow-2xs">
+                                                {selectedTimes.length * numVagasPorHorario} vaga(s) no total
                                             </span>
                                         </div>
-                                        <div className="flex flex-wrap gap-1 max-h-[60px] overflow-y-auto custom-scrollbar">
+                                        <div className="flex flex-wrap gap-1.5 max-h-[85px] overflow-y-auto custom-scrollbar pt-0.5">
                                             {selectedTimes.sort().map(t => (
                                                 <span 
                                                     key={t}
                                                     onClick={() => handleRemoveTime(t)}
-                                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-white border border-sky-200 text-sky-800 rounded-md font-mono text-[10px] font-bold hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 cursor-pointer transition-all group"
+                                                    className="inline-flex items-center gap-1 px-2 py-1 bg-white border border-sky-200 text-sky-900 rounded-lg font-mono text-[11px] font-black hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200 cursor-pointer transition-all shadow-2xs group"
                                                     title="Clique para remover este horário"
                                                 >
                                                     <span>{t}</span>
                                                     {numVagasPorHorario > 1 && (
-                                                        <span className="text-[9px] text-sky-600 font-extrabold bg-sky-100 px-1 rounded">
+                                                        <span className="text-[9px] text-sky-700 font-black bg-sky-100 px-1 rounded">
                                                             ×{numVagasPorHorario}
                                                         </span>
                                                     )}
-                                                    <X className="w-2.5 h-2.5 group-hover:scale-125 transition-transform" />
+                                                    <X className="w-3 h-3 text-slate-400 group-hover:text-rose-600 group-hover:scale-125 transition-transform" />
                                                 </span>
                                             ))}
                                         </div>
@@ -1100,23 +1256,23 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
                             </div>
                         </div>
 
-                        {/* Footer Moderno */}
-                        <div className="px-5 py-3.5 border-t border-slate-200 bg-slate-50 flex items-center justify-between gap-3 shrink-0">
-                            <div className="text-xs font-semibold text-slate-500 truncate">
+                        {/* Footer Moderno e Amplo */}
+                        <div className="px-6 py-4 border-t border-slate-100 bg-white flex flex-col sm:flex-row items-center justify-between gap-4 shrink-0">
+                            <div className="text-xs font-semibold text-slate-500 text-center sm:text-left">
                                 {selectedTimes.length > 0 ? (
                                     <span>
-                                        Total: <strong className="text-sky-700 font-extrabold">{selectedTimes.length * numVagasPorHorario} vaga(s)</strong> {numVagasPorHorario > 1 ? `(${selectedTimes.length} horário(s) × ${numVagasPorHorario} vagas)` : ''} para {selectedDate ? selectedDate.toLocaleDateString('pt-BR') : ''}
+                                        Total a liberar: <strong className="text-sky-700 font-black text-sm">{selectedTimes.length * numVagasPorHorario} vaga(s)</strong> {numVagasPorHorario > 1 ? `(${selectedTimes.length} horários × ${numVagasPorHorario} vagas)` : `(${selectedTimes.length} horário(s))`} para <strong>{selectedDate ? selectedDate.toLocaleDateString('pt-BR') : ''}</strong>
                                     </span>
                                 ) : (
-                                    <span>Selecione ao menos 1 horário no painel</span>
+                                    <span className="text-slate-400 font-medium">Selecione ao menos 1 horário no painel acima para liberar as vagas</span>
                                 )}
                             </div>
 
-                            <div className="flex items-center gap-2 shrink-0">
+                            <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
                                 <button
                                     type="button"
                                     onClick={() => { setIsAddVagasModalOpen(false); setSelectedTimes([]); setNumVagasPorHorario(1); }}
-                                    className="px-4 py-2 border border-slate-200 hover:bg-white text-slate-600 font-bold rounded-xl text-xs uppercase transition-all cursor-pointer shadow-2xs"
+                                    className="px-4 py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-600 font-bold rounded-xl text-xs uppercase tracking-wider transition-all cursor-pointer shadow-2xs"
                                 >
                                     Cancelar
                                 </button>
@@ -1124,16 +1280,16 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
                                     type="button"
                                     onClick={handleConfirmAddVagas}
                                     disabled={!selectedDate || selectedTimes.length === 0 || actionLoading}
-                                    className="px-5 py-2 bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-700 hover:to-indigo-700 text-white font-extrabold rounded-xl shadow-md shadow-sky-500/25 disabled:opacity-50 disabled:shadow-none transition-all text-xs uppercase flex items-center gap-2 cursor-pointer active:scale-95"
+                                    className="px-6 py-2.5 bg-gradient-to-r from-sky-600 via-indigo-600 to-indigo-700 hover:from-sky-700 hover:to-indigo-800 text-white font-black rounded-xl shadow-lg shadow-sky-500/25 disabled:opacity-40 disabled:shadow-none transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer active:scale-95"
                                 >
                                     {actionLoading ? (
                                         <>
-                                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                            <span>Salvando...</span>
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                            <span>Salvando Vagas...</span>
                                         </>
                                     ) : (
                                         <>
-                                            <CheckCircle2 className="w-3.5 h-3.5" />
+                                            <CheckCircle2 className="w-4 h-4" />
                                             <span>Liberar Vagas ({selectedTimes.length * numVagasPorHorario})</span>
                                         </>
                                     )}

@@ -6,6 +6,7 @@ import { seedDefaultProcedures } from '../../services/procedimentosSeed';
 import { ResponsiveContainer, AreaChart, XAxis, YAxis, Tooltip, Area, CartesianGrid } from 'recharts';
 import { PacientesTab, formatPatientName } from '../common/PacientesTab';
 import { AgentesSaudeTab, AgentesSaudeHeaderMetrics } from './AgentesSaudeTab';
+import { ConsultasDashboardView } from './dashboard/ConsultasDashboardView';
 
 interface DadosScreenProps {
     currentUser: User;
@@ -615,117 +616,11 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
 
                 {/* 1. DASHBOARD TAB */}
                 {activeTab === 'dashboard' && (
-                    <div className="space-y-6">
-                        {/* Summary Cards */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                            <div className="p-5 bg-gradient-to-br from-sky-500 to-sky-600 text-white rounded-2xl shadow-md flex flex-col justify-between min-h-[110px]">
-                                <span className="text-[10px] font-black uppercase tracking-widest text-sky-100">Total de Pacientes</span>
-                                <span className="text-3xl font-black">{stats.totalPatients}</span>
-                            </div>
-                            <div className="p-5 bg-gradient-to-br from-indigo-500 to-indigo-600 text-white rounded-2xl shadow-md flex flex-col justify-between min-h-[110px]">
-                                <span className="text-[10px] font-black uppercase tracking-widest text-indigo-100">Total de Agendamentos</span>
-                                <span className="text-3xl font-black">{stats.totalBookings}</span>
-                            </div>
-                            <div className="p-5 bg-gradient-to-br from-teal-500 to-teal-600 text-white rounded-2xl shadow-md flex flex-col justify-between min-h-[110px]">
-                                <span className="text-[10px] font-black uppercase tracking-widest text-teal-100">Exame Mais Realizado</span>
-                                <span className="text-lg font-black truncate">{stats.popularProcedures[0]?.name || 'Nenhum'}</span>
-                            </div>
-                            <div className="p-5 bg-gradient-to-br from-slate-700 to-slate-800 text-white rounded-2xl shadow-md flex flex-col justify-between min-h-[110px]">
-                                <span className="text-[10px] font-black uppercase tracking-widest text-slate-300">Vagas Totais Ativas</span>
-                                <span className="text-3xl font-black">
-                                    {stats.availableQuantities.reduce((acc, curr) => acc + Math.max(0, curr.available), 0)}
-                                </span>
-                            </div>
-                        </div>
-
-                        {/* Charts & Popular Grid */}
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                            {/* Trend Area Chart (recharts) */}
-                            <div className="lg:col-span-2 p-5 bg-white border border-slate-200/80 rounded-2xl shadow-sm flex flex-col h-[320px]">
-                                <h4 className="text-xs font-black uppercase tracking-wider text-slate-800 mb-4">Fluxo de Agendamentos por Período</h4>
-                                <div className="flex-1 w-full min-h-0">
-                                    {stats.bookingsByPeriod.length > 0 ? (
-                                        <ResponsiveContainer width="100%" height="100%">
-                                            <AreaChart data={stats.bookingsByPeriod} margin={{ left: -20, right: 10, top: 10, bottom: 5 }}>
-                                                <defs>
-                                                    <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
-                                                        <stop offset="5%" stopColor="#0284c7" stopOpacity={0.2}/>
-                                                        <stop offset="95%" stopColor="#0284c7" stopOpacity={0}/>
-                                                    </linearGradient>
-                                                </defs>
-                                                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                                                <XAxis dataKey="date" stroke="#94a3b8" style={{ fontSize: 9, fontWeight: 'bold' }} />
-                                                <YAxis stroke="#94a3b8" style={{ fontSize: 9, fontWeight: 'bold' }} />
-                                                <Tooltip />
-                                                <Area type="monotone" dataKey="count" name="Agendamentos" stroke="#0284c7" strokeWidth={2.5} fillOpacity={1} fill="url(#colorCount)" />
-                                            </AreaChart>
-                                        </ResponsiveContainer>
-                                    ) : (
-                                        <div className="h-full w-full flex items-center justify-center text-xs font-bold text-slate-400">Sem dados para exibir gráficos</div>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Popular rankings */}
-                            <div className="p-5 bg-white border border-slate-200/80 rounded-2xl shadow-sm space-y-4">
-                                <h4 className="text-xs font-black uppercase tracking-wider text-slate-800">Mais Solicitados</h4>
-                                <div className="space-y-3.5">
-                                    {stats.popularProcedures.length > 0 ? (
-                                        stats.popularProcedures.map((proc, idx) => (
-                                            <div key={idx} className="flex items-center justify-between text-xs border-b border-slate-100 pb-2.5 last:border-0 last:pb-0">
-                                                <div className="min-w-0 pr-2">
-                                                    <div className="font-extrabold text-slate-800 truncate">{proc.name}</div>
-                                                    <span className="text-[8px] font-black uppercase tracking-wider text-slate-400">{proc.type}</span>
-                                                </div>
-                                                <span className="shrink-0 px-2 py-0.5 bg-sky-50 border border-sky-100 text-sky-600 rounded-full font-black text-[10px]">
-                                                    {proc.count} agend.
-                                                </span>
-                                            </div>
-                                        ))
-                                    ) : (
-                                        <div className="text-center text-xs font-bold text-slate-400 py-8">Nenhum procedimento agendado ainda.</div>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Critical availability warnings */}
-                        <div className="p-5 bg-white border border-slate-200/80 rounded-2xl shadow-sm space-y-3.5">
-                            <h4 className="text-xs font-black uppercase tracking-wider text-slate-800">Monitoramento de Vagas Restantes</h4>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-                                {stats.availableQuantities.length > 0 ? (
-                                    stats.availableQuantities.map((item, idx) => {
-                                        const isCritical = item.available > 0 && item.available <= 5;
-                                        return (
-                                            <div key={idx} className={`p-3.5 border rounded-xl flex flex-col justify-between ${
-                                                item.available <= 0 
-                                                ? 'bg-rose-50/50 border-rose-100' 
-                                                : isCritical 
-                                                ? 'bg-amber-50/50 border-amber-100' 
-                                                : 'bg-slate-50 border-slate-100'
-                                            }`}>
-                                                <div className="font-extrabold text-xs text-slate-800 truncate">{item.name}</div>
-                                                <div className="flex items-center justify-between mt-2">
-                                                    <span className="text-[8px] font-bold uppercase tracking-wider text-slate-400">{item.type}</span>
-                                                    <span className={`text-xs font-black ${
-                                                        item.available <= 0 
-                                                        ? 'text-rose-600' 
-                                                        : isCritical 
-                                                        ? 'text-amber-600' 
-                                                        : 'text-slate-700'
-                                                    }`}>
-                                                        {Math.max(0, item.available)} vagas
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        );
-                                    })
-                                ) : (
-                                    <div className="col-span-full text-center text-xs font-bold text-slate-400 py-8">Nenhum exame cadastrado.</div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
+                    <ConsultasDashboardView
+                        currentUser={currentUser}
+                        subView={subView}
+                        onNavigate={onNavigate}
+                    />
                 )}
 
                 {/* 2. PACIENTES TAB */}

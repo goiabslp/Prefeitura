@@ -118,7 +118,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
     const [selectedProcedure, setSelectedProcedure] = useState<ConsultaProcedimento | null>(null);
     const [bookingDate, setBookingDate] = useState('');
     const [bookingQty, setBookingQty] = useState(1);
-    const [bookingPriority, setBookingPriority] = useState<'Normal' | 'Urgência'>('Normal');
+    const [bookingPriority, setBookingPriority] = useState<'Normal' | 'Urgência' | 'Especial'>('Normal');
     const [procedureQuery, setProcedureQuery] = useState('');
     const [solicitationDate, setSolicitationDate] = useState(() => {
         const d = new Date();
@@ -166,7 +166,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
     };
 
     // Get available slots based on priority and date
-    const getAvailableSlots = (proc: ConsultaProcedimento, priority: 'Normal' | 'Urgência', dateStr: string): number => {
+    const getAvailableSlots = (proc: ConsultaProcedimento, priority: 'Normal' | 'Urgência' | 'Especial', dateStr: string): number => {
         if (!proc) return 0;
         return Math.max(0, proc.available_quantity);
     };
@@ -459,18 +459,20 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
         // Determine status based on slot availability
         const availableSlots = getAvailableSlots(selectedProcedure, bookingPriority, targetDate);
         
-        // Se for usuário comum, vai sempre como Fila de Espera
-        const targetStatus = (!canSeeSlots)
+        // Se for Especial, vai direto para a fila prioritária especial
+        const targetStatus = (bookingPriority === 'Especial')
             ? ('Fila de espera' as const)
-            : (bookingDate && availableSlots >= bookingQty)
-                ? ('Solicitado' as const) 
-                : ('Fila de espera' as const);
+            : (!canSeeSlots)
+                ? ('Fila de espera' as const)
+                : (bookingDate && availableSlots >= bookingQty)
+                    ? ('Solicitado' as const) 
+                    : ('Fila de espera' as const);
 
         const optimisticBooking = {
             patient_id: selectedPatient.id,
             procedimento_id: selectedProcedure.id,
-            appointment_date: (canSeeSlots && bookingDate && targetStatus !== 'Fila de espera') ? targetDate : undefined,
-            appointment_time: (canSeeSlots && bookingDate && !isWaitlistOnly && targetStatus !== 'Fila de espera') ? (bookingTime || undefined) : undefined,
+            appointment_date: (canSeeSlots && bookingDate && targetStatus !== 'Fila de espera' && bookingPriority !== 'Especial') ? targetDate : undefined,
+            appointment_time: (canSeeSlots && bookingDate && !isWaitlistOnly && targetStatus !== 'Fila de espera' && bookingPriority !== 'Especial') ? (bookingTime || undefined) : undefined,
             solicitation_date: solicitationDate,
             quantity: bookingQty,
             priority: bookingPriority,
@@ -482,7 +484,9 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
             const result = await db.createAgendamento(optimisticBooking);
             setCreatedBooking(result);
             setSuccessMessage(
-                targetStatus === 'Fila de espera'
+                bookingPriority === 'Especial'
+                ? 'Agendamento Especial cadastrado com sucesso no topo da fila prioritária!'
+                : targetStatus === 'Fila de espera'
                 ? 'Paciente inserido na fila de espera com sucesso!'
                 : 'Agendamento realizado com sucesso!'
             );
@@ -532,10 +536,10 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
         setLoading(true);
         
         try {
-            // Only run check if priority is Normal
-            const isUrgent = bookingPriority === 'Urgência';
+            // Apenas verifica conflito de intervalo de 15 dias se for Normal (não se aplica a Urgência nem Especial)
+            const isBypassConflict = bookingPriority === 'Urgência' || bookingPriority === 'Especial';
             
-            if (!isUrgent) {
+            if (!isBypassConflict) {
                 try {
                     // Fetch patient history to check for active same-procedure bookings within 15 days
                     const history = await db.getPacienteHistory(selectedPatient.id);
@@ -921,6 +925,9 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                         patient={printingBooking.paciente || selectedPatient!}
                         procedure={printingBooking.procedimento || selectedProcedure!}
                         date={printingBooking.appointment_date}
+                        solicitationDate={printingBooking.solicitation_date || printingBooking.created_at}
+                        appointmentTime={printingBooking.appointment_time}
+                        status={printingBooking.status}
                         quantity={printingBooking.quantity}
                         priority={printingBooking.priority}
                         is_retorno={printingBooking.is_retorno}
@@ -1561,29 +1568,35 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
 
                                                 <div>
                                                     <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">Prioridade do Agendamento</label>
-                                                    <div className="grid grid-cols-2 gap-2">
+                                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                                                         {[
                                                             { value: 'Normal', label: 'Normal', color: 'border-slate-200 hover:border-slate-300 text-slate-600 bg-white' },
-                                                            { value: 'Urgência', label: 'Urgência', color: 'border-rose-200 bg-rose-50/30 text-rose-700 hover:bg-rose-50' }
+                                                            { value: 'Urgência', label: 'Urgência', color: 'border-rose-200 bg-rose-50/30 text-rose-700 hover:bg-rose-50' },
+                                                            { value: 'Especial', label: 'Agendamento Especial', color: 'border-amber-300 bg-gradient-to-r from-amber-50 to-yellow-50 text-amber-800 hover:bg-amber-100/80 shadow-xs' }
                                                         ].map((opt) => {
                                                             const isSel = bookingPriority === opt.value;
                                                             return (
                                                                 <button
                                                                     key={opt.value}
                                                                     type="button"
-                                                                    onClick={() => setBookingPriority(opt.value as 'Normal' | 'Urgência')}
+                                                                    onClick={() => setBookingPriority(opt.value as 'Normal' | 'Urgência' | 'Especial')}
                                                                     className={`py-2 px-3 rounded-xl border text-xs font-black uppercase tracking-wider transition-all duration-300 active:scale-95 text-center flex items-center justify-center gap-2 cursor-pointer ${
                                                                         isSel
-                                                                        ? opt.value === 'Urgência'
-                                                                            ? 'bg-rose-600 border-rose-600 text-white shadow-lg shadow-rose-600/20'
-                                                                            : 'bg-sky-600 border-sky-600 text-white shadow-lg shadow-sky-600/20'
+                                                                        ? opt.value === 'Especial'
+                                                                            ? 'bg-gradient-to-r from-amber-500 via-amber-600 to-yellow-500 border-amber-500 text-white shadow-lg shadow-amber-500/25 ring-2 ring-amber-400/30'
+                                                                            : opt.value === 'Urgência'
+                                                                                ? 'bg-rose-600 border-rose-600 text-white shadow-lg shadow-rose-600/20'
+                                                                                : 'bg-sky-600 border-sky-600 text-white shadow-lg shadow-sky-600/20'
                                                                         : opt.color
                                                                     }`}
                                                                 >
+                                                                    {opt.value === 'Especial' && (
+                                                                        <Sparkles className={`w-3.5 h-3.5 ${isSel ? 'text-white animate-spin' : 'text-amber-600'}`} style={{ animationDuration: '4s' }} />
+                                                                    )}
                                                                     {opt.value === 'Urgência' && (
                                                                         <div className={`w-2 h-2 rounded-full ${isSel ? 'bg-white' : 'bg-rose-600'} animate-ping`} />
                                                                     )}
-                                                                    {opt.label}
+                                                                    <span>{opt.label}</span>
                                                                 </button>
                                                             );
                                                         })}
@@ -1673,18 +1686,30 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                                             </span>
                                                         </div>
                                                     )}
-                                                    <div className="flex justify-between items-center gap-3">
-                                                        <span className="font-bold text-slate-400 shrink-0">Prioridade:</span>
-                                                        <span className={`font-black uppercase text-[10px] px-2 py-0.5 rounded ${
-                                                            bookingPriority === 'Urgência' ? 'bg-rose-500 text-white shadow-sm' : 'bg-slate-100 text-slate-700'
-                                                        }`}>{bookingPriority}</span>
-                                                    </div>
-                                                    {canSeeSlots && (isWaitlistOnly || getAvailableSlots(selectedProcedure, bookingPriority, bookingDate) <= 0) ? (
-                                                        <div className="text-[9.5px] font-bold text-amber-600 bg-amber-50 border border-amber-100 p-2 rounded-xl mt-1.5 flex items-center gap-2 shadow-sm">
-                                                            <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-500" />
-                                                            <span>Sem vagas de {bookingPriority.toLowerCase()} disponíveis. Paciente irá para a fila de espera.</span>
-                                                        </div>
-                                                    ) : null}
+                                                     <div className="flex justify-between items-center gap-3">
+                                                         <span className="font-bold text-slate-400 shrink-0">Prioridade:</span>
+                                                         <span className={`font-black uppercase text-[10px] px-2 py-0.5 rounded ${
+                                                             bookingPriority === 'Especial'
+                                                                 ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-white shadow-sm font-black flex items-center gap-1'
+                                                                 : bookingPriority === 'Urgência'
+                                                                     ? 'bg-rose-500 text-white shadow-sm'
+                                                                     : 'bg-slate-100 text-slate-700'
+                                                         }`}>
+                                                             {bookingPriority === 'Especial' && <Sparkles className="w-3 h-3" />}
+                                                             {bookingPriority}
+                                                         </span>
+                                                     </div>
+                                                     {bookingPriority === 'Especial' ? (
+                                                         <div className="text-[9.5px] font-bold text-amber-800 bg-amber-50 border border-amber-200 p-2.5 rounded-xl mt-1.5 flex items-center gap-2 shadow-xs">
+                                                             <Sparkles className="w-4 h-4 shrink-0 text-amber-600" />
+                                                             <span>Agendamento Especial Prioritário. Paciente será inserido no topo da fila com prioridade máxima.</span>
+                                                         </div>
+                                                     ) : canSeeSlots && (isWaitlistOnly || getAvailableSlots(selectedProcedure, bookingPriority, bookingDate) <= 0) ? (
+                                                         <div className="text-[9.5px] font-bold text-amber-600 bg-amber-50 border border-amber-100 p-2 rounded-xl mt-1.5 flex items-center gap-2 shadow-sm">
+                                                             <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-500" />
+                                                             <span>Sem vagas de {bookingPriority.toLowerCase()} disponíveis. Paciente irá para a fila de espera.</span>
+                                                         </div>
+                                                     ) : null}
                                                 </div>
                                             </div>
                                         </div>
@@ -1773,23 +1798,29 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                                         : (bookingDate && new Date(bookingDate + 'T12:00:00').toLocaleDateString('pt-BR')) + (bookingTime ? ` às ${bookingTime}` : '')}
                                                 </span>
                                             </div>
-                                            <div>
-                                                <span className="block text-[8px] font-black text-slate-400 uppercase tracking-wider">Prioridade</span>
-                                                <span className={`inline-block text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded mt-0.5 ${
-                                                    bookingPriority === 'Urgência'
-                                                    ? 'bg-rose-500 text-white shadow-sm animate-pulse'
-                                                    : 'bg-slate-100 text-slate-700'
-                                                }`}>
-                                                    {bookingPriority}
-                                                </span>
-                                            </div>
-                                            <div>
-                                                <span className="block text-[8px] font-black text-slate-400 uppercase tracking-wider">Status Estimado</span>
-                                                {!canSeeSlots || isWaitlistOnly ? (
-                                                    <span className="inline-block text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded mt-0.5 bg-amber-50 text-amber-700 border border-amber-100 font-extrabold animate-pulse">
-                                                        Fila de Espera
-                                                    </span>
-                                                ) : selectedProcedure && canSeeSlots && getAvailableSlots(selectedProcedure, bookingPriority, bookingDate) > 0 ? (
+                                             <div>
+                                                 <span className="block text-[8px] font-black text-slate-400 uppercase tracking-wider">Prioridade</span>
+                                                 <span className={`inline-block text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded mt-0.5 ${
+                                                     bookingPriority === 'Especial'
+                                                     ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-white shadow-sm font-black'
+                                                     : bookingPriority === 'Urgência'
+                                                     ? 'bg-rose-500 text-white shadow-sm animate-pulse'
+                                                     : 'bg-slate-100 text-slate-700'
+                                                 }`}>
+                                                     {bookingPriority}
+                                                 </span>
+                                             </div>
+                                             <div>
+                                                 <span className="block text-[8px] font-black text-slate-400 uppercase tracking-wider">Status Estimado</span>
+                                                 {bookingPriority === 'Especial' ? (
+                                                     <span className="inline-block text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded mt-0.5 bg-amber-50 text-amber-800 border border-amber-200 font-extrabold flex items-center gap-1">
+                                                         <Sparkles className="w-3 h-3 text-amber-600" /> Fila Prioritária (Especial)
+                                                     </span>
+                                                 ) : !canSeeSlots || isWaitlistOnly ? (
+                                                     <span className="inline-block text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded mt-0.5 bg-amber-50 text-amber-700 border border-amber-100 font-extrabold animate-pulse">
+                                                         Fila de Espera
+                                                     </span>
+                                                 ) : selectedProcedure && canSeeSlots && getAvailableSlots(selectedProcedure, bookingPriority, bookingDate) > 0 ? (
                                                     <span className="inline-block text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded mt-0.5 bg-emerald-50 text-emerald-700 border border-emerald-100 font-extrabold">
                                                         Agendado
                                                     </span>

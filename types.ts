@@ -618,7 +618,9 @@ export interface ConsultaAgendamento {
   appointment_time?: string;
   solicitation_date?: string;
   quantity: number;
-  priority: 'Normal' | 'Urgência';
+  priority: 'Normal' | 'Urgência' | 'Especial';
+  queue_position?: number;
+  special_sequence?: number;
   status: 'Solicitado' | 'Agendado' | 'Realizado' | 'Cancelado' | 'Não Realizado' | 'Fila de espera' | 'Aguardando Data' | 'Retorno';
   created_by: string;
   created_at?: string;

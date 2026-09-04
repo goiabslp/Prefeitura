@@ -1,13 +1,29 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { User, UserRole, Signature, AppPermission, Job, Sector, Person } from '../types';
 import {
   Plus, Search, Edit2, Trash2, ShieldCheck, Users, Save, X, Key,
   PenTool, LayoutGrid, User as UserIcon, CheckCircle2, Gavel, ShoppingCart, Briefcase, Network,
-  Eye, EyeOff, RotateCcw, AlertTriangle, Clock, Lock, Copy, Check, Info, Trash, ToggleRight, ArrowLeft, RefreshCw, Megaphone, FlaskConical, Calendar
+  Eye, EyeOff, RotateCcw, AlertTriangle, Clock, Lock, Copy, Check, Info, Trash, ToggleRight, ArrowLeft, RefreshCw, Megaphone, FlaskConical, Calendar,
+  ChevronDown, ChevronUp, CheckSquare, Square, Filter
 } from 'lucide-react';
 import { googleCalendarService } from '../services/googleCalendarService';
+
+export type UserTab = 'dados' | 'modulos' | 'assinaturas';
+
+const TAB_SLUGS: Record<UserTab, string> = {
+  dados: 'Dados',
+  modulos: 'Modulos',
+  assinaturas: 'Assinaturas'
+};
+
+const SLUG_TO_TAB: Record<string, UserTab> = {
+  'dados': 'dados',
+  'modulos': 'modulos',
+  'módulos': 'modulos',
+  'assinaturas': 'assinaturas'
+};
 
 const generateStrongPassword = () => {
   const lower = "abcdefghijkmnopqrstuvwxyz";
@@ -83,10 +99,18 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
   onBack
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isEditingPage, setIsEditingPage] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  // Controle de Abas na Página do Usuário (com ROTA URL individual)
+  const [activeUserTab, setActiveUserTab] = useState<UserTab>('dados');
+
+  // Estado do Componente Select de Assinaturas
+  const [isSignatureSelectOpen, setIsSignatureSelectOpen] = useState(false);
+  const [signatureSearch, setSignatureSearch] = useState('');
+  const signatureSelectRef = useRef<HTMLDivElement>(null);
 
   // Estado para Diálogos Customizados (Substituindo Confirm/Alert)
   const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean, title: string, message: string, onConfirm: () => void, type: 'danger' | 'warning' | 'info' }>({
@@ -114,6 +138,21 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
     permissions: ['parent_criar_oficio', 'parent_rh']
   });
 
+  // Fechar dropdown de assinaturas ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (signatureSelectRef.current && !signatureSelectRef.current.contains(event.target as Node)) {
+        setIsSignatureSelectOpen(false);
+      }
+    };
+    if (isSignatureSelectOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isSignatureSelectOpen]);
+
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ show: true, message, type });
     setTimeout(() => setToast({ ...toast, show: false }), 3000);
@@ -138,45 +177,148 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
     ]
     : finalUserList;
 
-  const handleOpenModal = (user?: User) => {
+  // Alternar abas com ROTA URL individual (/Admin/Usuarios/Editar/:id/:Aba ou /Admin/Usuarios/Novo/:Aba)
+  const handleChangeTab = (tab: UserTab, updateUrl = true) => {
+    setActiveUserTab(tab);
+    if (updateUrl) {
+      const tabSlug = TAB_SLUGS[tab];
+      let targetUrl = '';
+      if (editingUser) {
+        targetUrl = `/Admin/Usuarios/Editar/${editingUser.id}/${tabSlug}`;
+      } else {
+        targetUrl = `/Admin/Usuarios/Novo/${tabSlug}`;
+      }
+      if (window.location.pathname !== targetUrl) {
+        window.history.pushState({ userId: editingUser?.id, tab }, '', targetUrl);
+      }
+    }
+  };
+
+  // Abrir página de edição com URL individual (/Admin/Usuarios/Editar/:id/:Aba)
+  const handleOpenEditUser = (user: User, updateUrl = true, initialTab: UserTab = 'dados') => {
     setShowPassword(false);
     setCopied(false);
-    if (user) {
-      setEditingUser(user);
-      // Garantindo que agendamento de veículo esteja sempre presente no carregamento
-      const basePerms = user.permissions || [];
-      const perms = basePerms;
-      const googleStatus = googleCalendarService.getStoredStatus(user);
+    setEditingUser(user);
+    setActiveUserTab(initialTab);
+    const basePerms = user.permissions || [];
+    const googleStatus = googleCalendarService.getStoredStatus(user);
 
-      setFormData({
-        ...user,
-        google_connected: googleStatus.isConnected,
-        google_email: googleStatus.googleEmail || user.google_email,
-        google_connected_at: googleStatus.connectedAt || user.google_connected_at,
-        last_google_sync_at: googleStatus.lastSyncAt || user.last_google_sync_at,
-        allowedSignatureIds: user.allowedSignatureIds || [],
-        permissions: perms,
-        password: '' // Clear password to avoid validation error on existing users
-      });
-    } else {
-      setEditingUser(null);
-      setFormData({
-        name: '',
-        username: '',
-        password: generateStrongPassword(), // Auto-generate for new user
-        tempPassword: '',
-        tempPasswordExpiresAt: undefined,
-        role: 'collaborator',
-        sector: '',
-        jobTitle: '',
-        allowedSignatureIds: [],
-        email: '',
-        whatsapp: '+55',
-        permissions: ['parent_criar_oficio', 'parent_rh']
-      });
+    setFormData({
+      ...user,
+      google_connected: googleStatus.isConnected,
+      google_email: googleStatus.googleEmail || user.google_email,
+      google_connected_at: googleStatus.connectedAt || user.google_connected_at,
+      last_google_sync_at: googleStatus.lastSyncAt || user.last_google_sync_at,
+      allowedSignatureIds: user.allowedSignatureIds || [],
+      permissions: basePerms,
+      password: '' // Limpa campo de senha ao editar usuário existente
+    });
+    setIsEditingPage(true);
+
+    if (updateUrl) {
+      const tabSlug = TAB_SLUGS[initialTab];
+      const url = `/Admin/Usuarios/Editar/${user.id}/${tabSlug}`;
+      if (window.location.pathname !== url) {
+        window.history.pushState({ userId: user.id, tab: initialTab }, '', url);
+      }
     }
-    setIsModalOpen(true);
   };
+
+  // Abrir página de cadastro de novo usuário com URL individual (/Admin/Usuarios/Novo/:Aba)
+  const handleOpenNewUser = (updateUrl = true, initialTab: UserTab = 'dados') => {
+    setShowPassword(false);
+    setCopied(false);
+    setEditingUser(null);
+    setActiveUserTab(initialTab);
+    setFormData({
+      name: '',
+      username: '',
+      password: generateStrongPassword(),
+      tempPassword: '',
+      tempPasswordExpiresAt: undefined,
+      role: 'collaborator',
+      sector: '',
+      jobTitle: '',
+      allowedSignatureIds: [],
+      email: '',
+      whatsapp: '+55',
+      permissions: ['parent_criar_oficio', 'parent_rh']
+    });
+    setIsEditingPage(true);
+
+    if (updateUrl) {
+      const tabSlug = TAB_SLUGS[initialTab];
+      const url = `/Admin/Usuarios/Novo/${tabSlug}`;
+      if (window.location.pathname !== url) {
+        window.history.pushState({ tab: initialTab }, '', url);
+      }
+    }
+  };
+
+  // Retornar para a lista de usuários com URL /Admin/Usuarios
+  const handleBackToList = () => {
+    setIsEditingPage(false);
+    setEditingUser(null);
+    if (window.location.pathname !== '/Admin/Usuarios') {
+      window.history.pushState({}, '', '/Admin/Usuarios');
+    }
+  };
+
+  // Sincronização da URL individual do usuário no carregamento e em navegações (popstate)
+  useEffect(() => {
+    const syncFromUrl = () => {
+      let rawPath = window.location.pathname;
+      try { rawPath = decodeURIComponent(rawPath); } catch (e) {}
+      const path = rawPath.replace(/\/$/, '') || '/';
+      const searchParams = new URLSearchParams(window.location.search);
+      const queryId = searchParams.get('id');
+
+      // Detecta se a rota atual possui segmento de aba
+      // Ex: /Admin/Usuarios/Editar/:id/Modulos ou /Admin/Usuarios/Novo/Assinaturas
+      let detectedTab: UserTab = 'dados';
+      const segments = path.split('/').filter(Boolean);
+      const lastSegment = segments[segments.length - 1]?.toLowerCase();
+      if (lastSegment && SLUG_TO_TAB[lastSegment]) {
+        detectedTab = SLUG_TO_TAB[lastSegment];
+      }
+
+      // Detecta /Admin/Usuarios/Novo ou /Admin/Usuarios/Novo/:tab
+      if (path.toLowerCase().includes('/admin/usuarios/novo') || queryId === 'novo') {
+        handleOpenNewUser(false, detectedTab);
+        return;
+      }
+
+      // Detecta /Admin/Usuarios/Editar/:id ou /Admin/Usuarios/Editar/:id/:tab ou /Admin/Usuarios/:id
+      const editMatch = path.match(/\/admin\/usuarios\/editar\/([^/]+)(?:\/([^/]+))?/i) || path.match(/\/admin\/usuarios\/([^/]+)(?:\/([^/]+))?/i);
+      if (editMatch) {
+        const firstSlug = editMatch[1];
+        if (firstSlug && firstSlug.toLowerCase() !== 'usuarios' && firstSlug.toLowerCase() !== 'novo') {
+          const targetId = queryId || firstSlug;
+          const subSegment = editMatch[2]?.toLowerCase();
+          if (subSegment && SLUG_TO_TAB[subSegment]) {
+            detectedTab = SLUG_TO_TAB[subSegment];
+          }
+          if (targetId && users.length > 0) {
+            const found = users.find(u => u.id === targetId || u.username.toLowerCase() === targetId.toLowerCase());
+            if (found) {
+              handleOpenEditUser(found, false, detectedTab);
+              return;
+            }
+          }
+        }
+      }
+
+      // Se for a rota de listagem (/Admin/Usuarios)
+      if (path.toLowerCase() === '/admin/usuarios') {
+        setIsEditingPage(false);
+        setEditingUser(null);
+      }
+    };
+
+    syncFromUrl();
+    window.addEventListener('popstate', syncFromUrl);
+    return () => window.removeEventListener('popstate', syncFromUrl);
+  }, [users]);
 
   const handleRoleChange = (newRole: UserRole) => {
     if (!isAdmin) return;
@@ -206,6 +348,22 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
         return { ...prev, allowedSignatureIds: [...currentIds, sigId] };
       }
     });
+  };
+
+  const handleSelectAllSignatures = () => {
+    if (!isAdmin) return;
+    setFormData(prev => ({
+      ...prev,
+      allowedSignatureIds: availableSignatures.map(s => s.id)
+    }));
+  };
+
+  const handleClearAllSignatures = () => {
+    if (!isAdmin) return;
+    setFormData(prev => ({
+      ...prev,
+      allowedSignatureIds: []
+    }));
   };
 
   const toggleAppPermission = (perm: AppPermission) => {
@@ -404,7 +562,7 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
       onAddUser(userData);
       showToast("Novo usuário cadastrado!");
     }
-    setIsModalOpen(false);
+    handleBackToList();
   };
 
   const isEditingSelf = editingUser?.id === currentUser.id;
@@ -413,10 +571,13 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
   const labelClass = "block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5 ml-1";
 
 
+
+
   return (
     <div className="flex-1 h-full bg-slate-100 p-6 overflow-auto custom-scrollbar">
-      <div className="w-full space-y-6">
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+      {!isEditingPage ? (
+        <div className="w-full space-y-6 animate-fade-in">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div>
             <div className="flex items-center gap-3">
               {onBack && (
@@ -434,8 +595,8 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
           </div>
           {isAdmin && (
             <button
-              onClick={() => handleOpenModal()}
-              className="px-5 py-3 bg-slate-900 hover:bg-indigo-600 text-white font-bold rounded-xl shadow-lg hover:shadow-indigo-500/30 transition-all flex items-center gap-2"
+              onClick={() => handleOpenNewUser()}
+              className="px-5 py-3 bg-slate-900 hover:bg-indigo-600 text-white font-bold rounded-xl shadow-lg hover:shadow-indigo-500/30 transition-all flex items-center gap-2 cursor-pointer"
             >
               <Plus className="w-5 h-5" />
               Novo Usuário
@@ -478,33 +639,24 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                     <div className={`relative w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-black shadow-inner overflow-hidden shrink-0 group-hover:scale-105 transition-transform duration-300
                       ${user.role === 'admin' ? 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white' :
                         user.role === 'compras' ? 'bg-gradient-to-br from-emerald-500 to-teal-500 text-white' :
-                        user.role === 'licitacao' ? 'bg-gradient-to-br from-blue-500 to-cyan-500 text-white' :
-                        user.role === 'marketing' ? 'bg-gradient-to-br from-fuchsia-500 to-pink-500 text-white' :
-                        'bg-gradient-to-br from-slate-200 to-slate-300 text-slate-500'
+                          user.role === 'licitacao' ? 'bg-gradient-to-br from-blue-500 to-cyan-600 text-white' :
+                            user.role === 'marketing' ? 'bg-gradient-to-br from-fuchsia-500 to-pink-600 text-white' :
+                              'bg-gradient-to-br from-slate-700 to-slate-800 text-white'
                       }`}>
                       {user.avatar ? (
-                        <img src={user.avatar} alt={`Avatar de ${user.name}`} className="w-full h-full object-cover" />
+                        <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
                       ) : (
-                        user.name.charAt(0)
+                        user.name.charAt(0).toUpperCase()
                       )}
-
-                      {/* Status Dot */}
-                      <div className={`absolute bottom-1 right-1 w-3.5 h-3.5 border-[3px] border-white rounded-full shadow-sm ${user.status === 'blocked' ? 'bg-rose-500' : 'bg-green-400'}`}></div>
                     </div>
 
-                    <div className="flex-1 min-w-0">
+                    <div>
                       <div className="flex items-center gap-2 mb-1">
-                        <h3 className="text-xl font-bold text-slate-800 truncate leading-tight group-hover:text-indigo-900 transition-colors">
-                          {user.name}
-                        </h3>
+                        <h3 className="font-bold text-lg text-slate-800 tracking-tight">{user.name}</h3>
+                        <span className="text-xs font-semibold text-slate-400">(@{user.username})</span>
                         {isCurrentUser && (
                           <span className="px-2 py-0.5 bg-indigo-600 text-white text-[10px] font-black uppercase tracking-wider rounded-lg shadow-lg shadow-indigo-500/30 whitespace-nowrap">
                             Você
-                          </span>
-                        )}
-                        {user.status === 'blocked' && (
-                          <span className="px-2 py-0.5 bg-rose-600 text-white text-[10px] font-black uppercase tracking-wider rounded-lg shadow-lg shadow-rose-500/30 whitespace-nowrap">
-                            Bloqueado
                           </span>
                         )}
                       </div>
@@ -542,8 +694,8 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                   {/* Actions - Modernized */}
                   <div className="flex items-center gap-3 w-full md:w-auto justify-end border-t md:border-t-0 border-slate-100 pt-4 md:pt-0">
                     <button
-                      onClick={() => handleOpenModal(user)}
-                      className="group/btn relative px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-500 hover:text-indigo-600 hover:border-indigo-200 hover:shadow-lg hover:shadow-indigo-500/10 hover:-translate-y-0.5 transition-all duration-300 flex items-center gap-2 font-bold text-xs uppercase tracking-wide"
+                      onClick={() => handleOpenEditUser(user)}
+                      className="group/btn relative px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-500 hover:text-indigo-600 hover:border-indigo-200 hover:shadow-lg hover:shadow-indigo-500/10 hover:-translate-y-0.5 transition-all duration-300 flex items-center gap-2 font-bold text-xs uppercase tracking-wide cursor-pointer"
                     >
                       <Edit2 className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
                       <span className="hidden sm:inline">Editar</span>
@@ -575,37 +727,132 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
             );
           })}
         </div>
-
-        {/* MODAL DE EDIÇÃO/CADASTRO */}
-        {isModalOpen && createPortal(
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-fade-in">
-            <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[95vh] border border-white/20">
-              <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                <div className="flex items-center gap-4">
-                  <h3 className="text-xl font-bold text-slate-800">{isAdmin ? (editingUser ? 'Editar Usuário' : 'Novo Usuário') : 'Meu Perfil'}</h3>
+      </div>
+    ) : (
+        /* PÁGINA COMPLETA DE EDIÇÃO/CADASTRO DO USUÁRIO */
+        <div className="w-full max-w-6xl mx-auto space-y-6 animate-fade-in pb-12">
+          {/* Header Superior da Página de Edição */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm">
+            <div className="flex items-center gap-4">
+              <button
+                type="button"
+                onClick={handleBackToList}
+                className="p-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl transition-all flex items-center justify-center cursor-pointer hover:-translate-x-0.5 shadow-sm"
+                title="Voltar para Lista de Usuários"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 px-3 py-1 rounded-lg border border-indigo-100 flex items-center gap-1.5 shadow-sm">
+                    <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>
+                    {editingUser ? `/Admin/Usuarios/Editar/${editingUser.id}/${TAB_SLUGS[activeUserTab]}` : `/Admin/Usuarios/Novo/${TAB_SLUGS[activeUserTab]}`}
+                  </span>
                   {editingUser && isAdmin && currentUser.id !== editingUser.id && (
                     <button
                       type="button"
                       onClick={() => setFormData({ ...formData, status: formData.status === 'blocked' ? 'active' : 'blocked' })}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all shadow-sm ${
+                      className={`px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wider transition-all shadow-sm cursor-pointer ${
                         formData.status === 'blocked'
                           ? 'bg-rose-100 text-rose-700 hover:bg-rose-200 hover:shadow-md'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:shadow-md'
+                          : 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
                       }`}
                     >
                       {formData.status === 'blocked' ? 'Desbloquear Usuário' : 'Bloquear Usuário'}
                     </button>
                   )}
                 </div>
-                <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-slate-200 rounded-lg text-slate-500"><X className="w-5 h-5" /></button>
+                <h2 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight mt-1.5">
+                  {isAdmin ? (editingUser ? `Editar: ${editingUser.name}` : 'Novo Usuário') : 'Meu Perfil'}
+                </h2>
               </div>
+            </div>
 
-              <div className="p-8 space-y-8 overflow-y-auto custom-scrollbar">
-                
-                {/* Seleção de Avatar */}
-                <div className="space-y-4">
-                  <label className={labelClass}>Avatar (Monarquia/Medieval 3D)</label>
-                  <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar snap-x items-center">
+            <div className="flex items-center gap-3 self-end md:self-auto">
+              <button
+                type="button"
+                onClick={handleBackToList}
+                className="px-5 py-2.5 font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer text-sm"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleSave}
+                className="px-6 py-2.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-indigo-600 shadow-lg hover:shadow-indigo-500/20 flex items-center gap-2 transition-all cursor-pointer text-sm"
+              >
+                <Save className="w-4 h-4" />
+                {isAdmin ? 'Salvar Usuário' : 'Salvar Alterações'}
+              </button>
+            </div>
+          </div>
+
+          {/* Barra de Navegação por Abas (Nova ROTA URL para cada aba) */}
+          <div className="flex items-center gap-2 p-1.5 bg-slate-200/60 backdrop-blur-md rounded-2xl border border-slate-300/60 shadow-inner max-w-full overflow-x-auto custom-scrollbar">
+            <button
+              type="button"
+              onClick={() => handleChangeTab('dados')}
+              className={`flex items-center gap-2.5 px-6 py-3 rounded-xl font-bold text-sm transition-all duration-200 shrink-0 cursor-pointer ${
+                activeUserTab === 'dados'
+                  ? 'bg-white text-indigo-700 shadow-md shadow-slate-200 ring-1 ring-slate-200'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+              }`}
+            >
+              <UserIcon className={`w-4 h-4 ${activeUserTab === 'dados' ? 'text-indigo-600' : 'text-slate-400'}`} />
+              <span>Dados</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleChangeTab('modulos')}
+              className={`flex items-center gap-2.5 px-6 py-3 rounded-xl font-bold text-sm transition-all duration-200 shrink-0 cursor-pointer ${
+                activeUserTab === 'modulos'
+                  ? 'bg-white text-indigo-700 shadow-md shadow-slate-200 ring-1 ring-slate-200'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+              }`}
+            >
+              <LayoutGrid className={`w-4 h-4 ${activeUserTab === 'modulos' ? 'text-indigo-600' : 'text-slate-400'}`} />
+              <span>Módulos Autorizados</span>
+              <span className={`px-2 py-0.5 rounded-full text-xs font-black transition-colors ${
+                activeUserTab === 'modulos' 
+                  ? 'bg-indigo-100 text-indigo-700' 
+                  : 'bg-slate-300/80 text-slate-700'
+              }`}>
+                {formData.permissions?.length || 0}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleChangeTab('assinaturas')}
+              className={`flex items-center gap-2.5 px-6 py-3 rounded-xl font-bold text-sm transition-all duration-200 shrink-0 cursor-pointer ${
+                activeUserTab === 'assinaturas'
+                  ? 'bg-white text-indigo-700 shadow-md shadow-slate-200 ring-1 ring-slate-200'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+              }`}
+            >
+              <PenTool className={`w-4 h-4 ${activeUserTab === 'assinaturas' ? 'text-indigo-600' : 'text-slate-400'}`} />
+              <span>Assinaturas</span>
+              <span className={`px-2 py-0.5 rounded-full text-xs font-black transition-colors ${
+                activeUserTab === 'assinaturas' 
+                  ? 'bg-indigo-100 text-indigo-700' 
+                  : 'bg-slate-300/80 text-slate-700'
+              }`}>
+                {(formData.allowedSignatureIds || []).length}
+              </span>
+            </button>
+          </div>
+
+          {/* ABA: DADOS */}
+          {activeUserTab === 'dados' && (
+            <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm p-5 md:p-7 space-y-6 animate-fade-in">
+                {/* Seleção de Avatar Compacta */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className={labelClass}>Avatar (Monarquia/Medieval 3D)</label>
+                    <span className="text-[11px] text-slate-400 font-medium">Role para o lado para ver todos</span>
+                  </div>
+                  <div className="flex gap-2.5 overflow-x-auto pb-2 custom-scrollbar snap-x items-center">
                     {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14].map(num => {
                       const avatarUrl = `/avatars/avatar${num}.png`;
                       const isSelected = formData.avatar === avatarUrl;
@@ -614,16 +861,16 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                           key={num}
                           type="button"
                           onClick={() => setFormData({ ...formData, avatar: avatarUrl })}
-                          className={`relative shrink-0 w-24 h-24 rounded-[2rem] border-4 transition-all duration-300 snap-center ${
+                          className={`relative shrink-0 w-14 h-14 rounded-2xl border-2 transition-all duration-200 snap-center cursor-pointer ${
                             isSelected 
-                              ? 'border-pink-600 scale-105 shadow-xl shadow-pink-500/30' 
-                              : 'border-slate-100 hover:border-slate-300 hover:scale-105 opacity-80 hover:opacity-100'
+                              ? 'border-pink-600 scale-105 shadow-md shadow-pink-500/20' 
+                              : 'border-slate-200 hover:border-slate-300 hover:scale-105 opacity-80 hover:opacity-100'
                           }`}
                         >
-                          <img src={avatarUrl} alt={`Avatar ${num}`} className="w-full h-full object-cover rounded-[1.8rem] bg-slate-900" />
+                          <img src={avatarUrl} alt={`Avatar ${num}`} className="w-full h-full object-cover rounded-[0.9rem] bg-slate-900" />
                           {isSelected && (
-                            <div className="absolute -bottom-2 -right-2 bg-pink-600 text-white rounded-full p-1.5 border-4 border-white shadow-md">
-                              <CheckCircle2 className="w-4 h-4" />
+                            <div className="absolute -bottom-1 -right-1 bg-pink-600 text-white rounded-full p-0.5 border-2 border-white shadow-xs">
+                              <CheckCircle2 className="w-3 h-3" />
                             </div>
                           )}
                         </button>
@@ -632,32 +879,34 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                     <button
                       type="button"
                       onClick={() => setFormData({ ...formData, avatar: '' })}
-                      className={`relative shrink-0 w-24 h-24 rounded-[2rem] border-4 transition-all duration-300 snap-center flex flex-col items-center justify-center gap-1 ${
+                      className={`relative shrink-0 w-14 h-14 rounded-2xl border-2 transition-all duration-200 snap-center flex flex-col items-center justify-center gap-0.5 cursor-pointer ${
                         !formData.avatar || formData.avatar === ''
-                          ? 'border-slate-500 scale-105 shadow-xl shadow-slate-500/20 bg-slate-100' 
-                          : 'border-slate-100 bg-slate-50 hover:border-slate-300 hover:scale-105 opacity-80 hover:opacity-100 text-slate-400 hover:text-slate-600'
+                          ? 'border-slate-500 scale-105 shadow-md shadow-slate-500/10 bg-slate-100 text-slate-700' 
+                          : 'border-slate-200 bg-slate-50 hover:border-slate-300 hover:scale-105 opacity-80 hover:opacity-100 text-slate-400 hover:text-slate-600'
                       }`}
+                      title="Remover Avatar"
                     >
-                      <UserIcon className="w-6 h-6" />
-                      <span className="text-[10px] font-black uppercase">Sem Avatar</span>
+                      <UserIcon className="w-4 h-4" />
+                      <span className="text-[8px] font-black uppercase tracking-tight">Sem Foto</span>
                       {(!formData.avatar || formData.avatar === '') && (
-                        <div className="absolute -bottom-2 -right-2 bg-slate-500 text-white rounded-full p-1.5 border-4 border-white shadow-md">
-                          <CheckCircle2 className="w-4 h-4" />
+                        <div className="absolute -bottom-1 -right-1 bg-slate-600 text-white rounded-full p-0.5 border-2 border-white shadow-xs">
+                          <CheckCircle2 className="w-3 h-3" />
                         </div>
                       )}
                     </button>
                   </div>
                 </div>
 
-                <div className="space-y-4">
+                {/* Tipo de Perfil Compacto */}
+                <div className="space-y-2 pt-3 border-t border-slate-100">
                   <label className={labelClass}>Tipo de Perfil</label>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
                     {[
-                      { id: 'admin', label: 'Admin', desc: 'Acesso total.', icon: <ShieldCheck className="w-5 h-5" />, color: 'indigo' },
-                      { id: 'compras', label: 'Compras', desc: 'Módulos + Visão.', icon: <ShoppingCart className="w-5 h-5" />, color: 'emerald' },
-                      { id: 'licitacao', label: 'Licitação', desc: 'Setor de Licitação.', icon: <Gavel className="w-5 h-5" />, color: 'blue' },
-                      { id: 'marketing', label: 'Marketing', desc: 'Gestão de mídia.', icon: <Megaphone className="w-5 h-5" />, color: 'fuchsia' },
-                      { id: 'collaborator', label: 'Colaborador', desc: 'Operação básica.', icon: <UserIcon className="w-5 h-5" />, color: 'slate' }
+                      { id: 'admin', label: 'Admin', desc: 'Acesso total', icon: <ShieldCheck className="w-4 h-4" />, color: 'indigo' },
+                      { id: 'compras', label: 'Compras', desc: 'Módulos + Visão', icon: <ShoppingCart className="w-4 h-4" />, color: 'emerald' },
+                      { id: 'licitacao', label: 'Licitação', desc: 'Licitação', icon: <Gavel className="w-4 h-4" />, color: 'blue' },
+                      { id: 'marketing', label: 'Marketing', desc: 'Gestão de mídia', icon: <Megaphone className="w-4 h-4" />, color: 'fuchsia' },
+                      { id: 'collaborator', label: 'Colaborador', desc: 'Operação básica', icon: <UserIcon className="w-4 h-4" />, color: 'slate' }
                     ].map((role) => {
                       const isSelected = formData.role === role.id;
                       const canEditRole = isAdmin;
@@ -668,49 +917,56 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                           type="button"
                           disabled={!canEditRole}
                           onClick={() => handleRoleChange(role.id as UserRole)}
-                          className={`relative p-4 rounded-2xl border-2 text-left transition-all duration-300 group ${isSelected
-                            ? `bg-${role.color}-50 border-${role.color}-600 ring-4 ring-${role.color}-600/10`
-                            : `bg-white border-slate-100 hover:border-slate-300 ${!canEditRole ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`
+                          className={`relative px-3 py-2 rounded-xl border-2 text-left transition-all duration-200 flex items-center gap-2.5 ${isSelected
+                            ? `bg-${role.color}-50 border-${role.color}-600 ring-2 ring-${role.color}-600/10 shadow-xs`
+                            : `bg-white border-slate-200 hover:border-slate-300 ${!canEditRole ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`
                             }`}
                         >
-                          <div className="flex items-start justify-between">
-                            <div className={`p-2 rounded-xl transition-colors ${isSelected ? `bg-${role.color}-600 text-white` : `bg-slate-100 text-slate-400 group-hover:bg-emerald-100`
-                              }`}>
-                              {role.icon}
-                            </div>
-                            {isSelected && <CheckCircle2 className={`w-4 h-4 text-${role.color}-600 animate-fade-in`} />}
+                          <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
+                            isSelected ? `bg-${role.color}-600 text-white` : `bg-slate-100 text-slate-500`
+                          }`}>
+                            {role.icon}
                           </div>
-                          <div className="mt-3">
-                            <h4 className={`font-bold text-sm ${isSelected ? `text-${role.color}-900` : 'text-slate-800'}`}>{role.label}</h4>
-                            <p className="text-[10px] mt-0.5 leading-tight text-slate-500">{role.desc}</p>
+                          <div className="min-w-0 flex-1">
+                            <h4 className={`font-black text-xs truncate ${isSelected ? `text-${role.color}-950` : 'text-slate-800'}`}>
+                              {role.label}
+                            </h4>
+                            <p className="text-[9px] text-slate-400 font-medium truncate leading-none mt-0.5">
+                              {role.desc}
+                            </p>
                           </div>
+                          {isSelected && (
+                            <CheckCircle2 className={`w-3.5 h-3.5 text-${role.color}-600 shrink-0 ml-auto`} />
+                          )}
                         </button>
                       );
                     })}
                   </div>
                 </div>
 
-                {/* Duplicação: Tipo de Perfil Teste (Apenas para Usuários Administradores) */}
+                {/* Tipo de Perfil Teste Compacto (Apenas para Administradores) */}
                 {isAdmin && (
-                  <div className="space-y-4 pt-4 border-t border-slate-100">
+                  <div className="space-y-2 pt-3 border-t border-slate-100">
                     <div className="flex items-center justify-between">
-                      <label className={labelClass}>Tipo de Perfil Teste</label>
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                        <FlaskConical className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
-                        Apenas para Administradores
+                      <div className="flex items-center gap-2">
+                        <label className={labelClass}>Tipo de Perfil Teste</label>
+                        <span className="text-[10px] text-slate-400 font-medium hidden sm:inline">
+                          (Simular visualização de outro perfil)
+                        </span>
+                      </div>
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 shrink-0">
+                        <FlaskConical className="w-3 h-3 text-amber-500" />
+                        Apenas Administradores
                       </span>
                     </div>
-                    <p className="text-xs text-slate-500">
-                      Selecione um tipo de perfil para testar as permissões e visualizações do sistema como se fosse outro usuário.
-                    </p>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
                       {[
-                        { id: '', label: 'Sem Teste', desc: 'Usar perfil real.', icon: <RotateCcw className="w-5 h-5" />, color: 'slate' },
-                        { id: 'admin', label: 'Admin', desc: 'Testar como Admin.', icon: <ShieldCheck className="w-5 h-5" />, color: 'indigo' },
-                        { id: 'compras', label: 'Compras', desc: 'Testar Compras.', icon: <ShoppingCart className="w-5 h-5" />, color: 'emerald' },
-                        { id: 'licitacao', label: 'Licitação', desc: 'Testar Licitação.', icon: <Gavel className="w-5 h-5" />, color: 'blue' },
-                        { id: 'marketing', label: 'Marketing', desc: 'Testar Marketing.', icon: <Megaphone className="w-5 h-5" />, color: 'fuchsia' },
-                        { id: 'collaborator', label: 'Colaborador', desc: 'Testar Colaborador.', icon: <UserIcon className="w-5 h-5" />, color: 'slate' }
+                        { id: '', label: 'Sem Teste', desc: 'Perfil real', icon: <RotateCcw className="w-4 h-4" />, color: 'slate' },
+                        { id: 'admin', label: 'Admin', desc: 'Como Admin', icon: <ShieldCheck className="w-4 h-4" />, color: 'indigo' },
+                        { id: 'compras', label: 'Compras', desc: 'Como Compras', icon: <ShoppingCart className="w-4 h-4" />, color: 'emerald' },
+                        { id: 'licitacao', label: 'Licitação', desc: 'Como Licitação', icon: <Gavel className="w-4 h-4" />, color: 'blue' },
+                        { id: 'marketing', label: 'Marketing', desc: 'Como Marketing', icon: <Megaphone className="w-4 h-4" />, color: 'fuchsia' },
+                        { id: 'collaborator', label: 'Colaborador', desc: 'Como Colaborador', icon: <UserIcon className="w-4 h-4" />, color: 'slate' }
                       ].map((tRole) => {
                         const isSelected = (!formData.testRole && tRole.id === '') || formData.testRole === tRole.id;
 
@@ -719,22 +975,27 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                             key={tRole.id || 'none'}
                             type="button"
                             onClick={() => setFormData({ ...formData, testRole: (tRole.id as UserRole) || null })}
-                            className={`relative p-3.5 rounded-2xl border-2 text-left transition-all duration-300 group cursor-pointer ${isSelected
-                              ? `bg-${tRole.color}-50 border-${tRole.color}-600 ring-4 ring-${tRole.color}-600/10 shadow-sm`
-                              : 'bg-white border-slate-100 hover:border-slate-300'
+                            className={`relative px-2.5 py-2 rounded-xl border-2 text-left transition-all duration-200 flex items-center gap-2 cursor-pointer ${isSelected
+                              ? `bg-${tRole.color}-50 border-${tRole.color}-600 ring-2 ring-${tRole.color}-600/10 shadow-xs`
+                              : 'bg-white border-slate-200 hover:border-slate-300'
                               }`}
                           >
-                            <div className="flex items-start justify-between">
-                              <div className={`p-2 rounded-xl transition-colors ${isSelected ? `bg-${tRole.color}-600 text-white` : 'bg-slate-100 text-slate-400 group-hover:bg-amber-100 group-hover:text-amber-600'
-                                }`}>
-                                {tRole.icon}
-                              </div>
-                              {isSelected && <CheckCircle2 className={`w-4 h-4 text-${tRole.color}-600 animate-fade-in`} />}
+                            <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
+                              isSelected ? `bg-${tRole.color}-600 text-white` : 'bg-slate-100 text-slate-500'
+                            }`}>
+                              {tRole.icon}
                             </div>
-                            <div className="mt-2.5">
-                              <h4 className={`font-bold text-xs ${isSelected ? `text-${tRole.color}-900` : 'text-slate-800'}`}>{tRole.label}</h4>
-                              <p className="text-[10px] mt-0.5 leading-tight text-slate-500">{tRole.desc}</p>
+                            <div className="min-w-0 flex-1">
+                              <h4 className={`font-black text-xs truncate ${isSelected ? `text-${tRole.color}-950` : 'text-slate-800'}`}>
+                                {tRole.label}
+                              </h4>
+                              <p className="text-[9px] text-slate-400 font-medium truncate leading-none mt-0.5">
+                                {tRole.desc}
+                              </p>
                             </div>
+                            {isSelected && (
+                              <CheckCircle2 className={`w-3.5 h-3.5 text-${tRole.color}-600 shrink-0 ml-auto`} />
+                            )}
                           </button>
                         );
                       })}
@@ -1200,9 +1461,31 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                     )}
                   </div>
                 </div>
+              </div>
+            )}
 
-                <div className="border-t border-slate-100 pt-8">
-                  <label className={`${labelClass} mb-6 flex items-center gap-2 text-indigo-600 text-sm`}><LayoutGrid className="w-5 h-5" /> Módulos Autorizados</label>
+          {/* ABA: MÓDULOS AUTORIZADOS */}
+          {activeUserTab === 'modulos' && (
+            <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm p-6 md:p-10 space-y-8 animate-fade-in">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-100">
+                <div>
+                  <h3 className="text-lg font-black text-slate-900 flex items-center gap-2.5">
+                    <div className="p-2 rounded-xl bg-indigo-50 text-indigo-600">
+                      <LayoutGrid className="w-5 h-5" />
+                    </div>
+                    Módulos Autorizados
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Habilite ou restrinja o acesso aos módulos e fluxos operacionais do sistema para este usuário.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="px-3 py-1.5 rounded-xl text-xs font-black bg-indigo-50 text-indigo-700 border border-indigo-100 flex items-center gap-2 shadow-sm">
+                    <CheckCircle2 className="w-4 h-4 text-indigo-600" />
+                    {formData.permissions?.length || 0} permissão(ões) ativa(s)
+                  </span>
+                </div>
+              </div>
 
                   <div className="space-y-6">
                     {[
@@ -1371,36 +1654,329 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                       </div>
                     ))}
                   </div>
+              </div>
+            )}
+
+          {/* ABA: ASSINATURAS (EM FORMATO DE SELECT) */}
+          {activeUserTab === 'assinaturas' && (
+            <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm p-6 md:p-10 space-y-8 animate-fade-in">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-100">
+                <div>
+                  <h3 className="text-lg font-black text-slate-900 flex items-center gap-2.5">
+                    <div className="p-2 rounded-xl bg-indigo-50 text-indigo-600">
+                      <PenTool className="w-5 h-5" />
+                    </div>
+                    Assinaturas Permitidas
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Selecione no formato de Select quais assinaturas este usuário tem permissão para assinar documentos e ofícios.
+                  </p>
                 </div>
 
-
-                <div className="border-t border-slate-100 pt-8">
-                  <label className={`${labelClass} mb-4 flex items-center gap-2 text-indigo-600`}><PenTool className="w-4 h-4" /> Assinaturas Permitidas</label>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {availableSignatures.map(sig => {
-                      const isChecked = formData.allowedSignatureIds?.includes(sig.id);
-                      return (
-                        <label key={sig.id} className={`flex items-start gap-3 p-3.5 rounded-xl border transition-all ${!isAdmin ? 'opacity-40 cursor-not-allowed bg-slate-50' : 'cursor-pointer'} ${isChecked ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-slate-200 hover:border-indigo-300'}`}>
-                          <input type="checkbox" checked={isChecked} disabled={!isAdmin} onChange={() => toggleSignaturePermission(sig.id)} className="mt-1 w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500" />
-                          <div>
-                            <div className="font-bold text-xs text-slate-800">{sig.name}</div>
-                            <div className="text-[10px] text-slate-500 uppercase font-medium">{sig.role}</div>
-                          </div>
-                        </label>
-                      );
-                    })}
-                  </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="px-3 py-1.5 rounded-xl text-xs font-black bg-indigo-50 text-indigo-700 border border-indigo-100 flex items-center gap-2 shadow-sm">
+                    <CheckCircle2 className="w-4 h-4 text-indigo-600" />
+                    {(formData.allowedSignatureIds || []).length} de {availableSignatures.length} autorizada(s)
+                  </span>
                 </div>
               </div>
 
-              <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-end gap-3 shrink-0">
-                <button onClick={() => setIsModalOpen(false)} className="px-6 py-3 font-bold text-slate-600 hover:bg-slate-200 rounded-xl transition-colors">Cancelar</button>
-                <button onClick={handleSave} className="px-8 py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-indigo-600 shadow-xl flex items-center gap-2 transition-all"><Save className="w-5 h-5" /> {isAdmin ? 'Salvar Usuário' : 'Salvar Alterações'}</button>
+              {/* Seletor em Formato de Select (Multi-Select Moderno e Dinâmico) */}
+              <div className="space-y-4 max-w-3xl">
+                <label className={labelClass}>
+                  Assinaturas Permitidas (Formato de Select)
+                </label>
+
+                {/* Container com ref para clique fora fechar dropdown */}
+                <div className="relative" ref={signatureSelectRef}>
+                  {/* Gatilho do Select */}
+                  <button
+                    type="button"
+                    disabled={!isAdmin}
+                    onClick={() => setIsSignatureSelectOpen(!isSignatureSelectOpen)}
+                    className={`w-full min-h-[54px] p-3.5 rounded-2xl border text-left transition-all duration-200 flex items-center justify-between gap-3 cursor-pointer ${
+                      !isAdmin ? 'opacity-60 cursor-not-allowed bg-slate-100' : 'bg-slate-50 hover:bg-white focus:bg-white'
+                    } ${
+                      isSignatureSelectOpen 
+                        ? 'border-indigo-500 ring-4 ring-indigo-500/10 shadow-md bg-white' 
+                        : 'border-slate-200 hover:border-slate-300 shadow-sm'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 flex-wrap flex-1 min-w-0">
+                      <div className="p-2 rounded-xl bg-indigo-100/70 text-indigo-600 shrink-0">
+                        <PenTool className="w-4 h-4" />
+                      </div>
+
+                      {(formData.allowedSignatureIds || []).length === 0 ? (
+                        <span className="text-sm text-slate-400 font-medium">
+                          Selecione as assinaturas autorizadas para este usuário...
+                        </span>
+                      ) : (
+                        <div className="flex items-center gap-2 flex-wrap min-w-0">
+                          <span className="px-2.5 py-1 rounded-lg text-xs font-black bg-indigo-600 text-white shadow-sm shrink-0">
+                            {(formData.allowedSignatureIds || []).length} {(formData.allowedSignatureIds || []).length === 1 ? 'assinatura selecionada' : 'assinaturas selecionadas'}
+                          </span>
+                          <div className="flex items-center gap-1.5 flex-wrap overflow-hidden text-xs text-slate-600 font-medium">
+                            {availableSignatures
+                              .filter(sig => formData.allowedSignatureIds?.includes(sig.id))
+                              .slice(0, 3)
+                              .map(sig => (
+                                <span key={sig.id} className="px-2 py-0.5 rounded-md bg-slate-200/80 text-slate-700 text-[11px] font-bold truncate max-w-[140px]">
+                                  {sig.name}
+                                </span>
+                              ))}
+                            {(formData.allowedSignatureIds || []).length > 3 && (
+                              <span className="text-[11px] font-bold text-slate-400">
+                                +{(formData.allowedSignatureIds || []).length - 3} mais
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0 text-slate-400">
+                      {isAdmin && (formData.allowedSignatureIds || []).length > 0 && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleClearAllSignatures();
+                          }}
+                          className="p-1 rounded-lg hover:bg-slate-200 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                          title="Limpar seleção"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
+                      <div className={`transition-transform duration-200 ${isSignatureSelectOpen ? 'rotate-180 text-indigo-600' : ''}`}>
+                        <ChevronDown className="w-5 h-5" />
+                      </div>
+                    </div>
+                  </button>
+
+                  {/* Dropdown Aberto */}
+                  {isSignatureSelectOpen && (
+                    <div className="absolute left-0 right-0 top-full mt-2 bg-white rounded-2xl shadow-2xl border border-slate-200 p-3 z-50 animate-slide-up space-y-3">
+                      {/* Campo de Busca Rápida */}
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={signatureSearch}
+                          onChange={(e) => setSignatureSearch(e.target.value)}
+                          placeholder="Buscar por nome, cargo ou setor..."
+                          className="w-full pl-9 pr-8 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-800 text-xs focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all"
+                          autoFocus
+                        />
+                        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                        {signatureSearch && (
+                          <button
+                            type="button"
+                            onClick={() => setSignatureSearch('')}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Ações Rápidas */}
+                      {isAdmin && (
+                        <div className="flex items-center justify-between px-1 text-[11px] font-bold text-slate-500 border-b border-slate-100 pb-2">
+                          <span>Opções de Assinatura</span>
+                          <div className="flex items-center gap-3">
+                            <button
+                              type="button"
+                              onClick={handleSelectAllSignatures}
+                              className="text-indigo-600 hover:text-indigo-800 transition-colors flex items-center gap-1 cursor-pointer"
+                            >
+                              <CheckSquare className="w-3.5 h-3.5" />
+                              Selecionar Todas
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleClearAllSignatures}
+                              className="text-slate-500 hover:text-rose-600 transition-colors flex items-center gap-1 cursor-pointer"
+                            >
+                              <Square className="w-3.5 h-3.5" />
+                              Limpar Seleção
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Lista de Opções */}
+                      <div className="max-h-64 overflow-y-auto custom-scrollbar space-y-1">
+                        {availableSignatures
+                          .filter(sig => {
+                            if (!signatureSearch.trim()) return true;
+                            const term = signatureSearch.toLowerCase();
+                            return (
+                              sig.name.toLowerCase().includes(term) ||
+                              (sig.role && sig.role.toLowerCase().includes(term)) ||
+                              (sig.sector && sig.sector.toLowerCase().includes(term))
+                            );
+                          })
+                          .map(sig => {
+                            const isChecked = formData.allowedSignatureIds?.includes(sig.id);
+                            return (
+                              <div
+                                key={sig.id}
+                                onClick={() => toggleSignaturePermission(sig.id)}
+                                className={`flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer select-none ${
+                                  isChecked
+                                    ? 'bg-indigo-50/80 border-indigo-200 text-indigo-900 shadow-sm'
+                                    : 'bg-white border-transparent hover:bg-slate-50 text-slate-700'
+                                }`}
+                              >
+                                <div className="flex items-center gap-3 min-w-0">
+                                  <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors shrink-0 ${
+                                    isChecked 
+                                      ? 'bg-indigo-600 border-indigo-600 text-white' 
+                                      : 'bg-white border-slate-300'
+                                  }`}>
+                                    {isChecked && <Check className="w-3.5 h-3.5" strokeWidth={3} />}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <div className="font-bold text-xs truncate">{sig.name}</div>
+                                    <div className="text-[10px] text-slate-500 truncate flex items-center gap-1.5 mt-0.5">
+                                      <span className="font-medium">{sig.role}</span>
+                                      {sig.sector && (
+                                        <>
+                                          <span className="text-slate-300">•</span>
+                                          <span>{sig.sector}</span>
+                                        </>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {isChecked && (
+                                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-indigo-600 bg-indigo-100/60 px-2 py-0.5 rounded-md shrink-0 ml-2">
+                                    Autorizada
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
+
+                        {availableSignatures.filter(sig => {
+                          if (!signatureSearch.trim()) return true;
+                          const term = signatureSearch.toLowerCase();
+                          return (
+                            sig.name.toLowerCase().includes(term) ||
+                            (sig.role && sig.role.toLowerCase().includes(term)) ||
+                            (sig.sector && sig.sector.toLowerCase().includes(term))
+                          );
+                        }).length === 0 && (
+                          <div className="p-6 text-center text-slate-400 text-xs italic">
+                            Nenhuma assinatura encontrada com esse termo.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Seção Visual: Cards das Assinaturas Autorizadas */}
+              <div className="space-y-4 pt-4 border-t border-slate-100">
+                <div className="flex items-center justify-between">
+                  <label className={labelClass}>
+                    Assinaturas Atualmente Autorizadas para este Usuário
+                  </label>
+                  <span className="text-xs font-bold text-slate-400">
+                    {(formData.allowedSignatureIds || []).length} selecionada(s)
+                  </span>
+                </div>
+
+                {(formData.allowedSignatureIds || []).length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {availableSignatures
+                      .filter(sig => formData.allowedSignatureIds?.includes(sig.id))
+                      .map(sig => (
+                        <div
+                          key={sig.id}
+                          className="bg-white p-4 rounded-2xl border border-indigo-100 shadow-sm hover:shadow-md transition-all flex items-start justify-between gap-3 group relative overflow-hidden"
+                        >
+                          <div className="absolute top-0 left-0 bottom-0 w-1 bg-indigo-500 rounded-l-full"></div>
+                          <div className="flex items-start gap-3 pl-1 min-w-0">
+                            <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-xs shrink-0 shadow-inner">
+                              <PenTool className="w-4 h-4" />
+                            </div>
+                            <div className="min-w-0">
+                              <h4 className="font-bold text-xs text-slate-800 truncate" title={sig.name}>
+                                {sig.name}
+                              </h4>
+                              <p className="text-[11px] text-slate-500 font-medium truncate mt-0.5" title={sig.role}>
+                                {sig.role}
+                              </p>
+                              {sig.sector && (
+                                <span className="inline-block text-[10px] text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md font-bold mt-1.5 truncate max-w-full">
+                                  {sig.sector}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => toggleSignaturePermission(sig.id)}
+                              className="p-1.5 rounded-lg text-slate-300 hover:text-rose-600 hover:bg-rose-50 transition-colors shrink-0 cursor-pointer"
+                              title="Remover autorização"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                  </div>
+                ) : (
+                  <div className="p-8 rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 text-center space-y-2">
+                    <div className="w-10 h-10 mx-auto rounded-full bg-slate-200/80 text-slate-400 flex items-center justify-center">
+                      <PenTool className="w-5 h-5" />
+                    </div>
+                    <p className="text-xs font-bold text-slate-600">
+                      Nenhuma assinatura autorizada para este usuário
+                    </p>
+                    <p className="text-[11px] text-slate-400 max-w-sm mx-auto">
+                      Utilize o seletor acima para conceder permissões de assinatura digital neste perfil.
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
-          </div >,
-          document.body
-        )}
+          )}
+
+          {/* Rodapé da Página com Ações */}
+          <div className="bg-white rounded-2xl border border-slate-200/80 p-5 flex items-center justify-between shadow-sm">
+            <button
+              type="button"
+              onClick={handleBackToList}
+              className="px-6 py-3 font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer flex items-center gap-2 text-sm"
+            >
+              <ArrowLeft className="w-4 h-4" /> Voltar para Lista
+            </button>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleBackToList}
+                className="px-6 py-3 font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer text-sm"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleSave}
+                className="px-8 py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-indigo-600 shadow-xl flex items-center gap-2 transition-all cursor-pointer text-sm"
+              >
+                <Save className="w-5 h-5" /> {isAdmin ? 'Salvar Usuário' : 'Salvar Alterações'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
         {/* MODAL DE CONFIRMAÇÃO PERSONALIZADO */}
         {
@@ -1546,7 +2122,6 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
             document.body
           )
         }
-      </div >
-    </div >
+    </div>
   );
 };

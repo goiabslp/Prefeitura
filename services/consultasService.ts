@@ -297,6 +297,89 @@ export interface AgendamentoFilters {
     status?: string;
 }
 
+/**
+ * Constrói a lista ordenada da fila com as regras estritas de Agendamento Especial:
+ * 1. Agendamentos Especiais sempre ficam no topo da fila.
+ * 2. Entre os Especiais, é mantida uma sequência ordenada por criação (Especial 1, Especial 2...).
+ * 3. Se já existir um Especial para o mesmo procedimento, o novo Especial é inserido imediatamente após o último Especial daquele procedimento.
+ *    Caso não exista, é inserido no topo da lista de especiais.
+ * 4. Os agendamentos normais/regulares permanecem abaixo de todos os Especiais na ordem relativa de inserção.
+ */
+export const orderConsultasQueue = (bookings: ConsultaAgendamento[]): ConsultaAgendamento[] => {
+    // Ordena cronologicamente por criação para reproduzir o histórico de entradas na fila
+    const sortedChronological = [...bookings].sort((a, b) => {
+        const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return timeA - timeB;
+    });
+
+    const especiais: ConsultaAgendamento[] = [];
+    const normais: ConsultaAgendamento[] = [];
+
+    for (const item of sortedChronological) {
+        if (item.priority === 'Especial') {
+            let lastIndexSameProc = -1;
+            for (let i = especiais.length - 1; i >= 0; i--) {
+                if (especiais[i].procedimento_id === item.procedimento_id) {
+                    lastIndexSameProc = i;
+                    break;
+                }
+            }
+
+            if (lastIndexSameProc !== -1) {
+                // Insere imediatamente após o último Especial deste mesmo procedimento
+                especiais.splice(lastIndexSameProc + 1, 0, { ...item });
+            } else {
+                // Primeiro Especial deste procedimento: vai para o topo dos especiais
+                especiais.unshift({ ...item });
+            }
+        } else {
+            normais.push({ ...item });
+        }
+    }
+
+    // Atribui as posições oficiais na fila e a numeração sequencial dos Especiais
+    especiais.forEach((item, idx) => {
+        item.special_sequence = idx + 1;
+        item.queue_position = idx + 1;
+    });
+
+    normais.forEach((item, idx) => {
+        item.queue_position = especiais.length + idx + 1;
+    });
+
+    return [...especiais, ...normais];
+};
+
+/**
+ * Recalcula a fila completa e persiste as posições oficiais e sequências no banco de dados.
+ */
+export const recalculateAndPersistQueuePositions = async (): Promise<void> => {
+    try {
+        const { data: queueItems, error } = await supabase
+            .from('consultas_agendamentos')
+            .select('id, procedimento_id, priority, status, created_at, solicitation_date')
+            .in('status', ['Fila de espera', 'Aguardando Data', 'Solicitado']);
+
+        if (error || !queueItems || queueItems.length === 0) return;
+
+        const ordered = orderConsultasQueue(queueItems as ConsultaAgendamento[]);
+
+        // Atualiza no banco de dados
+        await Promise.all(ordered.map(item =>
+            supabase
+                .from('consultas_agendamentos')
+                .update({
+                    queue_position: item.queue_position,
+                    special_sequence: item.special_sequence || null
+                })
+                .eq('id', item.id)
+        ));
+    } catch (err) {
+        console.warn('[consultasService] recalculateAndPersistQueuePositions warning:', err);
+    }
+};
+
 export const getAgendamentos = async (filters?: AgendamentoFilters): Promise<ConsultaAgendamento[]> => {
     try {
         // We select *, paciente:consultas_pacientes(*), procedimento:consultas_procedimentos(*), responsavel:profiles(name)
@@ -316,10 +399,31 @@ export const getAgendamentos = async (filters?: AgendamentoFilters): Promise<Con
 
         let filtered = data || [];
 
-        // Apply filters in memory/js for easier partial matches on joined columns if needed,
-        // or structure properly. Supabase doesn't easily filter on relation fields in standard select
-        // unless you use inner joins which filter rows. We can filter in memory for name/cpf
-        // since the dataset size is typically manageable for a municipal regulation module.
+        // Garante que a ordem da fila de espera respeite a prioridade Especial e posições calculadas
+        const waitlistItems = filtered.filter(a => a.status === 'Fila de espera');
+        if (waitlistItems.length > 0) {
+            const orderedWaitlist = orderConsultasQueue(waitlistItems);
+            const posMap = new Map<string, { queue_position: number; special_sequence?: number }>();
+            orderedWaitlist.forEach(item => {
+                posMap.set(item.id, {
+                    queue_position: item.queue_position || 1,
+                    special_sequence: item.special_sequence
+                });
+            });
+
+            filtered = filtered.map(item => {
+                const queueInfo = posMap.get(item.id);
+                if (queueInfo) {
+                    return {
+                        ...item,
+                        queue_position: item.queue_position || queueInfo.queue_position,
+                        special_sequence: item.special_sequence || queueInfo.special_sequence
+                    };
+                }
+                return item;
+            });
+        }
+
         if (filters) {
             if (filters.patientName) {
                 const search = filters.patientName.toLowerCase();
@@ -384,8 +488,15 @@ export const createAgendamento = async (agendamento: Omit<ConsultaAgendamento, '
             if (error.message && error.message.includes('Vagas insuficientes')) {
                 throw new Error('Vagas esgotadas para este procedimento.');
             }
+            if (error.message && error.message.includes('consultas_agendamentos_priority_check')) {
+                throw new Error('A tabela do banco de dados ainda não aceita a prioridade "Especial". Por favor, execute o script SQL "add_agendamento_especial_and_queue_position.sql" no editor SQL do Supabase para atualizar a regra de prioridades.');
+            }
             throw error;
         }
+
+        // Recalcular e persistir posições da fila após novo agendamento
+        await recalculateAndPersistQueuePositions();
+        window.dispatchEvent(new CustomEvent('consultas-agendamentos-changed'));
 
         return data;
     } catch (error: any) {
@@ -697,14 +808,19 @@ export const getDashboardStats = async (): Promise<ConsultasDashboardStats> => {
 
 // --- VAGAS ---
 
-export const getVagas = async (procedimentoId: string): Promise<ConsultaVaga[]> => {
+export const getVagas = async (procedimentoId?: string): Promise<ConsultaVaga[]> => {
     try {
-        const { data, error } = await supabase
+        let query = supabase
             .from('consultas_vagas')
             .select('*')
-            .eq('procedimento_id', procedimentoId)
             .order('data', { ascending: true })
             .order('hora', { ascending: true });
+
+        if (procedimentoId) {
+            query = query.eq('procedimento_id', procedimentoId);
+        }
+
+        const { data, error } = await query;
 
         if (error) throw error;
         return data || [];

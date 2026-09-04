@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { User, ConsultaPaciente, ConsultaAgendamento, ConsultaProcedimento, AppState, ConsultaVaga } from '../../types';
-import { ArrowLeft, Search, Filter, Calendar, CheckCircle2, XCircle, Trash2, Loader2, Sparkles, Clock, FileDown, UserX, Repeat, RotateCcw, X, Activity, Check, Edit2, ChevronDown, ChevronLeft, ChevronRight, User as UserIcon, BarChart3, Users, UserCheck, Building2 } from 'lucide-react';
+import { ArrowLeft, Search, Filter, Calendar, CheckCircle2, XCircle, Trash2, Loader2, Sparkles, Clock, FileDown, UserX, Repeat, RotateCcw, X, Activity, Check, Edit2, ChevronDown, ChevronLeft, ChevronRight, User as UserIcon, BarChart3, Users, UserCheck, Building2, ShieldCheck, FileText, Phone, MapPin } from 'lucide-react';
 import * as db from '../../services/consultasService';
 import { useAgentesSaude } from '../../services/agentesSaudeService';
 import { jsPDF } from 'jspdf';
@@ -360,6 +360,594 @@ const ModernDatePicker: React.FC<ModernDatePickerProps> = ({
     );
 };
 
+// Componente DataItem no estilo do Abastecimento
+const DataItem = ({ 
+    label, 
+    value, 
+    icon: Icon, 
+    colorClass = "text-slate-700", 
+    flex = "flex-1", 
+    truncateValue = true, 
+    isBadge = false 
+}: { 
+    label: string; 
+    value: React.ReactNode; 
+    icon?: any; 
+    colorClass?: string; 
+    flex?: string; 
+    truncateValue?: boolean; 
+    isBadge?: boolean; 
+}) => (
+    <div className={`flex flex-col gap-1 ${flex} min-w-0 overflow-hidden`}>
+        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400/80 ml-0.5 whitespace-nowrap overflow-hidden text-ellipsis flex items-center gap-1.5">
+            {Icon && !isBadge && <Icon className="w-3 h-3 shrink-0" />}
+            <span className="truncate">{label}</span>
+        </span>
+        <div className={`flex items-center text-sm font-bold transition-colors ${colorClass} ${isBadge ? 'px-2.5 py-0.5 rounded-lg border w-fit max-w-full' : ''}`}>
+            {Icon && isBadge && <Icon className="w-3.5 h-3.5 mr-1.5 shrink-0 opacity-70" />}
+            {typeof value === 'string' || typeof value === 'number' ? (
+                <span className={truncateValue ? "truncate" : "whitespace-nowrap"} title={String(value)}>{value}</span>
+            ) : (
+                value
+            )}
+        </div>
+    </div>
+);
+
+// Funções utilitárias de estilo extraídas do componente para evitar recriação a cada render
+const getStatusStyle = (status: string) => {
+    switch (status) {
+        case 'Solicitado':
+            return 'text-sky-700 bg-sky-500/10 border-sky-300';
+        case 'Agendado':
+            return 'text-indigo-700 bg-indigo-500/10 border-indigo-300';
+        case 'Realizado':
+            return 'text-emerald-700 bg-emerald-500/10 border-emerald-300';
+        case 'Não Realizado':
+            return 'text-slate-700 bg-slate-500/10 border-slate-300';
+        case 'Fila de espera':
+            return 'text-amber-800 bg-amber-500/10 border-amber-300';
+        case 'Aguardando Data':
+            return 'text-violet-800 bg-violet-500/10 border-violet-300';
+        case 'Retorno':
+            return 'text-teal-800 bg-teal-500/10 border-teal-300';
+        case 'Cancelado':
+        default:
+            return 'text-rose-700 bg-rose-500/10 border-rose-300';
+    }
+};
+
+const getPriorityStyle = (priority: string, is_retorno?: boolean) => {
+    if (priority === 'Urgência') return 'text-rose-700 bg-rose-500/10 border-rose-300 font-black';
+    if (is_retorno) return 'text-teal-700 bg-teal-500/10 border-teal-300 font-black';
+    return 'text-slate-600 bg-slate-500/10 border-slate-200 font-semibold';
+};
+
+// Card de Agendamento no estilo idêntico ao AbastecimentoCard (com React.memo)
+interface AgendamentoCardProps {
+    booking: ConsultaAgendamento;
+    queuePosition?: number;
+    isOperating: boolean;
+    canEdit: boolean;
+    canComplete: boolean;
+    canCancel: boolean;
+    canDelete: boolean;
+    onEdit: (b: ConsultaAgendamento) => void;
+    onAgentInfo: (b: ConsultaAgendamento) => void;
+    onDownloadPdf: (b: ConsultaAgendamento) => void;
+    onStatusUpdate: (id: string, status: any) => void;
+    onOpenCancelModal: (b: ConsultaAgendamento) => void;
+    onDelete: (id: string) => void;
+    onReagendar: (id: string) => void;
+    onOpenRetornoModal: (b: ConsultaAgendamento) => void;
+    isGenerating: boolean;
+    formatPatientName: (patient?: ConsultaPaciente | null) => string;
+    agentPsf?: string;
+}
+
+const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
+    booking,
+    queuePosition,
+    isOperating,
+    canEdit,
+    canComplete,
+    canCancel,
+    canDelete,
+    onEdit,
+    onAgentInfo,
+    onDownloadPdf,
+    onStatusUpdate,
+    onOpenCancelModal,
+    onDelete,
+    onReagendar,
+    onOpenRetornoModal,
+    isGenerating,
+    formatPatientName,
+    agentPsf
+}) => {
+    const [isExpanded, setIsExpanded] = useState(false);
+
+    const patientName = booking.paciente ? formatPatientName(booking.paciente) : 'Paciente não informado';
+    const rawCpf = booking.paciente?.cpf || '';
+    const formattedCpf = rawCpf ? rawCpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4") : 'S/ CPF';
+    const solicitationFormatted = booking.solicitation_date
+        ? new Date(booking.solicitation_date + 'T00:00:00').toLocaleDateString('pt-BR')
+        : (booking.created_at ? new Date(booking.created_at).toLocaleDateString('pt-BR') : '-');
+
+    const appointmentDateFormatted = booking.status !== 'Fila de espera' && booking.status !== 'Aguardando Data' && (booking.appointment_time || booking.status === 'Agendado' || booking.status === 'Realizado')
+        ? `${new Date(booking.appointment_date + 'T12:00:00').toLocaleDateString('pt-BR')}${booking.appointment_time ? ` ${booking.appointment_time.substring(0, 5)}` : ''}`
+        : null;
+
+    const rawAgentName = (booking.paciente?.agente_saude || '').trim();
+    const hasAgent = rawAgentName.length > 0;
+
+    return (
+        <div className="rounded-2xl shadow-xs mb-3">
+            <div
+                onClick={() => setIsExpanded(!isExpanded)}
+                className={`group bg-white rounded-2xl border transition-all duration-300 relative overflow-hidden cursor-pointer ${
+                    isExpanded 
+                    ? 'border-cyan-200 ring-1 ring-cyan-100 shadow-lg shadow-cyan-500/5' 
+                    : 'border-slate-200/60 hover:shadow-md hover:border-cyan-200/50'
+                }`}
+            >
+                {/* Faixa lateral cyan com gradiente (estilo Abastecimento) */}
+                <div className={`absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-transparent via-cyan-400 to-transparent group-hover:via-cyan-500 transition-all ${isExpanded ? 'bg-cyan-500' : ''}`} />
+
+                <div className="flex flex-col wide:flex-row items-stretch min-h-[84px]">
+                    {/* CARD DE PRIMEIRA INFORMAÇÃO - POSIÇÃO GRANDE E DADOS DO PACIENTE */}
+                    <div className="bg-slate-50/90 border-b wide:border-b-0 wide:border-r border-slate-100 p-2.5 sm:p-3 px-3 sm:px-4 flex items-center gap-3 shrink-0 self-stretch wide:w-[380px] group-hover:bg-cyan-50/40 group-hover:border-cyan-100/60 transition-all relative">
+                        {/* Bloco de Destaque: POSIÇÃO Grande e Visível */}
+                        <div 
+                            className={`w-16 h-16 sm:w-[74px] sm:h-[74px] rounded-2xl flex flex-col items-center justify-center shrink-0 border transition-all duration-300 shadow-xs relative overflow-hidden ${
+                                booking.status === 'Fila de espera'
+                                    ? booking.priority === 'Especial'
+                                        ? 'bg-gradient-to-br from-amber-100 via-amber-200 to-yellow-200 border-amber-400 text-amber-950 shadow-amber-500/20 ring-2 ring-amber-400/40'
+                                        : 'bg-gradient-to-br from-amber-50 via-amber-100/90 to-amber-200/70 border-amber-300 text-amber-950 shadow-amber-500/15 ring-2 ring-amber-400/20'
+                                    : booking.status === 'Agendado'
+                                    ? 'bg-gradient-to-br from-emerald-50 via-teal-50 to-emerald-100/80 border-emerald-300 text-emerald-950'
+                                    : booking.status === 'Realizado'
+                                    ? 'bg-gradient-to-br from-teal-50 to-cyan-100/80 border-teal-300 text-teal-950'
+                                    : booking.status === 'Cancelado'
+                                    ? 'bg-gradient-to-br from-rose-50 to-rose-100/80 border-rose-300 text-rose-950'
+                                    : 'bg-gradient-to-br from-slate-100 to-slate-200 border-slate-300 text-slate-800'
+                            }`}
+                            title={
+                                booking.status === 'Fila de espera' && queuePosition 
+                                    ? `Posição: ${queuePosition}º lugar na fila de espera ${booking.priority === 'Especial' ? '(Agendamento Especial)' : ''}` 
+                                    : `Status: ${booking.status}`
+                            }
+                        >
+                            {booking.status === 'Fila de espera' ? (
+                                <>
+                                    <span className="text-[8.5px] font-black uppercase tracking-wider text-amber-800 leading-none">
+                                        {booking.priority === 'Especial' ? 'ESPECIAL' : 'POSIÇÃO'}
+                                    </span>
+                                    <span className="text-2xl sm:text-[28px] font-black font-mono leading-none tracking-tight text-amber-950 my-1">
+                                        {queuePosition ? `${queuePosition}º` : '--'}
+                                    </span>
+                                    <span className="text-[7.5px] font-black uppercase tracking-widest text-amber-700 leading-none">
+                                        NA FILA
+                                    </span>
+                                </>
+                            ) : booking.status === 'Agendado' ? (
+                                <>
+                                    <span className="text-[8px] font-black uppercase tracking-wider text-emerald-800 leading-none">
+                                        STATUS
+                                    </span>
+                                    <span className="text-xs sm:text-sm font-black uppercase tracking-tight text-emerald-950 my-1 text-center px-1 leading-tight">
+                                        AGENDADO
+                                    </span>
+                                    <span className="text-[7.5px] font-bold uppercase tracking-wider text-emerald-700 leading-none">
+                                        CONFIRMADO
+                                    </span>
+                                </>
+                            ) : (
+                                <>
+                                    <span className="text-[8px] font-black uppercase tracking-wider text-slate-500 leading-none">
+                                        STATUS
+                                    </span>
+                                    <span className="text-[11px] sm:text-xs font-black uppercase tracking-tight text-slate-800 my-1 text-center px-1 leading-tight">
+                                        {booking.status}
+                                    </span>
+                                    {queuePosition ? (
+                                        <span className="text-[7.5px] font-mono font-bold text-slate-500 leading-none">
+                                            {queuePosition}º FILA
+                                        </span>
+                                    ) : null}
+                                </>
+                            )}
+                        </div>
+
+                        {/* Dados textuais do Paciente - Nome Completo */}
+                        <div className="flex flex-col min-w-0 justify-center flex-1">
+                            <div className="flex items-center gap-1.5 mb-1">
+                                <span className="text-[8.5px] font-black uppercase tracking-widest text-cyan-700 bg-cyan-100/60 px-2 py-0.5 rounded-md border border-cyan-200/50 w-fit">
+                                    Paciente
+                                </span>
+                                {booking.priority === 'Especial' && (
+                                    <span className="text-[8px] font-black uppercase tracking-wider text-amber-900 bg-gradient-to-r from-amber-100 to-yellow-100 px-2 py-0.5 rounded border border-amber-300 flex items-center gap-1 shadow-xs">
+                                        <Sparkles className="w-2.5 h-2.5 text-amber-600" />
+                                        {booking.special_sequence ? `Especial ${booking.special_sequence}` : 'Especial'}
+                                    </span>
+                                )}
+                                {booking.priority === 'Urgência' && (
+                                    <span className="text-[8px] font-black uppercase tracking-wider text-rose-700 bg-rose-100/70 px-1.5 py-0.2 rounded border border-rose-200 animate-pulse">
+                                        Urgente
+                                    </span>
+                                )}
+                            </div>
+                            <span 
+                                className="text-xs sm:text-sm font-black text-slate-900 uppercase leading-snug break-words" 
+                                title={patientName}
+                            >
+                                {patientName}
+                            </span>
+                            <span className="text-[10px] font-bold text-slate-500 font-mono flex items-center gap-1 mt-1">
+                                <UserIcon className="w-3 h-3 text-slate-400 shrink-0" />
+                                {formattedCpf}
+                            </span>
+                        </div>
+                    </div>
+
+                    {/* CONTEÚDO PRINCIPAL DO REGISTRO */}
+                    <div className="flex-1 p-3.5 sm:p-4 pl-4 sm:pl-5 flex flex-col justify-center min-w-0">
+                        <div className="flex flex-col wide:flex-row wide:items-center gap-3 wide:gap-4">
+                            <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 wide:grid-cols-12 gap-3 items-center min-w-0">
+                                {/* SOLICITADO */}
+                                <DataItem 
+                                    label="Solicitado" 
+                                    value={solicitationFormatted} 
+                                    icon={Calendar} 
+                                    flex="col-span-1 wide:col-span-2" 
+                                />
+
+                                {/* EXAME / PROCEDIMENTO */}
+                                <div className="flex flex-col gap-1 col-span-2 sm:col-span-2 wide:col-span-4 min-w-0 overflow-hidden">
+                                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400/80 ml-0.5 whitespace-nowrap overflow-hidden text-ellipsis flex items-center gap-1.5">
+                                        <Activity className="w-3 h-3 shrink-0" />
+                                        <span className="truncate">Exame / Procedimento</span>
+                                    </span>
+                                    <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                                        <span className="text-xs sm:text-sm font-bold text-slate-900 uppercase truncate" title={booking.procedimento?.name}>
+                                            {booking.procedimento?.name || 'Não informado'}
+                                        </span>
+                                        {booking.procedimento?.code && (
+                                            <span className="text-[9px] text-slate-500 font-extrabold bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200 shrink-0">
+                                                {booking.procedimento.code}
+                                            </span>
+                                        )}
+                                        {booking.procedimento?.type && (
+                                            <span className={`px-1.5 py-0.2 text-[8px] font-black uppercase tracking-wider rounded shrink-0 ${
+                                                booking.procedimento.type === 'Exame'
+                                                ? 'bg-sky-50 text-sky-700 border border-sky-200'
+                                                : booking.procedimento.type === 'Consulta'
+                                                ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                                                : 'bg-rose-50 text-rose-700 border border-rose-200'
+                                            }`}>
+                                                {booking.procedimento.type}
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* DATA AGENDADA */}
+                                <div className="flex flex-col gap-1 col-span-1 wide:col-span-2 min-w-0 overflow-hidden">
+                                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400/80 ml-0.5 whitespace-nowrap overflow-hidden text-ellipsis flex items-center gap-1.5">
+                                        <Clock className="w-3 h-3 shrink-0" />
+                                        <span className="truncate">Data Agendada</span>
+                                    </span>
+                                    <div className="flex items-center text-xs sm:text-sm font-bold text-slate-800 whitespace-nowrap">
+                                        {appointmentDateFormatted ? (
+                                            <span>{appointmentDateFormatted}</span>
+                                        ) : (
+                                            <span className="inline-flex px-2 py-0.5 rounded text-[9px] font-black uppercase text-amber-800 bg-amber-50 border border-amber-300">
+                                                Aguardando Vaga
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* PRIORIDADE */}
+                                <DataItem 
+                                    label="Prioridade" 
+                                    value={booking.priority === 'Urgência' ? 'Urgência' : booking.is_retorno ? 'Retorno' : 'Normal'} 
+                                    colorClass={getPriorityStyle(booking.priority, booking.is_retorno)} 
+                                    isBadge={true} 
+                                    flex="col-span-1 wide:col-span-2" 
+                                />
+
+                                {/* STATUS */}
+                                <DataItem 
+                                    label="Status" 
+                                    value={booking.status} 
+                                    colorClass={getStatusStyle(booking.status)} 
+                                    isBadge={true} 
+                                    flex="col-span-1 wide:col-span-2" 
+                                />
+                            </div>
+
+                            {/* Ações Rápidas de Linha (Desktop) + Chevron */}
+                            <div className="flex items-center gap-2 self-end wide:self-center shrink-0">
+                                <div className="hidden sm:flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                                    {canEdit && (
+                                        <button
+                                            type="button"
+                                            onClick={() => onEdit(booking)}
+                                            className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer"
+                                            title="Editar Agendamento"
+                                        >
+                                            <Edit2 className="w-3.5 h-3.5" />
+                                        </button>
+                                    )}
+                                    <button
+                                        type="button"
+                                        onClick={() => onAgentInfo(booking)}
+                                        className="w-6 h-6 text-teal-700 hover:text-white hover:bg-teal-600 bg-teal-50 rounded-lg border border-teal-200 transition-colors flex items-center justify-center cursor-pointer font-black text-[10px]"
+                                        title="Ver Agente ACS e PSF"
+                                    >
+                                        A
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => onDownloadPdf(booking)}
+                                        disabled={isGenerating}
+                                        className="p-1.5 text-slate-400 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                                        title="Imprimir Comprovante (PDF)"
+                                    >
+                                        <FileDown className="w-3.5 h-3.5" />
+                                    </button>
+                                </div>
+
+                                <div className={`text-slate-300 group-hover:text-cyan-500 transition-transform duration-300 ${isExpanded ? 'rotate-180 text-cyan-500' : ''}`}>
+                                    <ChevronDown className="w-5 h-5" />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Conteúdo Expandido (Renderizado condicionalmente para máxima fluidez do DOM) */}
+                        {isExpanded && (
+                            <div className="grid grid-cols-2 wide:flex wide:flex-wrap gap-3.5 sm:gap-4 pt-4 mt-4 border-t border-slate-100 animate-in fade-in duration-150">
+                            <DataItem
+                                label="Protocolo"
+                                value={booking.id.substring(0, 8).toUpperCase()}
+                                colorClass="text-slate-400 font-mono text-[9px] bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200"
+                                flex="col-span-1 wide:w-auto"
+                            />
+
+                            <DataItem 
+                                label="Cartão SUS" 
+                                value={booking.paciente?.sus_number || 'Não informado'} 
+                                colorClass="text-cyan-700 bg-cyan-50 px-2 py-0.5 rounded border border-cyan-100 font-mono text-xs" 
+                                flex="col-span-1 wide:w-auto" 
+                            />
+
+                            <DataItem 
+                                label="Responsável" 
+                                value={booking.responsavel?.name || 'Sistema'} 
+                                icon={UserCheck} 
+                                colorClass="text-slate-600 font-medium" 
+                                flex="col-span-1 wide:w-auto" 
+                            />
+
+                            {booking.created_at && (
+                                <DataItem 
+                                    label="Criado em" 
+                                    value={new Date(booking.created_at).toLocaleString('pt-BR')} 
+                                    icon={Clock} 
+                                    colorClass="text-slate-500 font-normal" 
+                                    flex="col-span-1 wide:w-auto" 
+                                />
+                            )}
+
+                            {hasAgent && (
+                                <DataItem 
+                                    label="Agente de Saúde (ACS)" 
+                                    value={`${rawAgentName}${agentPsf ? ` (${agentPsf})` : ''}`} 
+                                    icon={ShieldCheck} 
+                                    colorClass="text-teal-700 font-medium" 
+                                    flex="col-span-2 wide:w-auto" 
+                                />
+                            )}
+
+                            {booking.paciente?.phone && (
+                                <DataItem 
+                                    label="Contato" 
+                                    value={booking.paciente.phone} 
+                                    icon={Phone} 
+                                    colorClass="text-slate-600 font-medium" 
+                                    flex="col-span-1 wide:w-auto" 
+                                />
+                            )}
+
+
+
+                            {booking.status === 'Cancelado' && (booking.cancellation_reason || booking.canceled_by_name) && (
+                                <div className="col-span-2 wide:w-full bg-rose-50 p-3 rounded-xl border border-rose-200 text-rose-700 text-xs flex flex-col gap-0.5">
+                                    <span className="font-black uppercase text-[10px]">
+                                        Cancelado por: {booking.canceled_by_name || 'Usuário'} {booking.canceled_at ? `em ${new Date(booking.canceled_at).toLocaleString('pt-BR')}` : ''}
+                                    </span>
+                                    <span className="font-bold">Motivo: {booking.cancellation_reason || 'Não informado'}</span>
+                                </div>
+                            )}
+
+                            {/* Botões de Ação no Rodapé do Expandido (estilo Abastecimento) */}
+                            <div className="flex flex-wrap items-center gap-2 ml-auto mt-2 wide:mt-0 col-span-2 wide:col-span-auto justify-end">
+                                {isOperating ? (
+                                    <div className="flex items-center gap-2 px-3 py-1.5 text-sky-600 bg-sky-50 rounded-lg text-xs font-bold">
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        Processando...
+                                    </div>
+                                ) : (
+                                    <>
+                                        {/* Editar */}
+                                        {canEdit && (
+                                            <button
+                                                type="button"
+                                                onClick={(e) => { e.stopPropagation(); onEdit(booking); }}
+                                                className="flex items-center gap-1.5 px-3 py-1.5 text-slate-600 hover:text-cyan-700 hover:bg-cyan-50 rounded-lg transition-colors text-xs font-bold border border-slate-200 hover:border-cyan-200 cursor-pointer"
+                                                title="Editar Agendamento / Paciente"
+                                            >
+                                                <Edit2 className="w-3.5 h-3.5" />
+                                                Editar
+                                            </button>
+                                        )}
+
+                                        {/* Ver Agente ACS */}
+                                        <button
+                                            type="button"
+                                            onClick={(e) => { e.stopPropagation(); onAgentInfo(booking); }}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 text-teal-700 hover:text-white bg-teal-50/80 hover:bg-teal-600 rounded-lg transition-colors text-xs font-bold border border-teal-200 cursor-pointer"
+                                            title="Ver dados do Agente de Saúde e PSF"
+                                        >
+                                            <Users className="w-3.5 h-3.5" />
+                                            Agente ACS
+                                        </button>
+
+                                        {/* Comprovante PDF */}
+                                        <button
+                                            type="button"
+                                            onClick={(e) => { e.stopPropagation(); onDownloadPdf(booking); }}
+                                            disabled={isGenerating}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 text-sky-700 hover:text-white bg-sky-50/80 hover:bg-sky-600 rounded-lg transition-colors text-xs font-bold border border-sky-200 cursor-pointer disabled:opacity-50"
+                                            title="Imprimir Comprovante de Agendamento (PDF)"
+                                        >
+                                            <FileDown className="w-3.5 h-3.5" />
+                                            Comprovante
+                                        </button>
+
+                                        {/* Ações por Status */}
+                                        {booking.status === 'Cancelado' && canEdit && (
+                                            <button
+                                                type="button"
+                                                onClick={(e) => { e.stopPropagation(); onReagendar(booking.id); }}
+                                                className="flex items-center gap-1.5 px-3 py-1.5 text-amber-700 hover:text-white bg-amber-50 hover:bg-amber-600 rounded-lg transition-colors text-xs font-bold border border-amber-300 cursor-pointer"
+                                                title="Reagendar Agendamento (Voltar para a Fila de Espera)"
+                                            >
+                                                <RotateCcw className="w-3.5 h-3.5" />
+                                                Reagendar
+                                            </button>
+                                        )}
+
+                                        {booking.status === 'Realizado' && (
+                                            <button
+                                                type="button"
+                                                onClick={(e) => { e.stopPropagation(); onOpenRetornoModal(booking); }}
+                                                className="flex items-center gap-1.5 px-3 py-1.5 text-teal-700 hover:text-white bg-teal-50 hover:bg-teal-600 rounded-lg transition-colors text-xs font-bold border border-teal-200 cursor-pointer"
+                                                title="Marcar Retorno para o Paciente"
+                                            >
+                                                <Repeat className="w-3.5 h-3.5" />
+                                                Retorno
+                                            </button>
+                                        )}
+
+                                        {booking.status === 'Solicitado' && (
+                                            <>
+                                                {canComplete && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => { e.stopPropagation(); onStatusUpdate(booking.id, 'Agendado'); }}
+                                                        className="flex items-center gap-1.5 px-3 py-1.5 text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors text-xs font-bold shadow-2xs cursor-pointer"
+                                                        title="Aprovar Agendamento"
+                                                    >
+                                                        <CheckCircle2 className="w-3.5 h-3.5" />
+                                                        Aprovar
+                                                    </button>
+                                                )}
+                                                {canCancel && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => { e.stopPropagation(); onOpenCancelModal(booking); }}
+                                                        className="flex items-center gap-1.5 px-3 py-1.5 text-rose-600 hover:text-white bg-rose-50 hover:bg-rose-600 rounded-lg transition-colors text-xs font-bold border border-rose-200 cursor-pointer"
+                                                        title="Rejeitar/Cancelar Agendamento"
+                                                    >
+                                                        <XCircle className="w-3.5 h-3.5" />
+                                                        Rejeitar
+                                                    </button>
+                                                )}
+                                            </>
+                                        )}
+
+                                        {booking.status === 'Agendado' && (
+                                            <>
+                                                {canComplete && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => { e.stopPropagation(); onStatusUpdate(booking.id, 'Realizado'); }}
+                                                        className="flex items-center gap-1.5 px-3 py-1.5 text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors text-xs font-bold shadow-2xs cursor-pointer"
+                                                        title="Marcar Procedimento como Realizado"
+                                                    >
+                                                        <CheckCircle2 className="w-3.5 h-3.5" />
+                                                        Concluir
+                                                    </button>
+                                                )}
+                                                {canComplete && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => { e.stopPropagation(); onStatusUpdate(booking.id, 'Não Realizado'); }}
+                                                        className="flex items-center gap-1.5 px-3 py-1.5 text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors text-xs font-bold border border-slate-200 cursor-pointer"
+                                                        title="Marcar como Não Realizado (Paciente Faltou)"
+                                                    >
+                                                        <UserX className="w-3.5 h-3.5" />
+                                                        Faltou
+                                                    </button>
+                                                )}
+                                                {canCancel && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => { e.stopPropagation(); onOpenCancelModal(booking); }}
+                                                        className="flex items-center gap-1.5 px-3 py-1.5 text-rose-600 hover:text-white bg-rose-50 hover:bg-rose-600 rounded-lg transition-colors text-xs font-bold border border-rose-200 cursor-pointer"
+                                                        title="Cancelar Agendamento"
+                                                    >
+                                                        <XCircle className="w-3.5 h-3.5" />
+                                                        Cancelar
+                                                    </button>
+                                                )}
+                                            </>
+                                        )}
+
+                                        {(booking.status === 'Fila de espera' || booking.status === 'Aguardando Data') && (
+                                            <>
+                                                {canCancel && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => { e.stopPropagation(); onOpenCancelModal(booking); }}
+                                                        className="flex items-center gap-1.5 px-3 py-1.5 text-rose-600 hover:text-white bg-rose-50 hover:bg-rose-600 rounded-lg transition-colors text-xs font-bold border border-rose-200 cursor-pointer"
+                                                        title="Cancelar Agendamento"
+                                                    >
+                                                        <XCircle className="w-3.5 h-3.5" />
+                                                        Cancelar
+                                                    </button>
+                                                )}
+                                            </>
+                                        )}
+
+                                        {/* Excluir */}
+                                        {canDelete && (
+                                            <button
+                                                type="button"
+                                                onClick={(e) => { e.stopPropagation(); onDelete(booking.id); }}
+                                                className="flex items-center gap-1.5 px-3 py-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors text-xs font-bold border border-transparent hover:border-rose-100 cursor-pointer"
+                                                title="Excluir Agendamento"
+                                            >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                                Excluir
+                                            </button>
+                                        )}
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const AgendamentoCard = React.memo(_AgendamentoCard);
+
 interface AcompanharScreenProps {
     currentUser: User;
     onBack: () => void;
@@ -431,6 +1019,23 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     const [filterStatus, setFilterStatus] = useState('');
     const [isMobile, setIsMobile] = useState<boolean>(() => typeof window !== 'undefined' ? window.innerWidth < 768 : false);
     const [expandedBookingId, setExpandedBookingId] = useState<string | null>(null);
+    const [displayLimit, setDisplayLimit] = useState(30);
+
+    // Redefine paginação ao trocar filtros
+    useEffect(() => {
+        setDisplayLimit(30);
+    }, [globalSearch, filterDate, filterStatus]);
+
+    // Lookup Map O(1) de PSF dos Agentes para máxima performance
+    const agentPsfMap = useMemo(() => {
+        const map: Record<string, string> = {};
+        agentesSaudeItems.forEach(a => {
+            if (a.nome) {
+                map[a.nome.toUpperCase().trim()] = a.psf || '';
+            }
+        });
+        return map;
+    }, [agentesSaudeItems]);
 
     useEffect(() => {
         const handleResize = () => {
@@ -466,7 +1071,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     const [editAppointmentDate, setEditAppointmentDate] = useState('');
     const [editAppointmentTime, setEditAppointmentTime] = useState('');
     const [editSolicitationDate, setEditSolicitationDate] = useState('');
-    const [editPriority, setEditPriority] = useState<'Normal' | 'Urgência'>('Normal');
+    const [editPriority, setEditPriority] = useState<'Normal' | 'Urgência' | 'Especial'>('Normal');
     const [editIsRetorno, setEditIsRetorno] = useState(false);
     const [editStatus, setEditStatus] = useState<ConsultaAgendamento['status']>('Solicitado');
     const [editQuantity, setEditQuantity] = useState(1);
@@ -696,45 +1301,13 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
             setProcedures(procData);
             setAllBookings(allBookingData);
 
-            // Group all waitlisted bookings by procedure_id to calculate position
-            const waitlistByProc: Record<string, ConsultaAgendamento[]> = {};
+            // Ordenação oficial da fila com agendamentos especiais no topo e regra de procedimentos
             const allWaitlist = allBookingData.filter(b => b.status === 'Fila de espera');
-            
-            allWaitlist.forEach(b => {
-                if (!waitlistByProc[b.procedimento_id]) {
-                    waitlistByProc[b.procedimento_id] = [];
-                }
-                waitlistByProc[b.procedimento_id].push(b);
-            });
+            const orderedWaitlist = db.orderConsultasQueue(allWaitlist);
 
             const positionMap: Record<string, number> = {};
-            const getPriorityWeight = (booking: ConsultaAgendamento) => {
-                if (booking.priority === 'Urgência') return 0;
-                if (booking.is_retorno) return 1;
-                return 2;
-            };
-
-            Object.keys(waitlistByProc).forEach(procId => {
-                const list = waitlistByProc[procId];
-                list.sort((a, b) => {
-                    const weightA = getPriorityWeight(a);
-                    const weightB = getPriorityWeight(b);
-                    if (weightA !== weightB) {
-                        return weightA - weightB;
-                    }
-                    const dateA = a.solicitation_date ? new Date(a.solicitation_date + 'T00:00:00').getTime() : (a.created_at ? new Date(a.created_at).getTime() : 0);
-                    const dateB = b.solicitation_date ? new Date(b.solicitation_date + 'T00:00:00').getTime() : (b.created_at ? new Date(b.created_at).getTime() : 0);
-                    if (dateA !== dateB) {
-                        return dateA - dateB;
-                    }
-                    const cA = a.created_at ? new Date(a.created_at).getTime() : 0;
-                    const cB = b.created_at ? new Date(b.created_at).getTime() : 0;
-                    return cA - cB;
-                });
-
-                list.forEach((b, index) => {
-                    positionMap[b.id] = index + 1;
-                });
+            orderedWaitlist.forEach((b, index) => {
+                positionMap[b.id] = b.queue_position || (index + 1);
             });
 
             setQueuePositions(positionMap);
@@ -773,6 +1346,16 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
             if (filterStatus) {
                 filtered = filtered.filter(a => a.status === filterStatus);
             }
+
+            // Ordena os agendamentos pela posição oficial da fila
+            filtered.sort((a, b) => {
+                const posA = positionMap[a.id] ?? 999999;
+                const posB = positionMap[b.id] ?? 999999;
+                if (posA !== posB) return posA - posB;
+                const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+                const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+                return timeB - timeA;
+            });
 
             setBookings(filtered);
         } catch (error) {
@@ -1083,8 +1666,9 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
         }
     };
 
-    const sortedBookings = [...bookings].sort((a, b) => {
-        if (filterStatus === 'Fila de espera') {
+    const sortedBookings = useMemo(() => {
+        if (filterStatus !== 'Fila de espera') return bookings;
+        return [...bookings].sort((a, b) => {
             const getPriorityWeight = (booking: ConsultaAgendamento) => {
                 if (booking.priority === 'Urgência') return 0;
                 if (booking.is_retorno) return 1;
@@ -1103,9 +1687,12 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
             const cA = a.created_at ? new Date(a.created_at).getTime() : 0;
             const cB = b.created_at ? new Date(b.created_at).getTime() : 0;
             return cA - cB;
-        }
-        return 0;
-    });
+        });
+    }, [bookings, filterStatus]);
+
+    const visibleBookings = useMemo(() => {
+        return sortedBookings.slice(0, displayLimit);
+    }, [sortedBookings, displayLimit]);
 
     if (reservedBookings.length > 0) {
         return (
@@ -1491,530 +2078,62 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                         </p>
                     </div>
                 ) : bookings.length > 0 ? (
-                    <>
-                        {/* LAYOUT MOBILE COMPACTO (block md:hidden) - Sem rolagem horizontal, apenas Nome, CPF e Procedimento, expansível para ver tudo */}
-                        <div className="block md:hidden space-y-3 w-full">
-                            {sortedBookings.map((booking) => {
-                                const isExpanded = expandedBookingId === booking.id;
-                                const isOperating = operatingId === booking.id;
+                    <div className="space-y-3 w-full pb-4">
+                        {visibleBookings.map((booking) => (
+                            <AgendamentoCard
+                                key={booking.id}
+                                booking={booking}
+                                queuePosition={queuePositions[booking.id]}
+                                isOperating={operatingId === booking.id}
+                                canEdit={canEdit}
+                                canComplete={canComplete}
+                                canCancel={canCancel}
+                                canDelete={canDelete}
+                                onEdit={handleOpenEditModal}
+                                onAgentInfo={handleOpenAgentInfo}
+                                onDownloadPdf={handleDownloadPdf}
+                                onStatusUpdate={handleStatusUpdate}
+                                onOpenCancelModal={handleOpenCancelModal}
+                                onDelete={handleDelete}
+                                onReagendar={handleReagendar}
+                                onOpenRetornoModal={(b) => {
+                                    setRetornoBooking(b);
+                                    const tomorrow = new Date();
+                                    tomorrow.setDate(tomorrow.getDate() + 1);
+                                    setRetornoDate(tomorrow.toISOString().split('T')[0]);
+                                    setIsRetornoModalOpen(true);
+                                }}
+                                isGenerating={isGenerating}
+                                formatPatientName={formatPatientName}
+                                agentPsf={agentPsfMap[(booking.paciente?.agente_saude || '').toUpperCase().trim()]}
+                            />
+                        ))}
 
-                                return (
-                                    <div 
-                                        key={booking.id}
-                                        className={`bg-white border rounded-2xl p-3.5 transition-all shadow-2xs w-full overflow-hidden ${
-                                            isExpanded 
-                                                ? 'border-sky-500 ring-2 ring-sky-500/10 shadow-md' 
-                                                : 'border-slate-200/90 hover:border-slate-300'
-                                        }`}
+                        {/* Barra de Paginação / Carregar Mais Agendamentos */}
+                        {sortedBookings.length > visibleBookings.length && (
+                            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 pb-6 px-4 bg-white rounded-2xl border border-slate-200/90 shadow-2xs mt-4">
+                                <div className="text-xs font-bold text-slate-500">
+                                    Exibindo <span className="text-slate-900 font-extrabold">{visibleBookings.length}</span> de <span className="text-slate-900 font-extrabold">{sortedBookings.length}</span> agendamentos
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setDisplayLimit(prev => prev + 30)}
+                                        className="px-4 py-2 bg-gradient-to-r from-sky-50 to-blue-50 hover:from-sky-100 hover:to-blue-100 border border-sky-200 text-sky-700 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer active:scale-95"
                                     >
-                                        {/* Linha Compacta Principal: NOME, CPF, PROCEDIMENTO e STATUS */}
-                                        <div 
-                                            onClick={() => setExpandedBookingId(isExpanded ? null : booking.id)}
-                                            className="flex items-start justify-between gap-2.5 cursor-pointer select-none"
-                                        >
-                                            <div className="min-w-0 flex-1 space-y-1">
-                                                <div className="font-black text-slate-900 text-sm uppercase leading-tight truncate">
-                                                    {booking.paciente ? formatPatientName(booking.paciente) : 'Carregando...'}
-                                                </div>
-                                                <div className="text-[11px] text-slate-500 font-bold flex items-center gap-2 flex-wrap">
-                                                    <span>CPF: <span className="text-slate-800 font-extrabold">{booking.paciente?.cpf ? booking.paciente.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4") : 'Não informado'}</span></span>
-                                                </div>
-                                                <div className="text-xs font-extrabold text-sky-700 uppercase flex items-center gap-1.5 flex-wrap pt-0.5">
-                                                    <span className="truncate">{booking.procedimento?.name || 'Procedimento não informado'}</span>
-                                                    {booking.procedimento?.code && (
-                                                        <span className="text-[9px] text-slate-500 font-black bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200">
-                                                            {booking.procedimento.code}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </div>
-
-                                            <div className="flex flex-col items-end gap-2 shrink-0">
-                                                <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border shadow-2xs ${
-                                                    booking.status === 'Solicitado'
-                                                    ? 'bg-sky-50 text-sky-700 border-sky-300'
-                                                    : booking.status === 'Agendado' 
-                                                    ? 'bg-indigo-50 text-indigo-700 border-indigo-300' 
-                                                    : booking.status === 'Realizado' 
-                                                    ? 'bg-emerald-50 text-emerald-800 border-emerald-300' 
-                                                    : booking.status === 'Não Realizado'
-                                                    ? 'bg-slate-100 text-slate-700 border-slate-300'
-                                                    : booking.status === 'Fila de espera'
-                                                    ? 'bg-amber-50 text-amber-800 border-amber-300'
-                                                    : booking.status === 'Aguardando Data'
-                                                    ? 'bg-violet-50 text-violet-800 border-violet-300'
-                                                    : booking.status === 'Retorno'
-                                                    ? 'bg-teal-50 text-teal-800 border-teal-300'
-                                                    : 'bg-rose-50 text-rose-800 border-rose-300'
-                                                }`}>
-                                                    {booking.status}
-                                                </span>
-
-                                                <div className={`w-7 h-7 rounded-xl flex items-center justify-center transition-transform ${isExpanded ? 'bg-sky-100 text-sky-700 rotate-180' : 'bg-slate-100 text-slate-500'}`}>
-                                                    <ChevronDown className="w-4 h-4" />
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Conteúdo Expandido com TODAS as informações do agendamento (AO ABRIR) */}
-                                        {isExpanded && (
-                                            <div className="mt-3 pt-3 border-t border-slate-100 space-y-3 animate-in fade-in slide-in-from-top-1 duration-200">
-                                                {/* Grid de Informações Detalhadas */}
-                                                <div className="grid grid-cols-2 gap-2 text-xs">
-                                                    <div className="bg-slate-50/80 p-2.5 rounded-xl border border-slate-100">
-                                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider block mb-0.5">Data Agendada</span>
-                                                        <div className="font-bold text-slate-800">
-                                                            {booking.status !== 'Fila de espera' && booking.status !== 'Aguardando Data' && (booking.appointment_time || booking.status === 'Agendado' || booking.status === 'Realizado') ? (
-                                                                <span>
-                                                                    {new Date(booking.appointment_date + 'T12:00:00').toLocaleDateString('pt-BR')}
-                                                                    {booking.appointment_time ? ` ${booking.appointment_time.substring(0, 5)}` : ''}
-                                                                </span>
-                                                            ) : (
-                                                                <span className="text-amber-800 font-black text-[10px]">Aguardando Vaga</span>
-                                                            )}
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="bg-slate-50/80 p-2.5 rounded-xl border border-slate-100">
-                                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider block mb-0.5">Data Solicitada</span>
-                                                        <div className="font-bold text-slate-800">
-                                                            {booking.solicitation_date 
-                                                                ? new Date(booking.solicitation_date + 'T00:00:00').toLocaleDateString('pt-BR') 
-                                                                : (booking.created_at ? new Date(booking.created_at).toLocaleDateString('pt-BR') : '-')}
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="bg-slate-50/80 p-2.5 rounded-xl border border-slate-100">
-                                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider block mb-0.5">Prioridade</span>
-                                                        <span className={`inline-flex px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${
-                                                            booking.priority === 'Urgência'
-                                                            ? 'bg-rose-500 text-white'
-                                                            : booking.is_retorno
-                                                            ? 'bg-teal-600 text-white'
-                                                            : 'bg-slate-200 text-slate-700'
-                                                        }`}>
-                                                            {booking.priority === 'Urgência' ? 'Urgência' : booking.is_retorno ? 'Retorno' : 'Normal'}
-                                                        </span>
-                                                    </div>
-
-                                                    <div className="bg-slate-50/80 p-2.5 rounded-xl border border-slate-100">
-                                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider block mb-0.5">Cartão SUS</span>
-                                                        <div className="font-bold text-slate-800 truncate">
-                                                            {booking.paciente?.sus_number || 'Não informado'}
-                                                        </div>
-                                                    </div>
-
-                                                    {booking.status === 'Fila de espera' && queuePositions[booking.id] && (
-                                                        <div className="col-span-2 bg-amber-50 p-2.5 rounded-xl border border-amber-200/80 flex items-center justify-between">
-                                                            <span className="text-[10px] font-black text-amber-800 uppercase tracking-wider">Posição na Fila de Espera</span>
-                                                            <span className="font-black text-amber-700 text-xs px-2.5 py-0.5 bg-amber-100 rounded-full border border-amber-300">
-                                                                {queuePositions[booking.id]}º lugar
-                                                            </span>
-                                                        </div>
-                                                    )}
-
-                                                    {booking.status === 'Cancelado' && (booking.cancellation_reason || booking.canceled_by_name) && (
-                                                        <div className="col-span-2 bg-rose-50 p-2.5 rounded-xl border border-rose-200 text-rose-700 text-xs">
-                                                            <span className="font-black uppercase text-[10px] block mb-0.5">Motivo do Cancelamento:</span>
-                                                            <span>{booking.cancellation_reason || 'Sem justificativa'}</span>
-                                                        </div>
-                                                    )}
-
-                                                    <div className="col-span-2 bg-slate-50/80 p-2.5 rounded-xl border border-slate-100">
-                                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider block mb-0.5">Responsável pelo Cadastro</span>
-                                                        <div className="font-bold text-slate-800">{booking.responsavel?.name || 'Sistema'}</div>
-                                                        {booking.created_at && (
-                                                            <span className="text-[9px] text-slate-400 block">{new Date(booking.created_at).toLocaleString('pt-BR')}</span>
-                                                        )}
-                                                    </div>
-                                                </div>
-
-                                                {/* Ações disponíveis no Mobile */}
-                                                <div className="pt-2 flex items-center justify-end gap-2 flex-wrap border-t border-slate-100">
-                                                    {isOperating ? (
-                                                        <Loader2 className="w-5 h-5 text-sky-600 animate-spin" />
-                                                    ) : (
-                                                        <>
-                                                            {canEdit && (
-                                                                <button
-                                                                    onClick={() => handleOpenEditModal(booking)}
-                                                                    className="px-3 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-xl text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all"
-                                                                >
-                                                                    <Edit2 className="w-3.5 h-3.5" /> Editar
-                                                                </button>
-                                                            )}
-                                                            <button
-                                                                onClick={() => handleDownloadPdf(booking)}
-                                                                disabled={isGenerating}
-                                                                className="px-3 py-1.5 bg-sky-50 text-sky-700 border border-sky-200 rounded-xl text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all"
-                                                            >
-                                                                <FileDown className="w-3.5 h-3.5" /> Comprovante
-                                                            </button>
-                                                            {booking.status === 'Cancelado' && canEdit && (
-                                                                <button
-                                                                    onClick={() => handleReagendar(booking.id)}
-                                                                    className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all shadow-2xs cursor-pointer"
-                                                                    title="Reagendar (Voltar para a Fila de Espera)"
-                                                                >
-                                                                    <RotateCcw className="w-3.5 h-3.5" /> Reagendar
-                                                                </button>
-                                                            )}
-                                                            {booking.status === 'Realizado' && (
-                                                                <button
-                                                                    onClick={() => {
-                                                                        setRetornoBooking(booking);
-                                                                        const tomorrow = new Date();
-                                                                        tomorrow.setDate(tomorrow.getDate() + 1);
-                                                                        setRetornoDate(tomorrow.toISOString().split('T')[0]);
-                                                                        setIsRetornoModalOpen(true);
-                                                                    }}
-                                                                    className="px-3 py-1.5 bg-teal-50 text-teal-700 border border-teal-200 rounded-xl text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all"
-                                                                >
-                                                                    <Repeat className="w-3.5 h-3.5" /> Retorno
-                                                                </button>
-                                                            )}
-                                                            {booking.status === 'Solicitado' && (
-                                                                <>
-                                                                    {canComplete && (
-                                                                        <button
-                                                                            onClick={() => handleStatusUpdate(booking.id, 'Agendado')}
-                                                                            className="px-3 py-1.5 bg-emerald-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all"
-                                                                        >
-                                                                            <CheckCircle2 className="w-3.5 h-3.5" /> Aprovar
-                                                                        </button>
-                                                                    )}
-                                                                    {canCancel && (
-                                                                        <button
-                                                                            onClick={() => handleOpenCancelModal(booking)}
-                                                                            className="px-3 py-1.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all"
-                                                                        >
-                                                                            <XCircle className="w-3.5 h-3.5" /> Rejeitar
-                                                                        </button>
-                                                                    )}
-                                                                </>
-                                                            )}
-                                                            {booking.status === 'Agendado' && (
-                                                                <>
-                                                                    {canComplete && (
-                                                                        <button
-                                                                            onClick={() => handleStatusUpdate(booking.id, 'Realizado')}
-                                                                            className="px-3 py-1.5 bg-emerald-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all"
-                                                                        >
-                                                                            <CheckCircle2 className="w-3.5 h-3.5" /> Concluir
-                                                                        </button>
-                                                                    )}
-                                                                    {canComplete && (
-                                                                        <button
-                                                                            onClick={() => handleStatusUpdate(booking.id, 'Não Realizado')}
-                                                                            className="px-3 py-1.5 bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all"
-                                                                        >
-                                                                            <UserX className="w-3.5 h-3.5" /> Faltou
-                                                                        </button>
-                                                                    )}
-                                                                    {canCancel && (
-                                                                        <button
-                                                                            onClick={() => handleOpenCancelModal(booking)}
-                                                                            className="px-3 py-1.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all"
-                                                                        >
-                                                                            <XCircle className="w-3.5 h-3.5" /> Cancelar
-                                                                        </button>
-                                                                    )}
-                                                                </>
-                                                            )}
-                                                            {(booking.status === 'Fila de espera' || booking.status === 'Aguardando Data') && (
-                                                                <>
-                                                                    {canCancel && (
-                                                                        <button
-                                                                            onClick={() => handleOpenCancelModal(booking)}
-                                                                            className="px-3 py-1.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all"
-                                                                        >
-                                                                            <XCircle className="w-3.5 h-3.5" /> Cancelar
-                                                                        </button>
-                                                                    )}
-                                                                </>
-                                                            )}
-                                                            {canDelete && (
-                                                                <button
-                                                                    onClick={() => handleDelete(booking.id)}
-                                                                    className="px-3 py-1.5 bg-slate-100 text-slate-600 border border-slate-200 rounded-xl text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all"
-                                                                >
-                                                                    <Trash2 className="w-3.5 h-3.5" /> Excluir
-                                                                </button>
-                                                            )}
-                                                        </>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                );
-                            })}
-                        </div>
-
-                        {/* TABELA COMPLETA DESKTOP (hidden md:block) */}
-                        <div className="hidden md:block bg-white border border-slate-200/80 rounded-2xl overflow-hidden shadow-2xs">
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-left border-collapse">
-                                    <thead className="sticky top-0 bg-slate-50 border-b border-slate-200/80 text-[10px] font-black text-slate-500 uppercase tracking-wider z-10 shadow-2xs">
-                                        <tr>
-                                            <th className="py-3 px-3 text-center w-16">Posição</th>
-                                            <th className="py-3 px-3">Solicitado</th>
-                                            <th className="py-3 px-3">Paciente / CPF</th>
-                                            <th className="py-3 px-3">Exame / Procedimento</th>
-                                            <th className="py-3 px-3">Data Agendada</th>
-                                            <th className="py-3 px-3 text-center">Prioridade</th>
-                                            <th className="py-3 px-3 text-center">Status</th>
-                                            <th className="py-3 px-3">Responsável</th>
-                                            <th className="py-3 px-3 text-right">Ações</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100">
-                                        {sortedBookings.map((booking) => {
-                                            const isOperating = operatingId === booking.id;
-                                            return (
-                                                <tr key={booking.id} className="hover:bg-sky-50/40 text-xs font-semibold text-slate-700 transition-colors">
-                                                    <td className="py-3 px-3 text-center">
-                                                        {booking.status === 'Fila de espera' && queuePositions[booking.id] ? (
-                                                            <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-300 font-black text-[10px] shadow-2xs">
-                                                                {queuePositions[booking.id]}º
-                                                            </span>
-                                                        ) : (
-                                                            <span className="text-slate-300 font-normal">-</span>
-                                                        )}
-                                                    </td>
-                                                    <td className="py-3 px-3 text-slate-500 whitespace-nowrap">
-                                                        {booking.solicitation_date 
-                                                            ? new Date(booking.solicitation_date + 'T00:00:00').toLocaleDateString('pt-BR') 
-                                                            : (booking.created_at ? new Date(booking.created_at).toLocaleDateString('pt-BR') : '-')}
-                                                    </td>
-                                                    <td className="py-3 px-3">
-                                                        <div className="font-extrabold text-slate-900 uppercase leading-tight">{booking.paciente ? formatPatientName(booking.paciente) : 'Carregando...'}</div>
-                                                        <div className="text-[10px] text-slate-400 font-bold tracking-wider mt-0.5">
-                                                            CPF: {booking.paciente?.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}
-                                                        </div>
-                                                    </td>
-                                                    <td className="py-3 px-3">
-                                                        <div className="flex items-center gap-1.5 flex-wrap">
-                                                            <span className="font-extrabold text-slate-800 uppercase">{booking.procedimento?.name || 'Carregando...'}</span>
-                                                            {booking.procedimento?.code && (
-                                                                <span className="text-[9px] text-slate-500 font-extrabold bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
-                                                                    {booking.procedimento.code}
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                         <span className={`inline-block px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider rounded mt-0.5 ${
-                                                             booking.procedimento?.type === 'Exame' 
-                                                             ? 'bg-sky-50 text-sky-700 border border-sky-200/60' 
-                                                             : booking.procedimento?.type === 'Consulta'
-                                                             ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/60'
-                                                             : 'bg-rose-50 text-rose-700 border border-rose-200/60'
-                                                         }`}>
-                                                            {booking.procedimento?.type}
-                                                         </span>
-                                                    </td>
-                                                    <td className="py-3 px-3 text-slate-700 font-extrabold whitespace-nowrap">
-                                                        {booking.status !== 'Fila de espera' && booking.status !== 'Aguardando Data' && (booking.appointment_time || booking.status === 'Agendado' || booking.status === 'Realizado') ? (
-                                                            <span>
-                                                                {new Date(booking.appointment_date + 'T12:00:00').toLocaleDateString('pt-BR')}
-                                                                {booking.appointment_time ? ` ${booking.appointment_time.substring(0, 5)}` : ''}
-                                                            </span>
-                                                        ) : (
-                                                            <span className="inline-flex px-2 py-0.5 rounded text-[9px] font-black uppercase text-amber-800 bg-amber-50 border border-amber-300 shadow-2xs">
-                                                                Aguardando Vaga
-                                                            </span>
-                                                        )}
-                                                    </td>
-                                                    <td className="py-3 px-3 text-center whitespace-nowrap">
-                                                         <span className={`inline-flex px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${
-                                                             booking.priority === 'Urgência'
-                                                             ? 'bg-rose-500 text-white shadow-2xs'
-                                                             : booking.is_retorno
-                                                             ? 'bg-teal-600 text-white shadow-2xs'
-                                                             : 'bg-slate-100 text-slate-600 border border-slate-200'
-                                                         }`}>
-                                                             {booking.priority === 'Urgência' ? 'Urgência' : booking.is_retorno ? 'Retorno' : 'Normal'}
-                                                         </span>
-                                                    </td>
-                                                    <td className="py-3 px-3 text-center whitespace-nowrap">
-                                                        <div className="flex flex-col items-center gap-1">
-                                                            <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border shadow-2xs ${
-                                                                booking.status === 'Solicitado'
-                                                                ? 'bg-sky-50 text-sky-700 border-sky-300'
-                                                                : booking.status === 'Agendado' 
-                                                                ? 'bg-indigo-50 text-indigo-700 border-indigo-300' 
-                                                                : booking.status === 'Realizado' 
-                                                                ? 'bg-emerald-50 text-emerald-800 border-emerald-300' 
-                                                                : booking.status === 'Não Realizado'
-                                                                ? 'bg-slate-100 text-slate-700 border-slate-300'
-                                                                : booking.status === 'Fila de espera'
-                                                                ? 'bg-amber-50 text-amber-800 border-amber-300'
-                                                                : booking.status === 'Aguardando Data'
-                                                                ? 'bg-violet-50 text-violet-800 border-violet-300'
-                                                                : booking.status === 'Retorno'
-                                                                ? 'bg-teal-50 text-teal-800 border-teal-300'
-                                                                : 'bg-rose-50 text-rose-800 border-rose-300'
-                                                            }`}>
-                                                                {booking.status}
-                                                            </span>
-                                                            {booking.status === 'Fila de espera' && queuePositions[booking.id] && (
-                                                                <span className="text-[9px] text-amber-800 font-extrabold uppercase tracking-wide bg-amber-50 border border-amber-300 px-1.5 py-0.5 rounded shadow-2xs">
-                                                                    {queuePositions[booking.id]}º na fila
-                                                                </span>
-                                                            )}
-                                                            {booking.status === 'Cancelado' && (booking.cancellation_reason || booking.canceled_by_name) && (
-                                                                <div className="text-[9px] text-rose-600 font-bold text-center max-w-[130px] truncate" title={`Cancelado por: ${booking.canceled_by_name || 'Usuário'} | Motivo: ${booking.cancellation_reason || 'Sem justificativa'}`}>
-                                                                    Motivo: {booking.cancellation_reason || 'Não informado'}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </td>
-                                                    <td className="py-3 px-3 text-slate-500 whitespace-nowrap">
-                                                        <div className="font-bold text-slate-700">{booking.responsavel?.name || 'Sistema'}</div>
-                                                        <div className="text-[9px] text-slate-400 mt-0.5 font-semibold">
-                                                            {booking.created_at && new Date(booking.created_at).toLocaleString('pt-BR')}
-                                                        </div>
-                                                    </td>
-                                                    <td className="py-3 px-3 text-right whitespace-nowrap">
-                                                        <div className="flex items-center justify-end gap-1.5">
-                                                            {isOperating ? (
-                                                                <Loader2 className="w-4 h-4 text-sky-600 animate-spin" />
-                                                            ) : (
-                                                                <>
-                                                                    {canEdit && (
-                                                                        <button
-                                                                            onClick={() => handleOpenEditModal(booking)}
-                                                                            className="p-1.5 text-amber-600 hover:text-white hover:bg-amber-500 rounded-lg border border-amber-200 hover:border-amber-500 transition-all flex items-center justify-center cursor-pointer shadow-2xs"
-                                                                            title="Editar Agendamento / Paciente"
-                                                                        >
-                                                                            <Edit2 className="w-3.5 h-3.5" />
-                                                                        </button>
-                                                                    )}
-                                                                    <button
-                                                                        onClick={() => handleOpenAgentInfo(booking)}
-                                                                        className="w-7 h-7 text-teal-700 hover:text-white hover:bg-teal-600 bg-teal-50/90 rounded-lg border border-teal-200 hover:border-teal-600 transition-all flex items-center justify-center cursor-pointer shadow-2xs font-black text-xs select-none"
-                                                                        title="Ver Agente de Saúde (ACS) e PSF"
-                                                                    >
-                                                                        A
-                                                                    </button>
-                                                                    <button
-                                                                        onClick={() => handleDownloadPdf(booking)}
-                                                                        disabled={isGenerating}
-                                                                        className="p-1.5 text-sky-600 hover:text-white hover:bg-sky-500 rounded-lg border border-sky-200 hover:border-sky-500 transition-all flex items-center justify-center cursor-pointer shadow-2xs disabled:opacity-50"
-                                                                        title="Imprimir Comprovante de Agendamento (PDF)"
-                                                                    >
-                                                                        <FileDown className="w-3.5 h-3.5" />
-                                                                    </button>
-                                                                    {booking.status === 'Cancelado' && canEdit && (
-                                                                        <button
-                                                                            onClick={() => handleReagendar(booking.id)}
-                                                                            className="p-1.5 text-amber-600 hover:text-white hover:bg-amber-500 bg-amber-50 rounded-lg border border-amber-300 hover:border-amber-500 transition-all flex items-center justify-center cursor-pointer shadow-2xs"
-                                                                            title="Reagendar Agendamento (Voltar para a Fila de Espera)"
-                                                                        >
-                                                                            <RotateCcw className="w-3.5 h-3.5" />
-                                                                        </button>
-                                                                    )}
-                                                                    {booking.status === 'Realizado' && (
-                                                                        <button
-                                                                            onClick={() => {
-                                                                                setRetornoBooking(booking);
-                                                                                const tomorrow = new Date();
-                                                                                tomorrow.setDate(tomorrow.getDate() + 1);
-                                                                                setRetornoDate(tomorrow.toISOString().split('T')[0]);
-                                                                                setIsRetornoModalOpen(true);
-                                                                            }}
-                                                                            className="p-1.5 text-teal-600 hover:text-white hover:bg-teal-500 rounded-lg border border-teal-200 hover:border-teal-500 transition-all flex items-center justify-center cursor-pointer shadow-2xs"
-                                                                            title="Marcar Retorno para o Paciente"
-                                                                        >
-                                                                            <Repeat className="w-3.5 h-3.5" />
-                                                                        </button>
-                                                                    )}
-                                                                    {booking.status === 'Solicitado' && (
-                                                                        <>
-                                                                            {canComplete && (
-                                                                                <button
-                                                                                    onClick={() => handleStatusUpdate(booking.id, 'Agendado')}
-                                                                                    className="p-1.5 text-emerald-600 hover:text-white hover:bg-emerald-500 rounded-lg border border-emerald-200 hover:border-emerald-500 transition-all flex items-center justify-center cursor-pointer shadow-2xs"
-                                                                                    title="Aprovar Agendamento"
-                                                                                >
-                                                                                    <CheckCircle2 className="w-3.5 h-3.5" />
-                                                                                </button>
-                                                                            )}
-                                                                            {canCancel && (
-                                                                                <button
-                                                                                    onClick={() => handleOpenCancelModal(booking)}
-                                                                                    className="p-1.5 text-rose-500 hover:text-white hover:bg-rose-500 rounded-lg border border-rose-200 hover:border-rose-500 transition-all flex items-center justify-center cursor-pointer shadow-2xs"
-                                                                                    title="Rejeitar/Cancelar Agendamento"
-                                                                                >
-                                                                                    <XCircle className="w-3.5 h-3.5" />
-                                                                                </button>
-                                                                            )}
-                                                                        </>
-                                                                    )}
-                                                                    {booking.status === 'Agendado' && (
-                                                                        <>
-                                                                            {canComplete && (
-                                                                                <button
-                                                                                    onClick={() => handleStatusUpdate(booking.id, 'Realizado')}
-                                                                                    className="p-1.5 text-emerald-600 hover:text-white hover:bg-emerald-500 rounded-lg border border-emerald-200 hover:border-emerald-500 transition-all flex items-center justify-center cursor-pointer shadow-2xs"
-                                                                                    title="Marcar Procedimento como Realizado"
-                                                                                >
-                                                                                    <CheckCircle2 className="w-3.5 h-3.5" />
-                                                                                </button>
-                                                                            )}
-                                                                            {canComplete && (
-                                                                                <button
-                                                                                    onClick={() => handleStatusUpdate(booking.id, 'Não Realizado')}
-                                                                                    className="p-1.5 text-slate-500 hover:text-white hover:bg-slate-600 rounded-lg border border-slate-200 hover:border-slate-600 transition-all flex items-center justify-center cursor-pointer shadow-2xs"
-                                                                                    title="Marcar como Não Realizado (Paciente Faltou)"
-                                                                                >
-                                                                                    <UserX className="w-3.5 h-3.5" />
-                                                                                </button>
-                                                                            )}
-                                                                            {canCancel && (
-                                                                                <button
-                                                                                    onClick={() => handleOpenCancelModal(booking)}
-                                                                                    className="p-1.5 text-rose-500 hover:text-white hover:bg-rose-500 rounded-lg border border-rose-200 hover:border-rose-500 transition-all flex items-center justify-center cursor-pointer shadow-2xs"
-                                                                                    title="Cancelar Agendamento"
-                                                                                >
-                                                                                    <XCircle className="w-3.5 h-3.5" />
-                                                                                </button>
-                                                                            )}
-                                                                        </>
-                                                                    )}
-                                                                    {(booking.status === 'Fila de espera' || booking.status === 'Aguardando Data') && (
-                                                                        <>
-                                                                            {canCancel && (
-                                                                                <button
-                                                                                    onClick={() => handleOpenCancelModal(booking)}
-                                                                                    className="p-1.5 text-rose-500 hover:text-white hover:bg-rose-500 rounded-lg border border-rose-200 hover:border-rose-500 transition-all flex items-center justify-center cursor-pointer shadow-2xs"
-                                                                                    title="Cancelar Agendamento"
-                                                                                >
-                                                                                    <XCircle className="w-3.5 h-3.5" />
-                                                                                </button>
-                                                                            )}
-                                                                        </>
-                                                                    )}
-                                                                    {canDelete && (
-                                                                        <button
-                                                                            onClick={() => handleDelete(booking.id)}
-                                                                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all flex items-center justify-center cursor-pointer"
-                                                                            title="Excluir Agendamento"
-                                                                        >
-                                                                            <Trash2 className="w-3.5 h-3.5" />
-                                                                        </button>
-                                                                    )}
-                                                                </>
-                                                            )}
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
+                                        Carregar Mais (+30)
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setDisplayLimit(sortedBookings.length)}
+                                        className="px-3 py-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                                    >
+                                        Mostrar Todos
+                                    </button>
+                                </div>
                             </div>
-                        </div>
-                    </>
+                        )}
+                    </div>
                 ) : (
                     <div className="h-full flex flex-col items-center justify-center text-slate-400 p-8">
                         <Sparkles className="w-12 h-12 mb-3 opacity-25 text-slate-500" />
@@ -2029,6 +2148,9 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                     patient={printingBooking.paciente!}
                     procedure={printingBooking.procedimento!}
                     date={printingBooking.appointment_date}
+                    solicitationDate={printingBooking.solicitation_date || printingBooking.created_at}
+                    appointmentTime={printingBooking.appointment_time}
+                    status={printingBooking.status}
                     quantity={printingBooking.quantity}
                     priority={printingBooking.priority}
                     is_retorno={printingBooking.is_retorno}
@@ -2657,11 +2779,12 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                         <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">Prioridade</label>
                                         <select
                                             value={editPriority}
-                                            onChange={(e) => setEditPriority(e.target.value as 'Normal' | 'Urgência')}
+                                            onChange={(e) => setEditPriority(e.target.value as 'Normal' | 'Urgência' | 'Especial')}
                                             className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 outline-none"
                                         >
                                             <option value="Normal">Normal</option>
                                             <option value="Urgência">Urgência</option>
+                                            <option value="Especial">Especial (Prioridade Máxima)</option>
                                         </select>
                                     </div>
 

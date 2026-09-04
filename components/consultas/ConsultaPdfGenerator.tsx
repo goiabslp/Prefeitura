@@ -1,22 +1,24 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { AppState, User, ConsultaPaciente, ConsultaProcedimento } from '../../types';
 import { PageWrapper } from '../PageWrapper';
-import { CalendarDays, User as UserIcon, Clock, Activity, ShieldCheck, FileText } from 'lucide-react';
+import { CalendarDays, User as UserIcon, Activity } from 'lucide-react';
+import { getAgentesSaudeItems } from '../../services/agentesSaudeService';
 
 interface ConsultaPdfGeneratorProps {
     bookingId: string;
     patient: ConsultaPaciente;
     procedure: ConsultaProcedimento;
-    date: string;
+    date?: string | null;
     quantity: number;
-    priority: 'Normal' | 'Urgência';
+    priority: 'Normal' | 'Urgência' | 'Especial';
     is_retorno?: boolean;
     currentUser: User;
     state: AppState;
     solicitationDate?: string;
     appointmentTime?: string;
     status?: string;
+    agentPsf?: string;
 }
 
 export const ConsultaPdfGenerator: React.FC<ConsultaPdfGeneratorProps> = ({
@@ -31,16 +33,54 @@ export const ConsultaPdfGenerator: React.FC<ConsultaPdfGeneratorProps> = ({
     state,
     solicitationDate,
     appointmentTime,
-    status
+    status,
+    agentPsf
 }) => {
-    const formatDateBr = (d?: string) => {
+    const formatDateBr = (d?: string | null) => {
         if (!d) return '';
-        const [year, month, day] = d.split('-');
+        const clean = d.split('T')[0];
+        const [year, month, day] = clean.split('-');
         if (!year || !month || !day) return d;
         return `${day}/${month}/${year}`;
     };
 
-    const isWaitlist = status === 'Fila de espera' || !appointmentTime;
+    // Determina o status real de forma fiel
+    const currentStatus = (status || (date && appointmentTime ? 'Agendado' : 'Fila de espera')).trim();
+    const isWaitlist = currentStatus.toLowerCase() === 'fila de espera' || currentStatus.toLowerCase() === 'aguardando data';
+
+    // Lista de agentes para lookup imediato de PSF
+    const agentesList = useMemo(() => getAgentesSaudeItems(), []);
+    const resolvedPsf = useMemo(() => {
+        if (agentPsf && agentPsf.trim()) return agentPsf.trim();
+        if (!patient?.agente_saude) return '';
+        const cleanAgent = patient.agente_saude.trim().toUpperCase();
+        const found = agentesList.find(a => a.nome.trim().toUpperCase() === cleanAgent);
+        return found?.psf || '';
+    }, [agentPsf, patient?.agente_saude, agentesList]);
+
+    // Estilo de badge correspondente ao status
+    const getStatusBadgeStyle = (st: string) => {
+        const s = st.toLowerCase();
+        if (s.includes('agendad')) {
+            return 'bg-emerald-600 text-white shadow-sm';
+        }
+        if (s.includes('fila') || s.includes('aguardando')) {
+            return 'bg-amber-100 text-amber-900 border border-amber-300 font-black';
+        }
+        if (s.includes('solicitad')) {
+            return 'bg-sky-600 text-white shadow-sm';
+        }
+        if (s.includes('realizad')) {
+            return 'bg-blue-700 text-white shadow-sm';
+        }
+        if (s.includes('cancel') || s.includes('não')) {
+            return 'bg-rose-600 text-white shadow-sm';
+        }
+        if (s.includes('retorno')) {
+            return 'bg-teal-600 text-white shadow-sm';
+        }
+        return 'bg-slate-700 text-white';
+    };
 
     return createPortal(
         <div
@@ -95,61 +135,81 @@ export const ConsultaPdfGenerator: React.FC<ConsultaPdfGeneratorProps> = ({
                             </div>
 
                             <div className="relative z-10 space-y-6">
-                                <span className={`inline-block px-3 py-1 rounded text-[8pt] uppercase font-black tracking-widest ${
-                                    isWaitlist ? 'bg-amber-100 text-amber-800' : 'bg-sky-600 text-white'
-                                }`}>
-                                    Status: {status || (isWaitlist ? 'Fila de espera' : 'Agendado')}
+                                <span className={`inline-block px-3.5 py-1.5 rounded-lg text-[8pt] uppercase tracking-wider ${getStatusBadgeStyle(currentStatus)}`}>
+                                    STATUS: {currentStatus.toUpperCase()}
                                 </span>
 
                                 <div className="grid grid-cols-2 gap-8 border-t border-slate-200/80 pt-6">
+                                    {/* Dados do Paciente */}
                                     <div className="space-y-4">
                                         <h4 className="text-[9pt] font-black uppercase tracking-widest text-sky-600 flex items-center gap-2">
                                             <UserIcon className="w-4 h-4 text-sky-600" />
                                             Dados do Paciente
                                         </h4>
-                                        <div className="space-y-2 text-xs">
+                                        <div className="space-y-3 text-xs">
                                             <div>
                                                 <span className="block text-[7pt] font-bold uppercase text-slate-400 tracking-wider">Nome Completo</span>
                                                 <span className="font-extrabold text-slate-800 text-sm">{patient.nickname ? `${patient.name} (${patient.nickname})` : patient.name}</span>
                                             </div>
-                                            <div>
-                                                <span className="block text-[7pt] font-bold uppercase text-slate-400 tracking-wider">CPF</span>
-                                                <span className="font-bold text-slate-800">{patient.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}</span>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <span className="block text-[7pt] font-bold uppercase text-slate-400 tracking-wider">CPF</span>
+                                                    <span className="font-bold text-slate-800">{patient.cpf ? patient.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4") : 'Não informado'}</span>
+                                                </div>
+                                                <div>
+                                                    <span className="block text-[7pt] font-bold uppercase text-slate-400 tracking-wider">Data de Nascimento</span>
+                                                    <span className="font-bold text-slate-800">{formatDateBr(patient.birth_date) || 'Não informada'}</span>
+                                                </div>
                                             </div>
-                                            <div>
-                                                <span className="block text-[7pt] font-bold uppercase text-slate-400 tracking-wider">Data de Nascimento</span>
-                                                <span className="font-bold text-slate-800">{formatDateBr(patient.birth_date)}</span>
+                                            <div className="grid grid-cols-2 gap-4 pt-1 border-t border-slate-200/50">
+                                                <div>
+                                                    <span className="block text-[7pt] font-bold uppercase text-slate-400 tracking-wider">Agente de Saúde (ACS)</span>
+                                                    <span className="font-bold text-slate-800 uppercase">{patient.agente_saude || 'Não informado'}</span>
+                                                </div>
+                                                <div>
+                                                    <span className="block text-[7pt] font-bold uppercase text-slate-400 tracking-wider">Unidade PSF</span>
+                                                    <span className="font-bold text-slate-800 uppercase">{resolvedPsf || 'Não informado'}</span>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
 
+                                    {/* Dados do Agendamento */}
                                     <div className="space-y-4">
                                         <h4 className="text-[9pt] font-black uppercase tracking-widest text-indigo-600 flex items-center gap-2">
                                             <CalendarDays className="w-4 h-4 text-indigo-600" />
                                             Dados do Agendamento
                                         </h4>
-                                        <div className="space-y-2 text-xs">
+                                        <div className="space-y-3 text-xs">
                                             <div>
                                                 <span className="block text-[7pt] font-bold uppercase text-slate-400 tracking-wider">Procedimento / Exame</span>
                                                 <span className="font-extrabold text-slate-800 text-sm uppercase">{procedure.name}</span>
                                             </div>
-                                            <div>
-                                                <span className="block text-[7pt] font-bold uppercase text-slate-400 tracking-wider">Data da Solicitação</span>
-                                                <span className="font-extrabold text-slate-800">{formatDateBr(solicitationDate || date)}</span>
-                                            </div>
                                             <div className="grid grid-cols-2 gap-4">
                                                 <div>
-                                                    <span className="block text-[7pt] font-bold uppercase text-slate-400 tracking-wider">Data e Hora</span>
-                                                    <span className={`font-extrabold ${isWaitlist ? 'text-amber-700 font-bold' : 'text-slate-800'}`}>
-                                                        {!isWaitlist
-                                                            ? `${formatDateBr(date)}${appointmentTime ? ' às ' + appointmentTime.substring(0, 5) : ''}`
-                                                            : 'Aguardando Vaga'}
+                                                    <span className="block text-[7pt] font-bold uppercase text-slate-400 tracking-wider">Data do Agendamento</span>
+                                                    <span className={`font-extrabold ${isWaitlist && !date ? 'text-amber-700' : 'text-slate-800'}`}>
+                                                        {date ? formatDateBr(date) : (isWaitlist ? 'Aguardando Vaga' : 'A definir')}
+                                                    </span>
+                                                </div>
+                                                <div>
+                                                    <span className="block text-[7pt] font-bold uppercase text-slate-400 tracking-wider">Hora do Agendamento</span>
+                                                    <span className={`font-extrabold ${!appointmentTime ? 'text-amber-700' : 'text-slate-800'}`}>
+                                                        {appointmentTime ? appointmentTime.substring(0, 5) : (isWaitlist ? 'Aguardando Vaga' : 'A definir')}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-4 pt-1 border-t border-slate-200/50">
+                                                <div>
+                                                    <span className="block text-[7pt] font-bold uppercase text-slate-400 tracking-wider">Data da Solicitação</span>
+                                                    <span className="font-bold text-slate-700">
+                                                        {formatDateBr(solicitationDate || date) || 'Não informada'}
                                                     </span>
                                                 </div>
                                                 <div>
                                                     <span className="block text-[7pt] font-bold uppercase text-slate-400 tracking-wider">Prioridade</span>
-                                                    <span className="font-bold text-slate-800 uppercase" style={{ color: priority === 'Urgência' ? '#dc2626' : is_retorno ? '#0d9488' : '#475569' }}>
-                                                        {priority === 'Urgência' ? 'Urgência' : is_retorno ? 'Retorno' : 'Normal'}
+                                                    <span className="font-extrabold uppercase" style={{ color: priority === 'Especial' ? '#d97706' : priority === 'Urgência' ? '#dc2626' : is_retorno ? '#0d9488' : '#334155' }}>
+                                                        {priority === 'Especial' ? 'Especial' : priority === 'Urgência' ? 'Urgência' : is_retorno ? 'Retorno' : 'Normal'}
                                                     </span>
                                                 </div>
                                             </div>
@@ -160,7 +220,7 @@ export const ConsultaPdfGenerator: React.FC<ConsultaPdfGeneratorProps> = ({
                         </div>
 
                         {/* Informações de Auditoria e Assinatura */}
-                        <div className="grid grid-cols-2 gap-8 pt-8 mt-12 border-t border-slate-100">
+                        <div className="grid grid-cols-2 gap-8 pt-8 mt-8 border-t border-slate-100">
                             <div className="space-y-2 text-xs">
                                 <span className="block text-[7pt] font-black uppercase tracking-widest text-slate-400">Responsável pelo Registro</span>
                                 <div className="font-bold text-slate-800">{currentUser.name}</div>
@@ -174,7 +234,7 @@ export const ConsultaPdfGenerator: React.FC<ConsultaPdfGeneratorProps> = ({
                         </div>
 
                         {/* Nota de rodapé legal */}
-                        <div className="mt-12 p-4 bg-slate-50 border border-slate-200/80 rounded-xl text-center text-[7pt] font-bold uppercase tracking-wider text-slate-400 leading-relaxed">
+                        <div className="mt-8 p-4 bg-slate-50 border border-slate-200/80 rounded-xl text-center text-[7pt] font-bold uppercase tracking-wider text-slate-400 leading-relaxed">
                             Este é um documento oficial emitido eletronicamente pela Secretaria Municipal de Saúde. O paciente deve apresentar-se no local do atendimento portando este comprovante, documento com foto e cartão do SUS.
                         </div>
                     </div>
@@ -184,3 +244,4 @@ export const ConsultaPdfGenerator: React.FC<ConsultaPdfGeneratorProps> = ({
         document.body
     );
 };
+

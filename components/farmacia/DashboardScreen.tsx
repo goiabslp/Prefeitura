@@ -511,8 +511,8 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         return normalized === 'saída' || normalized === 'saida';
     };
 
-    // Parsing robusto de data para movimentações (priorizando formato brasileiro DD/MM/YYYY)
-    const parseMovimentacaoDate = (dateStr?: string | Date): Date | null => {
+    // Parsing robusto de data para movimentações e medicamentos (priorizando formato brasileiro DD/MM/YYYY, ISO e variações)
+    const parseMovimentacaoDate = (dateStr?: string | Date | null): Date | null => {
         if (!dateStr) return null;
         if (dateStr instanceof Date) return isNaN(dateStr.getTime()) ? null : dateStr;
         try {
@@ -536,20 +536,60 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                     }
                     const parsedDate = new Date(year, month, day, hours, minutes, seconds);
                     if (!isNaN(parsedDate.getTime())) return parsedDate;
+                } else if (dateParts.length === 2) {
+                    // MM/YYYY
+                    const month = parseInt(dateParts[0], 10) - 1;
+                    const year = parseInt(dateParts[1], 10);
+                    const parsedDate = new Date(year, month, 1);
+                    if (!isNaN(parsedDate.getTime())) return parsedDate;
                 }
             }
 
-            // Prioridade 2: Formato ISO (YYYY-MM-DDTHH:mm:ss)
+            // Prioridade 2: Formato YYYY-MM
+            if (/^\d{4}-\d{2}$/.test(str)) {
+                const parts = str.split('-');
+                const parsedDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, 1);
+                if (!isNaN(parsedDate.getTime())) return parsedDate;
+            }
+
+            // Prioridade 3: Formato ISO (YYYY-MM-DD ou YYYY-MM-DDTHH:mm:ss)
             const isoParsed = parseISO(str);
             if (!isNaN(isoParsed.getTime())) return isoParsed;
 
-            // Prioridade 3: Instanciação direta
+            // Prioridade 4: Instanciação direta
             const directDate = new Date(str);
             if (!isNaN(directDate.getTime())) return directDate;
 
             return null;
         } catch {
             return null;
+        }
+    };
+
+    // Formatação de data 100% resiliente contra RangeError: Invalid time value
+    const formatSafeDate = (dateVal?: string | Date | null, formatStr: string = 'dd/MM/yyyy'): string => {
+        if (!dateVal) return '—';
+        try {
+            const parsed = parseMovimentacaoDate(dateVal);
+            if (!parsed || isNaN(parsed.getTime())) {
+                const str = String(dateVal).trim();
+                return str.length > 0 && str.length <= 25 ? str : '—';
+            }
+            return format(parsed, formatStr);
+        } catch {
+            const str = String(dateVal).trim();
+            return str.length > 0 && str.length <= 25 ? str : '—';
+        }
+    };
+
+    const formatSafeDistanceToNow = (dateVal?: string | Date | null): string => {
+        if (!dateVal) return '';
+        try {
+            const parsed = parseMovimentacaoDate(dateVal);
+            if (!parsed || isNaN(parsed.getTime())) return '';
+            return formatDistanceToNow(parsed, { addSuffix: true, locale: ptBR });
+        } catch {
+            return '';
         }
     };
 
@@ -766,12 +806,11 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         for (const med of medicamentos) {
             // Find all dispenses for this med in the last 30 days to get a daily average
             const thirtyDaysAgo = subMonths(now, 1);
-            const recentDispenses = movimentacoes.filter(m => 
-                m.medicamento_id === med.id && 
-                m.tipo === 'Saída' && 
-                m.data && 
-                parseISO(m.data) >= thirtyDaysAgo
-            );
+            const recentDispenses = movimentacoes.filter(m => {
+                if (m.medicamento_id !== med.id || m.tipo !== 'Saída' || !m.data) return false;
+                const mDate = parseMovimentacaoDate(m.data);
+                return mDate ? mDate >= thirtyDaysAgo : false;
+            });
 
             const totalDispensed30d = recentDispenses.reduce((acc, curr) => acc + curr.quantidade, 0);
             const dailyAverage = totalDispensed30d / 30;
@@ -1656,7 +1695,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                                     <div className="text-[10px] font-bold text-slate-400 mt-0.5">{m.medicamento_nome} • {m.quantidade} un</div>
                                 </div>
                                 <div className="text-slate-400 font-bold text-[9px] uppercase">
-                                    {m.data ? formatDistanceToNow(parseISO(m.data), { addSuffix: true, locale: ptBR }) : ''}
+                                    {formatSafeDistanceToNow(m.data)}
                                 </div>
                             </div>
                         ))}
@@ -1811,7 +1850,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                                         return (
                                             <tr key={op.id} className="hover:bg-slate-50/40 transition-colors">
                                                 <td className="p-4 font-mono text-[11px] text-slate-500 whitespace-nowrap">
-                                                    {op.data ? format(parseISO(op.data), 'dd/MM/yyyy HH:mm:ss') : '—'}
+                                                    {formatSafeDate(op.data, 'dd/MM/yyyy HH:mm:ss')}
                                                 </td>
                                                 <td className="p-4 whitespace-nowrap">
                                                     <span className={`inline-block px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider border ${tipoColor}`}>
@@ -2288,7 +2327,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                                                 </td>
                                                 <td className="p-4 text-center">
                                                     <div className="text-xs font-bold text-slate-700">{med.lote || 'S/L'}</div>
-                                                    <div className="text-[10px] text-slate-400 font-semibold">{med.validade ? format(parseISO(med.validade), 'dd/MM/yyyy') : '—'}</div>
+                                                    <div className="text-[10px] text-slate-400 font-semibold">{formatSafeDate(med.validade, 'dd/MM/yyyy')}</div>
                                                 </td>
                                                 <td className="p-4 text-center">
                                                     <span className={`inline-flex items-center px-3 py-1 rounded-xl text-xs font-black ${
@@ -2463,7 +2502,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                                                 </td>
                                                 <td className="p-4 text-center">
                                                     <div className="text-xs font-bold text-slate-700">{med.lote || 'S/L'}</div>
-                                                    <div className="text-[10px] text-slate-400 font-semibold">{med.validade ? format(parseISO(med.validade), 'dd/MM/yyyy') : '—'}</div>
+                                                    <div className="text-[10px] text-slate-400 font-semibold">{formatSafeDate(med.validade, 'dd/MM/yyyy')}</div>
                                                 </td>
                                                 <td className="p-4 text-center">
                                                     <span className={`inline-flex items-center px-3 py-1 rounded-xl text-xs font-black ${

@@ -209,6 +209,11 @@ const VIEW_TO_PATH: Record<string, string> = {
   'consultas:acompanhar': '/Consultas/Acompanhar',
   'consultas:dados': '/Consultas/DADOS',
   'consultas:dados-dashboard': '/Consultas/DADOS/Dashboard',
+  'consultas:dados-dashboard-geral': '/Consultas/DADOS/Dashboard/VisaoGeral',
+  'consultas:dados-dashboard-prazos': '/Consultas/DADOS/Dashboard/Prazos',
+  'consultas:dados-dashboard-filas': '/Consultas/DADOS/Dashboard/Filas',
+  'consultas:dados-dashboard-ia': '/Consultas/DADOS/Dashboard/IA',
+  'consultas:dados-dashboard-eficiencia': '/Consultas/DADOS/Dashboard/Eficiencia',
   'consultas:dados-pacientes': '/Consultas/DADOS/Pacientes',
   'consultas:dados-procedimentos': '/Consultas/DADOS/Exames',
   'consultas:dados-historico': '/Consultas/DADOS/Historico',
@@ -1192,6 +1197,10 @@ const App: React.FC = () => {
       } else if (path.includes('/kanban')) {
         setCurrentView('licitacao:kanban');
         return;
+      } else if (path.startsWith('/admin/usuarios')) {
+        setCurrentView('admin');
+        setAdminTab('users');
+        return;
       }
 
       const matchedEntry = Object.entries(PATH_TO_STATE).find(
@@ -1417,7 +1426,9 @@ const App: React.FC = () => {
       let targetPath = '';
       try { targetPath = decodeURIComponent(expectedPath); } catch (e) { targetPath = expectedPath; }
 
-      if (currentPath.replace(/\/$/, '').toLowerCase() !== targetPath.replace(/\/$/, '').toLowerCase()) {
+      if (stateKey === 'admin:users' && currentPath.toLowerCase().startsWith('/admin/usuarios/')) {
+        // Preserva a URL individual do usuário em edição (/Admin/Usuarios/Editar/:id ou /Admin/Usuarios/Novo)
+      } else if (currentPath.replace(/\/$/, '').toLowerCase() !== targetPath.replace(/\/$/, '').toLowerCase()) {
         window.history.pushState(null, '', expectedPath);
       }
     }
@@ -5035,6 +5046,21 @@ const App: React.FC = () => {
                   } else if (view === 'consultas:dados-dashboard') {
                     setAppState(prev => ({ ...prev, view: 'dados-dashboard' }));
                     window.history.pushState({}, '', '/Consultas/DADOS/Dashboard');
+                  } else if (view === 'consultas:dados-dashboard-geral') {
+                    setAppState(prev => ({ ...prev, view: 'dados-dashboard-geral' }));
+                    window.history.pushState({}, '', '/Consultas/DADOS/Dashboard/VisaoGeral');
+                  } else if (view === 'consultas:dados-dashboard-prazos') {
+                    setAppState(prev => ({ ...prev, view: 'dados-dashboard-prazos' }));
+                    window.history.pushState({}, '', '/Consultas/DADOS/Dashboard/Prazos');
+                  } else if (view === 'consultas:dados-dashboard-filas') {
+                    setAppState(prev => ({ ...prev, view: 'dados-dashboard-filas' }));
+                    window.history.pushState({}, '', '/Consultas/DADOS/Dashboard/Filas');
+                  } else if (view === 'consultas:dados-dashboard-ia') {
+                    setAppState(prev => ({ ...prev, view: 'dados-dashboard-ia' }));
+                    window.history.pushState({}, '', '/Consultas/DADOS/Dashboard/IA');
+                  } else if (view === 'consultas:dados-dashboard-eficiencia') {
+                    setAppState(prev => ({ ...prev, view: 'dados-dashboard-eficiencia' }));
+                    window.history.pushState({}, '', '/Consultas/DADOS/Dashboard/Eficiencia');
                   } else if (view === 'consultas:dados-pacientes') {
                     setAppState(prev => ({ ...prev, view: 'dados-pacientes' }));
                     window.history.pushState({}, '', '/Consultas/DADOS/Pacientes');
