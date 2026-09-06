@@ -255,20 +255,29 @@ export const ArtCanvasRenderer: React.FC<ArtCanvasRendererProps> = ({
           curY += lineHeight;
         }
 
-        // 1ª Camada: Sombra e Chanfro 3D Profundo
+        // 1ª Camada: Chanfro e Extrusão 3D Multicamadas Profunda
         ctx.save();
         ctx.font = fontStr;
         ctx.fillStyle = '#000000';
+        ctx.fillText(wordText, curX + 2, curY + 2);
+        ctx.fillText(wordText, curX + 4, curY + 4);
+        ctx.fillText(wordText, curX + 6, curY + 6);
         ctx.shadowColor = 'rgba(0, 0, 0, 0.98)';
-        ctx.shadowBlur = 24;
+        ctx.shadowBlur = 28;
         ctx.shadowOffsetX = 0;
-        ctx.shadowOffsetY = 8;
-        ctx.fillText(wordText, curX + 4, curY + 6);
+        ctx.shadowOffsetY = 10;
+        ctx.fillText(wordText, curX + 6, curY + 8);
 
-        // 2ª Camada: Cor de Destaque Vibrante (ou Branco) com Glow Integrado
+        // 2ª Camada: Borda/Contorno de Contraste Externo
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = isHigh ? 5 : 4;
+        ctx.lineJoin = 'round';
+        ctx.strokeText(wordText, curX, curY);
+
+        // 3ª Camada: Cor de Destaque Vibrante com Glow Profundo Integrado
         ctx.fillStyle = isHigh ? (variation.accentColor || '#f59e0b') : (variation.textColor || '#ffffff');
         ctx.shadowColor = isHigh ? (variation.accentColor || '#f59e0b') : 'rgba(0,0,0,0.85)';
-        ctx.shadowBlur = isHigh ? 28 : 10;
+        ctx.shadowBlur = isHigh ? 32 : 12;
         ctx.shadowOffsetX = 0;
         ctx.shadowOffsetY = 0;
         ctx.fillText(wordText, curX, curY);
@@ -743,11 +752,12 @@ export const ArtCanvasRenderer: React.FC<ArtCanvasRendererProps> = ({
                     return (
                       <span 
                         key={idx}
-                        className="text-[72px] md:text-[84px] uppercase font-black transform inline-block"
+                        className="text-[72px] md:text-[86px] uppercase font-black transform inline-block tracking-tight"
                         style={{
                           color: variation.accentColor || '#f59e0b',
-                          textShadow: '0 4px 0 #000, 0 8px 0 rgba(0,0,0,0.85), 0 16px 32px rgba(0,0,0,0.95), 0 0 35px ' + (variation.accentColor || 'rgba(245,158,11,0.6)'),
-                          filter: 'drop-shadow(0 6px 12px rgba(0,0,0,0.8))'
+                          WebkitTextStroke: '2px rgba(0,0,0,0.85)',
+                          textShadow: '0 2px 0 #000, 0 4px 0 rgba(0,0,0,0.95), 0 6px 0 rgba(0,0,0,0.9), 0 8px 0 rgba(0,0,0,0.8), 0 16px 32px rgba(0,0,0,0.95), 0 0 40px ' + (variation.accentColor || 'rgba(245,158,11,0.7)'),
+                          filter: 'drop-shadow(0 8px 16px rgba(0,0,0,0.9))'
                         }}
                       >
                         {w.text}
@@ -757,9 +767,10 @@ export const ArtCanvasRenderer: React.FC<ArtCanvasRendererProps> = ({
                   return (
                     <span 
                       key={idx}
-                      className="text-[60px] md:text-[70px] font-black uppercase text-white inline-block"
+                      className="text-[60px] md:text-[72px] font-black uppercase text-white inline-block tracking-tight"
                       style={{
-                        textShadow: '0 3px 0 #000, 0 7px 0 rgba(0,0,0,0.8), 0 14px 28px rgba(0,0,0,0.95)'
+                        WebkitTextStroke: '1.5px rgba(0,0,0,0.75)',
+                        textShadow: '0 2px 0 #000, 0 4px 0 rgba(0,0,0,0.9), 0 6px 0 rgba(0,0,0,0.8), 0 14px 28px rgba(0,0,0,0.95)'
                       }}
                     >
                       {w.text}

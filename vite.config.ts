@@ -327,6 +327,16 @@ DADOS DA PUBLICAÇÃO FORNECIDOS PELO ADMINISTRADOR:
 TRATAMENTO FOTOGRÁFICO DA IMAGEM:
 Defina parâmetros de tratamento (brightness 0.95-1.15, contrast 1.0-1.25, saturation 1.05-1.30, colorGradingTone: 'cool_civic' | 'warm_golden' | 'cinematic_neutral' | 'vibrant', vignetteStrength 0.15-0.40).
 
+CLÁUSULA MANDATÓRIA — APLICAÇÃO OBRIGATÓRIA EM CADA POST GERADO (EM CADA UMA DAS 3 VARIAÇÕES):
+Você DEVE obrigatoriamente aplicar a REGRA MÁXIMA E OBRIGATÓRIA do TÍTULO E SUBTÍTULO em CADA POST gerado.
+NUNCA retorne títulos simples, planos, estáticos ou sem tratamento visual. Em CADA UMA das 3 variações geradas:
+1. "titleHighlightWords": Preencha OBRIGATORIAMENTE um array com 1 a 3 palavras principais do TÍTULO "${info.title || ''}" que receberão tratamento visual diferenciado (cor de destaque vibrante accentColor, tamanho 84px proeminente, relevo 3D multicamadas e glow). Exemplo: para "GRANDE FINAL DO CAMPEONATO", retorne ["FINAL"] ou ["GRANDE", "FINAL"]. É PROIBIDO retornar array vazio.
+2. "titleEffect": Defina obrigatoriamente '3d_depth'.
+3. "accentColor": Defina uma cor de destaque vibrante de alto contraste (ex: amarelo sol #f59e0b, verde neon #10b981, turquesa #06b6d4, coral #f43f5e) para contrastar com as palavras normais.
+4. "subtitleSummary": Crie ou formate a chamada secundária como um elemento visual protagonista com container estilizado.
+5. "badgeLabel": Defina um selo oficial ou sticker temático de confirmação (ex: "✅ OFICIAL", "⚡ DESTAQUE", "📍 ENTRADA FRANCA").
+6. "haikeiShape": Selecione 'wave', 'blob' ou 'halftone' para enriquecer a base visual.
+
 Gere exatamente 3 variações que sigam fielmente o estilo e paleta das referências:
 1. "Institucional Dinâmica": Harmonia institucional com alta energia visual e elegância.
 2. "Moderna & Criativa": Composição contemporânea com cores vibrantes, formas arrojadas e efeito 3D.
@@ -529,7 +539,7 @@ INSTRUÇÕES:
                               }
                             }
                           },
-                          required: ['id', 'styleName', 'description', 'primaryColor', 'secondaryColor', 'accentColor', 'textColor', 'backgroundColor', 'fontFamilyTitle', 'fontFamilyBody', 'logoPosition', 'layoutType'],
+                          required: ['id', 'styleName', 'description', 'primaryColor', 'secondaryColor', 'accentColor', 'textColor', 'backgroundColor', 'fontFamilyTitle', 'fontFamilyBody', 'logoPosition', 'layoutType', 'titleHighlightWords', 'titleEffect'],
                         }
                       }
                     },

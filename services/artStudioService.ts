@@ -434,6 +434,27 @@ export const readFileAsOptimizedLogo = (file: File, maxDim: number = 1000): Prom
   });
 };
 
+// Função auxiliar para extrair as 1 a 3 palavras mais impactantes do título garantindo a regra máxima em cada post gerado
+export const extractSmartHighlightWords = (title: string): string[] => {
+  const stopWords = new Set([
+    'de', 'da', 'do', 'das', 'dos', 'e', 'em', 'para', 'com', 'no', 'na', 
+    'nos', 'nas', 'um', 'uma', 'o', 'a', 'os', 'as', 'por', 'pelo', 'pela',
+    'sobre', 'entre', 'até', 'ao', 'aos', 'à', 'às', 'se', 'sua', 'seu',
+    'comunicado', 'oficial', 'prefeitura', 'municipal'
+  ]);
+  const words = (title || '').trim().split(/\s+/).filter(w => w.length > 1);
+  if (!words.length) return ['DESTAQUE'];
+
+  // Prioriza palavras fora de stopWords
+  const meaningful = words.filter(w => !stopWords.has(w.toLowerCase().replace(/[^\wÀ-ú]/g, '')));
+  if (meaningful.length > 0) {
+    // Escolhe as palavras com maior número de caracteres ou as 2 primeiras mais significativas
+    const sorted = [...meaningful].sort((a, b) => b.length - a.length);
+    return sorted.slice(0, Math.min(2, sorted.length));
+  }
+  return [words[0]];
+};
+
 export const artStudioService = {
   // ==========================================
   // GESTÃO DE LOGOS DA PREFEITURA
@@ -1152,50 +1173,60 @@ export const artStudioService = {
         return this.createFallbackVariations(info);
       }
 
-      // Normaliza as variações recebidas
-      return rawVariations.slice(0, 3).map((v, idx) => ({
-        id: v.id || `var_${idx + 1}_${Date.now()}`,
-        styleName: v.styleName || (idx === 0 ? 'Institucional' : idx === 1 ? 'Moderna' : 'Impactante'),
-        description: v.description || 'Composição equilibrada adaptada para comunicação pública oficial.',
-        primaryColor: v.primaryColor || (idx === 0 ? '#1e3a8a' : idx === 1 ? '#4f46e5' : '#0f172a'),
-        secondaryColor: v.secondaryColor || (idx === 0 ? '#d97706' : idx === 1 ? '#06b6d4' : '#ef4444'),
-        accentColor: v.accentColor || (idx === 0 ? '#f59e0b' : idx === 1 ? '#10b981' : '#fbbf24'),
-        textColor: v.textColor || '#ffffff',
-        backgroundColor: v.backgroundColor || (idx === 0 ? '#0f172a' : idx === 1 ? '#090d16' : '#18181b'),
-        gradientBackground: v.gradientBackground || (
-          idx === 0 
-            ? 'linear-gradient(145deg, #0f172a 0%, #1e3a8a 70%, #172554 100%)' 
-            : idx === 1 
-            ? 'linear-gradient(135deg, #090d16 0%, #312e81 60%, #4338ca 100%)' 
-            : 'linear-gradient(180deg, #18181b 0%, #09090b 60%, #27272a 100%)'
-        ),
-        fontFamilyTitle: v.fontFamilyTitle || 'Montserrat, sans-serif',
-        fontFamilyBody: v.fontFamilyBody || 'Inter, sans-serif',
-        logoPosition: (v.logoPosition as ArtLogoPosition) || 'top_right',
-        logoSizePercent: v.logoSizePercent || 20,
-        logoOpacity: v.logoOpacity || 1,
-        layoutType: v.layoutType || (idx === 0 ? 'split' : idx === 1 ? 'overlay' : 'framed'),
-        headlineSummary: v.headlineSummary || info.title,
-        subtitleSummary: v.subtitleSummary || info.subtitle,
-        bodySummary: v.bodySummary || info.description,
-        impactWord: v.impactWord || (idx === 2 ? 'DESTAQUE' : undefined),
-        impactWordEffect: v.impactWordEffect || (idx === 2 ? 'glow' : idx === 1 ? '3d_shadow' : 'glass_badge'),
-        titleEffect: v.titleEffect || (idx === 0 ? 'clean_drop_shadow' : idx === 1 ? '3d_depth' : 'bold_punch'),
-        contextualTheme: v.contextualTheme || info.category || 'Institucional',
-        photoTreatment: v.photoTreatment || {
-          brightness: 1.05,
-          contrast: 1.1,
-          saturation: 1.15,
-          colorGradingTone: idx === 0 ? 'cool_civic' : idx === 1 ? 'warm_golden' : 'vibrant',
-          vignetteStrength: 0.3,
-          lightingEffect: idx === 1 ? 'sunlight_leak' : idx === 2 ? 'stage_light' : 'soft_glow'
-        },
-        elements: [
-          { type: 'badge', color: v.secondaryColor || '#4f46e5', opacity: 0.9 },
-          { type: 'gradient', opacity: 0.4 },
-          { type: 'frame', color: v.accentColor || '#f59e0b', opacity: 0.7 }
-        ]
-      }));
+      // Normaliza as variações recebidas garantindo a aplicação estrita da regra máxima em CADA POST gerado
+      return rawVariations.slice(0, 3).map((v, idx) => {
+        const highlightWords = (Array.isArray(v.titleHighlightWords) && v.titleHighlightWords.length > 0)
+          ? v.titleHighlightWords
+          : extractSmartHighlightWords(info.title || v.headlineSummary);
+
+        return {
+          id: v.id || `var_${idx + 1}_${Date.now()}`,
+          styleName: v.styleName || (idx === 0 ? 'Institucional' : idx === 1 ? 'Moderna' : 'Impactante'),
+          description: v.description || 'Composição equilibrada adaptada para comunicação pública oficial.',
+          primaryColor: v.primaryColor || (idx === 0 ? '#1e3a8a' : idx === 1 ? '#4f46e5' : '#0f172a'),
+          secondaryColor: v.secondaryColor || (idx === 0 ? '#d97706' : idx === 1 ? '#06b6d4' : '#ef4444'),
+          accentColor: v.accentColor || (idx === 0 ? '#f59e0b' : idx === 1 ? '#10b981' : '#fbbf24'),
+          textColor: v.textColor || '#ffffff',
+          backgroundColor: v.backgroundColor || (idx === 0 ? '#0f172a' : idx === 1 ? '#090d16' : '#18181b'),
+          gradientBackground: v.gradientBackground || (
+            idx === 0 
+              ? 'linear-gradient(145deg, #0f172a 0%, #1e3a8a 70%, #172554 100%)' 
+              : idx === 1 
+              ? 'linear-gradient(135deg, #090d16 0%, #312e81 60%, #4338ca 100%)' 
+              : 'linear-gradient(180deg, #18181b 0%, #09090b 60%, #27272a 100%)'
+          ),
+          fontFamilyTitle: v.fontFamilyTitle || 'Montserrat, sans-serif',
+          fontFamilyBody: v.fontFamilyBody || 'Inter, sans-serif',
+          logoPosition: (v.logoPosition as ArtLogoPosition) || 'top_right',
+          logoSizePercent: v.logoSizePercent || 20,
+          logoOpacity: v.logoOpacity || 1,
+          layoutType: v.layoutType || (idx === 0 ? 'split' : idx === 1 ? 'overlay' : 'framed'),
+          headlineSummary: v.headlineSummary || info.title,
+          subtitleSummary: v.subtitleSummary || info.subtitle,
+          bodySummary: v.bodySummary || info.description,
+          impactWord: v.impactWord || (idx === 2 ? 'DESTAQUE' : undefined),
+          impactWordEffect: v.impactWordEffect || (idx === 2 ? 'glow' : idx === 1 ? '3d_shadow' : 'glass_badge'),
+          titleEffect: v.titleEffect || '3d_depth',
+          titleHighlightWords: highlightWords,
+          haikeiShape: v.haikeiShape || (idx === 0 ? 'wave' : idx === 1 ? 'blob' : 'halftone'),
+          badgeLabel: v.badgeLabel || (info.eventDate ? '📅 DATA CONFIRMADA' : '✅ COMUNICADO OFICIAL'),
+          libraryIcons: Array.isArray(v.libraryIcons) && v.libraryIcons.length > 0 ? v.libraryIcons : ['Shield', 'CheckCircle2', 'Star'],
+          contextualTheme: v.contextualTheme || info.category || 'Institucional',
+          photoTreatment: v.photoTreatment || {
+            brightness: 1.05,
+            contrast: 1.1,
+            saturation: 1.15,
+            colorGradingTone: idx === 0 ? 'cool_civic' : idx === 1 ? 'warm_golden' : 'vibrant',
+            vignetteStrength: 0.3,
+            lightingEffect: idx === 1 ? 'sunlight_leak' : idx === 2 ? 'stage_light' : 'soft_glow'
+          },
+          elements: [
+            { type: 'badge', color: v.secondaryColor || '#4f46e5', opacity: 0.9 },
+            { type: 'gradient', opacity: 0.4 },
+            { type: 'frame', color: v.accentColor || '#f59e0b', opacity: 0.7 }
+          ]
+        };
+      });
     } catch (error) {
       clearInterval(progressTimer);
       console.warn('IA falhou, gerando composições de contingência de alto padrão visual:', error);
@@ -1205,6 +1236,8 @@ export const artStudioService = {
 
   // Cria 3 propostas visuais ricas de contingência caso a rede / chave da IA oscile
   createFallbackVariations(info: { title: string; subtitle?: string; description: string; category?: string; eventDate?: string }): ArtVariation[] {
+    const fallbackHighlights = extractSmartHighlightWords(info.title);
+
     return [
       {
         id: `var_1_institucional_${Date.now()}`,
@@ -1228,6 +1261,10 @@ export const artStudioService = {
         impactWord: info.eventDate ? 'VEM AÍ!' : 'IMPORTANTE!',
         impactWordEffect: 'glow',
         titleEffect: '3d_depth',
+        titleHighlightWords: fallbackHighlights,
+        haikeiShape: 'wave',
+        badgeLabel: '✅ COMUNICADO OFICIAL',
+        libraryIcons: ['Shield', 'CheckCircle2', 'MapPin'],
         photoTreatment: {
           brightness: 1.08,
           contrast: 1.12,
@@ -1262,7 +1299,11 @@ export const artStudioService = {
         bodySummary: info.description,
         impactWord: 'PARTICIPE!',
         impactWordEffect: 'metallic',
-        titleEffect: 'bold_punch',
+        titleEffect: '3d_depth',
+        titleHighlightWords: fallbackHighlights,
+        haikeiShape: 'blob',
+        badgeLabel: '⚡ GRANDE DESTAQUE',
+        libraryIcons: ['Sparkles', 'Calendar', 'Users'],
         photoTreatment: {
           brightness: 1.05,
           contrast: 1.15,
@@ -1298,6 +1339,10 @@ export const artStudioService = {
         impactWord: 'NOVIDADE!',
         impactWordEffect: '3d_shadow',
         titleEffect: '3d_depth',
+        titleHighlightWords: fallbackHighlights,
+        haikeiShape: 'halftone',
+        badgeLabel: '⭐ ESPECIAL MUNICIPAL',
+        libraryIcons: ['Trophy', 'Star', 'Flame'],
         photoTreatment: {
           brightness: 1.10,
           contrast: 1.20,
