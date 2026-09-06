@@ -87,6 +87,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, uiConfig, onL
   }, []);
 
   const handleBiometricLogin = async () => {
+    // Se o usuário já preencheu usuário e senha no formulário, autentica imediatamente
+    if (username.trim() && password.trim()) {
+      handleSubmit(new Event('submit') as any);
+      return;
+    }
+
     setLoading(true);
     setError('');
     try {
@@ -101,26 +107,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, uiConfig, onL
           setIsUpdatingSystem(true);
           onLoginSuccess?.();
         } else {
-          setError('Falha na verificação de credenciais salvas.');
+          setError('Falha ao autenticar com as credenciais salvas.');
         }
       } else {
-        if (!username || !password) {
-          setError('Para ativar Face ID / Touch ID, preencha usuário e senha e mantenha conectado.');
-        } else {
-          const emailToUse = username.includes('@') ? username : `${username}@projeto.local`;
-          const { error } = await onLogin(emailToUse, password);
-          if (!error) {
-            setBiometricsEnabled(true, username, password);
-            setIsUpdatingSystem(true);
-            onLoginSuccess?.();
-          } else {
-            setError('Credenciais inválidas para vincular biometria.');
-          }
-        }
+        setError('Preencha seu usuário e senha para entrar no sistema.');
       }
     } catch (err: any) {
       console.error(err);
-      setError('Autenticação biométrica cancelada ou não suportada.');
+      setError('Erro na autenticação.');
     } finally {
       setLoading(false);
     }

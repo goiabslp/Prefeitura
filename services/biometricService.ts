@@ -28,26 +28,6 @@ export const authenticateWithBiometrics = async (): Promise<{ user: string; pass
     return null;
   }
 
-  // Tenta acionar a verificação biométrica nativa do dispositivo (Face ID / Touch ID)
-  try {
-    if (typeof window !== 'undefined' && window.PublicKeyCredential && PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable) {
-      const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-      if (available) {
-        const challenge = new Uint8Array(32);
-        window.crypto.getRandomValues(challenge);
-
-        await navigator.credentials.get({
-          publicKey: {
-            challenge,
-            timeout: 60000,
-            userVerification: 'preferred'
-          }
-        });
-      }
-    }
-  } catch (err) {
-    console.warn('Alerta biometria nativa:', err);
-  }
-
+  // Retorna diretamente as credenciais salvas sem acionar o diálogo invasivo do Windows Hello
   return { user, pass };
 };
