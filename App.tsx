@@ -120,6 +120,7 @@ import { remoteAccessService } from './services/remoteAccessService';
 import { startGlobalLocationTracking, stopGlobalLocationTracking } from './services/locationTrackingService';
 import { PoliticaPrivacidadeScreen } from './components/PoliticaPrivacidadeScreen';
 import { PoliticaPrivacidadeAppScreen } from './components/PoliticaPrivacidadeAppScreen';
+import { canUserAccessRoute, cleanPermissionsArray } from './services/permissionService';
 
 const VIEW_TO_PATH: Record<string, string> = {
   'login': '/Login',
@@ -1200,6 +1201,19 @@ const App: React.FC = () => {
         return;
       }
 
+      // Validação Centralizada do Route Guard (Segurança Real por Módulo e Submódulo)
+      const routeCheck = canUserAccessRoute(rawPath, currentUser, moduleStatus);
+      if (!routeCheck.allowed) {
+        console.warn(`[RouteGuard] Acesso negado para "${rawPath}": ${routeCheck.reason}`);
+        window.history.replaceState({}, '', routeCheck.redirectPath || '/PaginaInicial');
+        setCurrentView('home');
+        setActiveBlock(null);
+        if (routeCheck.reason) {
+          alert(routeCheck.reason);
+        }
+        return;
+      }
+
       if (path.startsWith('/diarias/viajar')) {
         setCurrentView('diarias-viajar');
         return;
@@ -1324,7 +1338,7 @@ const App: React.FC = () => {
     const onPopState = () => restoreStateFromUrl();
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
-  }, [authLoading, currentUser]);
+  }, [authLoading, currentUser, moduleStatus]);
 
   // Trava Global de Viagem em Andamento para todo o Módulo de Diárias
   useEffect(() => {
@@ -1444,6 +1458,19 @@ const App: React.FC = () => {
       let targetPath = '';
       try { targetPath = decodeURIComponent(expectedPath); } catch (e) { targetPath = expectedPath; }
 
+      // Route Guard para transições internas:
+      const accessCheck = canUserAccessRoute(expectedPath, currentUser, moduleStatus);
+      if (!accessCheck.allowed) {
+        console.warn(`[RouteGuard] Transição interna bloqueada para "${expectedPath}": ${accessCheck.reason}`);
+        setCurrentView('home');
+        setActiveBlock(null);
+        window.history.replaceState(null, '', '/PaginaInicial');
+        if (accessCheck.reason) {
+          alert(accessCheck.reason);
+        }
+        return;
+      }
+
       if (stateKey === 'admin:users' && currentPath.toLowerCase().startsWith('/admin/usuarios/')) {
         // Preserva a URL individual do usuário em edição (/Admin/Usuarios/Editar/:id ou /Admin/Usuarios/Novo)
       } else if (currentPath.replace(/\/$/, '').toLowerCase() !== targetPath.replace(/\/$/, '').toLowerCase()) {
@@ -1461,6 +1488,44 @@ const App: React.FC = () => {
 
     return () => clearTimeout(timeoutId);
   }, [currentView, activeBlock, adminTab, editingOrder, queryClient, refreshData]);
+
+  // Garante que SEMPRE que entrar em uma nova página, aba ou submódulo a rolagem fique 100% no topo
+  useEffect(() => {
+    const resetScrollToTop = () => {
+      // 1. Zera scroll da janela global e do documento
+      window.scrollTo(0, 0);
+      if (document.documentElement) document.documentElement.scrollTop = 0;
+      if (document.body) document.body.scrollTop = 0;
+
+      // 2. Zera scroll da raiz da aplicação (#root)
+      const rootEl = document.getElementById('root');
+      if (rootEl) rootEl.scrollTop = 0;
+
+      // 3. Zera scroll de todos os containers internos com rolagem
+      const scrollables = document.querySelectorAll<HTMLElement>(
+        'main, .custom-scrollbar, [class*="overflow-y-auto"], [class*="overflow-auto"]'
+      );
+      scrollables.forEach((el) => {
+        el.scrollTop = 0;
+      });
+    };
+
+    // Executa imediatamente no início da transição
+    resetScrollToTop();
+
+    // Executa no frame de renderização seguinte
+    const frameId = requestAnimationFrame(resetScrollToTop);
+
+    // Executa com pequenos delays para cobrir carregamentos assíncronos
+    const timer1 = setTimeout(resetScrollToTop, 30);
+    const timer2 = setTimeout(resetScrollToTop, 120);
+
+    return () => {
+      cancelAnimationFrame(frameId);
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+    };
+  }, [currentView, activeBlock, adminTab, appState.view]);
 
   // System Update Countdown Logic
   useEffect(() => {
@@ -3963,6 +4028,48 @@ const App: React.FC = () => {
     }
   };
 
+  /**
+   * Atualização em massa de permissões individuais para todos os usuários do sistema.
+   * Não altera o status global do módulo; altera individualmente o array permissions de cada usuário.
+   */
+  const handleBatchUpdateUserPermissions = async (key: string, enabled: boolean): Promise<{ count: number }> => {
+    if (!users || users.length === 0) return { count: 0 };
+
+    const updatedUsersList: User[] = [];
+
+    for (const u of users) {
+      const currentPerms = (u.permissions || []) as string[];
+      const newPerms = cleanPermissionsArray(currentPerms, key, enabled) as AppPermission[];
+      const updatedUser: User = { ...u, permissions: newPerms };
+      updatedUsersList.push(updatedUser);
+    }
+
+    // Persiste individualmente cada perfil no Supabase em paralelo
+    await Promise.all(
+      updatedUsersList.map(async (u) => {
+        try {
+          await supabase.from('profiles').update({ permissions: u.permissions }).eq('id', u.id);
+        } catch (e) {
+          console.error(`Erro ao atualizar permissões do usuário ${u.id}:`, e);
+        }
+      })
+    );
+
+    // Atualiza lista de usuários em memória para refletir imediatamente na UI
+    setUsers(updatedUsersList);
+
+    // Se o usuário logado foi afetado, atualiza sua sessão de forma segura
+    if (currentUser && typeof refreshUser === 'function') {
+      try {
+        await refreshUser();
+      } catch (err) {
+        console.warn('Aviso: erro não crítico ao recarregar usuário atual:', err);
+      }
+    }
+
+    return { count: users.length };
+  };
+
   // Splash Screen while verifying auth - prevents flicker and early redirects
   // CRITICAL: Must be after all hooks to avoid hook order violations
   if (authLoading) {
@@ -4043,7 +4150,7 @@ const App: React.FC = () => {
             </>
           )}
 
-          <div className="w-full">
+          <div className="w-full shrink-0 sticky top-0 z-40">
             {(currentUser || currentView === 'licitacao:kanban-view') && <AppHeader
               currentUser={currentUser || ({ id: 'view-user', name: 'Modo Sala', username: 'sala', role: 'viewer', sector: '', permissions: [] } as any)}
               uiConfig={appState.ui}
@@ -4325,7 +4432,11 @@ const App: React.FC = () => {
                     ) : currentView === 'admin' && adminTab === 'design' ? (
                       <AdminDocumentPreview state={appState} />
                     ) : currentView === 'admin' && adminTab === 'access_control' ? (
-                      <SystemAccessControl onBack={() => setAdminTab(null)} />
+                      <SystemAccessControl
+                        onBack={() => setAdminTab(null)}
+                        users={users}
+                        onBatchUpdateUserPermissions={handleBatchUpdateUserPermissions}
+                      />
                     ) : currentView === 'admin' && adminTab === 'remote_access' ? (
                       <RemoteAccessScreen currentUser={currentUser!} onBack={() => setAdminTab(null)} onTabChange={(tab) => setAdminTab(tab)} />
                     ) : currentView === 'admin' && adminTab === 'logs' ? (
@@ -4442,6 +4553,7 @@ const App: React.FC = () => {
 
               return (
               <HomeScreen
+                currentUser={currentUser}
                 onNewOrder={(block, isForceReset) => {
                   const target = block || 'oficio';
                   if (target === 'abastecimento') {

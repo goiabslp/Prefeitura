@@ -9,6 +9,8 @@ import {
   ChevronDown, ChevronUp, CheckSquare, Square, Filter
 } from 'lucide-react';
 import { googleCalendarService } from '../services/googleCalendarService';
+import { ModuleAccessControlTree } from './admin/ModuleAccessControlTree';
+import { cleanPermissionsArray } from '../services/permissionService';
 
 export type UserTab = 'dados' | 'modulos' | 'assinaturas';
 
@@ -366,6 +368,35 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
     }));
   };
 
+  const handleToggleUserModulePermission = (key: string, enabled: boolean) => {
+    if (!isAdmin) return;
+    
+    const currentPerms = (formData.permissions || []) as string[];
+    // Limpeza profunda: remove chaves canônicas e legadas sem deixar resíduos zumbis
+    const updatedPerms = cleanPermissionsArray(currentPerms, key, enabled);
+
+    // 1. Atualização otimista imediata no formulário
+    setFormData(prev => ({
+      ...prev,
+      permissions: updatedPerms as AppPermission[]
+    }));
+
+    // 2. Se for edição de usuário existente, persiste em tempo real instantaneamente
+    if (editingUser) {
+      const updatedUser: User = {
+        ...editingUser,
+        ...formData,
+        permissions: updatedPerms as AppPermission[]
+      };
+
+      setEditingUser(prev => prev ? { ...prev, permissions: updatedPerms as AppPermission[] } : null);
+
+      // Persiste imediatamente no Supabase e atualiza o estado global sem recarregar
+      onUpdateUser(updatedUser);
+      showToast("Permissão atualizada em tempo real!", "success");
+    }
+  };
+
   const toggleAppPermission = (perm: AppPermission) => {
     if (!isAdmin) return;
     setFormData(prev => {
@@ -574,7 +605,7 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
 
 
   return (
-    <div className="flex-1 h-full bg-slate-100 p-6 overflow-auto custom-scrollbar">
+    <div className="flex-1 h-full w-full bg-slate-100 p-4 md:p-6 lg:p-8 overflow-auto custom-scrollbar">
       {!isEditingPage ? (
         <div className="w-full space-y-6 animate-fade-in">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -730,7 +761,7 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
       </div>
     ) : (
         /* PÁGINA COMPLETA DE EDIÇÃO/CADASTRO DO USUÁRIO */
-        <div className="w-full max-w-6xl mx-auto space-y-6 animate-fade-in pb-12">
+        <div className="w-full space-y-6 animate-fade-in pb-12">
           {/* Header Superior da Página de Edição */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm">
             <div className="flex items-center gap-4">
@@ -1464,198 +1495,19 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
               </div>
             )}
 
-          {/* ABA: MÓDULOS AUTORIZADOS */}
+          {/* ABA: MÓDULOS AUTORIZADOS (Árvore Canônica Idêntica à Global) */}
           {activeUserTab === 'modulos' && (
-            <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm p-6 md:p-10 space-y-8 animate-fade-in">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-100">
-                <div>
-                  <h3 className="text-lg font-black text-slate-900 flex items-center gap-2.5">
-                    <div className="p-2 rounded-xl bg-indigo-50 text-indigo-600">
-                      <LayoutGrid className="w-5 h-5" />
-                    </div>
-                    Módulos Autorizados
-                  </h3>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Habilite ou restrinja o acesso aos módulos e fluxos operacionais do sistema para este usuário.
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="px-3 py-1.5 rounded-xl text-xs font-black bg-indigo-50 text-indigo-700 border border-indigo-100 flex items-center gap-2 shadow-sm">
-                    <CheckCircle2 className="w-4 h-4 text-indigo-600" />
-                    {formData.permissions?.length || 0} permissão(ões) ativa(s)
-                  </span>
-                </div>
-              </div>
-
-                  <div className="space-y-6">
-                    {[
-                      {
-                        title: 'Ofícios',
-                        permissions: [{ id: 'parent_criar_oficio', label: 'Módulo: Ofícios' }],
-                        color: 'blue'
-                      },
-                      {
-                        title: 'Compras',
-                        permissions: [
-                          { id: 'parent_compras', label: 'Módulo: Compras' },
-                          { id: 'parent_compras_pedidos', label: 'Gestão de Pedidos' },
-                          { id: 'parent_compras_itens', label: 'Catálogo e Inventário' },
-                          { id: 'parent_compras_dados', label: 'Importar Planilha' }
-                        ],
-                        color: 'emerald'
-                      },
-                      {
-                        title: 'Diárias e Custeio',
-                        permissions: [
-                          { id: 'parent_diarias', label: 'Módulo: Diárias' },
-                          { id: 'parent_diarias_editor', label: 'Nova Solicitação' },
-                          { id: 'parent_diarias_historico', label: 'Histórico' },
-                          { id: 'parent_diarias_novo_evento', label: 'Novo Evento' },
-                          { id: 'parent_diarias_lancamentos', label: 'Lançamentos' },
-                          { id: 'parent_diarias_gestores', label: 'Gestores' },
-                          { id: 'parent_diarias_viajar', label: 'Viajar' },
-                          { id: 'parent_diarias_adiantamento', label: 'Solicitar Adiantamento' }
-                        ],
-                        color: 'amber'
-                      },
-                      {
-                        title: 'Gestão de Abastecimento',
-                        permissions: [
-                          { id: 'parent_abastecimento', label: 'Módulo: Abastecimento' },
-                          { id: 'parent_abastecimento_novo', label: 'Novo Abastecimento' },
-                          { id: 'parent_abastecimento_gestao', label: 'Gestão / Histórico' },
-                          { id: 'parent_abastecimento_dashboard', label: 'Dashboard' }
-                        ],
-                        color: 'cyan'
-                      },
-                      {
-                        title: 'Licitação',
-                        permissions: [
-                          { id: 'parent_licitacao', label: 'Módulo: Licitação' },
-                          { id: 'parent_licitacao_processos', label: 'Processos' },
-                          { id: 'parent_licitacao_triagem', label: 'Triagem' }
-                        ],
-                        color: 'purple'
-                      },
-                      {
-                        title: 'Administrativo',
-                        permissions: [{ id: 'parent_admin', label: 'Painel Administrativo' }],
-                        color: 'indigo'
-                      },
-                      {
-                        title: 'Veículos & Frotas',
-                        permissions: [
-                          { id: 'parent_agendamento_veiculo', label: 'Módulo: Agendamento de Veículos' },
-                          { id: 'parent_agendamento_veiculo_agendar', label: 'Agendar Veículo' },
-                          { id: 'parent_agendamento_veiculo_meus', label: 'Meus Agendamentos' },
-                          { id: 'parent_agendamento_veiculo_aprovacoes', label: 'Aprovações' },
-                          { id: 'parent_agendamento_veiculo_dashboard', label: 'Dashboard Analítico' },
-                          { id: 'parent_frotas', label: 'Módulo: Frotas' },
-                          { id: 'parent_frotas_dashboard', label: 'Dashboard Frotas' },
-                          { id: 'parent_frotas_leve', label: 'Frota Leve' },
-                          { id: 'parent_frotas_pesado', label: 'Frota Pesada / Máquinas' },
-                          { id: 'parent_frotas_acessorio', label: 'Acessórios & Equipamentos' }
-                        ],
-                        color: 'rose'
-                      },
-                      {
-                        title: 'Módulos Operacionais',
-                        permissions: [
-                          { id: 'parent_agricultura', label: 'Agricultura' },
-                          { id: 'parent_obras', label: 'Obras' },
-                          { id: 'parent_calendario', label: 'Calendário' },
-                          { id: 'parent_rh', label: 'Módulo: RH' },
-                          { id: 'parent_rh_horas_extras', label: 'RH: Horas Extras' },
-                          { id: 'parent_rh_historico', label: 'RH: Histórico' },
-                          { id: 'parent_marketing', label: 'Marketing Digital' },
-                          { id: 'parent_projetos', label: 'Gestão de Projetos' }
-                        ],
-                        color: 'teal'
-                      },
-                      {
-                        title: 'Gestão de Tarefas',
-                        permissions: [{ id: 'parent_tarefas', label: 'Módulo: Tarefas' }],
-                        color: 'pink'
-                      },
-                      {
-                        title: 'Regulação de Consultas',
-                        permissions: [
-                          { id: 'parent_consultas', label: 'Módulo: Consultas' },
-                          { id: 'parent_consultas_novo_agendamento', label: 'Novo Agendamento' },
-                          { id: 'parent_consultas_acompanhar', label: 'Acompanhar' },
-                          { id: 'parent_consultas_dados', label: 'Área de Dados' },
-                          { id: 'parent_consultas_pacientes', label: 'Pacientes' },
-                          { id: 'parent_consultas_gestor', label: 'Gestor' }
-                        ],
-                        color: 'sky'
-                      },
-                      {
-                        title: 'Farmácia Popular',
-                        permissions: [
-                          { id: 'parent_farmacia', label: 'Módulo: Farmácia Popular' },
-                          { id: 'parent_farmacia_consultar', label: 'Consultar' },
-                          { id: 'parent_farmacia_retirar', label: 'Retirar' },
-                          { id: 'parent_farmacia_estoque', label: 'Estoque' },
-                          { id: 'parent_farmacia_dashboard', label: 'Dashboard' },
-                          { id: 'parent_farmacia_pacientes', label: 'Pacientes' },
-                          { id: 'parent_farmacia_gestor', label: 'Gestor' }
-                        ],
-                        color: 'violet'
-                      },
-                      {
-                        title: 'Upload Rápido',
-                        permissions: [
-                          { id: 'parent_upload', label: 'Módulo: Upload Rápido' }
-                        ],
-                        color: 'sky'
-                      }
-                    ].map((category) => (
-                      <div key={category.title} className="bg-slate-50/50 rounded-2xl p-5 border border-slate-100/60">
-                        <h4 className={`text-xs font-black uppercase tracking-wider mb-4 text-${category.color}-600 flex items-center gap-2`}>
-                          <span className={`w-2 h-2 rounded-full bg-${category.color}-500`}></span>
-                          {category.title}
-                        </h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                          {category.permissions.map((perm) => {
-                            const isChecked = formData.permissions?.includes(perm.id as AppPermission);
-                            const isPurchaseManagement = perm.id === 'parent_compras_pedidos';
-                            const isAllowedForRole = isAdmin && (!isPurchaseManagement || (formData.role === 'admin' || formData.role === 'compras'));
-
-                            return (
-                              <label
-                                key={perm.id}
-                                className={`relative group flex items-center gap-3 p-3 rounded-xl border transition-all duration-200 select-none
-                                            ${!isAllowedForRole ? 'opacity-40 cursor-not-allowed bg-slate-100 grayscale' : 'cursor-pointer'}
-                                            ${isChecked
-                                    ? `bg-white border-${category.color}-200 shadow-md shadow-${category.color}-500/5 ring-1 ring-${category.color}-500/20`
-                                    : 'bg-white border-slate-200 hover:border-slate-300 hover:shadow-sm'}
-                                          `}
-                              >
-                                <div className={`relative flex items-center justify-center w-5 h-5 rounded-md border transition-colors
-                                      ${isChecked ? `bg-${category.color}-500 border-${category.color}-500 text-white` : 'bg-slate-50 border-slate-300 group-hover:border-slate-400'}`}>
-                                  {isChecked && <Check className="w-3.5 h-3.5" strokeWidth={3} />}
-                                  <input
-                                    type="checkbox"
-                                    checked={isChecked}
-                                    disabled={!isAllowedForRole}
-                                    onChange={() => toggleAppPermission(perm.id as AppPermission)}
-                                    className="absolute inset-0 opacity-0 w-full h-full cursor-pointer disabled:cursor-not-allowed"
-                                  />
-                                </div>
-                                <div className="flex flex-col">
-                                  <span className={`text-xs font-bold transition-colors ${isChecked ? 'text-slate-800' : 'text-slate-600'}`}>
-                                    {perm.label}
-                                  </span>
-                                </div>
-                              </label>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-              </div>
-            )}
+            <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm p-5 md:p-8 space-y-6 animate-fade-in">
+              <ModuleAccessControlTree
+                scope="user"
+                targetUserName={formData.name}
+                title={`Módulos Autorizados: ${formData.name || 'Usuário'}`}
+                subtitle="Configure as permissões específicas deste usuário para módulos e rotas do sistema. Os estados são sincronizados e persistem no banco de dados."
+                userPermissions={(formData.permissions || []) as string[]}
+                onToggleUserPermission={handleToggleUserModulePermission}
+              />
+            </div>
+          )}
 
           {/* ABA: ASSINATURAS (EM FORMATO DE SELECT) */}
           {activeUserTab === 'assinaturas' && (

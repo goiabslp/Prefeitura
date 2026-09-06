@@ -16,10 +16,23 @@
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
 
-  <!-- CSS Crítico: Previne FOUC (Flash of Unstyled Content) e estouro de imagens durante o carregamento -->
+  <!-- CSS Crítico: Previne FOUC (Flash of Unstyled Content), corte do header e descolamento de viewport -->
   <style>
     *, *::before, *::after {
       box-sizing: border-box;
+    }
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      -webkit-overflow-scrolling: touch;
+    }
+    #root {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
     }
     img {
       max-width: 100%;

@@ -95,6 +95,14 @@ export const RHModule: React.FC<RHModuleProps> = ({
         onNavigate('rh:horas-extras');
     };
 
+    const mainRef = React.useRef<HTMLElement>(null);
+    useEffect(() => {
+        if (mainRef.current) {
+            mainRef.current.scrollTop = 0;
+        }
+        window.scrollTo(0, 0);
+    }, [subView]);
+
     return (
         <div className="flex-1 w-full bg-slate-50 relative">
             {generatingPdfRecord && (
@@ -105,7 +113,7 @@ export const RHModule: React.FC<RHModuleProps> = ({
                 />
             )}
             <div className="flex-1 flex flex-col h-full bg-[#f8fafc] w-full max-w-[100vw] overflow-x-hidden relative">
-                <main className="flex-1 overflow-y-auto p-4 desktop:p-8 custom-scrollbar">
+                <main ref={mainRef} className="flex-1 overflow-y-auto p-4 desktop:p-8 custom-scrollbar">
                     {!isFormView ? (
                         <div className="flex-1 flex flex-col items-center justify-center w-full h-full min-h-0 container mx-auto">
                             {/* Fixed Back Button - Standardized Position */}

@@ -1,5 +1,6 @@
 
 import { AppState, FontFamily, User, Order, Signature, Sector, Job, Person } from './types';
+import { getAllPermissionKeys } from './services/permissionService';
 
 export const INITIAL_STATE: AppState = {
   branding: {
@@ -187,7 +188,7 @@ export const DEFAULT_USERS: User[] = [
     sector: 'Secretaria de Administração',
     jobTitle: 'Secretário de Administração e Finanças',
     allowedSignatureIds: ['sig1', 'sig2', 'sig3'],
-    permissions: ['parent_criar_oficio', 'parent_compras', 'parent_diarias', 'parent_diarias_novo_evento', 'parent_diarias_lancamentos', 'parent_diarias_viajar', 'parent_admin', 'parent_agendamento_veiculo', 'parent_agricultura', 'parent_obras', 'parent_calendario', 'parent_rh']
+    permissions: getAllPermissionKeys() as any
   },
   {
     id: 'user_juliana',

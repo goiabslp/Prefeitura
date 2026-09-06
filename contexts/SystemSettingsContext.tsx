@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../services/supabaseClient';
+import { MODULE_ACCESS_TREE } from '../services/permissionService';
 
 interface ModuleSetting {
     id: string;
@@ -217,42 +218,99 @@ export const SystemSettingsProvider: React.FC<{ children: React.ReactNode }> = (
 
     const toggleModule = async (key: string, enabled: boolean, channel: 'web' | 'mobile' = 'web') => {
         const fieldName = channel === 'web' ? 'is_enabled' : 'is_enabled_mobile';
-        try {
-            const { data: updatedData, error } = await supabase
-                .from('global_module_settings')
-                .update({ [fieldName]: enabled, updated_at: new Date().toISOString() })
-                .eq('module_key', key)
-                .select();
 
-            if (error || !updatedData || updatedData.length === 0) {
-                // Upsert para novos módulos fallback estáticos
-                const existingObj = settings.find(s => s.module_key === key);
-                if (existingObj) {
-                    await supabase.from('global_module_settings').upsert({
-                        module_key: key,
-                        label: existingObj.label,
-                        parent_key: existingObj.parent_key,
-                        order_index: existingObj.order_index,
-                        is_enabled: channel === 'web' ? enabled : true,
-                        is_enabled_mobile: channel === 'mobile' ? enabled : true,
-                        updated_at: new Date().toISOString()
-                    });
+        // Localiza metadados e chaves associadas na árvore canônica
+        let metaLabel = key;
+        let metaParent: string | null = null;
+        let metaOrder = 99;
+        const associatedKeys: string[] = [key];
+
+        for (const parent of MODULE_ACCESS_TREE) {
+            if (parent.key === key) {
+                metaLabel = parent.label;
+                if (parent.legacyKeys) associatedKeys.push(...parent.legacyKeys);
+                break;
+            }
+            const sub = parent.submodules?.find(s => s.key === key);
+            if (sub) {
+                metaLabel = sub.label;
+                metaParent = parent.key;
+                if (sub.legacyKeys) associatedKeys.push(...sub.legacyKeys);
+                break;
+            }
+        }
+
+        // 1. UPDATE OTIMISTA IMEDIATO (Zero Latência na Interface)
+        const previousWeb = moduleStatus[key];
+        const previousMobile = mobileModuleStatus[key];
+
+        if (channel === 'web') {
+            setModuleStatus(prev => {
+                const next = { ...prev };
+                associatedKeys.forEach(k => { next[k] = enabled; });
+                return next;
+            });
+        } else {
+            setMobileModuleStatus(prev => {
+                const next = { ...prev };
+                associatedKeys.forEach(k => { next[k] = enabled; });
+                return next;
+            });
+        }
+        setSettings(prev => prev.map(s => associatedKeys.includes(s.module_key) ? { ...s, [fieldName]: enabled } : s));
+
+        try {
+            const existingObj = settings.find(s => s.module_key === key);
+
+            // Upsert direto no Supabase em background para a chave canônica
+            const upsertPayload: any = {
+                module_key: key,
+                label: existingObj?.label || metaLabel,
+                parent_key: existingObj?.parent_key || metaParent,
+                order_index: existingObj?.order_index || metaOrder,
+                is_enabled: channel === 'web' ? enabled : (previousWeb ?? true),
+                is_enabled_mobile: channel === 'mobile' ? enabled : (previousMobile ?? true),
+                updated_at: new Date().toISOString()
+            };
+
+            const { error } = await supabase
+                .from('global_module_settings')
+                .upsert(upsertPayload, { onConflict: 'module_key' });
+
+            if (error) {
+                console.error('Error in upsert global_module_settings:', error);
+                // Reverte em caso de erro real
+                if (channel === 'web') {
+                    setModuleStatus(prev => ({ ...prev, [key]: previousWeb }));
+                } else {
+                    setMobileModuleStatus(prev => ({ ...prev, [key]: previousMobile }));
+                }
+                return false;
+            }
+
+            // Sincroniza também quaisquer registros legados que já existiam no banco
+            const existingLegacies = settings.filter(s => s.module_key !== key && associatedKeys.includes(s.module_key));
+            if (existingLegacies.length > 0) {
+                for (const leg of existingLegacies) {
+                    await supabase
+                        .from('global_module_settings')
+                        .update({
+                            [fieldName]: enabled,
+                            updated_at: new Date().toISOString()
+                        })
+                        .eq('module_key', leg.module_key);
                 }
             }
-
-            // Optimistic update
-            if (channel === 'web') {
-                setModuleStatus(prev => ({ ...prev, [key]: enabled }));
-            } else {
-                setMobileModuleStatus(prev => ({ ...prev, [key]: enabled }));
-            }
-            
-            setSettings(prev => prev.map(s => s.module_key === key ? { ...s, [fieldName]: enabled } : s));
 
             return true;
         } catch (error) {
             console.error('Error toggling module:', error);
-            alert('Erro ao atualizar status do módulo.');
+            // Reverte em caso de falha
+            if (channel === 'web') {
+                setModuleStatus(prev => ({ ...prev, [key]: previousWeb }));
+            } else {
+                setMobileModuleStatus(prev => ({ ...prev, [key]: previousMobile }));
+            }
             return false;
         }
     };

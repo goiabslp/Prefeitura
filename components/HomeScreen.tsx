@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FilePlus, Package, History, FileText, ArrowRight, ArrowLeft, ShoppingCart, Gavel, Wallet, Inbox, CalendarRange, FileSearch, Droplet, Fuel, BarChart3, TrendingUp, LogOut, Sprout, HardHat, Activity, Car, ChevronDown, CalendarDays, Users, LayoutGrid, Megaphone, Database, Pill, Timer, Upload, Banknote, Newspaper, Sparkles, Star } from 'lucide-react';
+import { FilePlus, Package, History, FileText, ArrowRight, ArrowLeft, ShoppingCart, Gavel, Wallet, Inbox, CalendarRange, FileSearch, Droplet, Fuel, BarChart3, TrendingUp, LogOut, Sprout, HardHat, Activity, Car, ChevronDown, CalendarDays, Users, LayoutGrid, Megaphone, Database, Pill, Timer, Upload, Banknote, Newspaper, Sparkles, Star, AlertTriangle } from 'lucide-react';
 import { UserRole, UIConfig, AppPermission, BlockType, DiariaEvento, Order, User } from '../types';
 import { TasksDashboard } from './dashboard/TasksDashboard';
 import { QuickTaskCreation } from './dashboard/QuickTaskCreation';
@@ -7,6 +7,7 @@ import { UpcomingEventsNotification } from './calendario/UpcomingEventsNotificat
 import { useSystemSettings } from '../contexts/SystemSettingsContext';
 import { ExcelImportModal } from './compras/ExcelImportModal';
 import { NoticiasAnnouncementModal } from './noticias/NoticiasAnnouncementModal';
+import { userCanAccessSubmodule, userCanAccessModuleParent, MODULE_ACCESS_TREE } from '../services/permissionService';
 
 interface HomeScreenProps {
     onNewOrder: (block?: BlockType, forceReset?: boolean) => void;
@@ -27,6 +28,7 @@ interface HomeScreenProps {
     onFarmacia?: () => void;
     onNoticias?: () => void;
     onViewTasksDashboard?: () => void;
+    currentUser?: User | null;
     userRole: UserRole;
     userName: string;
     userId: string;
@@ -49,6 +51,7 @@ interface HomeScreenProps {
 }
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({
+    currentUser,
     onNewOrder,
     onTrackOrder,
     onVehicleScheduling,
@@ -120,25 +123,45 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         return moduleStatus[key] !== false;
     };
 
-    const canAccessOficio = permissions.includes('parent_criar_oficio') && isModuleActive('parent_criar_oficio');
-    const canAccessCompras = permissions.includes('parent_compras') && isModuleActive('parent_compras');
-    const canAccessLicitacao = permissions.includes('parent_licitacao') && isModuleActive('parent_licitacao');
-    const canAccessDiarias = permissions.includes('parent_diarias') && isModuleActive('parent_diarias');
-    const canAccessScheduling = (permissions.includes('parent_agendamento_veiculo') || permissions.includes('parent_agendamento_veiculo_agendar') || permissions.includes('parent_agendamento_veiculo_meus') || permissions.includes('parent_agendamento_veiculo_aprovacoes') || permissions.includes('parent_agendamento_veiculo_dashboard')) && isModuleActive('parent_agendamento_veiculo');
-    const canAccessFleet = (permissions.includes('parent_frotas') || permissions.includes('parent_frotas_dashboard') || permissions.includes('parent_frotas_leve') || permissions.includes('parent_frotas_pesado') || permissions.includes('parent_frotas_acessorio')) && isModuleActive('parent_frotas');
+    const currentGlobalStatus = isMobileViewport ? mobileModuleStatus : moduleStatus;
+
+    const activeUser: User = React.useMemo(() => {
+        if (currentUser) return currentUser;
+        return {
+            id: userId,
+            username: userName,
+            name: userName,
+            role: userRole,
+            permissions: permissions
+        };
+    }, [currentUser, userId, userName, userRole, permissions]);
+
+    const checkModuleAccess = (parentKey: string) => {
+        const def = MODULE_ACCESS_TREE.find(m => m.key === parentKey);
+        if (!def) return isModuleActive(parentKey) && permissions.includes(parentKey as AppPermission);
+        return userCanAccessModuleParent(activeUser, def, currentGlobalStatus);
+    };
+
+    const canAccessOficio = checkModuleAccess('parent_criar_oficio');
+    const canAccessCompras = checkModuleAccess('parent_compras');
+    const canAccessLicitacao = checkModuleAccess('parent_licitacao');
+    const canAccessDiarias = checkModuleAccess('parent_diarias');
+    const canAccessScheduling = checkModuleAccess('parent_agendamento_veiculo');
+    const canAccessFleet = checkModuleAccess('parent_frotas');
     const canAccessLicitacaoTriagem = permissions.includes('parent_licitacao_triagem');
     const canAccessLicitacaoProcessos = permissions.includes('parent_licitacao_processos');
-    const canAccessAbastecimento = (permissions.includes('parent_abastecimento') || permissions.includes('parent_abastecimento_novo') || permissions.includes('parent_abastecimento_gestao') || permissions.includes('parent_abastecimento_dashboard')) && isModuleActive('parent_abastecimento');
-    const canAccessAgricultura = permissions.includes('parent_agricultura') && isModuleActive('parent_agricultura');
-    const canAccessObras = permissions.includes('parent_obras') && isModuleActive('parent_obras');
-    const canAccessTarefas = permissions.includes('parent_tarefas') && isModuleActive('parent_tarefas');
-    const canAccessCalendario = permissions.includes('parent_calendario') && isModuleActive('parent_calendario');
-    const canAccessRh = (permissions.includes('parent_rh') || permissions.includes('parent_rh_horas_extras') || permissions.includes('parent_rh_historico')) && isModuleActive('parent_rh');
-    const canAccessProjetos = permissions.includes('parent_projetos') && isModuleActive('parent_projetos');
-    const canAccessMarketing = permissions.includes('parent_marketing') && isModuleActive('parent_marketing');
-    const canAccessConsultas = (permissions.includes('parent_consultas') || permissions.includes('parent_consultas_novo_agendamento') || permissions.includes('parent_consultas_acompanhar') || permissions.includes('parent_consultas_dados') || permissions.includes('parent_consultas_pacientes') || permissions.includes('parent_consultas_gestor')) && isModuleActive('parent_consultas');
-    const canAccessFarmacia = (permissions.includes('parent_farmacia') || permissions.includes('parent_farmacia_consultar') || permissions.includes('parent_farmacia_retirar') || permissions.includes('parent_farmacia_estoque') || permissions.includes('parent_farmacia_dashboard') || permissions.includes('parent_farmacia_pacientes') || permissions.includes('parent_farmacia_gestor')) && isModuleActive('parent_farmacia');
-    const canAccessUpload = permissions.includes('parent_upload') && isModuleActive('parent_upload');
+    const canAccessAbastecimento = checkModuleAccess('parent_abastecimento');
+    const canAccessAgricultura = checkModuleAccess('parent_agricultura');
+    const canAccessObras = checkModuleAccess('parent_obras');
+    const canAccessTarefas = checkModuleAccess('parent_tarefas');
+    const canAccessCalendario = checkModuleAccess('parent_calendario');
+    const canAccessRh = checkModuleAccess('parent_rh');
+    const canAccessProjetos = checkModuleAccess('parent_projetos');
+    const canAccessMarketing = checkModuleAccess('parent_marketing');
+    const canAccessConsultas = checkModuleAccess('parent_consultas');
+    const canAccessFarmacia = checkModuleAccess('parent_farmacia');
+    const canAccessNoticias = checkModuleAccess('parent_noticias');
+    const canAccessUpload = checkModuleAccess('parent_upload');
     const firstName = userName.split(' ')[0];
 
     const getPendingCount = (blockType: string) => {
@@ -280,23 +303,68 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
         const config = getBlockConfig();
 
+        const canAccessSub = (parentKey: string, subKey: string) => {
+            return userCanAccessSubmodule(activeUser, parentKey, subKey, currentGlobalStatus);
+        };
+
         // Define Action Buttons for Active Block
         const actionButtons: Array<any> = [];
 
-        // "New" Button
-        if (activeBlock !== 'abastecimento' && activeBlock !== 'tarefas' && activeBlock !== 'diarias') {
-            actionButtons.push({
-                label: activeBlock === 'compras' ? 'Novo Pedido' : activeBlock === 'oficio' ? 'Novo Ofício' : 'Novo Registro',
-                desc: "Criar novo registro",
-                icon: FilePlus,
-                onClick: () => onNewOrder(activeBlock || 'oficio', true), // Force state reset always when starting a new flow
-                color: config.color
-            });
-            // "Track" Button
-            if (activeBlock !== 'licitacao') {
+        // Compras Specific Buttons
+        if (activeBlock === 'compras') {
+            if (canAccessSub('parent_compras', 'sub_compras_novo')) {
+                actionButtons.push({
+                    label: 'Novo Pedido',
+                    desc: "Criar novo pedido de compras",
+                    icon: FilePlus,
+                    onClick: () => onNewOrder('compras', true),
+                    color: config.color
+                });
+            }
+            if (canAccessSub('parent_compras', 'sub_compras_historico')) {
                 actionButtons.push({
                     label: 'Histórico',
-                    desc: `Consulte registros de ${activeBlock?.toUpperCase()}`,
+                    desc: "Consulte registros de COMPRAS",
+                    icon: History,
+                    onClick: onTrackOrder,
+                    color: 'purple'
+                });
+            }
+            if (canAccessSub('parent_compras', 'sub_compras_itens')) {
+                actionButtons.push({
+                    label: 'Itens',
+                    desc: 'Catálogo e Inventário',
+                    icon: Package,
+                    onClick: onManageInventory,
+                    color: 'amber'
+                });
+            }
+            if (isModuleActive('parent_compras_dados') && permissions.includes('parent_compras_dados')) {
+                actionButtons.push({
+                    label: 'Dados',
+                    desc: 'Importar Planilha de Estoque',
+                    icon: Database,
+                    onClick: () => setIsExcelModalOpen(true),
+                    color: 'cyan'
+                });
+            }
+        }
+
+        // Ofícios Specific Buttons
+        if (activeBlock === 'oficio') {
+            if (canAccessSub('parent_criar_oficio', 'sub_oficios_editor')) {
+                actionButtons.push({
+                    label: 'Novo Ofício',
+                    desc: "Criar novo ofício",
+                    icon: FilePlus,
+                    onClick: () => onNewOrder('oficio', true),
+                    color: config.color
+                });
+            }
+            if (canAccessSub('parent_criar_oficio', 'sub_oficios_historico')) {
+                actionButtons.push({
+                    label: 'Histórico',
+                    desc: "Consulte ofícios emitidos",
                     icon: History,
                     onClick: onTrackOrder,
                     color: 'purple'
@@ -306,7 +374,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
         // Diárias Specific Buttons
         if (activeBlock === 'diarias') {
-            if (permissions.includes('parent_diarias_editor') && isModuleActive('parent_diarias_editor')) {
+            if (canAccessSub('parent_diarias', 'sub_diarias_editor')) {
                 actionButtons.push({
                     label: 'Nova Solicitação',
                     desc: 'Criar novo registro',
@@ -315,7 +383,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                     color: config.color
                 });
             }
-            if (permissions.includes('parent_diarias_historico') && isModuleActive('parent_diarias_historico')) {
+            if (canAccessSub('parent_diarias', 'sub_diarias_historico')) {
                 actionButtons.push({
                     label: 'Histórico',
                     desc: 'Consulte registros de Diárias',
@@ -324,7 +392,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                     color: 'purple'
                 });
             }
-            if (permissions.includes('parent_diarias_novo_evento') && isModuleActive('parent_diarias_novo_evento')) {
+            if (canAccessSub('parent_diarias', 'sub_diarias_novo_evento')) {
                 actionButtons.push({
                     label: 'Nova Viagem',
                     desc: 'Informar nova viagem',
@@ -336,7 +404,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                     color: 'amber'
                 });
             }
-            if (permissions.includes('parent_diarias_lancamentos') && isModuleActive('parent_diarias_lancamentos')) {
+            if (canAccessSub('parent_diarias', 'sub_diarias_lancamentos')) {
                 actionButtons.push({
                     label: 'Lançamentos',
                     desc: 'Acompanhar Eventos',
@@ -348,7 +416,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                     color: 'blue'
                 });
             }
-            if (permissions.includes('parent_diarias_gestores') && isModuleActive('parent_diarias_gestores')) {
+            if (canAccessSub('parent_diarias', 'sub_diarias_gestores')) {
                 actionButtons.push({
                     label: 'Gestores',
                     desc: 'Vincular Gestores',
@@ -360,7 +428,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                     color: 'indigo'
                 });
             }
-            if (permissions.includes('parent_diarias_viajar') && isModuleActive('parent_diarias_viajar')) {
+            if (canAccessSub('parent_diarias', 'sub_diarias_viajar')) {
                 actionButtons.push({
                     label: 'Viajar',
                     desc: 'Iniciar/Finalizar Viagens',
@@ -372,7 +440,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                     color: 'emerald'
                 });
             }
-            if (permissions.includes('parent_diarias_adiantamento') && isModuleActive('parent_diarias_adiantamento')) {
+            if (canAccessSub('parent_diarias', 'sub_diarias_adiantamento')) {
                 actionButtons.push({
                     label: 'Adiantamento',
                     desc: 'Solicitar Adiantamento',
@@ -388,47 +456,60 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
         // Tarefas Specific Buttons
         if (activeBlock === 'tarefas') {
-            actionButtons.push({
-                label: 'Nova Tarefa',
-                desc: "Criar nova atividade",
-                icon: FilePlus,
-                onClick: () => {
-                    window.history.pushState({}, '', '/Tarefas/NovaTarefa');
-                    setIsTaskCreationOpen(true);
-                },
-                color: 'pink'
-            });
-            actionButtons.push({
-                label: 'Minhas Tarefas',
-                desc: "Dashboard de Atividades",
-                icon: History,
-                onClick: onViewTasksDashboard,
-                color: 'purple'
-            });
+            if (canAccessSub('parent_tarefas', 'sub_tarefas_nova')) {
+                actionButtons.push({
+                    label: 'Nova Tarefa',
+                    desc: "Criar nova atividade",
+                    icon: FilePlus,
+                    onClick: () => {
+                        window.history.pushState({}, '', '/Tarefas/NovaTarefa');
+                        setIsTaskCreationOpen(true);
+                    },
+                    color: 'pink'
+                });
+            }
+            if (canAccessSub('parent_tarefas', 'sub_tarefas_minhas')) {
+                actionButtons.push({
+                    label: 'Minhas Tarefas',
+                    desc: "Dashboard de Atividades",
+                    icon: History,
+                    onClick: onViewTasksDashboard,
+                    color: 'purple'
+                });
+            }
         }
 
-        // Specific Extra Buttons
-        if (activeBlock === 'compras') {
-            if (isModuleActive('parent_compras_itens') && permissions.includes('parent_compras_itens')) {
-                actionButtons.push({ label: 'Itens', desc: 'Catálogo e Inventário', icon: Package, onClick: onManageInventory, color: 'amber' });
-            }
-            if (isModuleActive('parent_compras_dados') && permissions.includes('parent_compras_dados')) {
-                actionButtons.push({ label: 'Dados', desc: 'Importar Planilha de Estoque', icon: Database, onClick: () => setIsExcelModalOpen(true), color: 'cyan' });
-            }
-        }
+        // Licitação Specific Buttons
         if (activeBlock === 'licitacao') {
-            if (permissions.includes('parent_licitacao_processos')) {
-                actionButtons.push({ label: 'Processos', desc: 'Todos os Processos', icon: FileSearch, onClick: onTrackOrder, color: 'sky' });
+            if (canAccessSub('parent_licitacao', 'sub_licitacao_novo')) {
+                actionButtons.push({
+                    label: 'Novo Pedido',
+                    desc: 'Abertura de Processo',
+                    icon: FilePlus,
+                    onClick: () => onNewOrder('licitacao', true),
+                    color: config.color
+                });
+            }
+            if (canAccessSub('parent_licitacao', 'sub_licitacao_processos')) {
+                actionButtons.push({
+                    label: 'Processos',
+                    desc: 'Todos os Processos',
+                    icon: FileSearch,
+                    onClick: onTrackOrder,
+                    color: 'sky'
+                });
             }
         }
+
+        // Abastecimento Specific Buttons
         if (activeBlock === 'abastecimento') {
-            if (isModuleActive('parent_abastecimento_novo') && permissions.includes('parent_abastecimento_novo')) {
+            if (canAccessSub('parent_abastecimento', 'sub_abastecimento_novo')) {
                 actionButtons.push({ label: 'Novo Abastecimento', desc: 'Registrar entrada', icon: Fuel, onClick: () => onAbastecimento?.('new'), color: 'cyan', hideOnMobile: false });
             }
-            if (isModuleActive('parent_abastecimento_gestao') && permissions.includes('parent_abastecimento_gestao')) {
+            if (canAccessSub('parent_abastecimento', 'sub_abastecimento_gestao')) {
                 actionButtons.push({ label: 'Gestão', desc: 'Histórico Completo', icon: History, onClick: () => onAbastecimento?.('management'), color: 'blue', hideOnMobile: false });
             }
-            if (isModuleActive('parent_abastecimento_dashboard') && permissions.includes('parent_abastecimento_dashboard')) {
+            if (canAccessSub('parent_abastecimento', 'sub_abastecimento_dashboard')) {
                 actionButtons.push({ label: 'Dashboard', desc: 'Indicadores', icon: BarChart3, onClick: () => onAbastecimento?.('dashboard'), color: 'emerald', hideOnMobile: false });
             }
         }
@@ -458,7 +539,23 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                             </div>
 
                             <div className="w-full flex flex-wrap justify-center items-stretch gap-3 desktop:gap-4 max-w-7xl animate-in zoom-in duration-500 fill-mode-backwards p-2">
-                                {actionButtons.map((btn, idx) => (
+                                {actionButtons.length === 0 ? (
+                                    <div className="text-center p-8 bg-white/90 backdrop-blur-md rounded-3xl border border-slate-200 max-w-md shadow-sm animate-fade-in">
+                                        <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center mx-auto mb-3 text-amber-600">
+                                            <AlertTriangle className="w-6 h-6" />
+                                        </div>
+                                        <h3 className="font-bold text-slate-800 text-base mb-1">Acesso Restrito</h3>
+                                        <p className="text-xs text-slate-500 mb-4 leading-relaxed">Seu usuário não possui permissão ativa para as funcionalidades deste módulo.</p>
+                                        <button
+                                            type="button"
+                                            onClick={() => setActiveBlock(null)}
+                                            className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition-all shadow-sm"
+                                        >
+                                            Voltar à Página Inicial
+                                        </button>
+                                    </div>
+                                ) : (
+                                    actionButtons.map((btn, idx) => (
                                     <button
                                         key={idx}
                                         onClick={btn.onClick}
@@ -475,7 +572,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                                         <h3 className="text-lg desktop:text-2xl font-bold text-slate-800 mb-1 group-hover:text-slate-900 tracking-tight">{btn.label}</h3>
                                         <p className="text-[10px] desktop:text-xs font-bold text-slate-400 group-hover:text-${btn.color}-600 transition-colors uppercase tracking-widest">{btn.desc}</p>
                                     </button>
-                                ))}
+                                ))
+                                )}
                             </div>
                         </div>
                     </div>
@@ -485,7 +583,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     };
 
     return (
-        <div className="fixed inset-0 w-full h-full bg-[#F8FAFC] font-sans flex flex-col overflow-hidden relative">
+        <div className="flex-1 w-full h-full bg-[#F8FAFC] font-sans flex flex-col overflow-hidden relative">
             {activeBlock ? (
                 <div className="flex-1 flex flex-col overflow-hidden bg-[#FAFAFA] relative">
                     {renderActiveBlock()}
@@ -568,7 +666,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                                 {canAccessMarketing && renderModuleButton(() => onMarketing?.(), 'teal', Megaphone, 'Marketing', 'Criativo', '248ms', false, getPendingCount('marketing'))}
                                 {canAccessConsultas && renderModuleButton(() => onConsultas?.(), 'sky', Activity, 'Consultas', 'Regulação e exames', '249ms', false, getPendingCount('consultas'))}
                                 {canAccessFarmacia && renderModuleButton(() => onFarmacia?.(), 'pink', Pill, 'Farmácia Popular', 'Medicamentos', '252ms', false, getPendingCount('farmacia'))}
-                                {renderModuleButton(() => onNoticias?.(), 'indigo', Newspaper, 'Notícias', 'Boletim & métricas', '255ms', false, 0, true)}
+                                {canAccessNoticias && renderModuleButton(() => onNoticias?.(), 'indigo', Newspaper, 'Notícias', 'Boletim & métricas', '255ms', false, 0, true)}
 
                                 {canAccessScheduling && renderModuleButton(() => { setActiveBlock('agendamento'); onVehicleScheduling?.(); }, 'violet', CalendarRange, 'Veículos', 'Agendamento', '250ms', false, getPendingCount('agendamento'))}
                                 {canAccessAbastecimento && renderModuleButton(() => setActiveBlock('abastecimento'), 'cyan', Droplet, 'Abastecimento', 'Combustível', '300ms', false, getPendingCount('abastecimento'))}
