@@ -121,6 +121,7 @@ import { startGlobalLocationTracking, stopGlobalLocationTracking } from './servi
 import { PoliticaPrivacidadeScreen } from './components/PoliticaPrivacidadeScreen';
 import { PoliticaPrivacidadeAppScreen } from './components/PoliticaPrivacidadeAppScreen';
 import { canUserAccessRoute, cleanPermissionsArray } from './services/permissionService';
+import { SystemAIAssistantScreen } from './components/ai/SystemAIAssistantScreen';
 
 const VIEW_TO_PATH: Record<string, string> = {
   'login': '/Login',
@@ -244,7 +245,9 @@ const VIEW_TO_PATH: Record<string, string> = {
   'noticias:boletim-mensal': '/Noticias/BoletimMensal',
   'upload': '/Upload',
   'politica-privacidade': '/PoliticaPrivacidade',
-  'politica-privacidade-app': '/PoliticaPrivacidadeApp'
+  'politica-privacidade-app': '/PoliticaPrivacidadeApp',
+  'assistente-ia': '/AssistenteIA',
+  'chat': '/Chat'
 };
 
 const PATH_TO_STATE: Record<string, any> = Object.fromEntries(
@@ -314,7 +317,7 @@ const mapLicitacaoProcessToOrder = (process: any): Order => {
 
 const App: React.FC = () => {
   // State controlling the active module view
-  const [currentView, setCurrentView] = useState<'login' | 'home' | 'admin' | 'tracking' | 'editor' | 'vehicle-scheduling' | 'abastecimento' | 'agricultura' | 'obras' | 'order-details' | 'tasks-dashboard' | 'purchase-inventory' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'diarias-novo-evento' | 'diarias-lancamentos' | 'diarias-gestores' | 'diarias-viajar' | 'diarias-adiantamento' | 'diarias-adiantamento-servidor' | 'diarias-adiantamento-viagem' | 'diarias-adiantamento-valores' | 'diarias-adiantamento-bancario' | 'diarias-adiantamento-justificativa' | 'licitacao' | 'licitacao:new' | 'licitacao:view' | 'licitacao:details' | 'licitacao:kanban' | 'licitacao:kanban-view' | 'licitacao-all' | 'licitacao-screening' | 'consultas' | 'farmacia' | 'noticias' | 'upload' | 'politica-privacidade' | 'politica-privacidade-app'>(() => {
+  const [currentView, setCurrentView] = useState<'login' | 'home' | 'admin' | 'tracking' | 'editor' | 'vehicle-scheduling' | 'abastecimento' | 'agricultura' | 'obras' | 'order-details' | 'tasks-dashboard' | 'purchase-inventory' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'diarias-novo-evento' | 'diarias-lancamentos' | 'diarias-gestores' | 'diarias-viajar' | 'diarias-adiantamento' | 'diarias-adiantamento-servidor' | 'diarias-adiantamento-viagem' | 'diarias-adiantamento-valores' | 'diarias-adiantamento-bancario' | 'diarias-adiantamento-justificativa' | 'licitacao' | 'licitacao:new' | 'licitacao:view' | 'licitacao:details' | 'licitacao:kanban' | 'licitacao:kanban-view' | 'licitacao-all' | 'licitacao-screening' | 'consultas' | 'farmacia' | 'noticias' | 'upload' | 'politica-privacidade' | 'politica-privacidade-app' | 'assistente-ia' | 'chat'>(() => {
     if (typeof window !== 'undefined') {
       let rawPath = window.location.pathname;
       try { rawPath = decodeURIComponent(rawPath); } catch (e) {}
@@ -4141,12 +4144,11 @@ const App: React.FC = () => {
             onClose={() => setToast(prev => ({ ...prev, isVisible: false }))}
           />
 
-          {/* Chat Components - Exibidos APENAS na Página Inicial (/PaginaInicial) para usuários autenticados */}
-          {currentUser && currentView === 'home' && !activeBlock && (
+          {/* Chat com a IA Operacional Nativa */}
+          {currentUser && !activeBlock && currentView !== 'assistente-ia' && currentView !== 'chat' && (
             <>
               <ChatWidget />
               <ChatWindow />
-              <ChatNotificationPopup />
             </>
           )}
 
@@ -5327,6 +5329,22 @@ const App: React.FC = () => {
                 onBack={() => {
                   setCurrentView('home');
                   window.history.pushState({}, '', '/PaginaInicial');
+                }}
+              />
+            )}
+
+            {(currentView === 'assistente-ia' || currentView === 'chat') && (
+              <SystemAIAssistantScreen
+                onNavigate={(route) => {
+                  window.history.pushState({}, '', route);
+                  const entry = Object.entries(VIEW_TO_PATH).find(([_, p]) => p === route);
+                  if (entry) {
+                    const [v, sub] = entry[0].split(':');
+                    setCurrentView(v as any);
+                    if (sub) {
+                      setAppState(prev => ({ ...prev, view: sub }));
+                    }
+                  }
                 }}
               />
             )}

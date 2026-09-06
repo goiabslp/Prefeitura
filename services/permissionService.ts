@@ -620,6 +620,15 @@ export const MODULE_ACCESS_TREE: ModuleItemDefinition[] = [
     routes: ['/Upload'],
     iconName: 'Upload',
     submodules: []
+  },
+  {
+    key: 'parent_assistente_ia',
+    legacyKeys: ['assistente_ia', 'chat'],
+    label: 'Assistente IA Operacional',
+    description: 'Assistente inteligente nativo integrado para consultas, execuções e fluxos operacionais',
+    routes: ['/AssistenteIA', '/Chat'],
+    iconName: 'Bot',
+    submodules: []
   }
 ];
 

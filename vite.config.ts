@@ -174,6 +174,19 @@ function geminiDevPlugin() {
                 - CATEGORIA: Em letras maiúsculas (ex: 'GOVERNO & GESTÃO', 'SAÚDE PÚBLICA', 'OBRAS & INFRAESTRUTURA', 'EDUCAÇÃO & ENSINO', 'ASSISTÊNCIA SOCIAL', 'MEIO AMBIENTE', 'EVENTOS & CIDADANIA').
                 - FRASE DE DESTAQUE: Aspas ou frase institucional inspiradora refletindo dedicação e compromisso com o município.
               `;
+            } else if (tipo === 'assistente_operacional') {
+              const systemInstruction = dados.systemInstruction || 'Você é o Assistente de IA Operacional da Prefeitura.';
+              const historyFormatted = (dados.history || []).map((h: any) => `${h.role === 'user' ? 'Usuário' : 'Assistente'}: ${h.content}`).join('\n\n');
+              
+              promptText = `
+${systemInstruction}
+
+HISTÓRICO DA CONVERSA:
+${historyFormatted}
+
+SOLICITAÇÃO DO USUÁRIO AGORA:
+${dados.promptText}
+`;
             } else {
               res.statusCode = 400;
               res.end(JSON.stringify({ error: 'Tipo de requisição inválido.' }));

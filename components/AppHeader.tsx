@@ -9,7 +9,7 @@ import {
   Home,
   RefreshCw,
   Bell,
-  MessageCircle,
+  Bot,
   ShieldCheck,
   ShieldOff,
   Tv
@@ -177,6 +177,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   };
 
   const getModuleTitle = () => {
+    if (currentView === 'assistente-ia' || currentView === 'chat') return "Assistente IA Operacional";
     if (currentView === 'admin') return "Painel Administrativo";
     if (currentView === 'order-details') return "Detalhes do Pedido";
     if (currentView === 'tracking') {
@@ -248,20 +249,17 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   };
 
   const ChatIcon = () => {
-    const { unreadCount, setIsOpen, isOpen } = useChat();
+    const { setIsOpen, isOpen } = useChat();
 
     return (
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className={`relative p-2 rounded-xl transition-all active:scale-95 group
-            ${isOpen ? 'bg-violet-50 text-violet-600' : 'text-slate-400 hover:bg-slate-50 hover:text-violet-600'}
+        className={`relative p-2 rounded-xl transition-all active:scale-95 group flex items-center justify-center
+            ${isOpen ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-md shadow-indigo-500/25' : 'text-slate-500 hover:bg-violet-50 hover:text-violet-600'}
           `}
-        title="Chat"
+        title="Assistente IA Operacional"
       >
-        <MessageCircle className={`w-5 h-5 ${unreadCount > 0 ? 'animate-pulse text-violet-600' : ''}`} />
-        {unreadCount > 0 && (
-          <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-violet-500 border-2 border-white rounded-full shadow-sm animate-bounce"></span>
-        )}
+        <Bot className="w-5 h-5 transition-transform group-hover:scale-110" />
       </button>
     );
   };
@@ -289,15 +287,8 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
     );
   };
 
-  const { unreadCount, setIsOpen, isOpen } = useChat();
-
   return (
-    <header className={`sticky top-0 z-[60] w-full border-b shrink-0 transition-all duration-500 ease-in-out
-      ${unreadCount > 0
-        ? 'bg-violet-50/30 border-violet-200 shadow-[0_4px_30px_rgba(139,92,246,0.3)] animate-pulse-glow'
-        : 'bg-white/80 backdrop-blur-md border-slate-200'
-      }
-    `}>
+    <header className="sticky top-0 z-[60] w-full border-b shrink-0 transition-all duration-500 ease-in-out bg-white/80 backdrop-blur-md border-slate-200">
       <div className="max-w-[1920px] mx-auto px-6 h-16 flex items-center justify-between">
 
         {/* Lado Esquerdo: Logo e Título */}
