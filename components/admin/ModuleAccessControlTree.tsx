@@ -174,24 +174,42 @@ export const ModuleAccessControlTree: React.FC<ModuleAccessControlTreeProps> = (
     setExpandedModules({});
   };
 
-  // Filtragem pela busca
+  // Filtragem pela busca e ordenação alfabética A-Z (Módulos e Submódulos)
   const filteredModules = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
-    if (!term) return MODULE_ACCESS_TREE;
+    const sourceList = term
+      ? MODULE_ACCESS_TREE.filter(module => {
+          const matchParent =
+            module.label.toLowerCase().includes(term) ||
+            module.description.toLowerCase().includes(term) ||
+            module.routes.some(r => r.toLowerCase().includes(term));
 
-    return MODULE_ACCESS_TREE.filter(module => {
-      const matchParent =
-        module.label.toLowerCase().includes(term) ||
-        module.description.toLowerCase().includes(term) ||
-        module.routes.some(r => r.toLowerCase().includes(term));
+          const matchChildren = module.submodules?.some(sub =>
+            sub.label.toLowerCase().includes(term) ||
+            sub.description.toLowerCase().includes(term) ||
+            sub.routes.some(r => r.toLowerCase().includes(term))
+          );
 
-      const matchChildren = module.submodules?.some(sub =>
-        sub.label.toLowerCase().includes(term) ||
-        sub.description.toLowerCase().includes(term) ||
-        sub.routes.some(r => r.toLowerCase().includes(term))
-      );
+          return matchParent || matchChildren;
+        })
+      : MODULE_ACCESS_TREE;
 
-      return matchParent || matchChildren;
+    // 1. Ordena os módulos pais em ordem alfabética
+    const sortedParents = [...sourceList].sort((a, b) =>
+      a.label.localeCompare(b.label, 'pt-BR', { sensitivity: 'base' })
+    );
+
+    // 2. Ordena os submódulos de cada módulo pai também em ordem alfabética
+    return sortedParents.map(module => {
+      if (!module.submodules || module.submodules.length === 0) {
+        return module;
+      }
+      return {
+        ...module,
+        submodules: [...module.submodules].sort((a, b) =>
+          a.label.localeCompare(b.label, 'pt-BR', { sensitivity: 'base' })
+        )
+      };
     });
   }, [searchTerm]);
 
@@ -221,97 +239,74 @@ export const ModuleAccessControlTree: React.FC<ModuleAccessControlTreeProps> = (
 
   return (
     <div className="w-full flex flex-col space-y-6 animate-fade-in font-sans">
-      {/* Header com estilo idêntico em ambas as páginas */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 bg-white p-6 rounded-3xl border border-slate-200/90 shadow-sm">
-        <div className="flex items-center gap-4">
-          <div className="p-3 bg-gradient-to-br from-indigo-600 to-indigo-700 text-white rounded-2xl shadow-md shadow-indigo-500/20">
-            <Shield className="w-6 h-6" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2.5 flex-wrap">
-              <h2 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight">
-                {title || (scope === 'global' ? 'Controle de Acesso Global' : `Permissões de Acesso: ${targetUserName || 'Usuário'}`)}
-              </h2>
-              <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest border flex items-center gap-1.5 shadow-xs ${
-                scope === 'global'
-                  ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
-                  : 'bg-emerald-50 text-emerald-700 border-emerald-200'
-              }`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${scope === 'global' ? 'bg-indigo-500' : 'bg-emerald-500'} animate-pulse`}></span>
-                {scope === 'global' ? 'Escopo Global' : 'Escopo Individual'}
-              </span>
+      {/* Header com estilo moderno */}
+      {scope === 'global' ? (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white px-6 py-4 rounded-3xl border border-slate-200/90 shadow-sm">
+          <div className="flex items-center gap-3.5">
+            <div className="p-2.5 bg-gradient-to-br from-indigo-600 to-indigo-700 text-white rounded-2xl shadow-md shadow-indigo-500/20 shrink-0">
+              <Shield className="w-5 h-5" />
             </div>
-            <p className="text-xs text-slate-500 mt-1 font-medium">
-              {subtitle || (scope === 'global'
-                ? 'Gerencie a disponibilidade geral de cada módulo e submódulo para todos os usuários do sistema.'
-                : 'Configure especificamente quais módulos e funcionalidades este usuário terá autorização para acessar.')}
-            </p>
+            <h2 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight">
+              Controle de Acesso Global
+            </h2>
+          </div>
+
+          {/* Apenas o botão Web/Mobile na mesma linha */}
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-2xl border border-slate-200/80 shrink-0 self-start sm:self-auto">
+            <button
+              type="button"
+              onClick={() => setActiveChannel('web')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                activeChannel === 'web'
+                  ? 'bg-white text-indigo-700 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <Monitor className="w-3.5 h-3.5" />
+              Web
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveChannel('mobile')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                activeChannel === 'mobile'
+                  ? 'bg-white text-rose-700 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <Smartphone className="w-3.5 h-3.5" />
+              Mobile
+            </button>
           </div>
         </div>
-
-        {/* Controles do Topo: Canal Web/Mobile no Global e Contadores */}
-        <div className="flex items-center gap-3 flex-wrap self-start lg:self-auto">
-          {scope === 'global' && (
-            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-2xl border border-slate-200/80">
-              <button
-                type="button"
-                onClick={() => setActiveChannel('web')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
-                  activeChannel === 'web'
-                    ? 'bg-white text-indigo-700 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                <Monitor className="w-3.5 h-3.5" />
-                Web
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveChannel('mobile')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
-                  activeChannel === 'mobile'
-                    ? 'bg-white text-rose-700 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                <Smartphone className="w-3.5 h-3.5" />
-                Mobile
-              </button>
+      ) : (
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 bg-white p-6 rounded-3xl border border-slate-200/90 shadow-sm">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-gradient-to-br from-emerald-600 to-emerald-700 text-white rounded-2xl shadow-md shadow-emerald-500/20">
+              <Shield className="w-6 h-6" />
             </div>
-          )}
+            <div>
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <h2 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight">
+                  {title || `Permissões de Acesso: ${targetUserName || 'Usuário'}`}
+                </h2>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest border flex items-center gap-1.5 shadow-xs bg-emerald-50 text-emerald-700 border-emerald-200">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  Escopo Individual
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-1 font-medium">
+                {subtitle || 'Configure especificamente quais módulos e funcionalidades este usuário terá autorização para acessar.'}
+              </p>
+            </div>
+          </div>
 
-          <div className="px-3.5 py-2 rounded-2xl bg-slate-50 border border-slate-200 flex items-center gap-2.5">
+          <div className="px-3.5 py-2 rounded-2xl bg-slate-50 border border-slate-200 flex items-center gap-2.5 self-start lg:self-auto">
             <CheckCircle2 className="w-4 h-4 text-emerald-600" />
             <span className="text-xs font-bold text-slate-700">
               <strong className="font-black text-slate-900">{stats.enabledItems}</strong> de {stats.totalItems} permissões ativas
             </span>
           </div>
-        </div>
-      </div>
-
-      {/* Banner Explicativo de Regras: Controle Global vs Universal para Todos */}
-      {scope === 'global' && (
-        <div className="bg-gradient-to-r from-indigo-50/90 via-sky-50/70 to-slate-50 p-4 rounded-3xl border border-indigo-100 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs shadow-xs">
-          <div className="flex items-start gap-3">
-            <div className="p-2 rounded-xl bg-indigo-600 text-white shrink-0 shadow-xs">
-              <Users className="w-4 h-4" />
-            </div>
-            <div>
-              <h4 className="font-black text-slate-900 text-sm">
-                Diferença entre os Controles nesta Página
-              </h4>
-              <p className="text-slate-600 mt-0.5 leading-relaxed text-[11px]">
-                <strong>Switch de Ativação:</strong> Define a disponibilidade global do módulo/submódulo no sistema. Se desativado, nenhum usuário acessa.<br />
-                <strong>Botão Universal "Ativar / Desativar p/ Todos":</strong> Atua individualmente sobre todos os usuários sem desativar a estrutura global, alterando as permissões de cada usuário no banco e permitindo reajustes manuais pontuais depois.
-              </p>
-            </div>
-          </div>
-          {users && users.length > 0 && (
-            <div className="shrink-0 px-3 py-1.5 rounded-xl bg-white border border-indigo-100 text-indigo-900 font-bold text-[11px] self-end md:self-auto flex items-center gap-1.5 shadow-2xs">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              {users.length} {users.length === 1 ? 'usuário cadastrado' : 'usuários cadastrados'}
-            </div>
-          )}
         </div>
       )}
 
