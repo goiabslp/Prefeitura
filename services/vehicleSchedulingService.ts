@@ -228,14 +228,19 @@ export const updateSchedule = async (schedule: VehicleSchedule): Promise<Vehicle
         .from('vehicle_schedules')
         .update(dbSchedule)
         .eq('id', schedule.id)
-        .neq('status', 'cancelado')
-        .neq('status', 'concluido')
         .select()
-        .single();
+        .maybeSingle();
 
     if (error) {
         console.error('Error updating schedule:', error);
         return null;
+    }
+
+    if (!data) {
+        // Se a linha não retornou via update, tenta buscar o registro atual
+        const existing = await getScheduleById(schedule.id);
+        if (existing) return existing;
+        return schedule;
     }
 
     const result = {
@@ -287,19 +292,12 @@ export const updateScheduleStatus = async (
     const { error } = await supabase
         .from('vehicle_schedules')
         .update(updateData)
-        .eq('id', id)
-        .neq('status', 'cancelado')
-        .neq('status', 'concluido'); // Prevent changing concluded schedules
+        .eq('id', id);
 
     if (error) {
         console.error('Error updating schedule status:', error);
         return false;
     }
-
-    // Check if the update actually happened (row wasn't filtered out by status check)
-    // However, Supabase .update() without .select() doesn't return count by default in v2 unless specified with count option
-    // But since we are allowed to "fail silently" if it was already concluded (idempotency), it's fine.
-    // Ideally we should check strictness, but for now this is safe.
 
     await notifyRequester(id, status);
 
@@ -349,41 +347,45 @@ export const checkAvailability = async (vehicleId: string, start: string, end: s
 // ... existing code
 
 export const checkAndAutoUpdateStatuses = async (schedules: VehicleSchedule[]): Promise<void> => {
-    const now = new Date();
-    const updates: Promise<any>[] = [];
+    try {
+        const now = new Date();
+        const updates: Promise<any>[] = [];
 
-    for (const schedule of schedules) {
-        if (schedule.status === 'cancelado' || schedule.status === 'concluido') continue;
+        for (const schedule of schedules) {
+            if (!schedule?.id || schedule.status === 'cancelado' || schedule.status === 'concluido') continue;
 
-        let newStatus: ScheduleStatus | null = null;
-        const departure = new Date(schedule.departureDateTime);
-        const ret = schedule.returnDateTime ? new Date(schedule.returnDateTime) : null;
+            let newStatus: ScheduleStatus | null = null;
+            const departure = new Date(schedule.departureDateTime);
+            const ret = schedule.returnDateTime ? new Date(schedule.returnDateTime) : null;
 
-        if (now > departure) {
-            if (schedule.status === 'pendente') {
-                newStatus = 'cancelado';
-            } else if (schedule.status === 'confirmado') {
-                newStatus = 'em_curso';
+            if (now > departure) {
+                if (schedule.status === 'pendente') {
+                    newStatus = 'cancelado';
+                } else if (schedule.status === 'confirmado') {
+                    newStatus = 'em_curso';
+                } else if (schedule.status === 'em_curso' && ret && now >= ret) {
+                    newStatus = 'concluido';
+                }
             } else if (schedule.status === 'em_curso' && ret && now >= ret) {
                 newStatus = 'concluido';
             }
-        } else if (schedule.status === 'em_curso' && ret && now >= ret) {
-            newStatus = 'concluido';
-        }
 
-        if (newStatus) {
-            if (newStatus === 'cancelado') {
-                updates.push(updateScheduleStatus(schedule.id, newStatus, {
-                    reason: 'Cancelado automaticamente: Data de saída expirada (anterior à data atual).',
-                    cancelledBy: 'Sistema'
-                }));
-            } else {
-                updates.push(updateScheduleStatus(schedule.id, newStatus));
+            if (newStatus) {
+                if (newStatus === 'cancelado') {
+                    updates.push(updateScheduleStatus(schedule.id, newStatus, {
+                        reason: 'Cancelado automaticamente: Data de saída expirada (anterior à data atual).',
+                        cancelledBy: 'Sistema'
+                    }).catch(e => console.warn('Erro ao auto-cancelar agendamento expirado:', e)));
+                } else {
+                    updates.push(updateScheduleStatus(schedule.id, newStatus).catch(e => console.warn('Erro ao auto-atualizar status de agendamento:', e)));
+                }
             }
         }
-    }
 
-    if (updates.length > 0) {
-        await Promise.all(updates);
+        if (updates.length > 0) {
+            await Promise.all(updates);
+        }
+    } catch (err) {
+        console.error('Erro na verificação automática de status de agendamentos:', err);
     }
 };

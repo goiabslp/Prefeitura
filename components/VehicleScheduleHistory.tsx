@@ -88,29 +88,33 @@ export const VehicleScheduleHistory: React.FC<VehicleScheduleHistoryProps> = ({
     return schedules.filter(s => s.serviceSectorId === userSectorId || s.requesterId === currentUserId || (currentUserPerson && s.requesterPersonId === currentUserPerson.id));
   }, [schedules, userRole, userSectorId, currentUserId, currentUserPerson]);
 
-  // Auto-Update Status Effect
+  const schedulesRef = React.useRef(schedules);
+  schedulesRef.current = schedules;
+  const isCheckingRef = React.useRef(false);
+
+  // Auto-Update Status Effect (executado de forma segura sem loop infinito)
   React.useEffect(() => {
     const checkStatus = async () => {
-      await checkAndAutoUpdateStatuses(schedules);
-
-      const now = new Date();
-      schedules.forEach(s => {
-        if (s.status === 'pendente' && new Date(s.departureDateTime) < now) {
-          onUpdateStatus(s.id, 'cancelado', {
-            reason: 'Cancelado automaticamente: Data de saída expirada (anterior à data atual).',
-            cancelledBy: 'Sistema'
-          });
+      if (isCheckingRef.current) return;
+      isCheckingRef.current = true;
+      try {
+        if (schedulesRef.current && schedulesRef.current.length > 0) {
+          await checkAndAutoUpdateStatuses(schedulesRef.current);
         }
-      });
+      } catch (err) {
+        console.warn('Erro ao atualizar status automáticos:', err);
+      } finally {
+        isCheckingRef.current = false;
+      }
     };
 
-    // Check immediately on mount/data change
+    // Checagem inicial
     checkStatus();
 
-    // Check periodically
-    const interval = setInterval(checkStatus, 30000); // 30 seconds
+    // Checagem periódica a cada 30 segundos
+    const interval = setInterval(checkStatus, 30000);
     return () => clearInterval(interval);
-  }, [schedules, onUpdateStatus]);
+  }, []);
 
   // States for Cancellation Modal
   const [cancelModalSchedule, setCancelModalSchedule] = useState<VehicleSchedule | null>(null);
