@@ -16,6 +16,16 @@
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
 
+  <!-- CSS Crítico: Previne FOUC (Flash of Unstyled Content) e estouro de imagens durante o carregamento -->
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+    img {
+      max-width: 100%;
+    }
+  </style>
+
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"

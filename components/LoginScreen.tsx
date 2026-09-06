@@ -219,6 +219,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, uiConfig, onL
           src="/images/goiabal_panoramic_landscape.jpg" 
           alt="São José do Goiabal" 
           className="w-full h-full object-cover object-[25%_65%] lg:object-[35%_60%] filter brightness-[1.02] contrast-[1.03]"
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          loading="eager"
         />
 
         {/* Efeito Degradê Conforme Modelo de Referência */}
@@ -294,15 +296,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, uiConfig, onL
 
       {/* Barras Diagonais 3D no Canto Inferior Direito (Conforme o Modelo) */}
       <div className="absolute -bottom-16 -right-16 pointer-events-none z-10 hidden lg:block select-none">
-        <div className="relative w-88 xl:w-[420px] h-88 xl:h-[420px]">
+        <div className="relative w-80 xl:w-[420px] h-80 xl:h-[420px]">
           {/* Sombra difusa da composição tridimensional */}
           <div className="absolute bottom-20 right-20 w-80 h-20 bg-slate-900/15 rounded-full rotate-[-40deg] blur-2xl"></div>
 
           {/* Pílula Verde Esmeralda 3D (Vibrante e com chanfro de luz) */}
-          <div className="absolute bottom-24 right-14 w-72 xl:w-84 h-15 bg-gradient-to-r from-[#10b981] via-[#059669] to-[#047857] rounded-full rotate-[-40deg] shadow-[0_16px_36px_rgba(16,185,129,0.38),inset_0_2px_4px_rgba(255,255,255,0.45),inset_0_-2px_4px_rgba(0,0,0,0.2)]"></div>
+          <div className="absolute bottom-24 right-14 w-72 xl:w-[336px] h-14 bg-gradient-to-r from-[#10b981] via-[#059669] to-[#047857] rounded-full rotate-[-40deg] shadow-[0_16px_36px_rgba(16,185,129,0.38),inset_0_2px_4px_rgba(255,255,255,0.45),inset_0_-2px_4px_rgba(0,0,0,0.2)]"></div>
 
           {/* Pílula Azul Marinho Profundo 3D */}
-          <div className="absolute bottom-8 right-24 w-80 xl:w-96 h-15 bg-gradient-to-r from-[#1e3a5f] via-[#0f294d] to-[#0c2340] rounded-full rotate-[-40deg] shadow-[0_22px_45px_rgba(12,35,64,0.42),inset_0_2px_4px_rgba(255,255,255,0.28),inset_0_-2px_4px_rgba(0,0,0,0.35)]"></div>
+          <div className="absolute bottom-8 right-24 w-80 xl:w-96 h-14 bg-gradient-to-r from-[#1e3a5f] via-[#0f294d] to-[#0c2340] rounded-full rotate-[-40deg] shadow-[0_22px_45px_rgba(12,35,64,0.42),inset_0_2px_4px_rgba(255,255,255,0.28),inset_0_-2px_4px_rgba(0,0,0,0.35)]"></div>
 
           {/* Sombra de apoio translúcida */}
           <div className="absolute -bottom-4 right-36 w-64 h-12 bg-emerald-500/25 backdrop-blur-sm rounded-full rotate-[-40deg]"></div>
@@ -334,21 +336,30 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, uiConfig, onL
           {/* Bloco Superior: Logo, Título, Subtítulo e 3 Badges */}
           <div className="flex flex-col gap-3.5 xl:gap-4.5 max-w-xl">
             
-            {/* Logo Oficial da Prefeitura */}
-            <div className="flex items-center gap-3.5">
+            {/* Logo Oficial da Prefeitura (com dimensões rígidas contra estouro/FOUC) */}
+            <div className="flex items-center gap-3.5 h-14 min-h-[56px]" style={{ minHeight: '56px' }}>
               {logoUrl ? (
                 <img 
                   src={logoUrl} 
                   alt="Prefeitura de São José do Goiabal" 
-                  className="h-12 xl:h-14 object-contain filter drop-shadow-md" 
+                  className="h-12 xl:h-14 max-h-14 max-w-[260px] object-contain filter drop-shadow-md"
+                  style={{ height: '52px', maxHeight: '56px', maxWidth: '260px', objectFit: 'contain' }}
+                  loading="eager"
                 />
               ) : (
                 <div className="flex items-center gap-3.5">
-                  <div className="w-13 h-13 xl:w-15 xl:h-15 rounded-2xl bg-white/95 shadow-md shadow-slate-900/10 border border-white p-1.5 flex items-center justify-center flex-shrink-0">
+                  <div 
+                    className="w-14 h-14 rounded-2xl bg-white/95 shadow-md shadow-slate-900/10 border border-white p-1.5 flex items-center justify-center flex-shrink-0 overflow-hidden"
+                    style={{ width: '56px', height: '56px', minWidth: '56px', minHeight: '56px', maxWidth: '56px', maxHeight: '56px' }}
+                  >
                     <img 
                       src="/apple-touch-icon.png" 
                       alt="Brasão de São José do Goiabal" 
                       className="w-full h-full object-contain"
+                      style={{ width: '100%', height: '100%', maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+                      width={56}
+                      height={56}
+                      loading="eager"
                     />
                   </div>
                   <div className="flex flex-col justify-center">
