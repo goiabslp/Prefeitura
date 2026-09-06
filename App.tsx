@@ -1176,6 +1176,30 @@ const App: React.FC = () => {
       const path = rawPath.replace(/\/$/, '').toLowerCase() || '/';
 
       // Look up path case-insensitively and ignoring trailing slash
+      // Rotas públicas que não necessitam de autenticação
+      if (path.includes('/kanban/view')) {
+        setCurrentView('licitacao:kanban-view');
+        return;
+      } else if (path.includes('/kanban')) {
+        setCurrentView('licitacao:kanban');
+        return;
+      } else if (path.startsWith('/politicaprivacidadeapp')) {
+        setCurrentView('politica-privacidade-app');
+        return;
+      } else if (path.startsWith('/politicaprivacidade')) {
+        setCurrentView('politica-privacidade');
+        return;
+      }
+
+      // Se não há usuário autenticado na sessão atual, redireciona diretamente para Login
+      if (!currentUser) {
+        setCurrentView('login');
+        if (path !== '/' && path !== '/login') {
+          window.history.replaceState({}, '', '/Login');
+        }
+        return;
+      }
+
       if (path.startsWith('/diarias/viajar')) {
         setCurrentView('diarias-viajar');
         return;
@@ -1190,12 +1214,6 @@ const App: React.FC = () => {
         return;
       } else if (path.startsWith('/upload')) {
         setCurrentView('upload');
-        return;
-      } else if (path.includes('/kanban/view')) {
-        setCurrentView('licitacao:kanban-view');
-        return;
-      } else if (path.includes('/kanban')) {
-        setCurrentView('licitacao:kanban');
         return;
       } else if (path.startsWith('/admin/usuarios')) {
         setCurrentView('admin');
@@ -1543,7 +1561,7 @@ const App: React.FC = () => {
   useEffect(() => {
     if (authLoading) return;
 
-    const isPublicView = currentView === 'licitacao:kanban-view';
+    const isPublicView = currentView === 'licitacao:kanban-view' || currentView === 'licitacao:kanban' || currentView === 'politica-privacidade' || currentView === 'politica-privacidade-app';
 
     if (currentUser && currentView === 'login') {
       // Prevent auto-redirect if we are explicitly showing the login transition modal
@@ -1763,6 +1781,7 @@ const App: React.FC = () => {
         // Preserva as credenciais de acesso salvas antes de limpar o localStorage
         const savedUser = localStorage.getItem('remember_user');
         const savedPass = localStorage.getItem('remember_pass');
+        const savedBio = localStorage.getItem('biometrics_enabled');
 
         // Atualização debaixo dos panos: limpa cache e atualiza a flag silenciosamente
         localStorage.clear();
@@ -1771,6 +1790,7 @@ const App: React.FC = () => {
         // Restaura as credenciais salvas
         if (savedUser) localStorage.setItem('remember_user', savedUser);
         if (savedPass) localStorage.setItem('remember_pass', savedPass);
+        if (savedBio) localStorage.setItem('biometrics_enabled', savedBio);
 
         localStorage.setItem(WINDOW_KEY, currentWindow);
         if (needsForcedUpdate && systemUpdateTarget) {

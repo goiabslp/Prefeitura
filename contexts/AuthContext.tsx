@@ -22,10 +22,26 @@ const AuthContext = createContext<AuthContextType>({
     refreshUser: async () => { },
 });
 
+const hasStoredSession = (): boolean => {
+    if (typeof window === 'undefined') return false;
+    try {
+        for (let i = 0; i < window.sessionStorage.length; i++) {
+            const key = window.sessionStorage.key(i);
+            if (key && key.startsWith('sb-') && key.endsWith('-auth-token')) {
+                const val = window.sessionStorage.getItem(key);
+                if (val && val !== 'null' && val !== '{}') return true;
+            }
+        }
+    } catch (e) {
+        return false;
+    }
+    return false;
+};
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null);
     const [session, setSession] = useState<Session | null>(null);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState<boolean>(() => hasStoredSession());
 
     useEffect(() => {
         // Check active session
