@@ -104,6 +104,7 @@ import { ConsultasModule } from './components/consultas/ConsultasModule';
 import { FarmaciaModule } from './components/farmacia/FarmaciaModule';
 import { NoticiasModule } from './components/noticias/NoticiasModule';
 import { UploadHub } from './components/upload/UploadHub';
+import { ArtModule } from './components/art/ArtModule';
 import { SystemUpdateScreen } from './components/SystemUpdateScreen';
 import { NovoEventoScreen } from './components/diarias/NovoEventoScreen';
 import { LancamentosScreen } from './components/diarias/LancamentosScreen';
@@ -247,7 +248,13 @@ const VIEW_TO_PATH: Record<string, string> = {
   'politica-privacidade': '/PoliticaPrivacidade',
   'politica-privacidade-app': '/PoliticaPrivacidadeApp',
   'assistente-ia': '/AssistenteIA',
-  'chat': '/Chat'
+  'chat': '/Chat',
+  'art': '/Art',
+  'art:criar': '/Art/Criar',
+  'art:logos': '/Art/Logos',
+  'art:referencias': '/Art/Referencias',
+  'art:historico': '/Art/Historico',
+  'art:editor': '/Art/Editor'
 };
 
 const PATH_TO_STATE: Record<string, any> = Object.fromEntries(
@@ -317,7 +324,7 @@ const mapLicitacaoProcessToOrder = (process: any): Order => {
 
 const App: React.FC = () => {
   // State controlling the active module view
-  const [currentView, setCurrentView] = useState<'login' | 'home' | 'admin' | 'tracking' | 'editor' | 'vehicle-scheduling' | 'abastecimento' | 'agricultura' | 'obras' | 'order-details' | 'tasks-dashboard' | 'purchase-inventory' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'diarias-novo-evento' | 'diarias-lancamentos' | 'diarias-gestores' | 'diarias-viajar' | 'diarias-adiantamento' | 'diarias-adiantamento-servidor' | 'diarias-adiantamento-viagem' | 'diarias-adiantamento-valores' | 'diarias-adiantamento-bancario' | 'diarias-adiantamento-justificativa' | 'licitacao' | 'licitacao:new' | 'licitacao:view' | 'licitacao:details' | 'licitacao:kanban' | 'licitacao:kanban-view' | 'licitacao-all' | 'licitacao-screening' | 'consultas' | 'farmacia' | 'noticias' | 'upload' | 'politica-privacidade' | 'politica-privacidade-app' | 'assistente-ia' | 'chat'>(() => {
+  const [currentView, setCurrentView] = useState<'login' | 'home' | 'admin' | 'tracking' | 'editor' | 'vehicle-scheduling' | 'abastecimento' | 'agricultura' | 'obras' | 'order-details' | 'tasks-dashboard' | 'purchase-inventory' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'diarias-novo-evento' | 'diarias-lancamentos' | 'diarias-gestores' | 'diarias-viajar' | 'diarias-adiantamento' | 'diarias-adiantamento-servidor' | 'diarias-adiantamento-viagem' | 'diarias-adiantamento-valores' | 'diarias-adiantamento-bancario' | 'diarias-adiantamento-justificativa' | 'licitacao' | 'licitacao:new' | 'licitacao:view' | 'licitacao:details' | 'licitacao:kanban' | 'licitacao:kanban-view' | 'licitacao-all' | 'licitacao-screening' | 'consultas' | 'farmacia' | 'noticias' | 'upload' | 'politica-privacidade' | 'politica-privacidade-app' | 'assistente-ia' | 'chat' | 'art'>(() => {
     if (typeof window !== 'undefined') {
       let rawPath = window.location.pathname;
       try { rawPath = decodeURIComponent(rawPath); } catch (e) {}
@@ -327,6 +334,9 @@ const App: React.FC = () => {
       }
       if (path.includes('/kanban')) {
         return 'licitacao:kanban';
+      }
+      if (path.startsWith('/art')) {
+        return 'art';
       }
     }
     return 'login';
@@ -1231,6 +1241,9 @@ const App: React.FC = () => {
         return;
       } else if (path.startsWith('/upload')) {
         setCurrentView('upload');
+        return;
+      } else if (path.startsWith('/art')) {
+        setCurrentView('art');
         return;
       } else if (path.startsWith('/admin/usuarios')) {
         setCurrentView('admin');
@@ -4610,6 +4623,10 @@ const App: React.FC = () => {
                   setAppState(prev => ({ ...prev, view: undefined }));
                   window.history.pushState({}, '', VIEW_TO_PATH['noticias']);
                 }}
+                onArt={() => {
+                  setCurrentView('art');
+                  window.history.pushState({}, '', VIEW_TO_PATH['art']);
+                }}
                 activeBlock={activeBlock}
                 setActiveBlock={(block) => {
                   if (block === 'licitacao') {
@@ -5327,6 +5344,16 @@ const App: React.FC = () => {
               <UploadHub
                 currentUser={currentUser}
                 onBack={() => {
+                  setCurrentView('home');
+                  window.history.pushState({}, '', '/PaginaInicial');
+                }}
+              />
+            )}
+
+            {currentView === 'art' && (
+              <ArtModule
+                currentUser={currentUser}
+                onBackToHome={() => {
                   setCurrentView('home');
                   window.history.pushState({}, '', '/PaginaInicial');
                 }}

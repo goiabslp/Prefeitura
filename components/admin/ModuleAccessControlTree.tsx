@@ -4,12 +4,14 @@ import {
   Power, Settings2, Monitor, Smartphone, ShoppingCart, Briefcase,
   Gavel, Calendar, Users, HeartPulse, Pill, Newspaper, Car, Fuel,
   Truck, FileText, CheckSquare, ShieldAlert, Sparkles, Layers, Check,
-  AlertTriangle, Upload, UserCheck, UserX, Loader2
+  AlertTriangle, Upload, UserCheck, UserX, Loader2, Palette, ArrowLeft
 } from 'lucide-react';
 import { MODULE_ACCESS_TREE, ModuleItemDefinition } from '../../services/permissionService';
 import { User } from '../../types';
 
 export interface ModuleAccessControlTreeProps {
+  /** Ação para voltar ao painel na mesma linha do cabeçalho */
+  onBack?: () => void;
   /** Escopo da árvore: global (/Admin/ControleAcesso) ou individual do usuário (/Admin/Usuarios/Editar/:id/Modulos) */
   scope: 'global' | 'user';
   /** Título do cabeçalho */
@@ -37,6 +39,7 @@ export interface ModuleAccessControlTreeProps {
 }
 
 export const ModuleAccessControlTree: React.FC<ModuleAccessControlTreeProps> = ({
+  onBack,
   scope,
   title,
   subtitle,
@@ -85,6 +88,7 @@ export const ModuleAccessControlTree: React.FC<ModuleAccessControlTreeProps> = (
       case 'parent_tarefas': return <CheckSquare className={iconClass} />;
       case 'parent_admin': return <ShieldAlert className={iconClass} />;
       case 'parent_upload': return <Upload className={iconClass} />;
+      case 'parent_art': return <Palette className={iconClass} />;
       default: return <Layers className={iconClass} />;
     }
   };
@@ -239,16 +243,29 @@ export const ModuleAccessControlTree: React.FC<ModuleAccessControlTreeProps> = (
 
   return (
     <div className="w-full flex flex-col space-y-6 animate-fade-in font-sans">
-      {/* Header com estilo moderno */}
+      {/* Header com estilo moderno com botão de Voltar na mesma linha */}
       {scope === 'global' ? (
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white px-6 py-4 rounded-3xl border border-slate-200/90 shadow-sm">
-          <div className="flex items-center gap-3.5">
-            <div className="p-2.5 bg-gradient-to-br from-indigo-600 to-indigo-700 text-white rounded-2xl shadow-md shadow-indigo-500/20 shrink-0">
-              <Shield className="w-5 h-5" />
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white px-5 sm:px-6 py-3.5 sm:py-4 rounded-3xl border border-slate-200/90 shadow-sm">
+          <div className="flex items-center gap-3.5 flex-wrap sm:flex-nowrap">
+            {onBack && (
+              <button
+                onClick={onBack}
+                type="button"
+                className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-900 hover:text-white transition-all active:scale-95 border border-slate-200/60 cursor-pointer text-xs font-bold group shrink-0 mr-1"
+                title="Voltar ao Painel"
+              >
+                <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
+                <span>Voltar ao Painel</span>
+              </button>
+            )}
+            <div className="flex items-center gap-3.5">
+              <div className="p-2.5 bg-gradient-to-br from-indigo-600 to-indigo-700 text-white rounded-2xl shadow-md shadow-indigo-500/20 shrink-0">
+                <Shield className="w-5 h-5" />
+              </div>
+              <h2 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight">
+                Controle de Acesso Global
+              </h2>
             </div>
-            <h2 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight">
-              Controle de Acesso Global
-            </h2>
           </div>
 
           {/* Apenas o botão Web/Mobile na mesma linha */}
@@ -310,37 +327,39 @@ export const ModuleAccessControlTree: React.FC<ModuleAccessControlTreeProps> = (
         </div>
       )}
 
-      {/* Barra de Filtro, Pesquisa e Ações Rápidas */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-200/80 shadow-xs">
-        <div className="relative flex-1 max-w-xl">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-          <input
-            type="text"
-            placeholder="Pesquisar por módulo, funcionalidade ou rota URL (ex: /Editor/Compras)..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-slate-50 pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 transition-all outline-none text-xs md:text-sm font-medium placeholder:text-slate-400"
-          />
-        </div>
+      {/* Barra de Filtro, Pesquisa e Ações Rápidas (Removida no Controle de Acesso Global) */}
+      {scope !== 'global' && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-200/80 shadow-xs">
+          <div className="relative flex-1 max-w-xl">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+            <input
+              type="text"
+              placeholder="Pesquisar por módulo, funcionalidade ou rota URL (ex: /Editor/Compras)..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full bg-slate-50 pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 transition-all outline-none text-xs md:text-sm font-medium placeholder:text-slate-400"
+            />
+          </div>
 
-        <div className="flex items-center gap-2 self-end sm:self-auto">
-          <button
-            type="button"
-            onClick={expandAll}
-            className="px-3 py-2 text-xs font-bold text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all cursor-pointer"
-          >
-            Expandir Todos
-          </button>
-          <span className="text-slate-300">|</span>
-          <button
-            type="button"
-            onClick={collapseAll}
-            className="px-3 py-2 text-xs font-bold text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all cursor-pointer"
-          >
-            Recolher Todos
-          </button>
+          <div className="flex items-center gap-2 self-end sm:self-auto">
+            <button
+              type="button"
+              onClick={expandAll}
+              className="px-3 py-2 text-xs font-bold text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all cursor-pointer"
+            >
+              Expandir Todos
+            </button>
+            <span className="text-slate-300">|</span>
+            <button
+              type="button"
+              onClick={collapseAll}
+              className="px-3 py-2 text-xs font-bold text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all cursor-pointer"
+            >
+              Recolher Todos
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Árvore de Módulos (Cards Idênticos nas duas páginas) */}
       <div className="space-y-4">

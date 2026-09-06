@@ -622,6 +622,44 @@ export const MODULE_ACCESS_TREE: ModuleItemDefinition[] = [
     submodules: []
   },
   {
+    key: 'parent_art',
+    legacyKeys: ['art', 'art_studio'],
+    label: 'Art (Gerador Inteligente de Artes)',
+    description: 'Criação inteligente de publicações institucionais em 1080x1920 e 1080x1080 com IA generativa, logos e referências',
+    routes: ['/Art', '/Art/Criar', '/Art/Logos', '/Art/Referencias', '/Art/Historico', '/Art/Editor'],
+    iconName: 'Palette',
+    submodules: [
+      {
+        key: 'sub_art_criar',
+        legacyKeys: ['parent_art_criar'],
+        label: 'Criar Publicação',
+        description: 'Assistente guiado de geração de artes com IA e variações',
+        routes: ['/Art/Criar']
+      },
+      {
+        key: 'sub_art_historico',
+        legacyKeys: ['parent_art_historico'],
+        label: 'Histórico de Artes',
+        description: 'Histórico de publicações criadas, variações e downloads',
+        routes: ['/Art/Historico']
+      },
+      {
+        key: 'sub_art_logos',
+        legacyKeys: ['parent_art_logos'],
+        label: 'Logos da Prefeitura',
+        description: 'Gerenciamento e controle das logos oficiais institucionais',
+        routes: ['/Art/Logos']
+      },
+      {
+        key: 'sub_art_referencias',
+        legacyKeys: ['parent_art_referencias'],
+        label: 'Imagens de Referência',
+        description: 'Gerenciamento das até 9 imagens de referência de direção de arte',
+        routes: ['/Art/Referencias']
+      }
+    ]
+  },
+  {
     key: 'parent_assistente_ia',
     legacyKeys: ['assistente_ia', 'chat'],
     label: 'Assistente IA Operacional',

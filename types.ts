@@ -195,9 +195,9 @@ export interface AppState {
 
 export type UserRole = 'admin' | 'collaborator' | 'compras' | 'marketing' | 'licitacao';
 
-export type AppPermission = 'parent_criar_oficio' | 'parent_admin' | 'parent_compras' | 'parent_diarias' | 'parent_diarias_editor' | 'parent_diarias_historico' | 'parent_diarias_novo_evento' | 'parent_diarias_lancamentos' | 'parent_diarias_gestores' | 'parent_diarias_viajar' | 'parent_diarias_adiantamento' | 'parent_frotas' | 'parent_agendamento_veiculo' | 'parent_agendamento_veiculo_agendar' | 'parent_agendamento_veiculo_meus' | 'parent_agendamento_veiculo_aprovacoes' | 'parent_agendamento_veiculo_dashboard' | 'parent_abastecimento' | 'parent_abastecimento_novo' | 'parent_abastecimento_gestao' | 'parent_abastecimento_dashboard' | 'parent_agricultura' | 'parent_obras' | 'parent_tarefas' | 'parent_calendario' | 'parent_rh' | 'parent_rh_horas_extras' | 'parent_rh_historico' | 'parent_projetos' | 'parent_marketing' | 'parent_compras_itens' | 'parent_compras_dados' | 'parent_licitacao' | 'parent_licitacao_processos' | 'parent_licitacao_triagem' | 'parent_consultas' | 'parent_consultas_novo_agendamento' | 'parent_consultas_liberar_vagas' | 'parent_consultas_acompanhar' | 'parent_consultas_dados' | 'parent_consultas_pacientes' | 'parent_consultas_gestor' | 'parent_farmacia' | 'parent_farmacia_criar' | 'parent_farmacia_editar' | 'parent_farmacia_excluir' | 'parent_farmacia_aprovar' | 'parent_farmacia_consultar' | 'parent_farmacia_retirar' | 'parent_farmacia_estoque' | 'parent_farmacia_dashboard' | 'parent_farmacia_pacientes' | 'parent_farmacia_gestor' | 'parent_frotas_dashboard' | 'parent_frotas_leve' | 'parent_frotas_pesado' | 'parent_frotas_acessorio' | 'parent_noticias' | 'parent_upload';
+export type AppPermission = 'parent_criar_oficio' | 'parent_admin' | 'parent_compras' | 'parent_diarias' | 'parent_diarias_editor' | 'parent_diarias_historico' | 'parent_diarias_novo_evento' | 'parent_diarias_lancamentos' | 'parent_diarias_gestores' | 'parent_diarias_viajar' | 'parent_diarias_adiantamento' | 'parent_frotas' | 'parent_agendamento_veiculo' | 'parent_agendamento_veiculo_agendar' | 'parent_agendamento_veiculo_meus' | 'parent_agendamento_veiculo_aprovacoes' | 'parent_agendamento_veiculo_dashboard' | 'parent_abastecimento' | 'parent_abastecimento_novo' | 'parent_abastecimento_gestao' | 'parent_abastecimento_dashboard' | 'parent_agricultura' | 'parent_obras' | 'parent_tarefas' | 'parent_calendario' | 'parent_rh' | 'parent_rh_horas_extras' | 'parent_rh_historico' | 'parent_projetos' | 'parent_marketing' | 'parent_compras_itens' | 'parent_compras_dados' | 'parent_licitacao' | 'parent_licitacao_processos' | 'parent_licitacao_triagem' | 'parent_consultas' | 'parent_consultas_novo_agendamento' | 'parent_consultas_liberar_vagas' | 'parent_consultas_acompanhar' | 'parent_consultas_dados' | 'parent_consultas_pacientes' | 'parent_consultas_gestor' | 'parent_farmacia' | 'parent_farmacia_criar' | 'parent_farmacia_editar' | 'parent_farmacia_excluir' | 'parent_farmacia_aprovar' | 'parent_farmacia_consultar' | 'parent_farmacia_retirar' | 'parent_farmacia_estoque' | 'parent_farmacia_dashboard' | 'parent_farmacia_pacientes' | 'parent_farmacia_gestor' | 'parent_frotas_dashboard' | 'parent_frotas_leve' | 'parent_frotas_pesado' | 'parent_frotas_acessorio' | 'parent_noticias' | 'parent_upload' | 'parent_art' | 'sub_art_criar' | 'sub_art_historico' | 'sub_art_logos' | 'sub_art_referencias';
 
-export type BlockType = 'oficio' | 'compras' | 'diarias' | 'agendamento' | 'abastecimento' | 'vs_calendar' | 'vs_day' | 'vs_history' | 'vs_approvals' | 'dashboard' | 'agricultura' | 'obras' | 'tarefas' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'licitacao' | 'consultas' | 'farmacia';
+export type BlockType = 'oficio' | 'compras' | 'diarias' | 'agendamento' | 'abastecimento' | 'vs_calendar' | 'vs_day' | 'vs_history' | 'vs_approvals' | 'dashboard' | 'agricultura' | 'obras' | 'tarefas' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'licitacao' | 'consultas' | 'farmacia' | 'art';
 
 export interface FarmaciaMedicamento {
   id: string;
@@ -735,6 +735,112 @@ export interface JornalMateria {
   visualizacoes?: number;
   curtidas?: number;
   imagemPosicao?: string; // Posição do enquadramento da imagem (ex: '50% 25%', 'top', 'center', 'bottom')
+}
+
+// ==========================================
+// MÓDULO ART — GERADOR INTELIGENTE DE ARTES
+// ==========================================
+
+export type ArtFormatType = 'vertical' | 'quadrado'; // vertical: 1080x1920, quadrado: 1080x1080
+
+export type ArtLogoPosition = 'top_left' | 'top_right' | 'bottom_left' | 'bottom_right' | 'center_top' | 'center_bottom';
+
+export interface ArtLogoItem {
+  id: string;
+  name: string;
+  dataUrl: string; // Base64 ou URL da imagem
+  isDefault: boolean;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface ArtReferenceItem {
+  id: string;
+  index: number; // 0 a 8 (espaço visual até 9 referências)
+  name: string;
+  dataUrl: string; // Base64 ou URL da imagem
+  createdAt: string;
+  notes?: string;
+}
+
+export interface ArtGraphicElement {
+  id?: string;
+  type: 'shape' | 'badge' | 'line' | 'gradient' | 'frame' | 'glow' | 'accent' | 'tag';
+  color?: string;
+  opacity?: number;
+  borderRadius?: number;
+  position?: { x: number; y: number; width?: number; height?: number };
+  content?: string;
+  style?: string;
+}
+
+export interface ArtPhotoTreatment {
+  brightness?: number; // 0.9 a 1.2
+  contrast?: number; // 0.9 a 1.3
+  saturation?: number; // 0.9 a 1.3
+  colorGradingTone?: 'cool_civic' | 'warm_golden' | 'cinematic_neutral' | 'vibrant' | string;
+  vignetteStrength?: number; // 0 a 0.6
+  overlayGradientOpacity?: number; // 0.3 a 0.85
+  lightingEffect?: 'soft_glow' | 'sunlight_leak' | 'stage_light' | 'cinematic_flare' | 'none' | string;
+}
+
+export interface ArtVariation {
+  id: string;
+  styleName: 'Institucional' | 'Moderna' | 'Impactante' | string;
+  description: string;
+  primaryColor: string;
+  secondaryColor: string;
+  accentColor: string;
+  textColor: string;
+  backgroundColor: string;
+  gradientBackground?: string;
+  fontFamilyTitle: string;
+  fontFamilyBody: string;
+  logoPosition: ArtLogoPosition;
+  logoSizePercent: number; // Ex: 16% a 24% da largura
+  logoOpacity: number;
+  layoutType: 'split' | 'hero_image' | 'overlay' | 'framed' | 'minimal';
+  headlineVisualWeight?: 'bold' | 'extra_bold' | 'black';
+  elements: ArtGraphicElement[];
+  headlineSummary?: string; // Título refinado pela IA
+  subtitleSummary?: string; // Subtítulo refinado pela IA
+  bodySummary?: string; // Corpo resumido com concisão preservando fatos
+  // Diretriz Central da IA - Módulo Art
+  impactWord?: string; // Ex: 'GRANDE FINAL', 'NESTE SÁBADO', 'EVENTO GRATUITO', 'PARTICIPE', 'NOVIDADE', 'VEM AÍ'
+  impactWordEffect?: 'glow' | '3d_shadow' | 'metallic' | 'glass_badge' | 'bold_outline' | 'illuminated';
+  titleEffect?: '3d_depth' | 'subtle_glow' | 'clean_drop_shadow' | 'bold_punch';
+  titleHighlightWords?: string[]; // Palavras do título que recebem destaque cromático, tamanho ampliado e efeito 3D
+  photoTreatment?: ArtPhotoTreatment;
+  contextualTheme?: string;
+  haikeiShape?: 'wave' | 'blob' | 'halftone' | 'minimal' | string;
+  badgeLabel?: string;
+  libraryIcons?: string[];
+}
+
+export interface ArtPublication {
+  id: string;
+  title: string;
+  subtitle?: string;
+  description: string;
+  eventDate?: string;
+  eventTime?: string;
+  eventLocation?: string;
+  category: string;
+  ctaText?: string;
+  notesForAI?: string;
+  userImages: string[]; // Fotos enviadas pelo usuário
+  primaryImageIndex: number;
+  selectedLogoId?: string;
+  logoSnapshot?: ArtLogoItem;
+  referencesUsed: ArtReferenceItem[];
+  variations: ArtVariation[];
+  selectedVariationIndex: number;
+  activeFormat: ArtFormatType;
+  createdAt: string;
+  updatedAt?: string;
+  createdByName?: string;
+  createdByEmail?: string;
 }
 
 declare const __LATEST_COMMIT__: string;

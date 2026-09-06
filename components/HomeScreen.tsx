@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FilePlus, Package, History, FileText, ArrowRight, ArrowLeft, ShoppingCart, Gavel, Wallet, Inbox, CalendarRange, FileSearch, Droplet, Fuel, BarChart3, TrendingUp, LogOut, Sprout, HardHat, Activity, Car, ChevronDown, CalendarDays, Users, LayoutGrid, Megaphone, Database, Pill, Timer, Upload, Banknote, Newspaper, Sparkles, Star, AlertTriangle } from 'lucide-react';
+import { FilePlus, Package, History, FileText, ArrowRight, ArrowLeft, ShoppingCart, Gavel, Wallet, Inbox, CalendarRange, FileSearch, Droplet, Fuel, BarChart3, TrendingUp, LogOut, Sprout, HardHat, Activity, Car, ChevronDown, CalendarDays, Users, LayoutGrid, Megaphone, Database, Pill, Timer, Upload, Banknote, Newspaper, Sparkles, Star, AlertTriangle, Palette } from 'lucide-react';
 import { UserRole, UIConfig, AppPermission, BlockType, DiariaEvento, Order, User } from '../types';
 import { TasksDashboard } from './dashboard/TasksDashboard';
 import { QuickTaskCreation } from './dashboard/QuickTaskCreation';
@@ -27,6 +27,7 @@ interface HomeScreenProps {
     onConsultas?: () => void;
     onFarmacia?: () => void;
     onNoticias?: () => void;
+    onArt?: () => void;
     onViewTasksDashboard?: () => void;
     currentUser?: User | null;
     userRole: UserRole;
@@ -76,6 +77,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     onConsultas,
     onFarmacia,
     onNoticias,
+    onArt,
     onLogout,
     onViewTasksDashboard,
     orders = [], // Receive orders for Tasks Dashboard
@@ -162,6 +164,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     const canAccessFarmacia = checkModuleAccess('parent_farmacia');
     const canAccessNoticias = checkModuleAccess('parent_noticias');
     const canAccessUpload = checkModuleAccess('parent_upload');
+    const canAccessArt = checkModuleAccess('parent_art');
     const firstName = userName.split(' ')[0];
 
     const getPendingCount = (blockType: string) => {
@@ -667,6 +670,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                                 {canAccessConsultas && renderModuleButton(() => onConsultas?.(), 'sky', Activity, 'Consultas', 'Regulação e exames', '249ms', false, getPendingCount('consultas'))}
                                 {canAccessFarmacia && renderModuleButton(() => onFarmacia?.(), 'pink', Pill, 'Farmácia Popular', 'Medicamentos', '252ms', false, getPendingCount('farmacia'))}
                                 {canAccessNoticias && renderModuleButton(() => onNoticias?.(), 'indigo', Newspaper, 'Notícias', 'Boletim & métricas', '255ms', false, 0, true)}
+                                {canAccessArt && renderModuleButton(() => {
+                                    if (onArt) onArt();
+                                    else {
+                                        window.history.pushState({}, '', '/Art');
+                                        window.dispatchEvent(new Event('popstate'));
+                                    }
+                                }, 'violet', Palette, 'Art', 'Gerador de artes IA', '258ms', false, 0, true)}
 
                                 {canAccessScheduling && renderModuleButton(() => { setActiveBlock('agendamento'); onVehicleScheduling?.(); }, 'violet', CalendarRange, 'Veículos', 'Agendamento', '250ms', false, getPendingCount('agendamento'))}
                                 {canAccessAbastecimento && renderModuleButton(() => setActiveBlock('abastecimento'), 'cyan', Droplet, 'Abastecimento', 'Combustível', '300ms', false, getPendingCount('abastecimento'))}

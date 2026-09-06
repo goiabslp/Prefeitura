@@ -190,6 +190,183 @@ ${historyFormatted}
 SOLICITAÇÃO DO USUÁRIO AGORA:
 ${dados.promptText}
 `;
+    } else if (tipo === 'art_generator') {
+      const info = dados.info || {};
+      const imagesCount = (dados.userImages || []).length;
+      const refsCount = (dados.references || []).length;
+
+      promptText = `
+### ESCOPO EXCLUSIVO: MÓDULO ART (/Art) — GERAÇÃO DE POSTS E PEÇAS GRÁFICAS INSTITUCIONAIS
+Todas as instruções, regras de hierarquia textual, tarjas em containers, fórmulas de cores e bibliotecas visuais abaixo aplicam-se ESTRITAMENTE E EXCLUSIVAMENTE à geração de posts e artes sociais do Módulo /Art da Prefeitura Municipal.
+NÃO afetam nem se aplicam a nenhum outro módulo do sistema.
+
+## REGRA PRINCIPAL — SEGUIR FIELMENTE AS REFERÊNCIAS
+A IA deve priorizar e seguir fielmente o padrão visual apresentado nas imagens de referência.
+As referências são a PRINCIPAL FONTE DE DIREÇÃO ARTÍSTICA da geração. Antes de criar qualquer arte, analise cuidadosamente as imagens e identifique como os elementos são organizados, posicionados e aplicados sobre a fotografia.
+
+A IA DEVE OBRIGATORIAMENTE:
+* Seguir o estilo visual das referências;
+* Reproduzir a lógica de composição das referências;
+* Utilizar elementos gráficos semelhantes aos apresentados;
+* Seguir a mesma linguagem de formas, linhas, efeitos e tipografia;
+* Manter uma organização visual semelhante;
+* Respeitar a hierarquia visual;
+* Utilizar as referências como principal orientação para posicionamento dos elementos;
+* Adaptar o estilo das referências à imagem enviada pelo usuário.
+
+### ## TÍTULO E SUBTÍTULO — FOCO ABSOLUTO DA ARTE (REGRA MÁXIMA E OBRIGATÓRIA)
+O TÍTULO e o SUBTÍTULO / CHAMADA SECUNDÁRIA devem ser obrigatoriamente tratados como os PRINCIPAIS ELEMENTOS VISUAIS DA PUBLICAÇÃO.
+Eles NUNCA devem aparecer como simples textos estáticos sobre a imagem.
+A IA deve transformar títulos e chamadas em ELEMENTOS GRÁFICOS DE DESTAQUE, criativos, grandes, modernos, dinâmicos e visualmente impactantes.
+
+REGRAS OBRIGATÓRIAS DO TÍTULO E SUBTÍTULO:
+* Fontes grandes e expressivas (tamanho proeminente e imponente);
+* Variação de tamanho entre palavras (palavras-chave em destaque ampliado);
+* Variação de peso tipográfico (alternar bold, black, extrabold);
+* CORES DIFERENTES PARA PALAVRAS IMPORTANTES (destacar palavras centrais com a cor de destaque accentColor ou gradientes);
+* Gradientes, Efeitos 3D, Profundidade, Sombras projetadas e multicamadas;
+* Contornos, Glow, Relevos, Perspectiva e Sobreposição de elementos;
+* Destaques gráficos, elementos decorativos integrados ao texto, formas geométricas, ícones e elementos temáticos.
+
+COMPOSIÇÃO DO TÍTULO:
+A IA deve identificar as palavras mais importantes do título e dar a elas TRATAMENTO VISUAL DIFERENCIADO.
+Não utilizar a mesma fonte, tamanho ou cor em todas as palavras.
+Exemplo conceitual:
+"GRANDE" → tamanho maior + efeito 3D
+"FINAL" → cor de destaque + sombra forte
+"DO CAMPEONATO" → complemento visual com apoio gráfico
+A composição deve criar HIERARQUIA VISUAL IMEDIATAMENTE PERCEPTÍVEL.
+
+FÓRMULA VISUAL OBRIGATÓRIA:
+Sempre buscar combinações como:
+COR DIFERENTE + TAMANHO MAIOR + EFEITO 3D + SOMBRA + ELEMENTO GRÁFICO COMPLEMENTAR.
+Adapte os efeitos ao contexto da publicação, evitando aplicar exatamente o mesmo efeito em todas as artes.
+
+ELEMENTOS INTEGRADOS AO TEXTO:
+Os elementos visuais não devem ficar apenas ao redor do título. Sempre que fizer sentido, devem interagir com as palavras:
+* Objetos e linhas atravessando o texto;
+* Elementos e luzes saindo atrás das letras;
+* Sombras projetadas profundas;
+* Brilhos envolvendo determinadas palavras;
+* Formas conectadas às letras, ícones próximos a palavras-chave;
+* Elementos 3D criando profundidade e partículas acompanhando o texto;
+* Faixas e selos envolvendo palavras, e elementos temáticos integrados à tipografia.
+O objetivo é fazer o texto parecer PARTE DA COMPOSIÇÃO ARTÍSTICA, e não simplesmente uma informação adicionada sobre a fotografia.
+
+SUBTÍTULO / CHAMADA SECUNDÁRIA:
+O subtítulo também deve possuir tratamento visual próprio:
+* Grande o suficiente para ser percebido imediatamente;
+* Visualmente atraente com hierarquia clara em relação ao título, porém ainda considerado um dos elementos principais da arte;
+* Utilizar combinações de: TAMANHO + COR + PESO + SOMBRA + FORMAS + ELEMENTOS GRÁFICOS.
+
+ELEMENTOS DO RESTANTE DA ARTE:
+Os elementos utilizados no título e subtítulo devem servir como inspiração para criar os demais elementos decorativos da publicação (formas, 3D, brilhos, linhas, gradientes) gerando UNIDADE VISUAL rica, evitando áreas vazias sem poluir a imagem principal.
+
+FOCO VISUAL (ORDEM DE PRIORIDADE ABSOLUTA):
+1. TÍTULO (Elemento protagonista absoluto)
+2. SUBTÍTULO / CHAMADA SECUNDÁRIA (Destaque marcante)
+3. IMAGEM PRINCIPAL (Fotografia única, contínua e integrada)
+4. INFORMAÇÕES COMPLEMENTARES (Data, Horário, Local em bloco estilizado)
+5. LOGO DA PREFEITURA (Posicionada com autoridade)
+
+REGRA FINAL INEGOCIÁVEL:
+NUNCA produzir título ou subtítulo simples, pequeno, estático ou sem tratamento visual.
+Toda publicação deve transformar o título e a chamada secundária em elementos gráficos protagonistas, utilizando criatividade, cores, profundidade, efeitos, tipografia expressiva e elementos visuais integrados à composição.
+
+### METODOLOGIA DE DIREÇÃO DE ARTE E DESIGN GRÁFICO SÊNIOR (INSTITUCIONAL & UTILIDADE PÚBLICA)
+1. REGRAS DE HIERARQUIA TEXTUAL E TIPOGRAFIA:
+   - Use fontes Sem Serifa (Sans-Serif) pesadas, modernas, geométricas ou condensadas (Montserrat Black, Gotham Ultra, Futura Bold, Impact ou Bebas Neue).
+   - Todos os textos principais, títulos e palavras-chave devem ser prioritariamente em CAIXA ALTA (UPPERCASE).
+   - O título principal deve ter espessura Ultra Bold/Black e alto contraste com o fundo.
+   - O subtítulo deve ter espessura Semi-Bold ou Medium para criar contraste visual de peso.
+   - Efeitos e Tratamentos Tipográficos: Borda/Contorno Externo (Stroke/Outline) espesso branco ou na cor de contraste principal; Efeito Sombra / Sticker (borda recortada e drop shadow deslocada); Curvatura e Perspectiva Leve (inclinação dinâmica sutil de 3° a 6° ou arqueamento); Gradação de Cor (degradê linear suave dentro das letras).
+
+2. ESTRUTURA DE TARJAS, FORMAS E CONTAINERS:
+   - Os blocos de texto NÃO ficam soltos sobre a foto: ficam acomodados dentro de formas sólidas:
+     a) Pílulas e Retângulos Arredondados (Rounded Pills/Plates): Caixas horizontais de cantos arredondados, empilhadas em camadas.
+     b) Faixas Descontínuas / Estilo Placa de Sinalização: Placas sobrepostas com cantos levemente arredondados e borda/stroke externo branco evidente.
+     c) Efeito Escada / Degraus: Títulos divididos em faixas sobrepostas compactas com cores sólidas alternadas.
+   - Elementos Gráficos Complementares: Ícone de Localização (Pin flat com cor de destaque), Badges de Confirmação (selos com checkmark "✅"), Logos e Hashtags em Estilo Sticker com contorno branco espesso, Fundo com Textura Halftone/Reticulada sutil ou degradê suave.
+
+3. DIRETRIZES DE CORES (FÓRMULA FIXA DE 4 PAPÉIS):
+   - 1. Cor Primária de Fundo da Tarja (Ex: Verde-bandeira, Azul Royal, Roxo institucional ou Laranja).
+   - 2. Cor Secundária de Contraste Vibrante (Ex: Amarelo Sol, Verde-limão, Turquesa ou Laranja neon) — usada em palavras-chave que exigem leitura imediata.
+   - 3. Cor de Respiro/Destaque Neutro: Branco Puro — usado em bordas externas grossas (outlines), textos sobre fundos escuros ou placas de apoio.
+   - 4. Cor Escura de Apoio: Usada em sombras sutis ou textos sobre fundos muito claros.
+
+### BIBLIOTECAS VISUAIS GRATUITAS — MÓDULO ART (RECURSOS AUXILIARES E LICENÇAS LIVRES)
+Integre e selecione conscientemente elementos de bibliotecas visuais gratuitas com licenças comerciais/institucionais abertas:
+* Lucide Icons, Phosphor Icons, Tabler Icons, Heroicons: selecione ícones funcionais adequados ao tema (Pin de mapa, checkmarks ✅, troféus, escudos, saúde, obras).
+* Google Fonts: Montserrat, Bebas Neue, Outfit, Poppins, Inter para contraste tipográfico.
+* Haikei Shape Engine: defina formas geométricas e orgânicas ("wave" para ondas de rodapé, "blob" para luzes e cantos, "halftone" para retículas pontilhadas modernas).
+* OpenMoji / unDraw / Storyset: stickers temáticos e selos de confirmação.
+
+UTILIZAÇÃO INTELIGENTE:
+Analise: Imagem + descrição + contexto + referências visuais + título + subtítulo.
+Selecione automaticamente os elementos que melhor combinam com a publicação.
+VARIAÇÃO ENTRE PUBLICAÇÕES:
+Evite repetições de templates; varie formas, ícones, composições e estilos visuais conforme a categoria da arte.
+COMBINAÇÃO COM IA:
+Combine bibliotecas gratuitas com efeitos 3D, relevo, glow, partículas e fotografia tratada profissionalmente.
+
+### NÃO DIVIDIR A IMAGEM
+A imagem enviada pelo usuário DEVE PERMANECER COMO UMA FOTOGRAFIA PRINCIPAL ÚNICA, ocupando a composição de maneira natural e contínua (100% da área).
+NÃO CRIAR divisões artificiais, colagens ou painéis separados que cortem a imagem.
+Os elementos gráficos dinâmicos, textos e logos devem flutuar SOBRE a fotografia com sobreposições suaves para contraste e legibilidade.
+
+DADOS DA PUBLICAÇÃO FORNECIDOS PELO ADMINISTRADOR:
+- TÍTULO: ${info.title || 'Comunicado Oficial'}
+- SUBTÍTULO: ${info.subtitle || ''}
+- TEXTO PRINCIPAL / DESCRIÇÃO: ${info.description || ''}
+- DATA: ${info.eventDate || ''}
+- HORÁRIO: ${info.eventTime || ''}
+- LOCAL: ${info.eventLocation || ''}
+- CATEGORIA: ${info.category || 'Institucional'}
+- CHAMADA / CTA: ${info.ctaText || 'Participe!'}
+- DIRETRIZ ESTRATÉGICA / COMANDO DE DIREÇÃO DE ARTE DA IA: ${info.notesForAI || 'Equilíbrio dinâmico, criativo e vibrante fiel às referências'}
+- IMAGENS DO EVENTO/CONTEÚDO DO USUÁRIO: ${imagesCount} imagem(ns) fornecida(s)
+- IMAGENS DE REFERÊNCIA VISUAL CADASTRADAS: ${refsCount} referência(s) de padrão estético
+
+TRATAMENTO FOTOGRÁFICO DA IMAGEM:
+Defina parâmetros de tratamento (brightness 0.95-1.15, contrast 1.0-1.25, saturation 1.05-1.30, colorGradingTone: 'cool_civic' | 'warm_golden' | 'cinematic_neutral' | 'vibrant', vignetteStrength 0.15-0.40).
+
+Gere exatamente 3 variações que sigam fielmente o estilo e paleta das referências:
+1. "Institucional Dinâmica": Harmonia institucional com alta energia visual e elegância.
+2. "Moderna & Criativa": Composição contemporânea com cores vibrantes, formas arrojadas e efeito 3D.
+3. "Alto Impacto": Máximo destaque visual, palavra de impacto em evidência e dinamismo gráfico envolvente.
+`;
+    } else if (tipo === 'art_autofill_fields') {
+      promptText = `
+Você é um Diretor de Comunicação e Redator Publicitário Oficial da Prefeitura Municipal.
+Analise as informações do texto/descrição fornecido e crie automaticamente os campos essenciais de comunicação para a publicação da arte:
+
+TEXTO / INFORMAÇÕES DA PUBLICAÇÃO FORNECIDAS PELO USUÁRIO:
+"""${dados.description || ''}"""
+
+MISSÃO DE EXTRAÇÃO & REDAÇÃO INSTITUCIONAL:
+1. "title": Crie um Título Principal de alto impacto, claro, atrativo e com autoridade oficial (máximo de 5 a 8 palavras). Ex: "Campanha de Vacinação Contra a Gripe", "Grande Final do Campeonato Municipal", "Inauguração do Novo Posto de Saúde".
+2. "subtitle": Crie um Subtítulo / Chamada Secundária elegante e explicativa que complemente o título com perfeição (1 frase concisa).
+3. "ctaText": Crie uma Chamada para Ação (CTA) direta, motivadora e convidativa. Ex: "Participe com sua família!", "Compareça à UBS mais próxima!", "Confira a programação completa!", "Garanta sua vaga!".
+4. "category": Selecione a categoria mais adequada dentre: 'Saúde Pública', 'Educação & Ensino', 'Obras & Infraestrutura', 'Cultura & Eventos', 'Assistência Social', 'Meio Ambiente', 'Esporte & Lazer', 'Governo & Gestão'.
+5. "eventDate": Se houver menção de data no texto (ex: "15 de Outubro de 2026", "Neste sábado"), extraia formatada. Se não houver, retorne "".
+6. "eventTime": Se houver menção de horário no texto (ex: "Das 08h às 17h", "A partir das 19h"), extraia. Se não houver, retorne "".
+7. "eventLocation": Se houver menção de local no texto (ex: "Praça da Matriz", "UBS Central"), extraia. Se não houver, retorne "".
+`;
+    } else if (tipo === 'art_chat_editor') {
+      promptText = `
+Você é o Assistente Especialista de Design Gráfico do Módulo Art da Prefeitura.
+O usuário deseja ajustar uma arte já gerada.
+
+VARIAÇÃO ATUAL:
+${JSON.stringify(dados.currentVariation || {}, null, 2)}
+
+SOLICITAÇÃO DO USUÁRIO:
+"${dados.userCommand}"
+
+INSTRUÇÕES:
+- Interprete a intenção (ex: "Deixe o título mais chamativo", "Coloque a data em maior destaque", "Mude as cores para tons quentes", "Mude a logo para o topo esquerdo").
+- Retorne a variação atualizada mantendo coerência visual e harmonia institucional.
+`;
     } else {
       return new Response(JSON.stringify({ error: 'Tipo de requisição inválido.' }), {
         status: 400,
@@ -253,6 +430,169 @@ ${dados.promptText}
             },
             required: ['manchete', 'subtitulo', 'corpo', 'categoria', 'destaqueFrase'],
           },
+        }
+      });
+    } else if (tipo === 'art_generator') {
+      const contentsParts: any[] = [{ text: promptText }];
+
+      // Adiciona as imagens de referência para compreensão multimodal profunda
+      if (Array.isArray(dados.references)) {
+        for (const ref of dados.references) {
+          if (ref?.dataUrl && typeof ref.dataUrl === 'string') {
+            const match = ref.dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+            if (match) {
+              contentsParts.push({
+                inlineData: {
+                  mimeType: match[1],
+                  data: match[2]
+                }
+              });
+            }
+          }
+        }
+      }
+
+      // Adiciona as fotos de evento enviadas pelo usuário
+      if (Array.isArray(dados.userImages)) {
+        for (const imgUrl of dados.userImages) {
+          if (imgUrl && typeof imgUrl === 'string') {
+            const match = imgUrl.match(/^data:([^;]+);base64,(.+)$/);
+            if (match) {
+              contentsParts.push({
+                inlineData: {
+                  mimeType: match[1],
+                  data: match[2]
+                }
+              });
+            }
+          }
+        }
+      }
+
+      response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: contentsParts.length > 1 ? contentsParts : promptText,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              variations: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    id: { type: Type.STRING },
+                    styleName: { type: Type.STRING },
+                    description: { type: Type.STRING },
+                    primaryColor: { type: Type.STRING },
+                    secondaryColor: { type: Type.STRING },
+                    accentColor: { type: Type.STRING },
+                    textColor: { type: Type.STRING },
+                    backgroundColor: { type: Type.STRING },
+                    gradientBackground: { type: Type.STRING },
+                    fontFamilyTitle: { type: Type.STRING },
+                    fontFamilyBody: { type: Type.STRING },
+                    logoPosition: { type: Type.STRING },
+                    logoSizePercent: { type: Type.NUMBER },
+                    logoOpacity: { type: Type.NUMBER },
+                    layoutType: { type: Type.STRING },
+                    headlineSummary: { type: Type.STRING },
+                    subtitleSummary: { type: Type.STRING },
+                    bodySummary: { type: Type.STRING },
+                    impactWord: { type: Type.STRING },
+                    impactWordEffect: { type: Type.STRING },
+                    titleEffect: { type: Type.STRING },
+                    titleHighlightWords: {
+                      type: Type.ARRAY,
+                      items: { type: Type.STRING },
+                      description: '1 a 3 palavras principais do título que recebem tratamento visual diferenciado (cor de destaque, tamanho maior e efeito 3D)'
+                    },
+                    haikeiShape: {
+                      type: Type.STRING,
+                      description: 'Forma geométrica/orgânica do Haikei: wave, blob, halftone ou minimal'
+                    },
+                    badgeLabel: {
+                      type: Type.STRING,
+                      description: 'Selo ou sticker de confirmação temática (ex: ✅ GRATUITO COM CARTÃO SUS, ⚡ GRANDE FINAL)'
+                    },
+                    libraryIcons: {
+                      type: Type.ARRAY,
+                      items: { type: Type.STRING },
+                      description: 'Nomes de ícones sugeridos das bibliotecas Lucide/Heroicons'
+                    },
+                    contextualTheme: { type: Type.STRING },
+                    photoTreatment: {
+                      type: Type.OBJECT,
+                      properties: {
+                        brightness: { type: Type.NUMBER },
+                        contrast: { type: Type.NUMBER },
+                        saturation: { type: Type.NUMBER },
+                        colorGradingTone: { type: Type.STRING },
+                        vignetteStrength: { type: Type.NUMBER },
+                        lightingEffect: { type: Type.STRING }
+                      }
+                    }
+                  },
+                  required: ['id', 'styleName', 'description', 'primaryColor', 'secondaryColor', 'accentColor', 'textColor', 'backgroundColor', 'fontFamilyTitle', 'fontFamilyBody', 'logoPosition', 'layoutType'],
+                }
+              }
+            },
+            required: ['variations'],
+          }
+        }
+      });
+    } else if (tipo === 'art_chat_editor') {
+      response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: promptText,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              id: { type: Type.STRING },
+              styleName: { type: Type.STRING },
+              description: { type: Type.STRING },
+              primaryColor: { type: Type.STRING },
+              secondaryColor: { type: Type.STRING },
+              accentColor: { type: Type.STRING },
+              textColor: { type: Type.STRING },
+              backgroundColor: { type: Type.STRING },
+              gradientBackground: { type: Type.STRING },
+              fontFamilyTitle: { type: Type.STRING },
+              fontFamilyBody: { type: Type.STRING },
+              logoPosition: { type: Type.STRING },
+              logoSizePercent: { type: Type.NUMBER },
+              logoOpacity: { type: Type.NUMBER },
+              layoutType: { type: Type.STRING },
+              headlineSummary: { type: Type.STRING },
+              subtitleSummary: { type: Type.STRING },
+              bodySummary: { type: Type.STRING },
+            },
+            required: ['primaryColor', 'textColor', 'backgroundColor', 'logoPosition'],
+          }
+        }
+      });
+    } else if (tipo === 'art_autofill_fields') {
+      response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: promptText,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              title: { type: Type.STRING },
+              subtitle: { type: Type.STRING },
+              ctaText: { type: Type.STRING },
+              category: { type: Type.STRING },
+              eventDate: { type: Type.STRING },
+              eventTime: { type: Type.STRING },
+              eventLocation: { type: Type.STRING },
+            },
+            required: ['title', 'subtitle', 'ctaText'],
+          }
         }
       });
     } else {
