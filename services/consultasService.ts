@@ -319,40 +319,53 @@ export const orderConsultasQueue = (bookings: ConsultaAgendamento[]): ConsultaAg
         return 0;
     };
 
-    // 1. Separa estritamente em Agendamentos Especiais e Comuns
-    const especiais = bookings.filter(b => b.priority === 'Especial');
-    const comuns = bookings.filter(b => b.priority !== 'Especial');
+    // 1. Separa estritamente nas 3 categorias de prioridade obrigatórias:
+    // 1º Agendamentos Especiais — prioridade máxima.
+    // 2º Urgentes — após os agendamentos especiais.
+    // 3º Normais — após os urgentes.
+    const isEspecial = (b: ConsultaAgendamento) => b.priority === 'Especial';
+    const isUrgente = (b: ConsultaAgendamento) => b.priority === 'Urgência' || (b.priority as string) === 'Urgente';
+    const isNormal = (b: ConsultaAgendamento) => !isEspecial(b) && !isUrgente(b);
 
-    // 2. Entre vários Agendamentos Especiais, preservar a ordem em que foram registrados/agendados (FIFO)
-    especiais.sort((a, b) => {
+    const especiais = bookings.filter(isEspecial);
+    const urgentes = bookings.filter(isUrgente);
+    const normais = bookings.filter(isNormal);
+
+    // 2. Dentro de cada categoria, manter a ordem cronológica da solicitação/agendamento (FIFO)
+    const sortByTime = (a: ConsultaAgendamento, b: ConsultaAgendamento) => {
         const diff = getTime(a) - getTime(b);
         if (diff !== 0) return diff;
         return (a.id || '').localeCompare(b.id || '');
-    });
+    };
 
-    // 3. Agendamentos comuns permanecem na fila normal pela ordem em que foram registrados
-    comuns.sort((a, b) => {
-        const diff = getTime(a) - getTime(b);
-        if (diff !== 0) return diff;
-        return (a.id || '').localeCompare(b.id || '');
-    });
+    especiais.sort(sortByTime);
+    urgentes.sort(sortByTime);
+    normais.sort(sortByTime);
 
-    // 4. A fila efetiva coloca todos os Especiais no topo, seguidos pelos comuns
+    // 3. A fila efetiva organiza na ordem definitiva: Especial -> Urgente -> Normal
     const filaFinal: ConsultaAgendamento[] = [];
+    let positionCounter = 1;
 
     especiais.forEach((item, idx) => {
         filaFinal.push({
             ...item,
-            queue_position: idx + 1,
+            queue_position: positionCounter++,
             special_sequence: idx + 1
         });
     });
 
-    normaisLoop:
-    comuns.forEach((item, idx) => {
+    urgentes.forEach(item => {
         filaFinal.push({
             ...item,
-            queue_position: especiais.length + idx + 1,
+            queue_position: positionCounter++,
+            special_sequence: undefined
+        });
+    });
+
+    normais.forEach(item => {
+        filaFinal.push({
+            ...item,
+            queue_position: positionCounter++,
             special_sequence: undefined
         });
     });

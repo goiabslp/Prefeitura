@@ -44,48 +44,23 @@ export const AgendarScreen: React.FC<AgendarScreenProps> = ({
 
     const getSlotAssignments = (vagas: ConsultaVaga[], procBookings: ConsultaAgendamento[]) => {
         const assignments = new Map<string, ConsultaAgendamento>();
-        const slotsByDate: Record<string, ConsultaVaga[]> = {};
-        vagas.forEach(v => {
-            if (!slotsByDate[v.data]) slotsByDate[v.data] = [];
-            slotsByDate[v.data].push(v);
-        });
+        
+        // Apenas agendamentos com status 'Agendado' (já confirmados manualmente) ocupam vagas
+        const confirmedBookings = procBookings.filter(b => 
+            b.status === 'Agendado' && b.appointment_date && b.appointment_time
+        );
 
-        const bookingsByDate: Record<string, ConsultaAgendamento[]> = {};
-        procBookings.forEach(b => {
-            if (b.status === 'Cancelado' || b.status === 'Não Realizado' || !b.appointment_date) return;
-            if (!bookingsByDate[b.appointment_date]) bookingsByDate[b.appointment_date] = [];
-            bookingsByDate[b.appointment_date].push(b);
-        });
-
-        Object.keys(slotsByDate).forEach(dateStr => {
-            const slots = slotsByDate[dateStr];
-            const bList = bookingsByDate[dateStr] || [];
-            const sortedBList = [...bList].sort((a, b) => {
-                if (a.priority === 'Especial' && b.priority !== 'Especial') return -1;
-                if (a.priority !== 'Especial' && b.priority === 'Especial') return 1;
-                return 0;
-            });
-            const unmatchedBookings = [...sortedBList];
-            const matchedBookingIds = new Set<string>();
-
-            slots.forEach(slot => {
-                const exactMatch = sortedBList.find(b =>
-                    b.appointment_time && matchTime(b.appointment_time, slot.hora) && !matchedBookingIds.has(b.id)
-                );
-                if (exactMatch) {
-                    assignments.set(slot.id, exactMatch);
-                    matchedBookingIds.add(exactMatch.id);
-                    const idx = unmatchedBookings.findIndex(b => b.id === exactMatch.id);
-                    if (idx > -1) unmatchedBookings.splice(idx, 1);
-                }
-            });
-
-            slots.forEach(slot => {
-                if (!assignments.has(slot.id) && unmatchedBookings.length > 0) {
-                    const nextBooking = unmatchedBookings.shift()!;
-                    assignments.set(slot.id, nextBooking);
-                }
-            });
+        const matchedBookingIds = new Set<string>();
+        vagas.forEach(slot => {
+            const match = confirmedBookings.find(b => 
+                !matchedBookingIds.has(b.id) &&
+                b.appointment_date === slot.data && 
+                matchTime(b.appointment_time || '', slot.hora)
+            );
+            if (match) {
+                assignments.set(slot.id, match);
+                matchedBookingIds.add(match.id);
+            }
         });
 
         return assignments;
@@ -155,7 +130,7 @@ export const AgendarScreen: React.FC<AgendarScreenProps> = ({
 
                 const totalVagasLivres = freeSlots.length;
                 if (totalVagasLivres > 0) {
-                    // Ordena a fila respeitando estritamente a prioridade de Agendamentos Especiais
+                    // Ordena a fila respeitando estritamente a prioridade de 3 níveis: Especial -> Urgente -> Normal
                     const ordered = db.orderConsultasQueue(candidatosByProc[procId]);
                     // Apenas os N primeiros que possuem vaga física disponível aparecem
                     const aptos = ordered.slice(0, totalVagasLivres);
@@ -163,14 +138,25 @@ export const AgendarScreen: React.FC<AgendarScreenProps> = ({
                 }
             });
 
-            // Ordena o conjunto final preservando a queue_position de cada procedimento (Especiais primeiro)
+            // Ordena o conjunto final pela regra oficial obrigatória:
+            // 1º Agendamento Especial
+            // 2º Urgente
+            // 3º Normal
+            // E cronológico (FIFO) dentro de cada nível
             elegiveis.sort((a, b) => {
-                const isSpecialA = a.priority === 'Especial';
-                const isSpecialB = b.priority === 'Especial';
-                if (isSpecialA !== isSpecialB) return isSpecialA ? -1 : 1;
+                const getScore = (p: string) => {
+                    if (p === 'Especial') return 1;
+                    if (p === 'Urgência' || (p as any) === 'Urgente') return 2;
+                    return 3;
+                };
+                const scoreA = getScore(a.priority);
+                const scoreB = getScore(b.priority);
+                if (scoreA !== scoreB) return scoreA - scoreB;
+
                 const posA = a.queue_position ?? 999;
                 const posB = b.queue_position ?? 999;
                 if (posA !== posB) return posA - posB;
+
                 const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
                 const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
                 return timeA - timeB;
@@ -280,7 +266,8 @@ export const AgendarScreen: React.FC<AgendarScreenProps> = ({
     }, [promotedBookings, searchTerm, selectedProcedureFilter]);
 
     const totalEspeciais = promotedBookings.filter(b => b.priority === 'Especial').length;
-    const totalComuns = promotedBookings.filter(b => b.priority !== 'Especial').length;
+    const totalUrgentes = promotedBookings.filter(b => b.priority === 'Urgência' || (b.priority as any) === 'Urgente').length;
+    const totalNormais = promotedBookings.filter(b => b.priority !== 'Especial' && b.priority !== 'Urgência' && (b.priority as any) !== 'Urgente').length;
 
     return (
         <div className="w-full mx-auto flex flex-col flex-1 h-full max-h-full min-h-0 bg-white rounded-3xl border border-slate-200/80 shadow-2xl shadow-slate-100 overflow-hidden">
@@ -307,36 +294,52 @@ export const AgendarScreen: React.FC<AgendarScreenProps> = ({
                             </span>
                         </div>
                         <p className="text-xs font-semibold text-slate-500 mt-0.5">
-                            Efetivação de marcações para agendamentos promovidos com vagas liberadas
+                            Definição manual de data e horário conforme a prioridade: Especial → Urgente → Normal
                         </p>
                     </div>
                 </div>
 
-                {/* Métricas Rápidas */}
+                {/* Métricas Rápidas com 3 Níveis de Prioridade */}
                 <div className="flex items-center gap-2 self-stretch sm:self-auto flex-wrap">
-                    <div className="px-3.5 py-2 rounded-2xl bg-amber-50 border border-amber-200/80 flex items-center gap-2">
-                        <Sparkles className="w-4 h-4 text-amber-600" />
+                    <div className="px-3 py-1.5 rounded-2xl bg-amber-50 border border-amber-200/80 flex items-center gap-2 shadow-2xs" title="Pacientes com prioridade máxima">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-600 fill-amber-500" />
                         <div>
-                            <span className="block text-[8px] font-black uppercase tracking-widest text-amber-800">Especiais Aptos</span>
-                            <span className="text-sm font-black text-amber-950">{totalEspeciais}</span>
+                            <span className="block text-[7.5px] font-black uppercase tracking-widest text-amber-800">Especiais</span>
+                            <span className="text-xs font-black text-amber-950">{totalEspeciais}</span>
                         </div>
                     </div>
 
-                    <div className="px-3.5 py-2 rounded-2xl bg-sky-50 border border-sky-200/80 flex items-center gap-2">
-                        <Calendar className="w-4 h-4 text-sky-600" />
+                    <div className="px-3 py-1.5 rounded-2xl bg-rose-50 border border-rose-200/80 flex items-center gap-2 shadow-2xs" title="Pacientes urgentes">
+                        <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
                         <div>
-                            <span className="block text-[8px] font-black uppercase tracking-widest text-sky-800">Total Aptos</span>
-                            <span className="text-sm font-black text-sky-950">{promotedBookings.length}</span>
+                            <span className="block text-[7.5px] font-black uppercase tracking-widest text-rose-800">Urgentes</span>
+                            <span className="text-xs font-black text-rose-950">{totalUrgentes}</span>
+                        </div>
+                    </div>
+
+                    <div className="px-3 py-1.5 rounded-2xl bg-slate-50 border border-slate-200/80 flex items-center gap-2 shadow-2xs" title="Pacientes normais">
+                        <UserIcon className="w-3.5 h-3.5 text-slate-500" />
+                        <div>
+                            <span className="block text-[7.5px] font-black uppercase tracking-widest text-slate-700">Normais</span>
+                            <span className="text-xs font-black text-slate-900">{totalNormais}</span>
+                        </div>
+                    </div>
+
+                    <div className="px-3 py-1.5 rounded-2xl bg-emerald-50 border border-emerald-200/80 flex items-center gap-2 shadow-2xs">
+                        <CalendarCheck className="w-3.5 h-3.5 text-emerald-600" />
+                        <div>
+                            <span className="block text-[7.5px] font-black uppercase tracking-widest text-emerald-800">Total Aptos</span>
+                            <span className="text-xs font-black text-emerald-950">{promotedBookings.length}</span>
                         </div>
                     </div>
 
                     <button
                         onClick={() => loadAgendarData()}
                         disabled={loading}
-                        className="p-2.5 rounded-2xl bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200/70 transition-all active:scale-95 cursor-pointer ml-1"
+                        className="p-2 rounded-2xl bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200/70 transition-all active:scale-95 cursor-pointer ml-1"
                         title="Atualizar dados da fila"
                     >
-                        <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-sky-600' : ''}`} />
+                        <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-sky-600' : ''}`} />
                     </button>
                 </div>
             </div>
@@ -421,6 +424,9 @@ export const AgendarScreen: React.FC<AgendarScreenProps> = ({
                     <div className="grid grid-cols-1 gap-4">
                         {filteredBookings.map((b, index) => {
                             const isSpecial = b.priority === 'Especial';
+                            const isUrgente = b.priority === 'Urgência' || (b.priority as any) === 'Urgente';
+                            const isNormal = !isSpecial && !isUrgente;
+
                             const procVagas = vagasMap[b.procedimento_id] || [];
                             const procBookings = bookingsMap[b.procedimento_id] || [];
                             const assignments = getSlotAssignments(procVagas, procBookings);
@@ -446,47 +452,61 @@ export const AgendarScreen: React.FC<AgendarScreenProps> = ({
 
                             const isSubmitting = actionLoading === b.id;
 
+                            // Cores e estilos dinâmicos baseados na prioridade
+                            const cardBorderClass = isSpecial
+                                ? 'border-amber-300 ring-2 ring-amber-400/25 bg-gradient-to-r from-amber-50/20 via-white to-white'
+                                : isUrgente
+                                ? 'border-rose-300 ring-2 ring-rose-400/25 bg-gradient-to-r from-rose-50/20 via-white to-white'
+                                : 'border-slate-200/90 hover:border-emerald-300 bg-white';
+
+                            const stripClass = isSpecial
+                                ? 'bg-gradient-to-b from-amber-400 via-yellow-500 to-amber-600'
+                                : isUrgente
+                                ? 'bg-gradient-to-b from-rose-500 via-red-500 to-rose-700'
+                                : 'bg-gradient-to-b from-emerald-400 via-emerald-500 to-teal-600';
+
+                            const positionBoxClass = isSpecial
+                                ? 'bg-gradient-to-br from-amber-100 via-yellow-100 to-amber-200 border-amber-400 text-amber-950 shadow-amber-200/50'
+                                : isUrgente
+                                ? 'bg-gradient-to-br from-rose-100 via-red-100 to-rose-200 border-rose-300 text-rose-950 shadow-rose-200/50'
+                                : 'bg-slate-50 border-slate-200 text-slate-900 shadow-slate-200/30';
+
+                            const priorityTitle = isSpecial ? 'ESPECIAL' : isUrgente ? 'URGENTE' : 'NORMAL';
+
                             return (
                                 <div
                                     key={b.id}
-                                    className={`p-4 md:p-5 rounded-2xl border transition-all duration-300 relative overflow-hidden bg-white shadow-xs ${
-                                        isSpecial
-                                            ? 'border-amber-300 ring-2 ring-amber-400/20 hover:shadow-md'
-                                            : 'border-slate-200/80 hover:border-emerald-200 hover:shadow-md'
-                                    }`}
+                                    className={`p-4 md:p-5 rounded-2xl border transition-all duration-300 relative overflow-hidden shadow-xs hover:shadow-md ${cardBorderClass}`}
                                 >
-                                    {/* Faixa lateral indicadora */}
-                                    <div className={`absolute top-0 left-0 w-1.5 h-full ${
-                                        isSpecial ? 'bg-amber-400' : 'bg-emerald-500'
-                                    }`} />
+                                    {/* Faixa lateral indicadora da prioridade */}
+                                    <div className={`absolute top-0 left-0 w-2 h-full ${stripClass}`} />
 
-                                    <div className="flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-4 pl-2">
+                                    <div className="flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-4 pl-3">
                                         {/* Coluna 1: Posição, Paciente e Dados Clínicos */}
-                                        <div className="flex items-start gap-3 flex-1 min-w-0">
-                                            {/* Posição na Fila / Badge Especial */}
-                                            <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex flex-col items-center justify-center shrink-0 border shadow-2xs ${
-                                                isSpecial
-                                                    ? 'bg-gradient-to-br from-amber-100 via-yellow-100 to-amber-200 border-amber-400 text-amber-950'
-                                                    : 'bg-emerald-50 border-emerald-200 text-emerald-950'
-                                            }`}>
-                                                <span className="text-[8px] font-black uppercase tracking-wider text-amber-900 leading-none">
-                                                    {isSpecial ? 'ESPECIAL' : 'POSIÇÃO'}
+                                        <div className="flex items-start gap-3.5 flex-1 min-w-0">
+                                            {/* Posição na Fila com Estilo por Categoria */}
+                                            <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex flex-col items-center justify-center shrink-0 border shadow-2xs ${positionBoxClass}`}>
+                                                <span className={`text-[8px] font-black uppercase tracking-wider leading-none ${
+                                                    isSpecial ? 'text-amber-900' : isUrgente ? 'text-rose-900' : 'text-slate-600'
+                                                }`}>
+                                                    {priorityTitle}
                                                 </span>
                                                 <span className="text-xl sm:text-2xl font-black font-mono leading-none my-0.5">
                                                     {b.queue_position ? `${b.queue_position}º` : `${index + 1}º`}
                                                 </span>
-                                                <span className="text-[7px] font-black uppercase tracking-widest text-slate-600 leading-none">
+                                                <span className="text-[7px] font-black uppercase tracking-widest text-slate-500 leading-none">
                                                     FILA
                                                 </span>
                                             </div>
 
-                                            {/* Informações do Paciente e Exame */}
+                                            {/* Informações do Paciente e Procedimento */}
                                             <div className="flex-1 min-w-0">
-                                                <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                                                <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
+                                                    {/* Badge de Prioridade 1: Especial */}
                                                     {isSpecial && (
                                                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider text-amber-950 bg-gradient-to-r from-amber-200 via-yellow-100 to-amber-200 border border-amber-400 shadow-2xs ring-1 ring-amber-400/30">
                                                             <Sparkles className="w-3 h-3 text-amber-700 fill-amber-500 animate-pulse shrink-0" />
-                                                            <span>AGENDAMENTO ESPECIAL</span>
+                                                            <span>1º AGENDAMENTO ESPECIAL</span>
                                                             {b.special_sequence ? (
                                                                 <span className="ml-1 bg-amber-950/15 px-1 py-0.2 rounded text-[8px] font-black">
                                                                     Nº {b.special_sequence}
@@ -494,11 +514,32 @@ export const AgendarScreen: React.FC<AgendarScreenProps> = ({
                                                             ) : null}
                                                         </span>
                                                     )}
+
+                                                    {/* Badge de Prioridade 2: Urgente */}
+                                                    {isUrgente && (
+                                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider text-rose-900 bg-rose-100 border border-rose-300 shadow-2xs ring-1 ring-rose-400/20">
+                                                            <AlertCircle className="w-3 h-3 text-rose-600 shrink-0" />
+                                                            <span>2º PRIORIDADE: URGÊNCIA</span>
+                                                        </span>
+                                                    )}
+
+                                                    {/* Badge de Prioridade 3: Normal */}
+                                                    {isNormal && (
+                                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider text-slate-700 bg-slate-100 border border-slate-300 shadow-2xs">
+                                                            <UserIcon className="w-3 h-3 text-slate-500 shrink-0" />
+                                                            <span>3º FILA NORMAL</span>
+                                                        </span>
+                                                    )}
+
+                                                    {/* Badge de Status: Pendente de Agendamento */}
+                                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[8.5px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-300">
+                                                        <Clock className="w-3 h-3 text-amber-600 shrink-0" />
+                                                        <span>Pendente de Agendamento</span>
+                                                    </span>
+
+                                                    {/* Vaga Liberada Disponível */}
                                                     <span className="px-2 py-0.5 rounded-md text-[8.5px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">
                                                         Vaga Disponível
-                                                    </span>
-                                                    <span className="px-2 py-0.5 rounded-md text-[8.5px] font-black uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200">
-                                                        {b.priority === 'Urgência' ? 'Urgência' : b.is_retorno ? 'Retorno' : 'Normal'}
                                                     </span>
                                                 </div>
 
@@ -515,7 +556,7 @@ export const AgendarScreen: React.FC<AgendarScreenProps> = ({
                                                         <Activity className="w-3.5 h-3.5 text-slate-400" />
                                                         <strong className="text-slate-800 uppercase">{b.procedimento?.name || 'Procedimento'}</strong>
                                                         {b.procedimento?.code && (
-                                                            <span className="text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.2 rounded font-mono font-bold">
+                                                             <span className="text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.2 rounded font-mono font-bold">
                                                                 {b.procedimento.code}
                                                             </span>
                                                         )}
@@ -528,13 +569,13 @@ export const AgendarScreen: React.FC<AgendarScreenProps> = ({
                                             </div>
                                         </div>
 
-                                        {/* Coluna 2: Seletor de Vagas Disponíveis e Ação de Agendamento */}
-                                        <div className="bg-slate-50/80 p-3.5 rounded-2xl border border-slate-200/70 flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
+                                        {/* Coluna 2: Seletor de Vagas Disponíveis e Ação de Agendamento Manual */}
+                                        <div className="bg-slate-50/90 p-3.5 rounded-2xl border border-slate-200/80 flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
                                             {/* Data Disponível */}
                                             <div className="flex flex-col min-w-[140px]">
-                                                <label className="text-[9px] font-black uppercase tracking-wider text-slate-500 mb-1 flex items-center gap-1">
+                                                <label className="text-[9px] font-black uppercase tracking-wider text-slate-600 mb-1 flex items-center gap-1">
                                                     <Calendar className="w-3 h-3 text-emerald-600" />
-                                                    Data da Vaga
+                                                    Definir Data
                                                 </label>
                                                 <select
                                                     value={curSelectedDate}
@@ -549,7 +590,7 @@ export const AgendarScreen: React.FC<AgendarScreenProps> = ({
                                                             setSelectedTimes(prev => ({ ...prev, [b.id]: newTimes[0] }));
                                                         }
                                                     }}
-                                                    className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-black text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                                                    className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-black text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 shadow-2xs"
                                                 >
                                                     {uniqueDates.map(d => (
                                                         <option key={d} value={d}>
@@ -561,14 +602,14 @@ export const AgendarScreen: React.FC<AgendarScreenProps> = ({
 
                                             {/* Horário Disponível */}
                                             <div className="flex flex-col min-w-[110px]">
-                                                <label className="text-[9px] font-black uppercase tracking-wider text-slate-500 mb-1 flex items-center gap-1">
+                                                <label className="text-[9px] font-black uppercase tracking-wider text-slate-600 mb-1 flex items-center gap-1">
                                                     <Clock className="w-3 h-3 text-emerald-600" />
-                                                    Horário
+                                                    Definir Horário
                                                 </label>
                                                 <select
                                                     value={curSelectedTime}
                                                     onChange={(e) => setSelectedTimes(prev => ({ ...prev, [b.id]: e.target.value }))}
-                                                    className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-black text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-mono"
+                                                    className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-black text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-mono shadow-2xs"
                                                 >
                                                     {timesForDate.map(t => (
                                                         <option key={t} value={t}>
@@ -578,7 +619,7 @@ export const AgendarScreen: React.FC<AgendarScreenProps> = ({
                                                 </select>
                                             </div>
 
-                                            {/* Responsável e Botão Agendar */}
+                                            {/* Responsável e Botão Confirmar Agendamento */}
                                             <div className="flex flex-col justify-end">
                                                 <span className="text-[8px] font-bold text-slate-400 uppercase tracking-wider mb-1 hidden sm:block">
                                                     Operador: {currentUser?.name ? currentUser.name.split(' ')[0] : 'Sistema'}
@@ -590,18 +631,20 @@ export const AgendarScreen: React.FC<AgendarScreenProps> = ({
                                                     className={`px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-sm active:scale-95 cursor-pointer ${
                                                         isSpecial
                                                             ? 'bg-gradient-to-r from-amber-500 via-amber-600 to-yellow-600 hover:from-amber-600 hover:to-yellow-700 text-white shadow-amber-500/20'
+                                                            : isUrgente
+                                                            ? 'bg-gradient-to-r from-rose-600 via-red-600 to-rose-700 hover:from-rose-700 hover:to-red-800 text-white shadow-rose-600/20'
                                                             : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20'
                                                     }`}
                                                 >
                                                     {isSubmitting ? (
                                                         <>
                                                             <Loader2 className="w-4 h-4 animate-spin" />
-                                                            <span>Agendando...</span>
+                                                            <span>Confirmando...</span>
                                                         </>
                                                     ) : (
                                                         <>
                                                             <Check className="w-4 h-4" />
-                                                            <span>Agendar</span>
+                                                            <span>Agendar Paciente</span>
                                                         </>
                                                     )}
                                                 </button>

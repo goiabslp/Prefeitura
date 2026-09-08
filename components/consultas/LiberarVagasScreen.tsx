@@ -156,56 +156,26 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
 
     const slotAssignments = useMemo(() => {
         const assignments = new Map<string, ConsultaAgendamento>();
-        const slotsByDate: Record<string, ConsultaVaga[]> = {};
         
-        vagas.forEach(v => {
-            if (!slotsByDate[v.data]) slotsByDate[v.data] = [];
-            slotsByDate[v.data].push(v);
-        });
+        // Regra fundamental: Liberar vaga ≠ agendar paciente.
+        // Apenas agendamentos já EFETIVADOS (status === 'Agendado') com data e horário confirmados ocupam a vaga.
+        // Pacientes na fila de espera ou aguardando definição de data/hora NÃO são alocados automaticamente nas vagas.
+        const confirmedBookings = bookings.filter(b => 
+            b.status === 'Agendado' && b.appointment_date && b.appointment_time
+        );
 
-        const bookingsByDate: Record<string, ConsultaAgendamento[]> = {};
-        bookings.forEach(b => {
-            if (b.status === 'Cancelado' || b.status === 'Não Realizado' || !b.appointment_date) return;
-            if (!bookingsByDate[b.appointment_date]) bookingsByDate[b.appointment_date] = [];
-            bookingsByDate[b.appointment_date].push(b);
-        });
+        const matchedBookingIds = new Set<string>();
 
-        Object.keys(slotsByDate).forEach(dateStr => {
-            const slots = slotsByDate[dateStr];
-            const bList = bookingsByDate[dateStr] || [];
-            // Prioriza Agendamentos Especiais no preenchimento de vagas daquela data
-            const sortedBList = [...bList].sort((a, b) => {
-                if (a.priority === 'Especial' && b.priority !== 'Especial') return -1;
-                if (a.priority !== 'Especial' && b.priority === 'Especial') return 1;
-                const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
-                const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
-                return timeA - timeB;
-            });
-            const unmatchedBookings = [...sortedBList];
-            const matchedBookingIds = new Set<string>();
-
-            // 1ª passada: match exato de horário (dando preferência a quem é Especial)
-            slots.forEach(slot => {
-                const exactMatch = sortedBList.find(b => 
-                    b.appointment_time && 
-                    matchTime(b.appointment_time, slot.hora) &&
-                    !matchedBookingIds.has(b.id)
-                );
-                if (exactMatch) {
-                    assignments.set(slot.id, exactMatch);
-                    matchedBookingIds.add(exactMatch.id);
-                    const idx = unmatchedBookings.findIndex(b => b.id === exactMatch.id);
-                    if (idx > -1) unmatchedBookings.splice(idx, 1);
-                }
-            });
-
-            // 2ª passada: alocar bookings restantes
-            slots.forEach(slot => {
-                if (!assignments.has(slot.id) && unmatchedBookings.length > 0) {
-                    const nextBooking = unmatchedBookings.shift()!;
-                    assignments.set(slot.id, nextBooking);
-                }
-            });
+        vagas.forEach(slot => {
+            const match = confirmedBookings.find(b => 
+                !matchedBookingIds.has(b.id) &&
+                b.appointment_date === slot.data && 
+                matchTime(b.appointment_time || '', slot.hora)
+            );
+            if (match) {
+                assignments.set(slot.id, match);
+                matchedBookingIds.add(match.id);
+            }
         });
 
         return assignments;
