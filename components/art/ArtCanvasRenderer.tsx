@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { 
+import html2canvas from 'html2canvas';
+import {
   Download, Sparkles, Shield, Maximize2, RefreshCw, ZoomIn, ZoomOut, Check,
   Calendar, Clock, MapPin, Tag, ArrowRight
 } from 'lucide-react';
@@ -21,9 +22,9 @@ interface ArtCanvasRendererProps {
 export const getTitleWordsStructure = (title: string, highlightWords?: string[]) => {
   const words = (title || '').trim().split(/\s+/).filter(Boolean);
   if (!words.length) return [];
-  
+
   const normalizedHighlights = (highlightWords || []).map(w => w.toLowerCase().replace(/[^\wÀ-ú]/g, ''));
-  
+
   return words.map((word, index) => {
     const cleanWord = word.toLowerCase().replace(/[^\wÀ-ú]/g, '');
     const isExplicitHighlight = normalizedHighlights.includes(cleanWord);
@@ -48,6 +49,7 @@ export const ArtCanvasRenderer: React.FC<ArtCanvasRendererProps> = ({
   onExportDone
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const artFrameRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState<number>(0.25);
   const [isExporting, setIsExporting] = useState<boolean>(false);
 
@@ -74,10 +76,70 @@ export const ArtCanvasRenderer: React.FC<ArtCanvasRendererProps> = ({
   }, [updateScale]);
 
   // Função para exportar em resolução nativa 1080x1920 ou 1080x1080 em PNG nítido
+  // Captura o próprio frame do DOM, garantindo que o arquivo baixado seja 100% idêntico ao exibido na tela
   const exportToPNG = async () => {
     setIsExporting(true);
     try {
-      // Cria canvas offscreen na resolução real nativa
+      if (artFrameRef.current) {
+        const frameEl = artFrameRef.current;
+
+        // Cria clone isolado no body fora da tela para capturar na resolução 1080px nativa sem clipping de overflow ou transform dos pais
+        const clone = frameEl.cloneNode(true) as HTMLDivElement;
+        clone.style.transform = 'none';
+        clone.style.position = 'fixed';
+        clone.style.left = '-10000px';
+        clone.style.top = '0';
+        clone.style.width = `${nativeWidth}px`;
+        clone.style.height = `${nativeHeight}px`;
+        clone.style.zIndex = '-9999';
+        clone.style.overflow = 'hidden';
+
+        document.body.appendChild(clone);
+
+        try {
+          // Aguarda estabilização do DOM clonado
+          await new Promise((r) => setTimeout(r, 120));
+
+          const canvas = await html2canvas(clone, {
+            width: nativeWidth,
+            height: nativeHeight,
+            scale: 1,
+            useCORS: true,
+            allowTaint: true,
+            logging: false,
+            backgroundColor: null,
+            imageTimeout: 15000,
+            windowWidth: nativeWidth,
+            windowHeight: nativeHeight
+          });
+
+          if (document.body.contains(clone)) {
+            document.body.removeChild(clone);
+          }
+
+          const dataUrl = canvas.toDataURL('image/png', 1.0);
+          const link = document.createElement('a');
+          const cleanTitle = (publication.title || 'arte_prefeitura')
+            .toLowerCase()
+            .replace(/[^a-z0-9]/g, '_')
+            .substring(0, 30);
+          link.download = `${cleanTitle}_${format}_${nativeWidth}x${nativeHeight}.png`;
+          link.href = dataUrl;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+
+          onExportDone?.();
+          return;
+        } catch (domErr) {
+          if (document.body.contains(clone)) {
+            document.body.removeChild(clone);
+          }
+          console.warn('Captura DOM direta via html2canvas falhou, recorrendo ao exportador 2D sincronizado:', domErr);
+        }
+      }
+
+      // Fallback: Cria canvas offscreen na resolução real nativa rigorosamente idêntico ao DOM
       const offscreenCanvas = document.createElement('canvas');
       offscreenCanvas.width = nativeWidth;
       offscreenCanvas.height = nativeHeight;
@@ -152,100 +214,80 @@ export const ArtCanvasRenderer: React.FC<ArtCanvasRendererProps> = ({
           ctx.fillStyle = vig;
           ctx.fillRect(0, 0, nativeWidth, nativeHeight);
 
-          // Scrim de legibilidade superior para contraste da logo
-          const topScrim = ctx.createLinearGradient(0, 0, 0, 280);
-          topScrim.addColorStop(0, 'rgba(15, 23, 42, 0.7)');
+          // Scrim de legibilidade superior suave para contraste do sticker e selos sobre o céu/topo
+          const topScrim = ctx.createLinearGradient(0, 0, 0, 500);
+          topScrim.addColorStop(0, 'rgba(15, 23, 42, 0.40)');
+          topScrim.addColorStop(0.65, 'rgba(15, 23, 42, 0.12)');
           topScrim.addColorStop(1, 'rgba(15, 23, 42, 0)');
           ctx.fillStyle = topScrim;
-          ctx.fillRect(0, 0, nativeWidth, 280);
-
-          // Scrim de legibilidade inferior para os textos e informações SOBRE a fotografia
-          const bottomScrim = ctx.createLinearGradient(0, nativeHeight * 0.32, 0, nativeHeight);
-          bottomScrim.addColorStop(0, 'rgba(15, 23, 42, 0)');
-          bottomScrim.addColorStop(0.5, 'rgba(15, 23, 42, 0.65)');
-          bottomScrim.addColorStop(1, 'rgba(15, 23, 42, 0.92)');
-          ctx.fillStyle = bottomScrim;
-          ctx.fillRect(0, nativeHeight * 0.32, nativeWidth, nativeHeight * 0.68);
+          ctx.fillRect(0, 0, nativeWidth, 500);
           ctx.restore();
         } catch (e) {
           console.warn('Erro ao renderizar imagem no canvas offscreen:', e);
         }
       }
 
-      // 3. Elementos gráficos e molduras decorativas
-      // 3. Elementos gráficos, luzes e moldura cívica dinâmica
+      // 3. BARRA OU MOLDURA CÍVICA SUPERIOR SUAVE
       ctx.save();
-      // Barra cívica superior com gradiente
-      const barGrad = ctx.createLinearGradient(48, 40, nativeWidth - 48, 40);
-      barGrad.addColorStop(0, variation.accentColor || '#f59e0b');
-      barGrad.addColorStop(0.5, variation.secondaryColor || '#4f46e5');
-      barGrad.addColorStop(1, variation.primaryColor || '#06b6d4');
+      const barGrad = ctx.createLinearGradient(48, 30, nativeWidth - 48, 30);
+      barGrad.addColorStop(0, '#facc15');
+      barGrad.addColorStop(0.5, '#76b82a');
+      barGrad.addColorStop(1, '#0ea5e9');
       ctx.fillStyle = barGrad;
       ctx.beginPath();
-      ctx.roundRect(48, 38, nativeWidth - 96, 12, 6);
-      ctx.fill();
-
-      // Partículas luminosas decorativas
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-      ctx.beginPath();
-      ctx.arc(120, 180, 4, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(nativeWidth - 140, 260, 5, 0, Math.PI * 2);
+      ctx.roundRect(48, 28, nativeWidth - 96, 10, 5);
       ctx.fill();
       ctx.restore();
 
-      // 4. Categoria & Palavra de Ação/Impacto Obrigatória
-      const catText = (publication.category || 'COMUNICAÇÃO OFICIAL').toUpperCase();
+      // 4. SELO / STICKER TEMÁTICO DE TOPO (ESTILO #TAPA TUDO / TÁ PAGO / CATEGORIA)
+      let curY = format === 'vertical' ? 120 : 80;
+      const catClean = (publication.category || 'MUNICIPAL').toUpperCase().replace(/[^\wÀ-ú]/g, '');
+      const badgeStr = `#${catClean}`;
+
       ctx.save();
-      ctx.font = '900 22px Montserrat, Inter, sans-serif';
-      ctx.fillStyle = variation.accentColor || '#f59e0b';
-      ctx.fillText(`•  ${catText}`, 64, format === 'vertical' ? 120 : 100);
+      ctx.font = '900 24px Montserrat, Inter, sans-serif';
+      const badgeMetrics = ctx.measureText(badgeStr);
+      const badgeW = badgeMetrics.width + 36;
+      const badgeH = 46;
 
-      // Palavra de impacto obrigatória com efeito de selo tridimensional
-      const effectiveImpact = variation.impactWord || (
-        publication.eventDate ? 'VEM AÍ!' :
-        (publication.category?.toLowerCase().includes('saúde') ? 'ATENÇÃO!' :
-        (publication.category?.toLowerCase().includes('esporte') ? 'GRANDE EVENTO!' :
-        (publication.category?.toLowerCase().includes('obra') ? 'NOVIDADE!' : 'PARTICIPE!')))
-      );
-
-      const impactStr = `⚡ ${effectiveImpact.toUpperCase()}`;
-      ctx.font = '900 22px Montserrat, Inter, sans-serif';
-      const impWidth = ctx.measureText(impactStr).width;
-      const impX = 64 + ctx.measureText(`•  ${catText}`).width + 24;
-      const impY = format === 'vertical' ? 95 : 75;
-      
-      // Sombra e fundo da pílula de impacto
-      ctx.shadowColor = variation.accentColor || 'rgba(245, 158, 11, 0.6)';
-      ctx.shadowBlur = 18;
-      ctx.fillStyle = variation.secondaryColor || '#4f46e5';
+      // Sombra e Borda do Selo Sticker
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
+      ctx.shadowBlur = 16;
+      ctx.shadowOffsetY = 6;
+      ctx.fillStyle = '#ffffff';
       ctx.beginPath();
-      ctx.roundRect(impX, impY, impWidth + 28, 40, 14);
+      ctx.roundRect(64, curY, badgeW, badgeH, 14);
+      ctx.fill();
+
+      // Preenchimento do Selo com cor vibrante
+      ctx.fillStyle = variation.accentColor || '#facc15';
+      ctx.beginPath();
+      ctx.roundRect(66, curY + 2, badgeW - 4, badgeH - 4, 12);
       ctx.fill();
       ctx.shadowBlur = 0;
 
-      ctx.fillStyle = '#ffffff';
-      ctx.fillText(impactStr, impX + 14, impY + 28);
+      ctx.fillStyle = '#0f172a';
+      ctx.fillText(badgeStr, 82, curY + 32);
       ctx.restore();
 
-      // 5. TÍTULO PRINCIPAL PROTAGONISTA — FÓRMULA VISUAL (COR DIFERENTE + TAMANHO MAIOR + EFEITO 3D + SOMBRA + APOIO GRÁFICO)
+      curY += 75;
+
+      // 5. TÍTULO PRINCIPAL PROTAGONISTA — ESTILO STICKER DIE-CUT COM BORDA BRANCA GROSSA (REFERÊNCIAS PREFEITURA)
       const titleText = variation.headlineSummary || publication.title || 'COMUNICADO OFICIAL';
       const wordsStructure = getTitleWordsStructure(titleText, variation.titleHighlightWords);
-      
+
       let curX = 64;
-      let curY = format === 'vertical' ? (primaryImage ? nativeHeight * 0.52 : 290) : (primaryImage ? 230 : 190);
       const maxWidth = nativeWidth - 128;
-      const lineHeight = 94;
+      const lineHeight = 105;
 
       ctx.save();
       for (let n = 0; n < wordsStructure.length; n++) {
         const item = wordsStructure[n];
         const isHigh = item.isHighlight;
-        const fontStr = isHigh 
-          ? '900 82px Montserrat, Outfit, sans-serif'
-          : '900 68px Montserrat, Outfit, sans-serif';
-        
+        const fontStr = isHigh
+          ? '900 90px Montserrat, Outfit, Impact, sans-serif'
+          : '900 76px Montserrat, Outfit, Impact, sans-serif';
+
         ctx.font = fontStr;
         const wordText = item.text.toUpperCase();
         const metrics = ctx.measureText(wordText + ' ');
@@ -255,31 +297,24 @@ export const ArtCanvasRenderer: React.FC<ArtCanvasRendererProps> = ({
           curY += lineHeight;
         }
 
-        // 1ª Camada: Chanfro e Extrusão 3D Multicamadas Profunda
+        // Camada 1: Contorno Branco Grosso Die-Cut (Adesivo Recortado) com Sombra Suave
         ctx.save();
         ctx.font = fontStr;
-        ctx.fillStyle = '#000000';
-        ctx.fillText(wordText, curX + 2, curY + 2);
-        ctx.fillText(wordText, curX + 4, curY + 4);
-        ctx.fillText(wordText, curX + 6, curY + 6);
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.98)';
-        ctx.shadowBlur = 28;
-        ctx.shadowOffsetX = 0;
-        ctx.shadowOffsetY = 10;
-        ctx.fillText(wordText, curX + 6, curY + 8);
-
-        // 2ª Camada: Borda/Contorno de Contraste Externo
-        ctx.strokeStyle = '#000000';
-        ctx.lineWidth = isHigh ? 5 : 4;
         ctx.lineJoin = 'round';
+        ctx.miterLimit = 2;
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.40)';
+        ctx.shadowBlur = 24;
+        ctx.shadowOffsetY = 10;
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = isHigh ? 20 : 16;
         ctx.strokeText(wordText, curX, curY);
 
-        // 3ª Camada: Cor de Destaque Vibrante com Glow Profundo Integrado
-        ctx.fillStyle = isHigh ? (variation.accentColor || '#f59e0b') : (variation.textColor || '#ffffff');
-        ctx.shadowColor = isHigh ? (variation.accentColor || '#f59e0b') : 'rgba(0,0,0,0.85)';
-        ctx.shadowBlur = isHigh ? 32 : 12;
-        ctx.shadowOffsetX = 0;
+        // Camada 2: Preenchimento com Cores Vibrantes (Verde-limão das referências e Amarelo Sol)
+        ctx.shadowBlur = 0;
         ctx.shadowOffsetY = 0;
+        ctx.fillStyle = isHigh
+          ? (variation.accentColor || '#facc15')
+          : (variation.primaryColor && !['#0f172a', '#18181b', '#090d16'].includes(variation.primaryColor) ? variation.primaryColor : '#76b82a');
         ctx.fillText(wordText, curX, curY);
         ctx.restore();
 
@@ -287,108 +322,116 @@ export const ArtCanvasRenderer: React.FC<ArtCanvasRendererProps> = ({
       }
       ctx.restore();
 
-      // Linha gráfica decorativa integrada conectada ao título
-      ctx.save();
-      ctx.fillStyle = variation.accentColor || '#f59e0b';
-      ctx.shadowColor = variation.accentColor || '#f59e0b';
-      ctx.shadowBlur = 18;
-      ctx.beginPath();
-      ctx.roundRect(64, curY + 22, 160, 6, 3);
-      ctx.fill();
-      ctx.restore();
+      curY += 45;
 
-      curY += 72;
-
-      // 6. SUBTÍTULO / CHAMADA SECUNDÁRIA PROTAGONISTA — COMBINAÇÃO DE TAMANHO + COR + PESO + SOMBRA + FORMAS
+      // 6. SUBTÍTULO / CHAMADA SECUNDÁRIA — FAIXA BRANCA RETANGULAR COM CANTOS LEVEMENTE ARREDONDADOS (ESTILO PREFEITURA)
       const subText = variation.subtitleSummary || publication.subtitle;
       if (subText) {
         ctx.save();
         ctx.font = '900 32px Montserrat, Inter, sans-serif';
         const subUpper = subText.toUpperCase();
         const subMetrics = ctx.measureText(subUpper);
-        const badgeW = Math.min(nativeWidth - 128, subMetrics.width + 48);
-        const badgeH = 58;
+        const subBadgeW = Math.min(nativeWidth - 128, subMetrics.width + 56);
+        const subBadgeH = 64;
 
-        // Fundo em cápsula translúcida com borda de destaque
-        ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
-        ctx.strokeStyle = variation.accentColor || 'rgba(245, 158, 11, 0.7)';
-        ctx.lineWidth = 2.5;
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.85)';
-        ctx.shadowBlur = 18;
-        ctx.beginPath();
-        ctx.roundRect(64, curY, badgeW, badgeH, 16);
-        ctx.fill();
-        ctx.stroke();
-
-        // Barra gráfica vertical de acento
-        ctx.fillStyle = variation.accentColor || '#f59e0b';
-        ctx.beginPath();
-        ctx.roundRect(70, curY + 8, 8, badgeH - 16, 4);
-        ctx.fill();
-
-        // Texto do subtítulo nítido com sombra
+        // Fundo Branco Sólido Retangular com Sombra Limpa
         ctx.fillStyle = '#ffffff';
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
-        ctx.shadowBlur = 6;
-        ctx.fillText(subUpper, 90, curY + 41);
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.30)';
+        ctx.shadowBlur = 20;
+        ctx.shadowOffsetY = 8;
+        ctx.beginPath();
+        ctx.roundRect(64, curY, subBadgeW, subBadgeH, 14);
+        ctx.fill();
+
+        // Texto em Verde Escuro ou Azul Escuro de Alta Legibilidade
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#15803d'; // Verde floresta institucional de Governador Valadares
+        ctx.fillText(subUpper, 92, curY + 44);
         curY += 85;
         ctx.restore();
       }
 
-      // 7. Bloco Oficial de Informações Físicas (Data, Horário, Local) com Glassmorphism
-      if (publication.eventDate || publication.eventTime || publication.eventLocation) {
-        const boxY = format === 'vertical' ? nativeHeight - 440 : nativeHeight - 340;
+      // 7. PÍLULA DE LOCALIZAÇÃO (PIN AMARELO + CHECKMARK VERDE DAS REFERÊNCIAS)
+      if (publication.eventLocation) {
         ctx.save();
-        // Fundo com vidro translúcido escuro
-        ctx.fillStyle = 'rgba(15, 23, 42, 0.78)';
-        ctx.beginPath();
-        ctx.roundRect(60, boxY, nativeWidth - 120, 175, 28);
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
-        ctx.lineWidth = 2.5;
-        ctx.stroke();
+        ctx.font = '900 26px Montserrat, Inter, sans-serif';
+        const locStr = `📍 ${publication.eventLocation.toUpperCase()}  ✅`;
+        const locMetrics = ctx.measureText(locStr);
+        const locBadgeW = Math.min(nativeWidth - 128, locMetrics.width + 48);
+        const locBadgeH = 54;
 
-        ctx.font = '800 28px Inter, sans-serif';
-        ctx.fillStyle = '#ffffff';
-
-        let infoY = boxY + 52;
-        if (publication.eventDate) {
-          ctx.fillText(`📅  DATA: ${publication.eventDate}`, 90, infoY);
-          infoY += 46;
-        }
-        if (publication.eventTime) {
-          ctx.fillText(`⏰  HORÁRIO: ${publication.eventTime}`, 90, infoY);
-          infoY += 46;
-        }
-        if (publication.eventLocation) {
-          ctx.fillText(`📍  LOCAL: ${publication.eventLocation}`, 90, infoY);
-        }
-        ctx.restore();
-      }
-
-      // CTA Oficial em 3D
-      if (publication.ctaText) {
-        const ctaStr = `${publication.ctaText.toUpperCase()} →`;
-        ctx.save();
-        ctx.font = '900 24px Montserrat, Inter, sans-serif';
-        const ctaW = ctx.measureText(ctaStr).width + 50;
-        const ctaY = format === 'vertical' ? nativeHeight - 220 : nativeHeight - 140;
-
-        ctx.fillStyle = variation.secondaryColor || '#4f46e5';
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+        // Fundo Azul Celeste / Ciano das referências
+        ctx.fillStyle = '#0ea5e9';
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.25)';
         ctx.shadowBlur = 16;
         ctx.shadowOffsetY = 6;
         ctx.beginPath();
-        ctx.roundRect(60, ctaY, ctaW, 58, 20);
+        ctx.roundRect(64, curY, locBadgeW, locBadgeH, 14);
         ctx.fill();
 
         ctx.shadowBlur = 0;
         ctx.fillStyle = '#ffffff';
-        ctx.fillText(ctaStr, 85, ctaY + 38);
+        ctx.fillText(locStr, 88, curY + 37);
+        curY += 75;
         ctx.restore();
       }
 
-      // 8. Logo Institucional (Preservando Proporção Rigorosa)
+      // 7. PÍLULA DE DATA & HORÁRIO (IDENTICA AO DOM DA TELA)
+      if (publication.eventDate || publication.eventTime) {
+        ctx.save();
+        ctx.font = '900 21px Montserrat, Inter, sans-serif';
+        let dtStr = '';
+        if (publication.eventDate && publication.eventTime) {
+          dtStr = `📅  ${publication.eventDate}    •    ⏰  ${publication.eventTime}`;
+        } else if (publication.eventDate) {
+          dtStr = `📅  ${publication.eventDate}`;
+        } else {
+          dtStr = `⏰  ${publication.eventTime}`;
+        }
+
+        const dtMetrics = ctx.measureText(dtStr);
+        const dtBadgeW = Math.min(nativeWidth - 128, dtMetrics.width + 48);
+        const dtBadgeH = 50;
+
+        // Fundo escuro translúcido com borda suave idêntico ao DOM
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
+        ctx.shadowBlur = 16;
+        ctx.shadowOffsetY = 6;
+        ctx.beginPath();
+        ctx.roundRect(64, curY, dtBadgeW, dtBadgeH, 14);
+        ctx.fill();
+
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#fef08a';
+        ctx.fillText(dtStr, 88, curY + 33);
+        ctx.restore();
+      }
+
+      // 8. PLACA OFICIAL DA LOGO DA PREFEITURA NO RODAPÉ CENTRALIZADO (FIEL ÀS REFERÊNCIAS E AO DOM)
+      const plaqueW = 380;
+      const plaqueH = 82;
+      const plaqueX = (nativeWidth - plaqueW) / 2;
+      const plaqueY = nativeHeight - plaqueH - 28;
+
+      ctx.save();
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
+      ctx.shadowBlur = 24;
+      ctx.shadowOffsetY = 8;
+      ctx.beginPath();
+      ctx.roundRect(plaqueX, plaqueY, plaqueW, plaqueH, 20);
+      ctx.fill();
+
+      ctx.strokeStyle = 'rgba(226, 232, 240, 0.9)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
       if (logo?.dataUrl) {
         try {
           const logoImg = new Image();
@@ -399,37 +442,29 @@ export const ArtCanvasRenderer: React.FC<ArtCanvasRendererProps> = ({
             logoImg.onerror = resolve;
           });
 
-          // Calcula dimensões preservando proporção
-          const logoWidth = (nativeWidth * (variation.logoSizePercent || 20)) / 100;
-          const aspect = logoImg.height / logoImg.width;
-          const logoHeight = logoWidth * aspect;
-
-          let logoX = nativeWidth - logoWidth - 60;
-          let logoY = 60;
-
-          // Posições
-          if (variation.logoPosition === 'top_left') {
-            logoX = 60;
-            logoY = 60;
-          } else if (variation.logoPosition === 'bottom_right') {
-            logoX = nativeWidth - logoWidth - 60;
-            logoY = nativeHeight - logoHeight - 60;
-          } else if (variation.logoPosition === 'bottom_left') {
-            logoX = 60;
-            logoY = nativeHeight - logoHeight - 60;
-          } else if (variation.logoPosition === 'center_bottom') {
-            logoX = (nativeWidth - logoWidth) / 2;
-            logoY = nativeHeight - logoHeight - 60;
+          const maxImgH = 64;
+          const maxImgW = plaqueW - 48;
+          const aspect = logoImg.width / logoImg.height;
+          let lW = maxImgH * aspect;
+          let lH = maxImgH;
+          if (lW > maxImgW) {
+            lW = maxImgW;
+            lH = lW / aspect;
           }
-
-          ctx.save();
-          ctx.globalAlpha = variation.logoOpacity || 1;
-          ctx.drawImage(logoImg, logoX, logoY, logoWidth, logoHeight);
-          ctx.restore();
+          const lX = plaqueX + (plaqueW - lW) / 2;
+          const lY = plaqueY + (plaqueH - lH) / 2;
+          ctx.drawImage(logoImg, lX, lY, lW, lH);
         } catch (e) {
-          console.warn('Erro ao renderizar logo no exportador:', e);
+          console.warn('Erro ao carregar logo na placa do canvas:', e);
         }
+      } else {
+        ctx.fillStyle = '#0f172a';
+        ctx.font = '900 18px Montserrat, Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('🏛️  PREFEITURA MUNICIPAL', nativeWidth / 2, plaqueY + 48);
+        ctx.textAlign = 'left';
       }
+      ctx.restore();
 
       // 9. Download automático do arquivo PNG gerado
       const dataUrl = offscreenCanvas.toDataURL('image/png', 1.0);
@@ -515,7 +550,7 @@ export const ArtCanvasRenderer: React.FC<ArtCanvasRendererProps> = ({
       </div>
 
       {/* Frame Visual com Escala Exata */}
-      <div 
+      <div
         ref={containerRef}
         className="relative overflow-hidden rounded-3xl border border-slate-300/80 shadow-2xl bg-slate-900 flex items-center justify-center select-none"
         style={{
@@ -525,6 +560,7 @@ export const ArtCanvasRenderer: React.FC<ArtCanvasRendererProps> = ({
       >
         {/* Camada Nativa em 1080x1920 ou 1080x1080 escalonada via CSS transform */}
         <div
+          ref={artFrameRef}
           className="absolute top-0 left-0 origin-top-left flex flex-col justify-between overflow-hidden"
           style={{
             width: `${nativeWidth}px`,
@@ -539,15 +575,16 @@ export const ArtCanvasRenderer: React.FC<ArtCanvasRendererProps> = ({
             <div className="absolute inset-0 w-full h-full overflow-hidden">
               <img
                 src={primaryImage}
+                crossOrigin="anonymous"
                 alt="Fotografia Principal da Publicação"
                 className="w-full h-full object-cover"
                 style={{
                   filter: `brightness(${variation.photoTreatment?.brightness || 1.05}) contrast(${variation.photoTreatment?.contrast || 1.1}) saturate(${variation.photoTreatment?.saturation || 1.15})`
                 }}
               />
-              
+
               {/* Vinheta Cinematográfica Suave */}
-              <div 
+              <div
                 className="absolute inset-0 pointer-events-none"
                 style={{
                   background: `radial-gradient(circle at 50% 45%, transparent 40%, rgba(0, 0, 0, ${variation.photoTreatment?.vignetteStrength || 0.35}) 100%)`
@@ -556,37 +593,29 @@ export const ArtCanvasRenderer: React.FC<ArtCanvasRendererProps> = ({
 
               {/* Efeito de Iluminação Cênica Suave */}
               {variation.photoTreatment?.lightingEffect && variation.photoTreatment.lightingEffect !== 'none' && (
-                <div 
+                <div
                   className="absolute inset-0 pointer-events-none mix-blend-screen opacity-35"
                   style={{
                     background: variation.photoTreatment.lightingEffect === 'sunlight_leak'
                       ? 'radial-gradient(circle at 15% 10%, rgba(251, 191, 36, 0.5) 0%, transparent 60%)'
                       : variation.photoTreatment.lightingEffect === 'stage_light'
-                      ? 'radial-gradient(circle at 85% 15%, rgba(56, 189, 248, 0.45) 0%, transparent 65%)'
-                      : 'radial-gradient(circle at 50% 20%, rgba(255, 255, 255, 0.35) 0%, transparent 70%)'
+                        ? 'radial-gradient(circle at 85% 15%, rgba(56, 189, 248, 0.45) 0%, transparent 65%)'
+                        : 'radial-gradient(circle at 50% 20%, rgba(255, 255, 255, 0.35) 0%, transparent 70%)'
                   }}
                 />
               )}
 
               {/* Scrim Superior Suave para Legibilidade do Topo/Logo */}
               <div 
-                className="absolute inset-x-0 top-0 h-64 pointer-events-none"
+                className="absolute inset-x-0 top-0 h-80 pointer-events-none"
                 style={{
-                  background: 'linear-gradient(to bottom, rgba(0, 0, 0, 0.7) 0%, rgba(0, 0, 0, 0.3) 60%, transparent 100%)'
+                  background: 'linear-gradient(to bottom, rgba(15, 23, 42, 0.40) 0%, rgba(15, 23, 42, 0.12) 60%, transparent 100%)'
                 }}
               />
 
-              {/* Scrim Inferior Suave para Legibilidade de Título e Informações SOBRE a Foto */}
-              <div 
-                className="absolute inset-x-0 bottom-0 h-[60%] pointer-events-none"
-                style={{
-                  background: 'linear-gradient(to top, rgba(0, 0, 0, 0.88) 0%, rgba(0, 0, 0, 0.6) 45%, rgba(0, 0, 0, 0.2) 75%, transparent 100%)'
-                }}
-              />
-
-              {/* Tonalidade Institucional Suave Integrada (Sem esconder a fotografia) */}
-              <div 
-                className="absolute inset-0 pointer-events-none mix-blend-color opacity-20"
+              {/* Tonalidade Suave Opcional de Integração */}
+              <div
+                className="absolute inset-0 pointer-events-none mix-blend-color opacity-10"
                 style={{
                   background: variation.backgroundColor || '#0f172a'
                 }}
@@ -594,183 +623,67 @@ export const ArtCanvasRenderer: React.FC<ArtCanvasRendererProps> = ({
             </div>
           )}
 
-          {/* 2. Barra / Linha Cívica Superior com Gradiente Dinâmico */}
-          <div 
-            className="absolute top-10 left-12 right-12 h-3 rounded-full z-20 shadow-lg"
-            style={{ 
-              background: `linear-gradient(90deg, ${variation.accentColor || '#f59e0b'} 0%, ${variation.secondaryColor || '#4f46e5'} 50%, ${variation.primaryColor || '#06b6d4'} 100%)`,
-              boxShadow: `0 0 20px ${variation.accentColor || 'rgba(245, 158, 11, 0.4)'}`
+          {/* 2. Barra Cívica Superior com Gradiente Dinâmico */}
+          <div
+            className="absolute top-7 left-12 right-12 h-2.5 rounded-full z-20 shadow-md"
+            style={{
+              background: `linear-gradient(90deg, #facc15 0%, #76b82a 50%, #0ea5e9 100%)`,
+              boxShadow: '0 2px 10px rgba(0,0,0,0.2)'
             }}
           />
 
-          {/* 3. Elementos Gráficos Decorativos Dinâmicos (Partículas, Círculos e Luz) */}
-          <div className="absolute inset-0 z-10 pointer-events-none overflow-hidden">
-            {/* Círculo de Luz / Glow Superior Esquerdo */}
-            <div 
-              className="absolute -top-24 -left-24 w-96 h-96 rounded-full blur-3xl opacity-30 mix-blend-screen"
-              style={{ background: variation.primaryColor || '#4f46e5' }}
-            />
-            {/* Círculo de Luz / Glow Inferior Direito */}
-            <div 
-              className="absolute -bottom-20 -right-20 w-80 h-80 rounded-full blur-3xl opacity-35 mix-blend-screen"
-              style={{ background: variation.accentColor || '#f59e0b' }}
-            />
-            {/* Arcos Geométricos Sutis de Movimento */}
-            <div 
-              className="absolute top-28 right-10 w-48 h-48 rounded-full border-2 border-dashed opacity-20 pointer-events-none"
-              style={{ borderColor: variation.accentColor || '#f59e0b' }}
-            />
-            <div 
-              className="absolute bottom-40 left-8 w-32 h-32 rounded-full border border-white/20 opacity-25 pointer-events-none"
-            />
-            {/* Partículas de Brilho */}
-            <div className="absolute top-44 left-32 w-2 h-2 rounded-full bg-white/70 shadow-[0_0_8px_#ffffff] animate-ping" />
-            <div className="absolute top-64 right-40 w-3 h-3 rounded-full bg-amber-300/80 shadow-[0_0_12px_#fbbf24]" />
-            <div className="absolute bottom-96 right-16 w-2.5 h-2.5 rounded-full bg-sky-300/70 shadow-[0_0_10px_#7dd3fc]" />
-
-            {/* Onda Fluida de Base (Haikei Shape Engine - Licença CC0 Livre) */}
-            <div className="absolute inset-x-0 bottom-0 h-44 pointer-events-none opacity-20 mix-blend-screen overflow-hidden">
-              <svg viewBox="0 0 1080 300" className="w-full h-full" fill="none">
-                <path
-                  d={getHaikeiWaveSvgPath(1)}
-                  fill={variation.primaryColor || '#1d4ed8'}
-                />
-              </svg>
-            </div>
-          </div>
-
-          {/* 4. Logo da Prefeitura — Elemento Independente com Preservação Rigorosa de Aspect Ratio */}
-          {logo?.dataUrl && (
-            <div 
-              className="absolute z-30 flex items-center"
-              style={{
-                ...getLogoPositionStyles(variation.logoPosition),
-                width: `${(nativeWidth * (variation.logoSizePercent || 20)) / 100}px`,
-                opacity: variation.logoOpacity || 1
-              }}
-            >
-              <img
-                src={logo.dataUrl}
-                alt={logo.name || 'Logo Oficial'}
-                className="w-full h-auto object-contain drop-shadow-2xl"
-              />
-            </div>
-          )}
-
-          {/* 5. Cabeçalho / Categoria e Palavra de Ação/Impacto */}
-          <div className="relative z-20 px-16 pt-24 flex items-center gap-3 flex-wrap">
-            {/* Tag da Categoria */}
-            <div 
-              className="inline-flex items-center gap-2.5 px-5 py-2.5 rounded-2xl text-[20px] font-black uppercase tracking-widest border backdrop-blur-md shadow-xl"
-              style={{
-                background: 'rgba(15, 23, 42, 0.55)',
-                borderColor: 'rgba(255, 255, 255, 0.25)',
-                color: '#ffffff'
-              }}
-            >
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399] animate-pulse"></span>
-              <span>{publication.category || 'Comunicação Oficial'}</span>
-            </div>
-
-            {/* Palavra de Impacto com Super Destaque Visual 3D */}
-            {(() => {
-              const impact = variation.impactWord || (
-                publication.eventDate ? 'VEM AÍ!' :
-                (publication.category?.toLowerCase().includes('saúde') ? 'ATENÇÃO!' :
-                (publication.category?.toLowerCase().includes('esporte') ? 'GRANDE EVENTO!' :
-                (publication.category?.toLowerCase().includes('obra') ? 'NOVIDADE!' : 'PARTICIPE!')))
-              );
-              return (
-                <div 
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl text-[20px] font-black uppercase tracking-wider text-white shadow-2xl border border-white/30 transform hover:scale-105 transition-transform"
-                  style={{
-                    background: variation.impactWordEffect === 'metallic'
-                      ? 'linear-gradient(135deg, #fbbf24 0%, #d97706 50%, #f59e0b 100%)'
-                      : variation.impactWordEffect === 'glow'
-                      ? `linear-gradient(135deg, ${variation.accentColor || '#f59e0b'} 0%, #ea580c 100%)`
-                      : `linear-gradient(135deg, ${variation.secondaryColor || '#4f46e5'} 0%, #7c3aed 100%)`,
-                    boxShadow: `0 4px 0 rgba(0,0,0,0.4), 0 8px 25px ${variation.accentColor || 'rgba(245, 158, 11, 0.5)'}, 0 0 35px rgba(255, 255, 255, 0.2)`
-                  }}
-                >
-                  <span className="text-xl">⚡</span>
-                  <span className="tracking-wide drop-shadow-[0_2px_4px_rgba(0,0,0,0.6)]">{impact}</span>
-                </div>
-              );
-            })()}
-          </div>
-
-          {/* 6. Selo Oficial Estilizado Flutuante & Badge de Confirmação em Estilo Sticker */}
-          <div className="absolute top-28 right-16 z-20 pointer-events-none hidden sm:flex items-center gap-3">
-            {variation.badgeLabel && (
-              <div 
-                className="px-4 py-2 rounded-2xl border-2 border-white flex items-center gap-2 backdrop-blur-md shadow-2xl -rotate-2 transform"
+          {/* 3. CORPO PRINCIPAL DE TEXTOS — POSICIONADO NO TOPO / CENTRO-SUPERIOR FIEL ÀS REFERÊNCIAS */}
+          <div className="relative z-20 px-14 pt-14 pb-8 flex flex-col justify-start items-start w-full select-none">
+            {/* Selo / Sticker Temático de Topo (Estilo #TAPA TUDO / TÁ PAGO / CATEGORIA) */}
+            <div className="inline-flex items-center gap-2 mb-4">
+              <div
+                className="px-5 py-2 rounded-2xl border-[3px] border-white shadow-xl flex items-center gap-2 transform -rotate-1 hover:rotate-0 transition-transform"
                 style={{
-                  background: `linear-gradient(135deg, ${variation.accentColor || '#f59e0b'} 0%, ${variation.secondaryColor || '#4f46e5'} 100%)`,
-                  boxShadow: '0 8px 24px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.4)'
+                  background: variation.accentColor || '#facc15',
+                  boxShadow: '0 8px 20px rgba(0,0,0,0.3), 0 0 0 2px rgba(255,255,255,0.8)'
                 }}
               >
-                <span className="text-[12px] font-black text-white uppercase tracking-wider leading-tight drop-shadow-md">
-                  {variation.badgeLabel}
+                <span className="text-xl">⚡</span>
+                <span className="text-[20px] font-black uppercase tracking-wider text-slate-950 drop-shadow-2xs">
+                  #{((publication.category || 'MUNICIPAL')).toUpperCase().replace(/[^\wÀ-ú]/g, '')}
                 </span>
               </div>
-            )}
 
-            <div 
-              className="w-18 h-18 rounded-full border-2 border-white/60 flex flex-col items-center justify-center text-center p-1 backdrop-blur-md shadow-2xl rotate-12 transform"
-              style={{
-                background: 'linear-gradient(145deg, rgba(255,255,255,0.2) 0%, rgba(0,0,0,0.5) 100%)',
-                boxShadow: '0 8px 32px rgba(0,0,0,0.5), inset 0 0 10px rgba(255,255,255,0.2)'
-              }}
-            >
-              <Shield className="w-5 h-5 text-amber-300 drop-shadow mb-0.5" />
-              <span className="text-[8px] font-black text-white uppercase tracking-tighter leading-tight">
-                OFICIAL
-              </span>
+              {variation.badgeLabel && (
+                <div
+                  className="px-4 py-1.5 rounded-2xl border-2 border-white bg-emerald-600 text-white font-black text-[16px] uppercase tracking-wider shadow-lg flex items-center gap-1.5"
+                >
+                  <span>{variation.badgeLabel}</span>
+                </div>
+              )}
             </div>
-          </div>
 
-          {/* 7. Corpo Central de Textos — FOCO ABSOLUTO NO TÍTULO E SUBTÍTULO COM PROTAGONISMO GRÁFICO */}
-          <div className="relative z-20 px-16 pb-12 flex flex-col justify-end flex-1">
-            {/* TÍTULO PRINCIPAL: FÓRMULA VISUAL (COR DIFERENTE + TAMANHO MAIOR + EFEITO 3D + SOMBRA + APOIO GRÁFICO) */}
-            <div className="relative mb-5 z-20">
-              {/* Glow radial dinâmico envolvendo o título */}
-              <div 
-                className="absolute -inset-x-10 -inset-y-8 rounded-3xl opacity-40 blur-3xl pointer-events-none -z-10"
+            {/* TÍTULO PRINCIPAL: LETREIRO STICKER DIE-CUT COM BORDA BRANCA GROSSA (ESTILO REFERÊNCIAS PREFEITURA) */}
+            <div className="relative mb-4 w-full">
+              <h1
+                className="font-black tracking-tight leading-[0.98] flex flex-wrap items-baseline gap-x-4 gap-y-2 select-none mb-3"
                 style={{
-                  background: `radial-gradient(circle, ${variation.accentColor || '#f59e0b'} 0%, transparent 70%)`
-                }}
-              />
-
-              <h1 
-                className="font-black tracking-tight leading-[1.04] flex flex-wrap items-baseline gap-x-4 gap-y-2 select-none mb-3"
-                style={{
-                  fontFamily: variation.fontFamilyTitle || 'Montserrat, sans-serif',
+                  fontFamily: variation.fontFamilyTitle || 'Montserrat, Impact, Outfit, sans-serif',
                 }}
               >
                 {getTitleWordsStructure(variation.headlineSummary || publication.title || 'Título da Publicação', variation.titleHighlightWords).map((w, idx) => {
-                  if (w.isHighlight) {
-                    return (
-                      <span 
-                        key={idx}
-                        className="text-[72px] md:text-[86px] uppercase font-black transform inline-block tracking-tight"
-                        style={{
-                          color: variation.accentColor || '#f59e0b',
-                          WebkitTextStroke: '2px rgba(0,0,0,0.85)',
-                          textShadow: '0 2px 0 #000, 0 4px 0 rgba(0,0,0,0.95), 0 6px 0 rgba(0,0,0,0.9), 0 8px 0 rgba(0,0,0,0.8), 0 16px 32px rgba(0,0,0,0.95), 0 0 40px ' + (variation.accentColor || 'rgba(245,158,11,0.7)'),
-                          filter: 'drop-shadow(0 8px 16px rgba(0,0,0,0.9))'
-                        }}
-                      >
-                        {w.text}
-                      </span>
-                    );
-                  }
+                  const isHigh = w.isHighlight;
+                  const wordColor = isHigh
+                    ? (variation.accentColor || '#facc15')
+                    : (variation.primaryColor && !['#0f172a', '#18181b', '#090d16'].includes(variation.primaryColor) ? variation.primaryColor : '#76b82a');
+
                   return (
-                    <span 
+                    <span
                       key={idx}
-                      className="text-[60px] md:text-[72px] font-black uppercase text-white inline-block tracking-tight"
+                      className="font-black uppercase tracking-tight transform inline-block"
                       style={{
-                        WebkitTextStroke: '1.5px rgba(0,0,0,0.75)',
-                        textShadow: '0 2px 0 #000, 0 4px 0 rgba(0,0,0,0.9), 0 6px 0 rgba(0,0,0,0.8), 0 14px 28px rgba(0,0,0,0.95)'
+                        fontSize: isHigh
+                          ? (format === 'vertical' ? '88px' : '76px')
+                          : (format === 'vertical' ? '76px' : '64px'),
+                        color: wordColor,
+                        WebkitTextStroke: '7px #ffffff',
+                        paintOrder: 'stroke fill',
+                        filter: 'drop-shadow(0 14px 22px rgba(0,0,0,0.38))'
                       }}
                     >
                       {w.text}
@@ -778,39 +691,21 @@ export const ArtCanvasRenderer: React.FC<ArtCanvasRendererProps> = ({
                   );
                 })}
               </h1>
-              
-              {/* Linha gráfica de acento integrada ao título */}
-              <div 
-                className="h-2 w-36 rounded-full shadow-lg"
-                style={{
-                  background: `linear-gradient(90deg, ${variation.accentColor || '#f59e0b'}, transparent)`,
-                  boxShadow: `0 0 14px ${variation.accentColor || '#f59e0b'}`
-                }}
-              />
             </div>
 
-            {/* SUBTÍTULO / CHAMADA SECUNDÁRIA COM TRATAMENTO GRÁFICO PRÓPRIO PROTAGONISTA */}
+            {/* SUBTÍTULO / CHAMADA SECUNDÁRIA — FAIXA BRANCA RETANGULAR COM CANTOS LEVEMENTE ARREDONDADOS */}
             {(variation.subtitleSummary || publication.subtitle) && (
-              <div className="relative mb-6 max-w-4xl z-20">
-                <div 
-                  className="inline-flex items-center gap-3.5 px-5 py-3 rounded-2xl border backdrop-blur-md shadow-2xl"
+              <div className="relative mb-3.5 max-w-4xl z-20">
+                <div
+                  className="inline-flex items-center px-6 py-2.5 rounded-xl bg-white shadow-2xl border-2 border-white/95 transform hover:scale-[1.01] transition-transform"
                   style={{
-                    background: 'linear-gradient(90deg, rgba(15, 23, 42, 0.85) 0%, rgba(30, 41, 59, 0.65) 100%)',
-                    borderColor: `${variation.accentColor || 'rgba(245, 158, 11, 0.5)'}`,
-                    boxShadow: '0 8px 30px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.15)'
+                    boxShadow: '0 10px 28px rgba(0,0,0,0.35)'
                   }}
                 >
-                  <span 
-                    className="w-2.5 h-8 rounded-full shrink-0"
+                  <p
+                    className="text-[28px] md:text-[34px] font-black uppercase tracking-wide text-emerald-800 leading-tight"
                     style={{
-                      background: variation.accentColor || '#f59e0b',
-                      boxShadow: `0 0 12px ${variation.accentColor || '#f59e0b'}`
-                    }}
-                  />
-                  <p 
-                    className="text-[30px] md:text-[34px] font-black uppercase tracking-wide text-white leading-tight"
-                    style={{
-                      textShadow: '0 2px 4px rgba(0,0,0,0.9), 0 4px 12px rgba(0,0,0,0.8)'
+                      color: '#15803d'
                     }}
                   >
                     {variation.subtitleSummary || publication.subtitle}
@@ -819,61 +714,55 @@ export const ArtCanvasRenderer: React.FC<ArtCanvasRendererProps> = ({
               </div>
             )}
 
-            {/* Resumo do Texto com preservação de detalhes */}
-            {(variation.bodySummary || publication.description) && (
-              <p className="text-[23px] font-medium leading-relaxed text-slate-200/90 mb-6 max-w-3xl line-clamp-3 drop-shadow-md">
-                {variation.bodySummary || publication.description}
-              </p>
-            )}
-
-            {/* Caixa Oficial de Dados do Evento (Data, Horário, Local) com Glassmorphism Refinado */}
-            {(publication.eventDate || publication.eventTime || publication.eventLocation) && (
-              <div 
-                className="p-7 rounded-3xl border backdrop-blur-2xl shadow-2xl flex flex-col gap-3 mb-5 transition-all"
-                style={{
-                  background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.75) 0%, rgba(30, 41, 59, 0.6) 100%)',
-                  borderColor: 'rgba(255, 255, 255, 0.25)',
-                  boxShadow: '0 20px 40px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.2)'
-                }}
-              >
-                {publication.eventDate && (
-                  <div className="flex items-center gap-4 text-[26px] font-black text-white">
-                    <div className="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-400/40 flex items-center justify-center shrink-0">
-                      <Calendar className="w-6 h-6 text-amber-400" />
-                    </div>
-                    <span>{publication.eventDate}</span>
-                  </div>
-                )}
-                {publication.eventTime && (
-                  <div className="flex items-center gap-4 text-[26px] font-bold text-slate-100">
-                    <div className="w-10 h-10 rounded-2xl bg-sky-500/20 border border-sky-400/40 flex items-center justify-center shrink-0">
-                      <Clock className="w-6 h-6 text-sky-400" />
-                    </div>
-                    <span>{publication.eventTime}</span>
-                  </div>
-                )}
-                {publication.eventLocation && (
-                  <div className="flex items-center gap-4 text-[26px] font-bold text-slate-100">
-                    <div className="w-10 h-10 rounded-2xl bg-rose-500/20 border border-rose-400/40 flex items-center justify-center shrink-0">
-                      <MapPin className="w-6 h-6 text-rose-400" />
-                    </div>
-                    <span className="truncate">{publication.eventLocation}</span>
-                  </div>
-                )}
+            {/* PÍLULA DE LOCALIZAÇÃO (PIN AMARELO + CHECKMARK VERDE DAS REFERÊNCIAS) */}
+            {publication.eventLocation && (
+              <div className="mb-4">
+                <div
+                  className="inline-flex items-center gap-2.5 px-5 py-2 rounded-xl bg-sky-500 shadow-xl border-2 border-white/90 text-white font-black text-[22px] uppercase tracking-wide"
+                  style={{
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.3)'
+                  }}
+                >
+                  <span className="text-amber-300">📍</span>
+                  <span>{publication.eventLocation}</span>
+                  <span className="text-emerald-300 ml-1">✅</span>
+                </div>
               </div>
             )}
 
-            {/* CTA Final com Efeito 3D de Alto Impacto */}
-            {publication.ctaText && (
-              <div 
-                className="inline-flex items-center gap-3.5 px-8 py-3.5 rounded-2xl text-[24px] font-black uppercase tracking-wider self-start text-white shadow-2xl border border-white/30 transform hover:translate-y-[-2px] transition-transform"
-                style={{
-                  background: `linear-gradient(135deg, ${variation.secondaryColor || '#4f46e5'} 0%, ${variation.primaryColor || '#1e3a8a'} 100%)`,
-                  boxShadow: `0 6px 0 rgba(0, 0, 0, 0.4), 0 12px 30px ${variation.secondaryColor || 'rgba(79, 70, 229, 0.5)'}`
-                }}
-              >
-                <span className="drop-shadow-sm">{publication.ctaText}</span>
-                <ArrowRight className="w-6 h-6" />
+            {/* Data & Horário em Cartões Estilizados e Limpos */}
+            {(publication.eventDate || publication.eventTime) && (
+              <div className="inline-flex items-center gap-3 bg-slate-900/80 backdrop-blur-md px-5 py-2 rounded-xl border border-white/30 text-white text-[19px] font-black uppercase tracking-wider shadow-lg mb-2">
+                {publication.eventDate && (
+                  <span className="flex items-center gap-1.5 text-amber-300">
+                    <Calendar className="w-4 h-4" />
+                    {publication.eventDate}
+                  </span>
+                )}
+                {publication.eventDate && publication.eventTime && <span className="opacity-40">•</span>}
+                {publication.eventTime && (
+                  <span className="flex items-center gap-1.5 text-sky-300">
+                    <Clock className="w-4 h-4" />
+                    {publication.eventTime}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* 4. PLACA OFICIAL DA LOGO DA PREFEITURA NO RODAPÉ CENTRALIZADO (FIEL ÀS 4 REFERÊNCIAS) */}
+          <div className="absolute bottom-7 left-1/2 -translate-x-1/2 z-30 px-8 py-3 rounded-2xl bg-white shadow-2xl border border-slate-200/90 flex items-center justify-center min-w-[280px] max-w-[440px]">
+            {logo?.dataUrl ? (
+              <img
+                src={logo.dataUrl}
+                crossOrigin="anonymous"
+                alt={logo.name || 'Logo Oficial da Prefeitura'}
+                className="max-h-16 w-auto object-contain drop-shadow-xs"
+              />
+            ) : (
+              <div className="flex items-center gap-2.5 text-slate-800 font-black text-sm uppercase tracking-wider">
+                <Shield className="w-5 h-5 text-emerald-600 shrink-0" />
+                <span>PREFEITURA MUNICIPAL</span>
               </div>
             )}
           </div>

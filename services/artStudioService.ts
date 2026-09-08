@@ -1181,49 +1181,48 @@ export const artStudioService = {
 
         return {
           id: v.id || `var_${idx + 1}_${Date.now()}`,
-          styleName: v.styleName || (idx === 0 ? 'Institucional' : idx === 1 ? 'Moderna' : 'Impactante'),
-          description: v.description || 'Composição equilibrada adaptada para comunicação pública oficial.',
-          primaryColor: v.primaryColor || (idx === 0 ? '#1e3a8a' : idx === 1 ? '#4f46e5' : '#0f172a'),
-          secondaryColor: v.secondaryColor || (idx === 0 ? '#d97706' : idx === 1 ? '#06b6d4' : '#ef4444'),
-          accentColor: v.accentColor || (idx === 0 ? '#f59e0b' : idx === 1 ? '#10b981' : '#fbbf24'),
-          textColor: v.textColor || '#ffffff',
-          backgroundColor: v.backgroundColor || (idx === 0 ? '#0f172a' : idx === 1 ? '#090d16' : '#18181b'),
+          styleName: v.styleName || (idx === 0 ? 'Sticker Die-Cut (#TapaTudo)' : idx === 1 ? 'Placa Cívica (7 de Setembro)' : 'Tarjas Tá Pago'),
+          description: v.description || 'Composição vibrante com stickers die-cut, faixas brancas e pílulas cívicas.',
+          primaryColor: v.primaryColor && !['#0f172a', '#18181b', '#090d16'].includes(v.primaryColor) ? v.primaryColor : (idx === 0 ? '#76b82a' : idx === 1 ? '#15803d' : '#0284c7'),
+          secondaryColor: v.secondaryColor || (idx === 0 ? '#0ea5e9' : idx === 1 ? '#1d4ed8' : '#84cc16'),
+          accentColor: v.accentColor || (idx === 0 ? '#facc15' : idx === 1 ? '#fde047' : '#fbbf24'),
+          textColor: '#ffffff',
+          backgroundColor: '#ffffff',
           gradientBackground: v.gradientBackground || (
             idx === 0 
-              ? 'linear-gradient(145deg, #0f172a 0%, #1e3a8a 70%, #172554 100%)' 
+              ? 'linear-gradient(145deg, #0284c7 0%, #0ea5e9 50%, #38bdf8 100%)' 
               : idx === 1 
-              ? 'linear-gradient(135deg, #090d16 0%, #312e81 60%, #4338ca 100%)' 
-              : 'linear-gradient(180deg, #18181b 0%, #09090b 60%, #27272a 100%)'
+              ? 'linear-gradient(135deg, #1e40af 0%, #1d4ed8 50%, #15803d 100%)' 
+              : 'linear-gradient(180deg, #0284c7 0%, #0369a1 100%)'
           ),
-          fontFamilyTitle: v.fontFamilyTitle || 'Montserrat, sans-serif',
+          fontFamilyTitle: v.fontFamilyTitle || 'Montserrat, Impact, sans-serif',
           fontFamilyBody: v.fontFamilyBody || 'Inter, sans-serif',
-          logoPosition: (v.logoPosition as ArtLogoPosition) || 'top_right',
-          logoSizePercent: v.logoSizePercent || 20,
-          logoOpacity: v.logoOpacity || 1,
+          logoPosition: (v.logoPosition as ArtLogoPosition) || 'center_bottom',
+          logoSizePercent: v.logoSizePercent || 24,
+          logoOpacity: 1,
           layoutType: v.layoutType || (idx === 0 ? 'split' : idx === 1 ? 'overlay' : 'framed'),
           headlineSummary: v.headlineSummary || info.title,
           subtitleSummary: v.subtitleSummary || info.subtitle,
           bodySummary: v.bodySummary || info.description,
-          impactWord: v.impactWord || (idx === 2 ? 'DESTAQUE' : undefined),
+          impactWord: v.impactWord || (idx === 2 ? 'TÁ PAGO!' : 'OFICIAL'),
           impactWordEffect: v.impactWordEffect || (idx === 2 ? 'glow' : idx === 1 ? '3d_shadow' : 'glass_badge'),
-          titleEffect: v.titleEffect || '3d_depth',
+          titleEffect: '3d_depth',
           titleHighlightWords: highlightWords,
           haikeiShape: v.haikeiShape || (idx === 0 ? 'wave' : idx === 1 ? 'blob' : 'halftone'),
           badgeLabel: v.badgeLabel || (info.eventDate ? '📅 DATA CONFIRMADA' : '✅ COMUNICADO OFICIAL'),
           libraryIcons: Array.isArray(v.libraryIcons) && v.libraryIcons.length > 0 ? v.libraryIcons : ['Shield', 'CheckCircle2', 'Star'],
           contextualTheme: v.contextualTheme || info.category || 'Institucional',
           photoTreatment: v.photoTreatment || {
-            brightness: 1.05,
-            contrast: 1.1,
+            brightness: 1.06,
+            contrast: 1.08,
             saturation: 1.15,
-            colorGradingTone: idx === 0 ? 'cool_civic' : idx === 1 ? 'warm_golden' : 'vibrant',
-            vignetteStrength: 0.3,
-            lightingEffect: idx === 1 ? 'sunlight_leak' : idx === 2 ? 'stage_light' : 'soft_glow'
+            colorGradingTone: 'vibrant',
+            vignetteStrength: 0.18,
+            lightingEffect: 'none'
           },
           elements: [
-            { type: 'badge', color: v.secondaryColor || '#4f46e5', opacity: 0.9 },
-            { type: 'gradient', opacity: 0.4 },
-            { type: 'frame', color: v.accentColor || '#f59e0b', opacity: 0.7 }
+            { type: 'badge', color: '#76b82a', opacity: 0.95 },
+            { type: 'frame', color: '#facc15', opacity: 0.9 }
           ]
         };
       });
@@ -1240,25 +1239,25 @@ export const artStudioService = {
 
     return [
       {
-        id: `var_1_institucional_${Date.now()}`,
-        styleName: 'Variação 01 — Institucional Dinâmica',
-        description: 'Harmonia institucional com alta energia visual, azul cívico nobre, contrastes em dourado e tipografia de autoridade.',
-        primaryColor: '#1e3a8a',
-        secondaryColor: '#3b82f6',
-        accentColor: '#f59e0b',
+        id: `var_1_sticker_${Date.now()}`,
+        styleName: 'Variação 01 — Letreiro Sticker Die-Cut (#TapaTudo)',
+        description: 'Visual vibrante de obras e serviços públicos: título sticker em verde-limão e amarelo ouro com contorno branco espesso, faixa branca e pílula azul de local.',
+        primaryColor: '#76b82a',
+        secondaryColor: '#0ea5e9',
+        accentColor: '#facc15',
         textColor: '#ffffff',
-        backgroundColor: '#0f172a',
-        gradientBackground: 'linear-gradient(145deg, #090d16 0%, #1e3a8a 60%, #172554 100%)',
-        fontFamilyTitle: 'Montserrat, sans-serif',
+        backgroundColor: '#ffffff',
+        gradientBackground: 'linear-gradient(145deg, #0284c7 0%, #0ea5e9 60%, #38bdf8 100%)',
+        fontFamilyTitle: 'Montserrat, Impact, sans-serif',
         fontFamilyBody: 'Inter, sans-serif',
-        logoPosition: 'top_right',
-        logoSizePercent: 20,
+        logoPosition: 'center_bottom',
+        logoSizePercent: 24,
         logoOpacity: 1,
         layoutType: 'split',
         headlineSummary: info.title,
         subtitleSummary: info.subtitle,
         bodySummary: info.description,
-        impactWord: info.eventDate ? 'VEM AÍ!' : 'IMPORTANTE!',
+        impactWord: info.eventDate ? 'VEM AÍ!' : 'OBRAS!',
         impactWordEffect: 'glow',
         titleEffect: '3d_depth',
         titleHighlightWords: fallbackHighlights,
@@ -1266,32 +1265,32 @@ export const artStudioService = {
         badgeLabel: '✅ COMUNICADO OFICIAL',
         libraryIcons: ['Shield', 'CheckCircle2', 'MapPin'],
         photoTreatment: {
-          brightness: 1.08,
-          contrast: 1.12,
-          saturation: 1.18,
-          colorGradingTone: 'cool_civic',
-          vignetteStrength: 0.32,
-          lightingEffect: 'sunlight_leak'
+          brightness: 1.06,
+          contrast: 1.08,
+          saturation: 1.15,
+          colorGradingTone: 'vibrant',
+          vignetteStrength: 0.18,
+          lightingEffect: 'none'
         },
         elements: [
-          { type: 'badge', color: '#1e3a8a', opacity: 0.9 },
-          { type: 'frame', color: '#f59e0b', opacity: 0.8 }
+          { type: 'badge', color: '#76b82a', opacity: 0.95 },
+          { type: 'frame', color: '#facc15', opacity: 0.9 }
         ]
       },
       {
-        id: `var_2_moderna_${Date.now()}`,
-        styleName: 'Variação 02 — Moderna & Criativa',
-        description: 'Gradientes modernos em índigo e violeta, sobreposição refinada, destaques em turquesa e atmosfera alegre.',
-        primaryColor: '#4f46e5',
-        secondaryColor: '#06b6d4',
-        accentColor: '#10b981',
+        id: `var_2_placa_${Date.now()}`,
+        styleName: 'Variação 02 — Placas Cívicas em Degraus (7 de Setembro)',
+        description: 'Super placas verdes e azuis com borda branca espessa de 8px, título em letras amarelas e brancas, faixa branca intermediária.',
+        primaryColor: '#15803d',
+        secondaryColor: '#1d4ed8',
+        accentColor: '#fde047',
         textColor: '#ffffff',
-        backgroundColor: '#090d16',
-        gradientBackground: 'linear-gradient(135deg, #090d16 0%, #312e81 60%, #4338ca 100%)',
-        fontFamilyTitle: 'Plus Jakarta Sans, sans-serif',
+        backgroundColor: '#ffffff',
+        gradientBackground: 'linear-gradient(135deg, #1e40af 0%, #1d4ed8 60%, #15803d 100%)',
+        fontFamilyTitle: 'Montserrat, sans-serif',
         fontFamilyBody: 'Inter, sans-serif',
-        logoPosition: 'top_left',
-        logoSizePercent: 22,
+        logoPosition: 'center_bottom',
+        logoSizePercent: 24,
         logoOpacity: 1,
         layoutType: 'overlay',
         headlineSummary: info.title,
@@ -1305,38 +1304,38 @@ export const artStudioService = {
         badgeLabel: '⚡ GRANDE DESTAQUE',
         libraryIcons: ['Sparkles', 'Calendar', 'Users'],
         photoTreatment: {
-          brightness: 1.05,
-          contrast: 1.15,
-          saturation: 1.22,
+          brightness: 1.06,
+          contrast: 1.08,
+          saturation: 1.15,
           colorGradingTone: 'vibrant',
-          vignetteStrength: 0.28,
-          lightingEffect: 'stage_light'
+          vignetteStrength: 0.18,
+          lightingEffect: 'none'
         },
         elements: [
-          { type: 'glow', color: '#06b6d4', opacity: 0.35 },
-          { type: 'badge', color: '#4f46e5', opacity: 0.95 }
+          { type: 'glow', color: '#0ea5e9', opacity: 0.35 },
+          { type: 'badge', color: '#15803d', opacity: 0.95 }
         ]
       },
       {
-        id: `var_3_impactante_${Date.now()}`,
-        styleName: 'Variação 03 — Alto Impacto Visual',
-        description: 'Máximo destaque visual, tipografia imponente em peso extra, contraste dinâmico vibrante e forte apelo de comunicação.',
-        primaryColor: '#0f172a',
-        secondaryColor: '#ef4444',
+        id: `var_3_tarjas_${Date.now()}`,
+        styleName: 'Variação 03 — Tarjas Empilhadas & Selo Tá Pago',
+        description: 'Selo/Carimbo ondulado denteado no topo, tarjas azuis turquesa empilhadas com borda branca arredondada e alto impacto popular.',
+        primaryColor: '#0284c7',
+        secondaryColor: '#84cc16',
         accentColor: '#fbbf24',
         textColor: '#ffffff',
-        backgroundColor: '#18181b',
-        gradientBackground: 'linear-gradient(180deg, #18181b 0%, #09090b 60%, #27272a 100%)',
+        backgroundColor: '#ffffff',
+        gradientBackground: 'linear-gradient(180deg, #0284c7 0%, #0369a1 100%)',
         fontFamilyTitle: 'Outfit, sans-serif',
         fontFamilyBody: 'Inter, sans-serif',
-        logoPosition: 'bottom_right',
-        logoSizePercent: 22,
+        logoPosition: 'center_bottom',
+        logoSizePercent: 24,
         logoOpacity: 1,
         layoutType: 'framed',
         headlineSummary: info.title,
         subtitleSummary: info.subtitle,
         bodySummary: info.description,
-        impactWord: 'NOVIDADE!',
+        impactWord: 'TÁ PAGO!',
         impactWordEffect: '3d_shadow',
         titleEffect: '3d_depth',
         titleHighlightWords: fallbackHighlights,
@@ -1344,15 +1343,15 @@ export const artStudioService = {
         badgeLabel: '⭐ ESPECIAL MUNICIPAL',
         libraryIcons: ['Trophy', 'Star', 'Flame'],
         photoTreatment: {
-          brightness: 1.10,
-          contrast: 1.20,
-          saturation: 1.25,
-          colorGradingTone: 'warm_golden',
-          vignetteStrength: 0.35,
-          lightingEffect: 'soft_glow'
+          brightness: 1.06,
+          contrast: 1.08,
+          saturation: 1.15,
+          colorGradingTone: 'vibrant',
+          vignetteStrength: 0.18,
+          lightingEffect: 'none'
         },
         elements: [
-          { type: 'shape', color: '#ef4444', opacity: 0.8 },
+          { type: 'shape', color: '#84cc16', opacity: 0.9 },
           { type: 'frame', color: '#fbbf24', opacity: 0.9 }
         ]
       }

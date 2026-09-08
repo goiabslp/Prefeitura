@@ -340,10 +340,10 @@ NUNCA retorne títulos simples, planos, estáticos ou sem tratamento visual. Em 
 5. "badgeLabel": Defina um selo oficial ou sticker temático de confirmação (ex: "✅ OFICIAL", "⚡ DESTAQUE", "📍 ENTRADA FRANCA").
 6. "haikeiShape": Selecione 'wave', 'blob' ou 'halftone' para enriquecer a base visual.
 
-Gere exatamente 3 variações que sigam fielmente o estilo e paleta das referências:
-1. "Institucional Dinâmica": Harmonia institucional com alta energia visual e elegância.
-2. "Moderna & Criativa": Composição contemporânea com cores vibrantes, formas arrojadas e efeito 3D.
-3. "Alto Impacto": Máximo destaque visual, palavra de impacto em evidência e dinamismo gráfico envolvente.
+Gere exatamente 3 variações que sigam fielmente os estilos comprovados das referências da Prefeitura:
+1. "Sticker Letreiro Die-Cut (#TapaTudo / Mão na Massa)": Título em lettering gigante com contorno branco espesso die-cut (adesivo recortado), letras em verde-limão vibrante (#76b82a) e amarelo sol (#facc15), selo sticker temático com hashtag, faixa branca retangular de subtítulo e pílula azul celeste de localização.
+2. "Placa Cívica em Degraus (7 de Setembro / Inscrições Abertas)": Estrutura de placas sobrepostas em degraus: pílula superior de data, faixa branca de chamada secundária, e super placa verde-bandeira (#15803d) ou azul royal (#1d4ed8) com borda branca espessa de 8px com o título em letras amarelas e brancas de alto impacto.
+3. "Tarjas Empilhadas & Selo Tá Pago": Selo/carimbo circular ondulado denteado no topo com leve rotação, título organizado em tarjas individuais arredondadas azul turquesa (#0284c7) com borda branca grossa e subtítulo em faixa branca sólida.
 `;
     } else if (tipo === 'art_autofill_fields') {
       promptText = `

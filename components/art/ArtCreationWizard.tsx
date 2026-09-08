@@ -41,15 +41,6 @@ const WEEKDAYS_SHORT_PT = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const HOURS_LIST = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
 const MINUTES_LIST = ['00', '05', '10', '15', '20', '25', '30', '35', '40', '45', '50', '55'];
 
-const QUICK_TIME_PRESETS = [
-  { label: '☀️ Manhã (08h às 12h)', startH: '08', startM: '00', endH: '12', endM: '00', hasEnd: true },
-  { label: '🌤️ Tarde (13h às 17h)', startH: '13', startM: '00', endH: '17', endM: '00', hasEnd: true },
-  { label: '💼 Comercial (08h às 18h)', startH: '08', startM: '00', endH: '18', endM: '00', hasEnd: true },
-  { label: '🌙 Noite (19h às 22h)', startH: '19', startM: '00', endH: '22', endM: '00', hasEnd: true },
-  { label: '⏰ Início às 09h', startH: '09', startM: '00', endH: '', endM: '00', hasEnd: false },
-  { label: '⏰ Início às 19h', startH: '19', startM: '00', endH: '', endM: '00', hasEnd: false },
-];
-
 export const ArtCreationWizard: React.FC<ArtCreationWizardProps> = ({
   onBack,
   onNavigate,
@@ -181,37 +172,6 @@ export const ArtCreationWizard: React.FC<ArtCreationWizardProps> = ({
     setCalViewDate(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
   };
 
-  const handleSelectQuickDate = (type: 'today' | 'tomorrow' | 'next_sat' | 'next_sun') => {
-    const d = new Date();
-    if (type === 'tomorrow') {
-      d.setDate(d.getDate() + 1);
-    } else if (type === 'next_sat') {
-      const day = d.getDay();
-      const diff = (6 - day + 7) % 7 || 7;
-      d.setDate(d.getDate() + diff);
-    } else if (type === 'next_sun') {
-      const day = d.getDay();
-      const diff = (7 - day) % 7 || 7;
-      d.setDate(d.getDate() + diff);
-    }
-    setCalViewDate(new Date(d.getFullYear(), d.getMonth(), 1));
-    setSelectedDayNum(d.getDate());
-    const formatted = `${d.getDate()} de ${MONTH_NAMES_PT[d.getMonth()]} de ${d.getFullYear()}`;
-    setTempEventDate(formatted);
-  };
-
-  const handleQuickTimePreset = (preset: typeof QUICK_TIME_PRESETS[0]) => {
-    setStartHour(preset.startH);
-    setStartMinute(preset.startM);
-    setHasEndTime(preset.hasEnd);
-    if (preset.hasEnd && preset.endH) {
-      setEndHour(preset.endH);
-      setEndMinute(preset.endM);
-      setTempEventTime(`Das ${preset.startH}:${preset.startM} às ${preset.endH}:${preset.endM}`);
-    } else {
-      setTempEventTime(`A partir das ${preset.startH}:${preset.startM}`);
-    }
-  };
 
   // Preenchimento inteligente por IA
   const [isAutoFilling, setIsAutoFilling] = useState<boolean>(false);
@@ -1177,72 +1137,15 @@ export const ArtCreationWizard: React.FC<ArtCreationWizardProps> = ({
                       );
                     })()}
                   </div>
-
-                  {/* Atalhos Rápidos de Data */}
-                  <div className="space-y-1">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                      Atalhos Rápidos
-                    </span>
-                    <div className="flex flex-wrap gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => handleSelectQuickDate('today')}
-                        className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/60 text-[11px] font-bold text-slate-600 hover:text-indigo-700 transition-all cursor-pointer shadow-2xs"
-                      >
-                        Hoje
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleSelectQuickDate('tomorrow')}
-                        className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/60 text-[11px] font-bold text-slate-600 hover:text-indigo-700 transition-all cursor-pointer shadow-2xs"
-                      >
-                        Amanhã
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleSelectQuickDate('next_sat')}
-                        className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/60 text-[11px] font-bold text-slate-600 hover:text-indigo-700 transition-all cursor-pointer shadow-2xs"
-                      >
-                        Próx. Sábado
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleSelectQuickDate('next_sun')}
-                        className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/60 text-[11px] font-bold text-slate-600 hover:text-indigo-700 transition-all cursor-pointer shadow-2xs"
-                      >
-                        Próx. Domingo
-                      </button>
-                    </div>
-                  </div>
                 </div>
 
                 {/* 2. Coluna Direita: Selects Modernos de Horário (5 colunas) */}
-                <div className="md:col-span-5 space-y-3.5 flex flex-col justify-between">
+                <div className="md:col-span-5 space-y-4 flex flex-col justify-start">
                   <div className="space-y-3">
                     <label className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
                       <Clock className="w-3.5 h-3.5 text-indigo-600" />
                       <span>Horário do Evento</span>
                     </label>
-
-                    {/* Sugestões Rápidas de Horários Frequentes */}
-                    <div className="space-y-1.5">
-                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                        Padrões Rápidos
-                      </span>
-                      <div className="grid grid-cols-1 gap-1.5">
-                        {QUICK_TIME_PRESETS.map((preset, idx) => (
-                          <button
-                            key={idx}
-                            type="button"
-                            onClick={() => handleQuickTimePreset(preset)}
-                            className="w-full text-left px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/70 text-xs font-bold text-slate-700 hover:text-indigo-900 transition-all cursor-pointer shadow-2xs flex items-center justify-between"
-                          >
-                            <span>{preset.label}</span>
-                            <span className="text-[10px] text-slate-400 font-normal">Aplicar</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
 
                     {/* Selects de Início */}
                     <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
@@ -1343,34 +1246,6 @@ export const ArtCreationWizard: React.FC<ArtCreationWizardProps> = ({
                       )}
                     </div>
                   </div>
-                </div>
-              </div>
-
-              {/* Card de Resumo Selecionado em Tempo Real */}
-              <div className="p-4 rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border border-indigo-500/20 text-white shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="space-y-1">
-                  <span className="text-[10px] font-black uppercase tracking-wider text-indigo-300">
-                    Pré-visualização do Formato Oficial
-                  </span>
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs sm:text-sm font-bold">
-                    <span className="flex items-center gap-1.5">
-                      <Calendar className="w-4 h-4 text-indigo-400" />
-                      <span>{tempEventDate || 'Nenhuma data selecionada'}</span>
-                    </span>
-                    {tempEventTime && (
-                      <>
-                        <span className="text-slate-500">•</span>
-                        <span className="flex items-center gap-1.5 text-sky-300">
-                          <Clock className="w-4 h-4" />
-                          <span>{tempEventTime}</span>
-                        </span>
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-1 text-[11px] font-medium text-slate-400">
-                  <span>Pronto para aplicar à publicação</span>
                 </div>
               </div>
             </div>
