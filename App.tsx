@@ -45,7 +45,7 @@ import { AbastecimentoService } from './services/abastecimentoService';
 import * as taskService from './services/taskService';
 import { marketingSyncService } from './services/marketingSyncService';
 import { saveRhHorasExtras, updateRhHorasExtras } from './services/rhService';
-import { Send, CheckCircle2, X, Download, Save, FilePlus, Package, History, FileText, Settings, LogOut, ChevronRight, ChevronDown, Search, Filter, Upload, Trash2, Printer, Edit, ArrowLeft, Loader2, ShieldAlert, MousePointer, Tv, Power, ShieldCheck } from 'lucide-react';
+import { Send, CheckCircle2, X, Download, Save, FilePlus, Package, History, FileText, Settings, LogOut, ChevronRight, ChevronDown, Search, Filter, Upload, Trash2, Printer, Edit, ArrowLeft, Loader2, ShieldAlert, MousePointer, Tv, Power, ShieldCheck, Clock } from 'lucide-react';
 
 // Components
 import { LoginScreen } from './components/LoginScreen';
@@ -407,7 +407,7 @@ const App: React.FC = () => {
     if (!rawUser) return null;
 
     // Se houver impersonação administrativa ativa:
-    // O currentUser assume a visão, dados e permissões do usuário alvo, ignorando onboarding e configurações pendentes
+    // O currentUser assume 100% a visão, dados e permissões do usuário alvo, sem privilégios administrativos adicionais
     if (impersonationSession) {
       const target = impersonationSession.targetUser;
       const safeAvatar = target.avatar && 
@@ -422,8 +422,16 @@ const App: React.FC = () => {
         avatar: safeAvatar,
         mustChangePassword: false,
         tempPassword: undefined,
-        realRole: rawUser.role,
-        impersonatedBy: impersonationSession.realAdmin
+        role: target.role,
+        realRole: target.role, // EXATO papel do usuário acessado, sem herança de papel do administrador
+        testRole: undefined, // Nunca herda o modo de teste do administrador
+        permissions: target.permissions || [], // RIGOROSAMENTE as permissões do usuário acessado
+        allowedSignatureIds: target.allowedSignatureIds || [],
+        sector: target.sector,
+        sectorId: target.sectorId,
+        jobTitle: target.jobTitle,
+        jobId: target.jobId,
+        impersonatedBy: impersonationSession.realAdmin // Mantém internamente a identidade real do administrador
       };
     }
 
@@ -470,6 +478,144 @@ const App: React.FC = () => {
       permissions: testPermissions
     };
   }, [rawUser, impersonationSession]);
+
+  // Presence do Administrador: mantém o estado ativo publicado para o usuário alvo
+  useEffect(() => {
+    if (!impersonationSession) return;
+
+    const channel = supabase.channel('impersonation_presence', {
+      config: { presence: { key: impersonationSession.sessionId } }
+    });
+
+    channel.subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        try {
+          await channel.track({
+            sessionId: impersonationSession.sessionId,
+            adminId: impersonationSession.realAdmin.id,
+            adminName: impersonationSession.realAdmin.name,
+            adminEmail: impersonationSession.realAdmin.email,
+            targetUserId: impersonationSession.targetUser.id,
+            targetUsername: impersonationSession.targetUser.username,
+            targetUserName: impersonationSession.targetUser.name,
+            targetEmail: impersonationSession.targetUser.email,
+            startedAt: impersonationSession.startedAt
+          });
+        } catch (trackErr) {
+          console.warn('[Impersonation] Erro ao rastrear presença:', trackErr);
+        }
+      }
+    });
+
+    return () => {
+      channel.untrack().catch(() => {});
+      supabase.removeChannel(channel);
+    };
+  }, [impersonationSession]);
+
+  // Transparência e Segurança: Notifica o usuário comum quando sua conta estiver sob acesso administrativo (não permitir impersonação silenciosa)
+  const [impersonationNoticeOnMe, setImpersonationNoticeOnMe] = useState<{
+    active: boolean;
+    adminName: string;
+    adminEmail?: string;
+    startedAt: string;
+  } | null>(null);
+
+  useEffect(() => {
+    // Se for o próprio administrador operando sob impersonação, não exibe este aviso de usuário
+    if (!rawUser || impersonationSession) {
+      setImpersonationNoticeOnMe(null);
+      return;
+    }
+
+    const checkMatch = (data: any) => {
+      if (!data) return false;
+      const uid = (rawUser.id || '').toString().toLowerCase();
+      const uname = (rawUser.username || '').toString().toLowerCase();
+      const umail = (rawUser.email || '').toString().toLowerCase();
+      const rname = (rawUser.name || '').toString().toLowerCase();
+
+      const tId = (data.targetUserId || '').toString().toLowerCase();
+      const tUname = (data.targetUsername || '').toString().toLowerCase();
+      const tMail = (data.targetEmail || '').toString().toLowerCase();
+      const tName = (data.targetUserName || '').toString().toLowerCase();
+
+      return (
+        (tId && uid && tId === uid) ||
+        (tUname && uname && tUname === uname) ||
+        (tMail && umail && tMail === umail) ||
+        (tName && rname && tName === rname)
+      );
+    };
+
+    // 1. Escuta via Supabase Presence (sincronização automática mesmo ao dar F5 na página)
+    const presenceChannel = supabase.channel('impersonation_presence');
+    presenceChannel
+      .on('presence', { event: 'sync' }, () => {
+        const state = presenceChannel.presenceState();
+        let match: any = null;
+        for (const key of Object.keys(state)) {
+          const presences = (state[key] || []) as any[];
+          for (const p of presences) {
+            if (checkMatch(p)) {
+              match = p;
+              break;
+            }
+          }
+          if (match) break;
+        }
+
+        if (match) {
+          setImpersonationNoticeOnMe({
+            active: true,
+            adminName: match.adminName || 'Administrador',
+            adminEmail: match.adminEmail,
+            startedAt: match.startedAt || new Date().toISOString()
+          });
+        } else {
+          setImpersonationNoticeOnMe(null);
+        }
+      })
+      .subscribe();
+
+    // 2. Escuta via Broadcasts em tempo real (alerta imediato e notificação toast)
+    const handleStarted = (payload: any) => {
+      const data = payload?.payload || payload;
+      if (checkMatch(data)) {
+        setImpersonationNoticeOnMe({
+          active: true,
+          adminName: data.adminName || 'Administrador',
+          adminEmail: data.adminEmail,
+          startedAt: data.startedAt || new Date().toISOString()
+        });
+        showToast(`Atenção: O Administrador ${data.adminName || ''} iniciou uma sessão de suporte na sua conta.`, "info");
+      }
+    };
+
+    const handleEnded = (payload: any) => {
+      const data = payload?.payload || payload;
+      if (checkMatch(data)) {
+        setImpersonationNoticeOnMe(null);
+        showToast(`A sessão de suporte do Administrador foi finalizada.`, "info");
+      }
+    };
+
+    const globalEventsCh = supabase.channel('global_events')
+      .on('broadcast', { event: 'impersonation-started' }, handleStarted)
+      .on('broadcast', { event: 'impersonation-ended' }, handleEnded)
+      .subscribe();
+
+    const alertsCh = supabase.channel('user_impersonation_alerts')
+      .on('broadcast', { event: 'impersonation-started' }, handleStarted)
+      .on('broadcast', { event: 'impersonation-ended' }, handleEnded)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(presenceChannel);
+      supabase.removeChannel(globalEventsCh);
+      supabase.removeChannel(alertsCh);
+    };
+  }, [rawUser?.id, rawUser?.username, rawUser?.email, rawUser?.name, impersonationSession]);
 
   const { moduleStatus } = useSystemSettings();
   const isModuleActive = (key: string) => moduleStatus[key] !== false;
@@ -3510,6 +3656,11 @@ const App: React.FC = () => {
   };
 
   const handleOpenAdmin = (tab?: string | null) => {
+    const routeCheck = canUserAccessRoute('/Admin', currentUser, moduleStatus);
+    if (!routeCheck.allowed) {
+      alert(routeCheck.reason || 'Acesso negado: seu perfil não possui permissão para o Painel Administrativo.');
+      return;
+    }
     setCurrentView('admin');
     const targetTab = tab || null;
     setAdminTab(targetTab);
@@ -4225,6 +4376,34 @@ const App: React.FC = () => {
               <ChatWidget />
               <ChatWindow />
             </>
+          )}
+
+          {/* Banner de Notificação e Transparência de Impersonação para o Usuário Alvo */}
+          {impersonationNoticeOnMe && !impersonationSession && (
+            <div className="w-full bg-gradient-to-r from-blue-950 via-indigo-950 to-slate-950 text-white px-4 md:px-8 py-3.5 shadow-2xl border-b-2 border-cyan-400 flex flex-col sm:flex-row items-center justify-between gap-3 animate-slide-down sticky top-0 z-[100]">
+              <div className="flex items-center gap-3.5">
+                <div className="p-2.5 bg-cyan-500/20 rounded-2xl border border-cyan-400/40 text-cyan-300 shadow-inner shrink-0">
+                  <ShieldAlert className="w-6 h-6 animate-pulse" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[10px] font-black uppercase tracking-widest bg-cyan-500/20 text-cyan-300 px-2.5 py-0.5 rounded-full border border-cyan-400/30">
+                      Transparência & Conformidade
+                    </span>
+                    <h4 className="font-black text-sm md:text-base text-white tracking-tight">
+                      Acesso Administrativo em Andamento na sua Conta
+                    </h4>
+                  </div>
+                  <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                    O Administrador <strong className="text-cyan-200">{impersonationNoticeOnMe.adminName}</strong> está conectado temporariamente à sua conta para suporte e auditoria. Todas as ações permanecem registradas com a autoria do administrador.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 text-xs font-semibold text-slate-300 bg-white/10 px-3.5 py-2 rounded-xl shrink-0 border border-white/10">
+                <Clock className="w-4 h-4 text-cyan-300" />
+                <span>Iniciado às {new Date(impersonationNoticeOnMe.startedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+              </div>
+            </div>
           )}
 
           <div className="w-full shrink-0 sticky top-0 z-40">

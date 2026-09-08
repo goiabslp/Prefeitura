@@ -562,14 +562,16 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
               </div>
             </div>
 
-            {/* Botão de Configurações - Visível no mobile e no desktop */}
-            <button
-              onClick={() => onOpenAdmin(null)}
-              className="p-2 rounded-xl text-slate-500 hover:bg-slate-50 hover:text-indigo-600 transition-all active:scale-95 group"
-              title="Configurações"
-            >
-              <Settings className="w-5 h-5 text-slate-600 group-hover:text-indigo-600 transition-colors" />
-            </button>
+            {/* Botão de Configurações - Visível apenas para quem possui permissão de Administração */}
+            {(currentUser.role === 'admin' || (currentUser.permissions || []).includes('parent_admin' as any)) && (
+              <button
+                onClick={() => onOpenAdmin(null)}
+                className="p-2 rounded-xl text-slate-500 hover:bg-slate-50 hover:text-indigo-600 transition-all active:scale-95 group"
+                title="Configurações Administrativas"
+              >
+                <Settings className="w-5 h-5 text-slate-600 group-hover:text-indigo-600 transition-colors" />
+              </button>
+            )}
           </div>
         )}
       </div>

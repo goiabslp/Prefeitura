@@ -273,6 +273,14 @@ export interface User {
   avatar?: string;
   status?: 'active' | 'blocked';
   google_connected?: boolean;
+  impersonatedBy?: {
+    id: string;
+    name: string;
+    username: string;
+    email?: string;
+    role: UserRole;
+    sector?: string;
+  };
   google_email?: string;
   google_connected_at?: string;
   last_google_sync_at?: string;

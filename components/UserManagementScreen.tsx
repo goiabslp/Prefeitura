@@ -131,7 +131,7 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
   const [isGoogleConnectModalOpen, setIsGoogleConnectModalOpen] = useState(false);
   const [connectGoogleEmail, setConnectGoogleEmail] = useState('');
 
-  const isAdmin = currentUser.role === 'admin' || currentUser.realRole === 'admin';
+  const isAdmin = currentUser.role === 'admin' || (!currentUser.impersonatedBy && currentUser.realRole === 'admin');
 
   const [formData, setFormData] = useState<Partial<User>>({
     name: '',

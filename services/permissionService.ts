@@ -854,6 +854,22 @@ export function cleanPermissionsArray(
 export function isSuperAdminUser(user: User | null): boolean {
   if (!user) return false;
 
+  // REGRA FUNDAMENTAL DE IMPERSONAÇÃO:
+  // Ao acessar outro usuário, o administrador deve enxergar e utilizar o sistema EXATAMENTE
+  // com as mesmas permissões desse usuário, sem privilégios administrativos adicionais.
+  if ((user as any).impersonatedBy) {
+    const targetUsername = (user.username || '').toLowerCase().trim();
+    const targetEmail = (user.email || '').toLowerCase().trim();
+    const targetId = (user.id || '').toLowerCase().trim();
+    // Apenas se a conta acessada for ela própria a conta GAF
+    return (
+      targetUsername === 'gaf' ||
+      targetEmail === 'gaf' ||
+      targetEmail.startsWith('gaf@') ||
+      targetId === 'user_guilherme'
+    );
+  }
+
   const username = (user.username || '').toLowerCase().trim();
   const email = (user.email || '').toLowerCase().trim();
   const id = (user.id || '').toLowerCase().trim();
@@ -908,7 +924,7 @@ export function userCanAccessModuleParent(
 ): boolean {
   if (!user) return false;
 
-  // SUPER ADMIN / GAF: Acesso completo e irrestrito a qualquer módulo
+  // SUPER ADMIN / GAF: Acesso completo e irrestrito a qualquer módulo (apenas quando não impersonando outro usuário)
   if (isSuperAdminUser(user)) {
     return true;
   }
@@ -922,8 +938,11 @@ export function userCanAccessModuleParent(
   const userRole = (user.testRole !== undefined && user.testRole !== null) ? user.testRole : user.role;
   
   // Salvaguarda: Administrador tem acesso ao módulo Admin para não ser bloqueado acidentalmente
-  if (parentDef.key === 'parent_admin' && userRole === 'admin') {
-    return true;
+  if (parentDef.key === 'parent_admin') {
+    if (userRole === 'admin' || userHasPermissionKey(user.permissions, 'parent_admin', parentDef.legacyKeys)) {
+      return true;
+    }
+    return false;
   }
 
   // Verifica permissão explícita do módulo

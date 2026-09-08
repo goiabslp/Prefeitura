@@ -1,6 +1,7 @@
 import { User, UserRole } from '../types';
 import { isSuperAdminUser } from './permissionService';
 import { auditLogService } from './auditLogService';
+import { supabase } from './supabaseClient';
 
 export interface ImpersonationSession {
   sessionId: string;
@@ -61,7 +62,7 @@ export const impersonationService = {
   /**
    * Inicia uma nova sessão de impersonação temporária.
    * Valida que o solicitante é administrador e não está impersonando a si próprio.
-   * Registra imediatamente o evento no log de auditoria.
+   * Registra imediatamente o evento no log de auditoria e notifica o usuário via broadcast.
    */
   async startImpersonation(realAdmin: User, targetUser: User): Promise<ImpersonationSession> {
     if (!realAdmin) {
@@ -134,13 +135,52 @@ export const impersonationService = {
       }
     });
 
+    // Transmite aviso em tempo real para o usuário acessado (não permitir impersonação silenciosa)
+    try {
+      const payload = {
+        targetUserId: targetUser.id,
+        targetUserName: targetUser.name,
+        targetUsername: targetUser.username,
+        targetEmail: targetUser.email || '',
+        adminName: realAdmin.name,
+        adminEmail: realAdmin.email || '',
+        startedAt,
+        sessionId
+      };
+
+      // Dispara nos canais com garantia de conexão
+      const ch1 = supabase.channel('global_events');
+      if (ch1.state === 'joined') {
+        ch1.send({ type: 'broadcast', event: 'impersonation-started', payload });
+      } else {
+        ch1.subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            ch1.send({ type: 'broadcast', event: 'impersonation-started', payload });
+          }
+        });
+      }
+
+      const ch2 = supabase.channel('user_impersonation_alerts');
+      if (ch2.state === 'joined') {
+        ch2.send({ type: 'broadcast', event: 'impersonation-started', payload });
+      } else {
+        ch2.subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            ch2.send({ type: 'broadcast', event: 'impersonation-started', payload });
+          }
+        });
+      }
+    } catch (broadcastErr) {
+      console.warn('[Impersonation] Erro ao transmitir broadcast de início:', broadcastErr);
+    }
+
     console.info(`[Impersonation] Sessão iniciada com sucesso. Admin: ${realAdmin.name} -> Visualizando como: ${targetUser.name}`);
     return session;
   },
 
   /**
    * Encerra a sessão de impersonação ativa.
-   * Calcula o tempo de duração e registra o log de encerramento na auditoria.
+   * Calcula o tempo de duração, registra o log de encerramento e avisa o usuário do encerramento.
    */
   async stopImpersonation(): Promise<{ success: boolean; durationSeconds: number } | null> {
     const session = this.getActiveImpersonation();
@@ -171,6 +211,42 @@ export const impersonationService = {
         duration_minutes: parseFloat(durationMinutes)
       }
     });
+
+    // Transmite aviso de término em tempo real para o usuário acessado
+    try {
+      const payload = {
+        targetUserId: session.targetUser.id,
+        targetUserName: session.targetUser.name,
+        targetUsername: session.targetUser.username,
+        targetEmail: session.targetUser.email || '',
+        adminName: session.realAdmin.name,
+        sessionId: session.sessionId
+      };
+
+      const ch1 = supabase.channel('global_events');
+      if (ch1.state === 'joined') {
+        ch1.send({ type: 'broadcast', event: 'impersonation-ended', payload });
+      } else {
+        ch1.subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            ch1.send({ type: 'broadcast', event: 'impersonation-ended', payload });
+          }
+        });
+      }
+
+      const ch2 = supabase.channel('user_impersonation_alerts');
+      if (ch2.state === 'joined') {
+        ch2.send({ type: 'broadcast', event: 'impersonation-ended', payload });
+      } else {
+        ch2.subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            ch2.send({ type: 'broadcast', event: 'impersonation-ended', payload });
+          }
+        });
+      }
+    } catch (broadcastErr) {
+      console.warn('[Impersonation] Erro ao transmitir broadcast de término:', broadcastErr);
+    }
 
     this.clearSession();
     console.info(`[Impersonation] Sessão encerrada. Duração: ${durationMinutes} minutos.`);
