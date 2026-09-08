@@ -299,60 +299,70 @@ export interface AgendamentoFilters {
 
 /**
  * Constrói a lista ordenada da fila com as regras estritas de Agendamento Especial:
- * 1. Agendamentos Especiais sempre ficam no topo da fila.
- * 2. Entre os Especiais, é mantida uma sequência ordenada por criação (Especial 1, Especial 2...).
- * 3. Se já existir um Especial para o mesmo procedimento, o novo Especial é inserido imediatamente após o último Especial daquele procedimento.
- *    Caso não exista, é inserido no topo da lista de especiais.
- * 4. Os agendamentos normais/regulares permanecem abaixo de todos os Especiais na ordem relativa de inserção.
+ * 1. Agendamentos Especiais sempre possuem prioridade máxima e ficam no topo da fila, acima de qualquer agendamento comum.
+ * 2. Entre múltiplos Agendamentos Especiais, preserva estritamente a ordem cronológica em que foram registrados/agendados (FIFO).
+ * 3. Agendamentos comuns permanecem na fila normal abaixo de todos os especiais, também na ordem cronológica de registro.
+ * 4. A ordem é dinâmica: quando um Especial é atendido, cancelado ou removido, o próximo Especial assume a prioridade.
  */
 export const orderConsultasQueue = (bookings: ConsultaAgendamento[]): ConsultaAgendamento[] => {
-    // Ordena cronologicamente por criação para reproduzir o histórico de entradas na fila
-    const sortedChronological = [...bookings].sort((a, b) => {
-        const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
-        const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
-        return timeA - timeB;
-    });
+    if (!bookings || bookings.length === 0) return [];
 
-    const especiais: ConsultaAgendamento[] = [];
-    const normais: ConsultaAgendamento[] = [];
-
-    for (const item of sortedChronological) {
-        if (item.priority === 'Especial') {
-            let lastIndexSameProc = -1;
-            for (let i = especiais.length - 1; i >= 0; i--) {
-                if (especiais[i].procedimento_id === item.procedimento_id) {
-                    lastIndexSameProc = i;
-                    break;
-                }
-            }
-
-            if (lastIndexSameProc !== -1) {
-                // Insere imediatamente após o último Especial deste mesmo procedimento
-                especiais.splice(lastIndexSameProc + 1, 0, { ...item });
-            } else {
-                // Primeiro Especial deste procedimento: vai para o topo dos especiais
-                especiais.unshift({ ...item });
-            }
-        } else {
-            normais.push({ ...item });
+    const getTime = (item: ConsultaAgendamento): number => {
+        if (item.created_at) {
+            const t = new Date(item.created_at).getTime();
+            if (!isNaN(t)) return t;
         }
-    }
+        if (item.solicitation_date) {
+            const t = new Date(item.solicitation_date + 'T00:00:00').getTime();
+            if (!isNaN(t)) return t;
+        }
+        return 0;
+    };
 
-    // Atribui as posições oficiais na fila e a numeração sequencial dos Especiais
+    // 1. Separa estritamente em Agendamentos Especiais e Comuns
+    const especiais = bookings.filter(b => b.priority === 'Especial');
+    const comuns = bookings.filter(b => b.priority !== 'Especial');
+
+    // 2. Entre vários Agendamentos Especiais, preservar a ordem em que foram registrados/agendados (FIFO)
+    especiais.sort((a, b) => {
+        const diff = getTime(a) - getTime(b);
+        if (diff !== 0) return diff;
+        return (a.id || '').localeCompare(b.id || '');
+    });
+
+    // 3. Agendamentos comuns permanecem na fila normal pela ordem em que foram registrados
+    comuns.sort((a, b) => {
+        const diff = getTime(a) - getTime(b);
+        if (diff !== 0) return diff;
+        return (a.id || '').localeCompare(b.id || '');
+    });
+
+    // 4. A fila efetiva coloca todos os Especiais no topo, seguidos pelos comuns
+    const filaFinal: ConsultaAgendamento[] = [];
+
     especiais.forEach((item, idx) => {
-        item.special_sequence = idx + 1;
-        item.queue_position = idx + 1;
+        filaFinal.push({
+            ...item,
+            queue_position: idx + 1,
+            special_sequence: idx + 1
+        });
     });
 
-    normais.forEach((item, idx) => {
-        item.queue_position = especiais.length + idx + 1;
+    normaisLoop:
+    comuns.forEach((item, idx) => {
+        filaFinal.push({
+            ...item,
+            queue_position: especiais.length + idx + 1,
+            special_sequence: undefined
+        });
     });
 
-    return [...especiais, ...normais];
+    return filaFinal;
 };
 
 /**
- * Recalcula a fila completa e persiste as posições oficiais e sequências no banco de dados.
+ * Recalcula a fila completa por procedimento e persiste as posições oficiais e sequências no banco de dados.
+ * Garante que a prioridade seja respeitada no backend para qualquer operação simultânea ou novo usuário.
  */
 export const recalculateAndPersistQueuePositions = async (): Promise<void> => {
     try {
@@ -363,18 +373,42 @@ export const recalculateAndPersistQueuePositions = async (): Promise<void> => {
 
         if (error || !queueItems || queueItems.length === 0) return;
 
-        const ordered = orderConsultasQueue(queueItems as ConsultaAgendamento[]);
+        // Agrupa por procedimento para garantir que cada fila médica tenha suas posições
+        // 1º lugar, 2º lugar... com Agendamento Especial sempre no topo daquele procedimento
+        const byProc: Record<string, ConsultaAgendamento[]> = {};
+        queueItems.forEach(item => {
+            const pid = item.procedimento_id || 'geral';
+            if (!byProc[pid]) byProc[pid] = [];
+            byProc[pid].push(item as ConsultaAgendamento);
+        });
 
-        // Atualiza no banco de dados
-        await Promise.all(ordered.map(item =>
+        const updatePayloads: { id: string; queue_position: number; special_sequence: number | null }[] = [];
+
+        Object.keys(byProc).forEach(procId => {
+            const ordered = orderConsultasQueue(byProc[procId]);
+            ordered.forEach(item => {
+                updatePayloads.push({
+                    id: item.id,
+                    queue_position: item.queue_position || 1,
+                    special_sequence: item.special_sequence || null
+                });
+            });
+        });
+
+        // Atualiza no banco de dados de forma assíncrona e resiliente
+        await Promise.all(updatePayloads.map(item =>
             supabase
                 .from('consultas_agendamentos')
                 .update({
                     queue_position: item.queue_position,
-                    special_sequence: item.special_sequence || null
+                    special_sequence: item.special_sequence
                 })
                 .eq('id', item.id)
         ));
+
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('consultas-agendamentos-changed'));
+        }
     } catch (err) {
         console.warn('[consultasService] recalculateAndPersistQueuePositions warning:', err);
     }
@@ -402,12 +436,21 @@ export const getAgendamentos = async (filters?: AgendamentoFilters): Promise<Con
         // Garante que a ordem da fila de espera respeite a prioridade Especial e posições calculadas
         const waitlistItems = filtered.filter(a => a.status === 'Fila de espera');
         if (waitlistItems.length > 0) {
-            const orderedWaitlist = orderConsultasQueue(waitlistItems);
+            const byProc: Record<string, ConsultaAgendamento[]> = {};
+            waitlistItems.forEach(item => {
+                const pid = item.procedimento_id || 'geral';
+                if (!byProc[pid]) byProc[pid] = [];
+                byProc[pid].push(item);
+            });
+
             const posMap = new Map<string, { queue_position: number; special_sequence?: number }>();
-            orderedWaitlist.forEach(item => {
-                posMap.set(item.id, {
-                    queue_position: item.queue_position || 1,
-                    special_sequence: item.special_sequence
+            Object.keys(byProc).forEach(procId => {
+                const orderedWaitlist = orderConsultasQueue(byProc[procId]);
+                orderedWaitlist.forEach(item => {
+                    posMap.set(item.id, {
+                        queue_position: item.queue_position || 1,
+                        special_sequence: item.special_sequence
+                    });
                 });
             });
 
@@ -416,8 +459,8 @@ export const getAgendamentos = async (filters?: AgendamentoFilters): Promise<Con
                 if (queueInfo) {
                     return {
                         ...item,
-                        queue_position: item.queue_position || queueInfo.queue_position,
-                        special_sequence: item.special_sequence || queueInfo.special_sequence
+                        queue_position: queueInfo.queue_position,
+                        special_sequence: queueInfo.special_sequence
                     };
                 }
                 return item;
@@ -525,6 +568,13 @@ export const updateAgendamentoStatus = async (id: string, status: ConsultaAgenda
             }
             throw error;
         }
+
+        // Recalcular fila automaticamente para que o próximo Especial assuma a prioridade
+        await recalculateAndPersistQueuePositions();
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('consultas-agendamentos-changed'));
+        }
+
         return data;
     } catch (error: any) {
         console.error('[consultasService] updateAgendamentoStatus Error:', error.message);
@@ -554,6 +604,12 @@ export const updateAgendamentoDateAndStatus = async (
             .single();
 
         if (error) throw error;
+
+        await recalculateAndPersistQueuePositions();
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('consultas-agendamentos-changed'));
+        }
+
         return data;
     } catch (error: any) {
         console.error('[consultasService] updateAgendamentoDateAndStatus Error:', error.message);
@@ -583,6 +639,12 @@ export const confirmarDataAgendamento = async (id: string, date: string, time?: 
             .single();
 
         if (error) throw error;
+
+        await recalculateAndPersistQueuePositions();
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('consultas-agendamentos-changed'));
+        }
+
         return data;
     } catch (error: any) {
         console.error('[consultasService] confirmarDataAgendamento Error:', error.message);
@@ -654,6 +716,12 @@ export const updateAgendamento = async (
         }
 
         if (error) throw error;
+
+        await recalculateAndPersistQueuePositions();
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('consultas-agendamentos-changed'));
+        }
+
         return data;
     } catch (error) {
         const appError = handleSupabaseError(error);
@@ -673,6 +741,12 @@ export const deleteAgendamento = async (id: string): Promise<boolean> => {
         if (count === 0) {
             throw new Error('Nenhum registro foi excluído. Verifique se você possui permissões de exclusão ou se o registro existe.');
         }
+
+        await recalculateAndPersistQueuePositions();
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('consultas-agendamentos-changed'));
+        }
+
         return true;
     } catch (error) {
         const appError = handleSupabaseError(error);
@@ -840,6 +914,9 @@ export const createVagas = async (vagas: Omit<ConsultaVaga, 'id' | 'created_at' 
 
         if (error) throw error;
 
+        // Recalcular fila automaticamente para priorizar Agendamentos Especiais com as novas vagas
+        await recalculateAndPersistQueuePositions();
+
         if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('consultas-vagas-changed'));
             window.dispatchEvent(new CustomEvent('consultas-procedimentos-changed'));
@@ -864,6 +941,8 @@ export const updateVaga = async (id: string, updates: Partial<ConsultaVaga>): Pr
 
         if (error) throw error;
 
+        await recalculateAndPersistQueuePositions();
+
         if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('consultas-vagas-changed'));
             window.dispatchEvent(new CustomEvent('consultas-procedimentos-changed'));
@@ -885,6 +964,8 @@ export const pauseVaga = async (id: string): Promise<boolean> => {
             .eq('id', id);
 
         if (error) throw error;
+
+        await recalculateAndPersistQueuePositions();
 
         if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('consultas-vagas-changed'));
@@ -908,6 +989,8 @@ export const unpauseVaga = async (id: string): Promise<boolean> => {
 
         if (error) throw error;
 
+        await recalculateAndPersistQueuePositions();
+
         if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('consultas-vagas-changed'));
             window.dispatchEvent(new CustomEvent('consultas-procedimentos-changed'));
@@ -929,6 +1012,8 @@ export const deleteVaga = async (id: string): Promise<boolean> => {
             .eq('id', id);
 
         if (error) throw error;
+
+        await recalculateAndPersistQueuePositions();
 
         if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('consultas-vagas-changed'));

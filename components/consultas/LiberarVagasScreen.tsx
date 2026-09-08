@@ -161,12 +161,20 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
         Object.keys(slotsByDate).forEach(dateStr => {
             const slots = slotsByDate[dateStr];
             const bList = bookingsByDate[dateStr] || [];
-            const unmatchedBookings = [...bList];
+            // Prioriza Agendamentos Especiais no preenchimento de vagas daquela data
+            const sortedBList = [...bList].sort((a, b) => {
+                if (a.priority === 'Especial' && b.priority !== 'Especial') return -1;
+                if (a.priority !== 'Especial' && b.priority === 'Especial') return 1;
+                const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+                const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+                return timeA - timeB;
+            });
+            const unmatchedBookings = [...sortedBList];
             const matchedBookingIds = new Set<string>();
 
-            // 1ª passada: match exato de horário
+            // 1ª passada: match exato de horário (dando preferência a quem é Especial)
             slots.forEach(slot => {
-                const exactMatch = bList.find(b => 
+                const exactMatch = sortedBList.find(b => 
                     b.appointment_time && 
                     matchTime(b.appointment_time, slot.hora) &&
                     !matchedBookingIds.has(b.id)
@@ -690,9 +698,13 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
                                                     const activeBooking = slotAssignments.get(v.id);
                                                     const isPaused = v.status === 'Pausada';
                                                     const isBooked = !!activeBooking;
+                                                    const isSpecial = activeBooking?.priority === 'Especial';
                                                     const patientName = activeBooking?.paciente?.name;
 
                                                     const pillStyle = (() => {
+                                                        if (isBooked && isSpecial) {
+                                                            return 'bg-amber-100 border-amber-400 text-amber-950 ring-1 ring-amber-400/40 shadow-xs';
+                                                        }
                                                         if (isBooked) {
                                                             return 'bg-indigo-50 border-indigo-200 text-indigo-900';
                                                         }
@@ -706,7 +718,7 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
                                                         <div 
                                                             key={v.id}
                                                             className={`px-2.5 py-1 rounded-lg border text-xs font-semibold flex items-center gap-2 shadow-xs transition-all ${pillStyle}`}
-                                                            title={patientName ? `Paciente: ${patientName}` : undefined}
+                                                            title={patientName ? `Paciente: ${patientName}${isSpecial ? ' (AGENDAMENTO ESPECIAL)' : ''}` : undefined}
                                                         >
                                                             {/* Horário */}
                                                             <div className="flex items-center gap-1 font-mono font-black text-xs">
@@ -716,8 +728,14 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
 
                                                             {/* Paciente ou Badge Status */}
                                                             {patientName ? (
-                                                                <span className="text-[10px] font-bold text-indigo-700 max-w-[120px] truncate" title={patientName}>
-                                                                    {patientName.split(' ')[0]}
+                                                                <span className={`text-[10px] font-bold max-w-[130px] truncate flex items-center gap-1 ${isSpecial ? 'text-amber-950 font-black' : 'text-indigo-700'}`} title={patientName}>
+                                                                    {isSpecial && <Sparkles className="w-3 h-3 text-amber-600 fill-amber-500 shrink-0 animate-pulse" />}
+                                                                    <span>{patientName.split(' ')[0]}</span>
+                                                                    {isSpecial && (
+                                                                        <span className="text-[7.5px] bg-amber-200/80 text-amber-950 px-1 py-0.2 rounded font-black border border-amber-300">
+                                                                            ESP
+                                                                        </span>
+                                                                    )}
                                                                 </span>
                                                             ) : isPaused ? (
                                                                 <span className="px-1 py-0.2 bg-amber-100 text-amber-800 rounded text-[9px] font-extrabold uppercase">

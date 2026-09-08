@@ -477,6 +477,11 @@ export const ConsultasReportPdfGenerator: React.FC<ConsultasReportPdfGeneratorPr
                                                         {/* 3. Paciente / CPF */}
                                                         <td className="px-3 py-2 border-r border-slate-100 align-middle">
                                                             <div className="flex flex-col gap-0.5">
+                                                                {b.priority === 'Especial' && (
+                                                                    <span className="inline-block text-[5.5pt] font-black uppercase text-amber-950 bg-amber-200 border border-amber-400 px-1.5 py-0.2 rounded w-fit mb-0.5">
+                                                                        ★ AGENDAMENTO ESPECIAL
+                                                                    </span>
+                                                                )}
                                                                 <div className="font-extrabold text-slate-900 leading-snug break-words">
                                                                     {formatPatientName(b.paciente?.name, b.paciente?.nickname)}
                                                                 </div>

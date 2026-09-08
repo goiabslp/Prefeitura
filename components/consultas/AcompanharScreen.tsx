@@ -418,6 +418,7 @@ const getStatusStyle = (status: string) => {
 };
 
 const getPriorityStyle = (priority: string, is_retorno?: boolean) => {
+    if (priority === 'Especial') return 'text-amber-950 bg-amber-200/70 border-amber-400 font-black shadow-2xs';
     if (priority === 'Urgência') return 'text-rose-700 bg-rose-500/10 border-rose-300 font-black';
     if (is_retorno) return 'text-teal-700 bg-teal-500/10 border-teal-300 font-black';
     return 'text-slate-600 bg-slate-500/10 border-slate-200 font-semibold';
@@ -427,6 +428,7 @@ const getPriorityStyle = (priority: string, is_retorno?: boolean) => {
 interface AgendamentoCardProps {
     booking: ConsultaAgendamento;
     queuePosition?: number;
+    specialSequence?: number;
     isOperating: boolean;
     canEdit: boolean;
     canComplete: boolean;
@@ -448,6 +450,7 @@ interface AgendamentoCardProps {
 const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
     booking,
     queuePosition,
+    specialSequence,
     isOperating,
     canEdit,
     canComplete,
@@ -514,20 +517,20 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                             }`}
                             title={
                                 booking.status === 'Fila de espera' && queuePosition 
-                                    ? `Posição: ${queuePosition}º lugar na fila de espera ${booking.priority === 'Especial' ? '(Agendamento Especial)' : ''}` 
+                                    ? `Posição: ${queuePosition}º lugar na fila de ${booking.procedimento?.name || 'procedimento'} ${booking.priority === 'Especial' ? '(Agendamento Especial)' : ''}` 
                                     : `Status: ${booking.status}`
                             }
                         >
                             {booking.status === 'Fila de espera' ? (
                                 <>
-                                    <span className="text-[8.5px] font-black uppercase tracking-wider text-amber-800 leading-none">
+                                    <span className="text-[8.5px] font-black uppercase tracking-wider text-amber-900 leading-none">
                                         {booking.priority === 'Especial' ? 'ESPECIAL' : 'POSIÇÃO'}
                                     </span>
                                     <span className="text-2xl sm:text-[28px] font-black font-mono leading-none tracking-tight text-amber-950 my-1">
                                         {queuePosition ? `${queuePosition}º` : '--'}
                                     </span>
-                                    <span className="text-[7.5px] font-black uppercase tracking-widest text-amber-700 leading-none">
-                                        NA FILA
+                                    <span className="text-[7.5px] font-black uppercase tracking-widest text-amber-800 leading-none">
+                                        {booking.priority === 'Especial' ? 'PRIORITÁRIO' : 'NA FILA'}
                                     </span>
                                 </>
                             ) : booking.status === 'Agendado' ? (
@@ -561,14 +564,19 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
 
                         {/* Dados textuais do Paciente - Nome Completo */}
                         <div className="flex flex-col min-w-0 justify-center flex-1">
-                            <div className="flex items-center gap-1.5 mb-1">
+                            <div className="flex items-center gap-1.5 mb-1 flex-wrap">
                                 <span className="text-[8.5px] font-black uppercase tracking-widest text-cyan-700 bg-cyan-100/60 px-2 py-0.5 rounded-md border border-cyan-200/50 w-fit">
                                     Paciente
                                 </span>
                                 {booking.priority === 'Especial' && (
-                                    <span className="text-[8px] font-black uppercase tracking-wider text-amber-900 bg-gradient-to-r from-amber-100 to-yellow-100 px-2 py-0.5 rounded border border-amber-300 flex items-center gap-1 shadow-xs">
-                                        <Sparkles className="w-2.5 h-2.5 text-amber-600" />
-                                        {booking.special_sequence ? `Especial ${booking.special_sequence}` : 'Especial'}
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider text-amber-950 bg-gradient-to-r from-amber-200 via-yellow-100 to-amber-200 border border-amber-400 shadow-xs ring-1 ring-amber-400/30">
+                                        <Sparkles className="w-3 h-3 text-amber-700 fill-amber-500 animate-pulse shrink-0" />
+                                        <span>AGENDAMENTO ESPECIAL</span>
+                                        {(specialSequence || booking.special_sequence) ? (
+                                            <span className="ml-1 bg-amber-950/15 px-1.5 py-0.2 rounded text-[8px] font-black">
+                                                Nº {specialSequence || booking.special_sequence}
+                                            </span>
+                                        ) : null}
                                     </span>
                                 )}
                                 {booking.priority === 'Urgência' && (
@@ -651,7 +659,7 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                 {/* PRIORIDADE */}
                                 <DataItem 
                                     label="Prioridade" 
-                                    value={booking.priority === 'Urgência' ? 'Urgência' : booking.is_retorno ? 'Retorno' : 'Normal'} 
+                                    value={booking.priority === 'Especial' ? 'AGENDAMENTO ESPECIAL' : booking.priority === 'Urgência' ? 'Urgência' : booking.is_retorno ? 'Retorno' : 'Normal'} 
                                     colorClass={getPriorityStyle(booking.priority, booking.is_retorno)} 
                                     isBadge={true} 
                                     flex="col-span-1 wide:col-span-2" 
@@ -1000,18 +1008,11 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     const [reportType, setReportType] = useState<'simplificado' | 'completo'>('simplificado');
     const [isPrintingReport, setIsPrintingReport] = useState(false);
     const [queuePositions, setQueuePositions] = useState<Record<string, number>>({});
+    const [specialSequences, setSpecialSequences] = useState<Record<string, number>>({});
     const [procedures, setProcedures] = useState<ConsultaProcedimento[]>([]);
     const [loading, setLoading] = useState(true);
     const [printingBooking, setPrintingBooking] = useState<ConsultaAgendamento | null>(null);
     const [isGenerating, setIsGenerating] = useState(false);
-
-    // States for Vagas Reservadas Pendentes
-    const [reservedBookings, setReservedBookings] = useState<ConsultaAgendamento[]>([]);
-    const [confirmedReservedBookings, setConfirmedReservedBookings] = useState<Record<string, ConsultaAgendamento>>({});
-    const [reservedDates, setReservedDates] = useState<Record<string, string>>({});
-    const [reservedTimes, setReservedTimes] = useState<Record<string, string>>({});
-    const [reservedProceduresVagas, setReservedProceduresVagas] = useState<Record<string, ConsultaVaga[]>>({});
-    const [reservedProceduresBookings, setReservedProceduresBookings] = useState<Record<string, ConsultaAgendamento[]>>({});
 
     // Filters
     const [globalSearch, setGlobalSearch] = useState('');
@@ -1078,133 +1079,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     const [editError, setEditError] = useState('');
     const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
 
-    const matchTime = (t1: string | undefined, t2: string) => {
-        if (!t1 || !t2) return false;
-        return t1.substring(0, 5) === t2.substring(0, 5);
-    };
 
-    const getSlotAssignmentsForProcedure = (vagasList: ConsultaVaga[], bookingsList: ConsultaAgendamento[]) => {
-        const assignments = new Map<string, ConsultaAgendamento>();
-        const slotsByDate: Record<string, ConsultaVaga[]> = {};
-        vagasList.forEach(v => {
-            if (!slotsByDate[v.data]) {
-                slotsByDate[v.data] = [];
-            }
-            slotsByDate[v.data].push(v);
-        });
-
-        const bookingsByDate: Record<string, ConsultaAgendamento[]> = {};
-        bookingsList.forEach(b => {
-            if (b.status === 'Cancelado' || b.status === 'Não Realizado' || b.status === 'Fila de espera' || b.status === 'Aguardando Data' || !b.appointment_date) return;
-            if (!bookingsByDate[b.appointment_date]) {
-                bookingsByDate[b.appointment_date] = [];
-            }
-            bookingsByDate[b.appointment_date].push(b);
-        });
-
-        Object.keys(slotsByDate).forEach(dateStr => {
-            const slots = slotsByDate[dateStr];
-            const bookings = bookingsByDate[dateStr] || [];
-            const unmatchedBookings = [...bookings];
-            const matchedBookingIds = new Set<string>();
-
-            slots.forEach(slot => {
-                const exactMatch = bookings.find(b => 
-                    b.appointment_time && 
-                    matchTime(b.appointment_time, slot.hora) &&
-                    !matchedBookingIds.has(b.id)
-                );
-                if (exactMatch) {
-                    assignments.set(slot.id, exactMatch);
-                    matchedBookingIds.add(exactMatch.id);
-                    const idx = unmatchedBookings.findIndex(b => b.id === exactMatch.id);
-                    if (idx > -1) {
-                        unmatchedBookings.splice(idx, 1);
-                    }
-                }
-            });
-
-            slots.forEach(slot => {
-                if (!assignments.has(slot.id) && unmatchedBookings.length > 0) {
-                    const nextBooking = unmatchedBookings.shift()!;
-                    assignments.set(slot.id, nextBooking);
-                }
-            });
-        });
-
-        return assignments;
-    };
-
-    const fetchReservedBookings = async () => {
-        try {
-            const data = await db.getAgendamentos({ status: 'Aguardando Data' });
-            setReservedBookings(data);
-            
-            if (data.length > 0) {
-                if (window.location.pathname !== '/Consultas/DefinirAgenda') {
-                    window.history.replaceState({}, '', '/Consultas/DefinirAgenda');
-                }
-                const procIds = Array.from(new Set(data.map(b => b.procedimento_id)));
-                const vagasMap: Record<string, ConsultaVaga[]> = {};
-                const bookingsMap: Record<string, ConsultaAgendamento[]> = {};
-                
-                await Promise.all(procIds.map(async (procId) => {
-                    try {
-                        const [vagasData, bookingsData] = await Promise.all([
-                            db.getVagas(procId),
-                            db.getAgendamentos({ procedimentoId: procId })
-                        ]);
-                        vagasMap[procId] = vagasData;
-                        bookingsMap[procId] = bookingsData;
-                    } catch (e) {
-                        console.error("Error loading reserved config for proc " + procId, e);
-                    }
-                }));
-                
-                setReservedProceduresVagas(vagasMap);
-                setReservedProceduresBookings(bookingsMap);
-            }
-        } catch (err) {
-            console.error('Error fetching reserved bookings in AcompanharScreen:', err);
-        }
-    };
-
-    const handleConfirmReservedDateAndTime = async (id: string, dateParam?: string, timeParam?: string) => {
-        const date = dateParam || reservedDates[id];
-        const time = timeParam || reservedTimes[id];
-        if (!date || !time) {
-            alert('Por favor, preencha a data e a hora.');
-            return;
-        }
-        setLoading(true);
-        try {
-            const result = await db.confirmarDataAgendamento(id, date, time);
-            if (result) {
-                setConfirmedReservedBookings(prev => ({ ...prev, [id]: result }));
-            }
-        } catch (err: any) {
-            alert(err.message || 'Erro ao confirmar data e hora.');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleCloseReservedModal = () => {
-        setConfirmedReservedBookings({});
-        setReservedDates({});
-        setReservedTimes({});
-        if (typeof window !== 'undefined' && window.location.pathname === '/Consultas/DefinirAgenda') {
-            window.history.replaceState({}, '', '/Consultas/Acompanhar');
-        }
-        if (onNavigate) {
-            onNavigate('consultas:acompanhar');
-        }
-        fetchReservedBookings();
-    };
-
-    useEffect(() => {
-        fetchReservedBookings();
-    }, []);
 
     useEffect(() => {
         const fetchGestores = async () => {
@@ -1239,7 +1114,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
         const groups: Record<string, Record<string, Record<string, ConsultaAgendamento[]>>> = {};
         allBookings.forEach(b => {
             const type = b.procedimento?.type || 'OUTRO';
-            const priority = b.priority === 'Urgência' ? 'Urgência' : b.is_retorno ? 'Retorno' : 'Normal';
+            const priority = b.priority === 'Especial' ? 'Especial' : b.priority === 'Urgência' ? 'Urgência' : b.is_retorno ? 'Retorno' : 'Normal';
             const status = b.status || 'Solicitado';
             
             if (!groups[type]) groups[type] = {};
@@ -1301,16 +1176,40 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
             setProcedures(procData);
             setAllBookings(allBookingData);
 
-            // Ordenação oficial da fila com agendamentos especiais no topo e regra de procedimentos
+            // 1. Agrupar e calcular a fila de espera estritamente por PROCEDIMENTO
             const allWaitlist = allBookingData.filter(b => b.status === 'Fila de espera');
-            const orderedWaitlist = db.orderConsultasQueue(allWaitlist);
+            
+            const waitlistByProc: Record<string, ConsultaAgendamento[]> = {};
+            allWaitlist.forEach(b => {
+                const procKey = b.procedimento_id || (b.procedimento ? b.procedimento.id : null) || (b.procedimento ? b.procedimento.name : null) || 'geral';
+                if (!waitlistByProc[procKey]) {
+                    waitlistByProc[procKey] = [];
+                }
+                waitlistByProc[procKey].push(b);
+            });
 
             const positionMap: Record<string, number> = {};
-            orderedWaitlist.forEach((b, index) => {
-                positionMap[b.id] = b.queue_position || (index + 1);
+            const specialSeqMap: Record<string, number> = {};
+
+            Object.keys(waitlistByProc).forEach(procKey => {
+                const procList = waitlistByProc[procKey];
+                // Regra oficial da fila para este procedimento:
+                // Agendamento Especial no topo da fila deste procedimento, seguido de comuns por ordem cronológica (FIFO)
+                const orderedProcList = db.orderConsultasQueue(procList);
+
+                let specialCount = 0;
+                orderedProcList.forEach((b, index) => {
+                    // Posição relativa ao procedimento: 1º lugar do procedimento, 2º lugar do procedimento, etc.
+                    positionMap[b.id] = index + 1;
+                    if (b.priority === 'Especial') {
+                        specialCount += 1;
+                        specialSeqMap[b.id] = specialCount;
+                    }
+                });
             });
 
             setQueuePositions(positionMap);
+            setSpecialSequences(specialSeqMap);
 
             // Apply filters in-memory (Apenas no Mobile: não exibe resultados antes da pesquisa se não houver filtro)
             if (isMobile && !globalSearch.trim() && !filterDate && !filterStatus) {
@@ -1347,11 +1246,46 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                 filtered = filtered.filter(a => a.status === filterStatus);
             }
 
-            // Ordena os agendamentos pela posição oficial da fila
+            // Ordenação dos agendamentos na visualização:
             filtered.sort((a, b) => {
-                const posA = positionMap[a.id] ?? 999999;
-                const posB = positionMap[b.id] ?? 999999;
-                if (posA !== posB) return posA - posB;
+                const isWaitlistA = a.status === 'Fila de espera';
+                const isWaitlistB = b.status === 'Fila de espera';
+
+                // Se ambos estão na fila de espera
+                if (isWaitlistA && isWaitlistB) {
+                    const isSpecialA = a.priority === 'Especial';
+                    const isSpecialB = b.priority === 'Especial';
+
+                    // 1. Agendamento Especial sempre tem prioridade máxima no topo
+                    if (isSpecialA !== isSpecialB) {
+                        return isSpecialA ? -1 : 1;
+                    }
+
+                    // 2. Se for o mesmo procedimento, ordenar estritamente pela posição na fila do procedimento
+                    const procA = (a.procedimento?.name || a.procedimento_id || '').trim();
+                    const procB = (b.procedimento?.name || b.procedimento_id || '').trim();
+                    if (procA === procB) {
+                        const posA = positionMap[a.id] ?? 999999;
+                        const posB = positionMap[b.id] ?? 999999;
+                        if (posA !== posB) return posA - posB;
+                    }
+
+                    // 3. Se forem procedimentos diferentes:
+                    // Mantém a ordem por data de solicitação mais antiga (FIFO geral)
+                    const timeA = a.solicitation_date ? new Date(a.solicitation_date + 'T00:00:00').getTime() : (a.created_at ? new Date(a.created_at).getTime() : 0);
+                    const timeB = b.solicitation_date ? new Date(b.solicitation_date + 'T00:00:00').getTime() : (b.created_at ? new Date(b.created_at).getTime() : 0);
+                    if (timeA !== timeB) return timeA - timeB;
+
+                    const posA = positionMap[a.id] ?? 999999;
+                    const posB = positionMap[b.id] ?? 999999;
+                    return posA - posB;
+                }
+
+                // Fila de espera vem antes dos demais status
+                if (isWaitlistA !== isWaitlistB) {
+                    return isWaitlistA ? -1 : 1;
+                }
+
                 const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
                 const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
                 return timeB - timeA;
@@ -1667,241 +1601,17 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     };
 
     const sortedBookings = useMemo(() => {
-        if (filterStatus !== 'Fila de espera') return bookings;
-        return [...bookings].sort((a, b) => {
-            const getPriorityWeight = (booking: ConsultaAgendamento) => {
-                if (booking.priority === 'Urgência') return 0;
-                if (booking.is_retorno) return 1;
-                return 2;
-            };
-            const weightA = getPriorityWeight(a);
-            const weightB = getPriorityWeight(b);
-            if (weightA !== weightB) {
-                return weightA - weightB;
-            }
-            const dateA = a.solicitation_date ? new Date(a.solicitation_date + 'T00:00:00').getTime() : (a.created_at ? new Date(a.created_at).getTime() : 0);
-            const dateB = b.solicitation_date ? new Date(b.solicitation_date + 'T00:00:00').getTime() : (b.created_at ? new Date(b.created_at).getTime() : 0);
-            if (dateA !== dateB) {
-                return dateA - dateB;
-            }
-            const cA = a.created_at ? new Date(a.created_at).getTime() : 0;
-            const cB = b.created_at ? new Date(b.created_at).getTime() : 0;
-            return cA - cB;
-        });
+        if (filterStatus === 'Fila de espera') {
+            return db.orderConsultasQueue(bookings);
+        }
+        return bookings;
     }, [bookings, filterStatus]);
 
     const visibleBookings = useMemo(() => {
         return sortedBookings.slice(0, displayLimit);
     }, [sortedBookings, displayLimit]);
 
-    if (reservedBookings.length > 0) {
-        return (
-            <div className="w-full max-w-[96%] 2xl:max-w-[1440px] mx-auto flex flex-col h-full max-h-full min-h-0 bg-white/95 backdrop-blur-md rounded-[2.5rem] border border-slate-200/80 shadow-[0_20px_60px_rgba(0,0,0,0.06)] overflow-y-auto animate-in fade-in duration-300 p-6 space-y-6">
-                {/* Header Banner */}
-                <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                        <div className="w-14 h-14 rounded-2xl bg-amber-50 border border-amber-200/80 flex items-center justify-center text-amber-600 shadow-sm animate-pulse">
-                            <Activity className="w-7 h-7" />
-                        </div>
-                        <div>
-                            <span className="text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
-                                Fila de Espera Promovida
-                            </span>
-                            <h2 className="text-xl sm:text-2xl font-black text-slate-900 uppercase tracking-tight mt-1">
-                                Vagas Reservadas Pendentes
-                            </h2>
-                        </div>
-                    </div>
-                </div>
-                
-                {/* Alert Box Explicativo Sem Asteriscos */}
-                <div className="p-5 bg-amber-50/80 border border-amber-200 rounded-2xl text-xs sm:text-sm font-bold text-amber-900 leading-relaxed shadow-sm">
-                    Os pacientes listados abaixo foram promovidos da fila de espera. Você deve preencher a <strong className="font-black text-amber-950 underline decoration-amber-400">Data</strong> e a <strong className="font-black text-amber-950 underline decoration-amber-400">Hora</strong> para cada um deles antes de prosseguir com o uso da tela.
-                </div>
-                
-                {/* Cards de Pacientes Promovidos */}
-                <div className="space-y-4 flex-1">
-                    {reservedBookings.map((b) => {
-                        const isConfirmed = !!confirmedReservedBookings[b.id];
-                        const confirmedBooking = confirmedReservedBookings[b.id];
-                        const dateVal = reservedDates[b.id] || '';
-                        const timeVal = reservedTimes[b.id] || '';
-                        
-                        const procVagas = reservedProceduresVagas[b.procedimento_id] || [];
-                        const procBookings = reservedProceduresBookings[b.procedimento_id] || [];
-                        const assignments = getSlotAssignmentsForProcedure(procVagas, procBookings);
-                        
-                        const availableSlotsForProc = procVagas.filter(v => {
-                            const statusNorm = (v.status || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-                            const isAvail = statusNorm === 'disponivel' || statusNorm === 'livre' || !v.status || (statusNorm !== 'ocupada' && statusNorm !== 'ocupado');
-                            return isAvail && !assignments.has(v.id);
-                        });
-                        
-                        let uniqueDates: string[] = [];
-                        let timesForSelectedDate: string[] = [];
 
-                        if (availableSlotsForProc.length > 0) {
-                            uniqueDates = Array.from(new Set(availableSlotsForProc.map(v => v.data))).sort();
-                            timesForSelectedDate = availableSlotsForProc
-                                .filter(v => v.data === dateVal)
-                                .map(v => v.hora.substring(0, 5))
-                                .sort();
-                        } else {
-                            const generatedDates: string[] = [];
-                            const today = new Date();
-                            for (let i = 0; i < 30; i++) {
-                                const d = new Date(today);
-                                d.setDate(d.getDate() + i);
-                                const dateStr = d.toISOString().split('T')[0];
-                                generatedDates.push(dateStr);
-                            }
-                            uniqueDates = generatedDates;
-                            timesForSelectedDate = [
-                                '07:00', '07:30', '08:00', '08:30', '09:00', '09:30',
-                                '10:00', '10:30', '11:00', '11:30', '13:00', '13:30',
-                                '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00'
-                            ];
-                        }
-                        
-                        return (
-                            <div 
-                                key={b.id} 
-                                className={`p-6 rounded-3xl border transition-all ${
-                                    isConfirmed 
-                                    ? 'bg-emerald-50/40 border-emerald-200' 
-                                    : 'bg-white border-slate-200 shadow-sm'
-                                }`}
-                            >
-                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-4 mb-4">
-                                    <div>
-                                        <h3 className="font-black text-slate-900 uppercase text-base tracking-tight">
-                                            {formatPatientName(b.paciente)}
-                                        </h3>
-                                        <div className="flex items-center gap-3 mt-1 text-xs text-slate-500 font-bold">
-                                            <span>CPF: {b.paciente?.cpf || 'Não informado'}</span>
-                                            <span className="w-1.5 h-1.5 rounded-full bg-slate-300"></span>
-                                            <span className="text-sky-600 font-extrabold uppercase">{b.procedimento?.name}</span>
-                                        </div>
-                                    </div>
-                                    {isConfirmed && (
-                                        <span className="px-3 py-1 bg-emerald-100 text-emerald-800 font-black text-[10px] uppercase tracking-wider rounded-full self-start sm:self-auto border border-emerald-200">
-                                            ✓ Confirmado
-                                        </span>
-                                    )}
-                                </div>
-
-                                {isConfirmed && confirmedBooking ? (
-                                    <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                                        <div>
-                                            <span className="text-xs text-emerald-800 font-bold">Agendado para: </span>
-                                            <strong className="text-sm text-emerald-950 font-black">
-                                                {confirmedBooking.appointment_date ? new Date(confirmedBooking.appointment_date + 'T12:00:00').toLocaleDateString('pt-BR') : ''} às {confirmedBooking.appointment_time}
-                                            </strong>
-                                        </div>
-                                        <button
-                                            type="button"
-                                            onClick={() => setPrintingBooking(confirmedBooking)}
-                                            className="px-4 py-2 bg-white border border-emerald-300 hover:bg-emerald-100 text-emerald-800 font-extrabold rounded-xl text-xs uppercase tracking-wider transition-all flex items-center gap-2 shadow-sm cursor-pointer"
-                                        >
-                                            <FileDown className="w-4 h-4 text-emerald-600" />
-                                            Baixar Recibo
-                                        </button>
-                                    </div>
-                                ) : (
-                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
-                                        <div>
-                                            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">
-                                                Data da Consulta
-                                            </label>
-                                            <select
-                                                value={dateVal}
-                                                onChange={(e) => {
-                                                    const d = e.target.value;
-                                                    setReservedDates(prev => ({ ...prev, [b.id]: d }));
-                                                    setReservedTimes(prev => ({ ...prev, [b.id]: '' }));
-                                                }}
-                                                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-bold text-slate-800 focus:bg-white focus:border-sky-500 focus:outline-none"
-                                            >
-                                                <option value="">Selecione a Data...</option>
-                                                {uniqueDates.map(d => (
-                                                    <option key={d} value={d}>
-                                                        {new Date(d + 'T12:00:00').toLocaleDateString('pt-BR')}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        </div>
-
-                                        <div>
-                                            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">
-                                                Hora da Consulta
-                                            </label>
-                                            <select
-                                                disabled={!dateVal}
-                                                value={timeVal}
-                                                onChange={(e) => {
-                                                    setReservedTimes(prev => ({ ...prev, [b.id]: e.target.value }));
-                                                }}
-                                                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-bold text-slate-800 focus:bg-white focus:border-sky-500 focus:outline-none disabled:opacity-50"
-                                            >
-                                                <option value="">Selecione o Horário...</option>
-                                                {timesForSelectedDate.map(t => (
-                                                    <option key={t} value={t}>{t}</option>
-                                                ))}
-                                            </select>
-                                        </div>
-
-                                        <button
-                                            type="button"
-                                            disabled={!dateVal || !timeVal || loading}
-                                            onClick={() => handleConfirmReservedDateAndTime(b.id, dateVal, timeVal)}
-                                            className="w-full py-3 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 disabled:opacity-40 text-white font-black rounded-xl text-xs uppercase tracking-wider shadow-md shadow-sky-500/20 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
-                                        >
-                                            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                                            Confirmar
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-                        );
-                    })}
-                </div>
-                
-                {/* Footer Bar */}
-                <div className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4 mt-auto">
-                    <button
-                        type="button"
-                        onClick={() => {
-                            if (typeof window !== 'undefined' && window.location.pathname === '/Consultas/DefinirAgenda') {
-                                window.history.replaceState({}, '', '/Consultas');
-                            }
-                            onBack();
-                        }}
-                        className="w-full sm:w-auto px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold rounded-2xl text-xs uppercase tracking-wider active:scale-95 transition-all cursor-pointer"
-                    >
-                        Voltar ao Menu
-                    </button>
-                    
-                    {reservedBookings.every(b => !!confirmedReservedBookings[b.id]) ? (
-                        <button
-                            type="button"
-                            onClick={handleCloseReservedModal}
-                            className="w-full sm:w-auto px-8 py-3.5 bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-extrabold rounded-2xl text-xs uppercase tracking-wider active:scale-95 transition-all shadow-lg shadow-emerald-500/20 hover:scale-[1.01] cursor-pointer"
-                        >
-                            Acessar Tela de Acompanhar
-                        </button>
-                    ) : (
-                        <button
-                            type="button"
-                            disabled={true}
-                            className="w-full sm:w-auto px-8 py-3.5 bg-slate-200 text-slate-400 font-extrabold rounded-2xl text-xs uppercase tracking-wider cursor-not-allowed opacity-70"
-                        >
-                            Defina todas as vagas para prosseguir
-                        </button>
-                    )}
-                </div>
-            </div>
-        );
-    }
 
 
 
@@ -2084,6 +1794,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                 key={booking.id}
                                 booking={booking}
                                 queuePosition={queuePositions[booking.id]}
+                                specialSequence={specialSequences[booking.id]}
                                 isOperating={operatingId === booking.id}
                                 canEdit={canEdit}
                                 canComplete={canComplete}

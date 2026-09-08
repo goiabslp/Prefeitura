@@ -1,8 +1,9 @@
 // Módulo de Consultas e Regulação Municipal
 import React, { useState, useEffect } from 'react';
 import { User, AppState } from '../../types';
-import { ArrowLeft, PlusCircle, Activity, History, Database, Users, ShieldCheck, CalendarClock } from 'lucide-react';
+import { ArrowLeft, PlusCircle, Activity, History, Database, Users, ShieldCheck, CalendarClock, CalendarCheck } from 'lucide-react';
 import { NovoAgendamentoScreen } from './NovoAgendamentoScreen';
+import { AgendarScreen } from './AgendarScreen';
 import { AcompanharScreen } from './AcompanharScreen';
 import { DadosScreen } from './DadosScreen';
 import { LiberarVagasScreen } from './LiberarVagasScreen';
@@ -44,11 +45,12 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
     };
 
     const isNovoAgendamentoActive = isModuleActive('parent_consultas_novo_agendamento');
+    const isLiberarVagasActive = isModuleActive('parent_consultas_liberar_vagas') !== false;
+    const isAgendarActive = isModuleActive('parent_consultas_agendar') !== false;
     const isAcompanharActive = isModuleActive('parent_consultas_acompanhar');
     const isDadosActive = isModuleActive('parent_consultas_dados');
     const isPacientesActive = isModuleActive('parent_consultas_pacientes');
     const isGestorActive = isModuleActive('parent_consultas_gestor');
-    const isLiberarVagasActive = isModuleActive('parent_consultas_liberar_vagas') !== false;
 
     const userPerms = currentUser?.permissions || [];
     const hasCustomPerms = Array.isArray(currentUser?.permissions) && currentUser.permissions.length > 0;
@@ -57,6 +59,7 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
 
     const canAccessNovoAgendamento = (isDefaultAdmin || userPerms.includes('parent_consultas_novo_agendamento')) && isNovoAgendamentoActive;
     const canAccessLiberarVagas = (isDefaultAdmin || userPerms.includes('parent_consultas_liberar_vagas') || userPerms.includes('parent_consultas_dados') || isAdmin) && isLiberarVagasActive;
+    const canAccessAgendar = (isDefaultAdmin || userPerms.includes('parent_consultas_agendar') || userPerms.includes('sub_consultas_agendar') || userPerms.includes('parent_consultas_acompanhar') || userPerms.includes('parent_consultas_novo_agendamento') || isAdmin) && isAgendarActive;
     const canAccessAcompanhar = (isDefaultAdmin || userPerms.includes('parent_consultas_acompanhar')) && isAcompanharActive;
     const canAccessDados = (isDefaultAdmin || userPerms.includes('parent_consultas_dados')) && isDadosActive;
     const canAccessPacientes = (isDefaultAdmin || userPerms.includes('parent_consultas_pacientes')) && isPacientesActive;
@@ -64,27 +67,29 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
 
     const showNovoAgendamento = (subView === 'novo-agendamento' || (subView?.startsWith('novo-agendamento') ?? false) || subView === 'vagas-reservadas') && canAccessNovoAgendamento;
     const showLiberarVagas = (subView === 'liberar-vagas') && canAccessLiberarVagas;
+    const showAgendar = (subView === 'agendar') && canAccessAgendar;
     const showAcompanhar = (subView === 'acompanhar' || subView === 'definir-agenda') && canAccessAcompanhar;
     const showDados = (subView === 'dados' || (subView?.startsWith('dados') ?? false)) && canAccessDados;
     const showPacientes = (subView === 'pacientes') && canAccessPacientes;
     const showGestor = (subView === 'gestor') && canAccessGestor;
     
-    const isSubView = showNovoAgendamento || showLiberarVagas || showAcompanhar || showDados || showPacientes || showGestor;
+    const isSubView = showNovoAgendamento || showLiberarVagas || showAgendar || showAcompanhar || showDados || showPacientes || showGestor;
 
     const renderMainScreen = () => {
         const visibleCardsCount = [
             canAccessNovoAgendamento,
             canAccessLiberarVagas,
+            canAccessAgendar,
             canAccessAcompanhar,
             canAccessPacientes,
             canAccessDados,
             canAccessGestor
         ].filter(Boolean).length;
 
-        const gridClass = visibleCardsCount === 5
+        const gridClass = visibleCardsCount >= 6
+            ? "w-full grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7 gap-6 max-w-7xl mb-8"
+            : visibleCardsCount === 5
             ? "w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 max-w-7xl mb-8"
-            : visibleCardsCount === 6
-            ? "w-full grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-6 max-w-7xl mb-8"
             : "w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mb-8";
 
         return (
@@ -162,6 +167,31 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
                             </p>
                             <p className="text-[10px] text-slate-400 mt-2 max-w-[180px] font-medium leading-normal">
                                 Liberação de cotas, definição de datas e controle de vagas por procedimento.
+                            </p>
+                        </button>
+                    )}
+
+                    {/* Card 3: Agendar */}
+                    {canAccessAgendar && (
+                        <button
+                            onClick={() => onNavigate('consultas:agendar')}
+                            className="group relative w-full min-h-[200px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50 border border-slate-100 shadow-[0_10px_35px_rgba(0,0,0,0.03)] hover:shadow-[0_30px_70px_rgba(16,185,129,0.15)] hover:border-emerald-200 hover:from-white hover:to-emerald-50/20 hover:-translate-y-2 active:scale-98 transition-all duration-300 ease-out flex flex-col items-center justify-center text-center overflow-hidden p-6 cursor-pointer"
+                        >
+                            <div className="absolute top-0 right-0 w-36 h-36 bg-emerald-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
+                            <div className="absolute bottom-0 left-0 w-24 h-24 bg-emerald-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
+
+                            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center mb-4 text-white group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-emerald-500/30 ring-4 ring-white">
+                                <CalendarCheck className="w-6.5 h-6.5" />
+                            </div>
+
+                            <h3 className="text-xl font-extrabold text-slate-800 mb-1.5 group-hover:text-slate-900 tracking-tight uppercase">
+                                Agendar
+                            </h3>
+                            <p className="text-xs font-bold text-slate-400 group-hover:text-emerald-600 transition-colors uppercase tracking-widest leading-relaxed">
+                                Vagas Disponíveis
+                            </p>
+                            <p className="text-[10px] text-slate-400 mt-2 max-w-[180px] font-medium leading-normal">
+                                Marcação efetiva de consultas e exames com vagas disponíveis para solicitações promovidas.
                             </p>
                         </button>
                     )}
@@ -298,6 +328,13 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
                             currentUser={currentUser}
                             onBack={() => onNavigate('consultas')}
                             onNavigate={onNavigate}
+                        />
+                    ) : showAgendar ? (
+                        <AgendarScreen
+                            currentUser={currentUser}
+                            onBack={() => onNavigate('consultas')}
+                            onNavigate={onNavigate}
+                            appState={appState}
                         />
                     ) : showAcompanhar ? (
                         <AcompanharScreen

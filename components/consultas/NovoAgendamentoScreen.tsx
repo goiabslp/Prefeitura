@@ -1700,9 +1700,9 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                                          </span>
                                                      </div>
                                                      {bookingPriority === 'Especial' ? (
-                                                         <div className="text-[9.5px] font-bold text-amber-800 bg-amber-50 border border-amber-200 p-2.5 rounded-xl mt-1.5 flex items-center gap-2 shadow-xs">
-                                                             <Sparkles className="w-4 h-4 shrink-0 text-amber-600" />
-                                                             <span>Agendamento Especial Prioritário. Paciente será inserido no topo da fila com prioridade máxima.</span>
+                                                         <div className="text-[9.5px] font-bold text-amber-900 bg-amber-50 border border-amber-300 p-2.5 rounded-xl mt-1.5 flex items-center gap-2 shadow-xs">
+                                                             <Sparkles className="w-4 h-4 shrink-0 text-amber-600 fill-amber-500 animate-pulse" />
+                                                             <span><strong>AGENDAMENTO ESPECIAL:</strong> O paciente será automaticamente posicionado no topo da fila e chamado prioritariamente na próxima vaga liberada.</span>
                                                          </div>
                                                      ) : canSeeSlots && (isWaitlistOnly || getAvailableSlots(selectedProcedure, bookingPriority, bookingDate) <= 0) ? (
                                                          <div className="text-[9.5px] font-bold text-amber-600 bg-amber-50 border border-amber-100 p-2 rounded-xl mt-1.5 flex items-center gap-2 shadow-sm">
@@ -1807,14 +1807,14 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                                      ? 'bg-rose-500 text-white shadow-sm animate-pulse'
                                                      : 'bg-slate-100 text-slate-700'
                                                  }`}>
-                                                     {bookingPriority}
+                                                     {bookingPriority === 'Especial' ? 'AGENDAMENTO ESPECIAL' : bookingPriority}
                                                  </span>
                                              </div>
                                              <div>
                                                  <span className="block text-[8px] font-black text-slate-400 uppercase tracking-wider">Status Estimado</span>
                                                  {bookingPriority === 'Especial' ? (
-                                                     <span className="inline-block text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded mt-0.5 bg-amber-50 text-amber-800 border border-amber-200 font-extrabold flex items-center gap-1">
-                                                         <Sparkles className="w-3 h-3 text-amber-600" /> Fila Prioritária (Especial)
+                                                     <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded mt-0.5 bg-amber-100 text-amber-950 border border-amber-300 font-extrabold shadow-2xs">
+                                                         <Sparkles className="w-3 h-3 text-amber-600 fill-amber-500" /> Topo da Fila (Especial)
                                                      </span>
                                                  ) : !canSeeSlots || isWaitlistOnly ? (
                                                      <span className="inline-block text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded mt-0.5 bg-amber-50 text-amber-700 border border-amber-100 font-extrabold animate-pulse">

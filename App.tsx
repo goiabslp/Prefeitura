@@ -210,6 +210,7 @@ const VIEW_TO_PATH: Record<string, string> = {
   'consultas:vagas-reservadas': '/Consultas/VagasReservadas',
   'consultas:novo-agendamento-definir-agenda': '/Consultas/NovoAgendamento/DefinirAgenda',
   'consultas:liberar-vagas': '/Consultas/LiberarVagas',
+  'consultas:agendar': '/Consultas/Agendar',
   'consultas:acompanhar': '/Consultas/Acompanhar',
   'consultas:dados': '/Consultas/DADOS',
   'consultas:dados-dashboard': '/Consultas/DADOS/Dashboard',
@@ -5432,6 +5433,9 @@ const App: React.FC = () => {
                   } else if (view === 'consultas:liberar-vagas') {
                     setAppState(prev => ({ ...prev, view: 'liberar-vagas' }));
                     window.history.pushState({}, '', '/Consultas/LiberarVagas');
+                  } else if (view === 'consultas:agendar') {
+                    setAppState(prev => ({ ...prev, view: 'agendar' }));
+                    window.history.pushState({}, '', '/Consultas/Agendar');
                   } else if (view === 'consultas:acompanhar') {
                     setAppState(prev => ({ ...prev, view: 'acompanhar' }));
                     window.history.pushState({}, '', '/Consultas/Acompanhar');

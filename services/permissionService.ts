@@ -240,6 +240,13 @@ export const MODULE_ACCESS_TREE: ModuleItemDefinition[] = [
         routes: ['/Consultas/LiberarVagas']
       },
       {
+        key: 'sub_consultas_agendar',
+        legacyKeys: ['parent_consultas_agendar'],
+        label: 'Agendar',
+        description: 'Marcação efetiva de consultas e exames com vagas disponíveis para solicitações promovidas',
+        routes: ['/Consultas/Agendar']
+      },
+      {
         key: 'sub_consultas_acompanhar',
         legacyKeys: ['parent_consultas_acompanhar'],
         label: 'Acompanhar',
