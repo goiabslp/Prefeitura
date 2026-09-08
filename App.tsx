@@ -122,7 +122,7 @@ import { remoteAccessService } from './services/remoteAccessService';
 import { startGlobalLocationTracking, stopGlobalLocationTracking } from './services/locationTrackingService';
 import { PoliticaPrivacidadeScreen } from './components/PoliticaPrivacidadeScreen';
 import { PoliticaPrivacidadeAppScreen } from './components/PoliticaPrivacidadeAppScreen';
-import { canUserAccessRoute, cleanPermissionsArray, userCanAccessModuleParent, MODULE_ACCESS_TREE } from './services/permissionService';
+import { canUserAccessRoute, cleanPermissionsArray } from './services/permissionService';
 import { SystemAIAssistantScreen } from './components/ai/SystemAIAssistantScreen';
 
 const VIEW_TO_PATH: Record<string, string> = {
@@ -352,7 +352,39 @@ const App: React.FC = () => {
     return () => remoteAccessService.unsubscribe(handleStateChange);
   }, []);
   const queryClient = useQueryClient();
+  const { data: licitacaoProcessesData } = useLicitacaoProcesses();
 
+  const mappedLicitacaoOrders: Order[] = React.useMemo(() => {
+    if (!licitacaoProcessesData) return [];
+    return licitacaoProcessesData.map(mapLicitacaoProcessToOrder);
+  }, [licitacaoProcessesData]);
+
+  const updateLicitacaoProcessMutation = useUpdateLicitacaoProcess();
+
+  const handleUpdateLicitacaoPhase = async (orderId: string, phase: string, payload?: any) => {
+    try {
+      const dbUpdates: any = { fase: phase };
+      if (payload?.protocolo) dbUpdates.protocolo = payload.protocolo;
+      if (payload?.checkin_finalizado) dbUpdates.checkin_finalizado = payload.checkin_finalizado;
+
+      await updateLicitacaoProcessMutation.mutateAsync({ id: orderId, updates: dbUpdates });
+      setOrders(orders.map(o => o.id === orderId ? { 
+        ...o, 
+        ...(payload?.protocolo ? { protocol: payload.protocolo } : {}),
+        documentSnapshot: { 
+          ...(o.documentSnapshot || {}), 
+          content: { 
+            ...(o.documentSnapshot?.content || {}), 
+            fase: phase,
+            ...(payload?.checkin_finalizado ? { checkin_finalizado: payload.checkin_finalizado } : {})
+          } 
+        } 
+      } as unknown as Order : o));
+    } catch (error) {
+      console.error('Failed to update phase', error);
+      throw error;
+    }
+  };
 
   const handleUpdateLicitacaoProtocol = async (orderId: string, protocolo: string) => {
     try {
@@ -587,48 +619,6 @@ const App: React.FC = () => {
 
   const { moduleStatus } = useSystemSettings();
   const isModuleActive = (key: string) => moduleStatus[key] !== false;
-
-  const canAccessLicitacao = React.useMemo(() => {
-    if (!currentUser) return false;
-    const def = MODULE_ACCESS_TREE.find(m => m.key === 'parent_licitacao');
-    if (!def) return false;
-    return userCanAccessModuleParent(currentUser, def, moduleStatus);
-  }, [currentUser, moduleStatus]);
-
-  const { data: licitacaoProcessesData } = useLicitacaoProcesses({ enabled: canAccessLicitacao });
-
-  const mappedLicitacaoOrders: Order[] = React.useMemo(() => {
-    if (!licitacaoProcessesData) return [];
-    return licitacaoProcessesData.map(mapLicitacaoProcessToOrder);
-  }, [licitacaoProcessesData]);
-
-  const updateLicitacaoProcessMutation = useUpdateLicitacaoProcess();
-
-  const handleUpdateLicitacaoPhase = async (orderId: string, phase: string, payload?: any) => {
-    try {
-      const dbUpdates: any = { fase: phase };
-      if (payload?.protocolo) dbUpdates.protocolo = payload.protocolo;
-      if (payload?.checkin_finalizado) dbUpdates.checkin_finalizado = payload.checkin_finalizado;
-
-      await updateLicitacaoProcessMutation.mutateAsync({ id: orderId, updates: dbUpdates });
-      setOrders(prevOrders => prevOrders.map(o => o.id === orderId ? { 
-        ...o, 
-        ...(payload?.protocolo ? { protocol: payload.protocolo } : {}),
-        documentSnapshot: { 
-          ...(o.documentSnapshot || {}), 
-          content: { 
-            ...(o.documentSnapshot?.content || {}), 
-            fase: phase,
-            ...(payload?.checkin_finalizado ? { checkin_finalizado: payload.checkin_finalizado } : {})
-          } 
-        } 
-      } as unknown as Order : o));
-    } catch (error) {
-      console.error('Failed to update phase', error);
-      throw error;
-    }
-  };
-
   const permissions = currentUser?.permissions || [];
   const [appState, setAppState] = useState<AppState>(INITIAL_STATE);
   const [activeBlock, setActiveBlock] = useState<BlockType | null>(null);
@@ -659,22 +649,7 @@ const App: React.FC = () => {
 
   const [tasks, setTasks] = useState<Order[]>([]);
 
-  const [users, setUsers] = useState<User[]>(() => {
-    return DEFAULT_USERS.map(u => {
-      try {
-        if (typeof window !== 'undefined') {
-          const savedPerms = localStorage.getItem(`sys_user_permissions_${u.id}`) || localStorage.getItem(`sys_user_permissions_${u.username}`);
-          if (savedPerms) {
-            const parsed = JSON.parse(savedPerms);
-            if (Array.isArray(parsed)) {
-              return { ...u, permissions: parsed };
-            }
-          }
-        }
-      } catch (e) {}
-      return u;
-    });
-  });
+  const [users, setUsers] = useState<User[]>(DEFAULT_USERS);
   // const [signatures, setSignatures] = useState<Signature[]>([]); // DEPRECATED: Signatures are now derived from Users
   const [globalCounter, setGlobalCounter] = useState(0);
 
@@ -1007,20 +982,8 @@ const App: React.FC = () => {
           twoFactorSecret2: ru.two_factor_secret_2
         }));
 
-        const baseUsersList = mappedUsers.length > 0 ? mappedUsers : DEFAULT_USERS;
-        const mergedUsersList = baseUsersList.map(u => {
-          try {
-            const savedPerms = localStorage.getItem(`sys_user_permissions_${u.id}`) || localStorage.getItem(`sys_user_permissions_${u.username}`);
-            if (savedPerms) {
-              const parsed = JSON.parse(savedPerms);
-              if (Array.isArray(parsed)) {
-                return { ...u, permissions: parsed };
-              }
-            }
-          } catch (e) {}
-          return u;
-        });
-        setUsers(mergedUsersList);
+        if (mappedUsers.length > 0) setUsers(mappedUsers);
+        else setUsers(DEFAULT_USERS);
 
         setSectors(savedSectors);
         setJobs(savedJobs);
@@ -3708,29 +3671,12 @@ const App: React.FC = () => {
   const handleStartImpersonation = async (targetUser: User) => {
     if (!rawUser) return;
     try {
-      // Busca a versão mais recente do usuário da lista de usuários e do armazenamento persistente
-      const latestUser = users.find(u => u.id === targetUser.id || u.username.toLowerCase() === targetUser.username.toLowerCase()) || targetUser;
-      let finalPerms = latestUser.permissions || [];
-      try {
-        const savedPerms = localStorage.getItem(`sys_user_permissions_${latestUser.id}`) || 
-                           localStorage.getItem(`sys_user_permissions_${latestUser.username.toLowerCase()}`);
-        if (savedPerms) {
-          const parsed = JSON.parse(savedPerms);
-          if (Array.isArray(parsed)) finalPerms = parsed;
-        }
-      } catch (e) {}
-
-      const userWithLatestPerms: User = {
-        ...latestUser,
-        permissions: finalPerms
-      };
-
-      const session = await impersonationService.startImpersonation(rawUser, userWithLatestPerms);
+      const session = await impersonationService.startImpersonation(rawUser, targetUser);
       setImpersonationSession(session);
       setCurrentView('home');
       setActiveBlock(null);
       window.history.pushState(null, '', '/PaginaInicial');
-      showToast(`Acesso Administrativo iniciado: visualizando como "${userWithLatestPerms.name}".`, "success");
+      showToast(`Acesso Administrativo iniciado: visualizando como "${targetUser.name}".`, "success");
     } catch (err: any) {
       console.error('Erro ao iniciar impersonação:', err);
       alert(err.message || 'Erro ao iniciar acesso como usuário.');
@@ -4238,21 +4184,6 @@ const App: React.FC = () => {
   };
 
   const handleUpdateUserInApp = async (u: User) => {
-    // 1. Persistência local prioritária e infalível de permissões e perfil (para todos os usuários)
-    try {
-      if (typeof window !== 'undefined') {
-        if (u.permissions && Array.isArray(u.permissions)) {
-          localStorage.setItem(`sys_user_permissions_${u.id}`, JSON.stringify(u.permissions));
-          if (u.username) {
-            localStorage.setItem(`sys_user_permissions_${u.username.toLowerCase()}`, JSON.stringify(u.permissions));
-          }
-        }
-        localStorage.setItem(`sys_user_override_${u.id}`, JSON.stringify(u));
-      }
-    } catch (e) {
-      console.warn("Aviso ao salvar permissões localmente:", e);
-    }
-
     // Handle testRole local persistence
     if (u.testRole !== undefined) {
       if (u.testRole) {
@@ -4262,30 +4193,13 @@ const App: React.FC = () => {
       }
     }
 
-    // Atualiza imediatamente o estado em memória para toda a aplicação
-    setUsers(p => p.map(us => us.id === u.id ? u : us));
-
-    // Se estiver em impersonação deste usuário, atualiza a sessão ativa imediatamente
-    if (impersonationSession && (impersonationSession.targetUser.id === u.id || impersonationSession.targetUser.username.toLowerCase() === (u.username || '').toLowerCase())) {
-      setImpersonationSession(prev => prev ? { ...prev, targetUser: { ...prev.targetUser, ...u } } : null);
-      try {
-        const stored = sessionStorage.getItem('sys_active_impersonation_session');
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          parsed.targetUser = { ...parsed.targetUser, ...u, permissions: u.permissions };
-          sessionStorage.setItem('sys_active_impersonation_session', JSON.stringify(parsed));
-        }
-      } catch (e) {}
-    }
-
     // PREVENT DB ERROR: Do not try to update mock users (non-UUID ids) in Supabase
     // Real Supabase IDs are UUIDs (36 chars). Mock IDs are 'user_guilherme', etc.
     const isMockUser = u.id.length < 30 || u.id.startsWith('user_');
 
     if (isMockUser) {
-      if (rawUser && rawUser.id === u.id) {
-        await refreshUser();
-      }
+      console.warn("Skipping DB update for mock user:", u.id);
+      setUsers(p => p.map(us => us.id === u.id ? u : us));
       return;
     }
 
@@ -4324,8 +4238,10 @@ const App: React.FC = () => {
     }
 
     if (error) {
-      console.error("Error updating user profile in Supabase:", error);
+      console.error("Error updating user profile:", error);
+      alert("Erro ao atualizar perfil: " + error.message);
     } else {
+      setUsers(p => p.map(us => us.id === u.id ? u : us));
       if (rawUser && rawUser.id === u.id) {
         await refreshUser();
       }

@@ -26,7 +26,6 @@ import { OnlineUsers } from './OnlineUsers';
 import { useState } from 'react';
 import { getCachedImage, IMAGE_KEYS } from '../services/cacheService';
 import { useLicitacaoProcesses } from '../hooks/useLicitacaoModule';
-import { userCanAccessModuleParent, MODULE_ACCESS_TREE } from '../services/permissionService';
 
 interface AppHeaderProps {
   currentUser: User;
@@ -63,14 +62,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   const isNotHome = currentView !== 'home';
   const isKanbanViewOnly = currentView === 'licitacao:kanban-view' || (typeof window !== 'undefined' && decodeURIComponent(window.location.pathname).toLowerCase().includes('/kanban/view'));
 
-  const canAccessLicitacao = React.useMemo(() => {
-    if (!currentUser) return false;
-    const def = MODULE_ACCESS_TREE.find(m => m.key === 'parent_licitacao');
-    if (!def) return false;
-    return userCanAccessModuleParent(currentUser, def);
-  }, [currentUser]);
-
-  const { data: licitacaoProcessesData } = useLicitacaoProcesses({ enabled: canAccessLicitacao });
+  const { data: licitacaoProcessesData } = useLicitacaoProcesses();
 
   const kanbanStats = React.useMemo(() => {
     if (!licitacaoProcessesData) return { total: 0, emAndamento: 0, urgentes: 0, finalizados: 0 };

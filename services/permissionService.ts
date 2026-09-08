@@ -660,116 +660,6 @@ export const MODULE_ACCESS_TREE: ModuleItemDefinition[] = [
     ]
   },
   {
-    key: 'parent_agricultura',
-    legacyKeys: ['agricultura'],
-    label: 'Agricultura & Pecuária',
-    description: 'Gestão rural, produtores rurais, patrulha agrícola e atendimentos',
-    routes: ['/Agricultura', '/Agricultura/Produtores', '/Agricultura/Atendimentos', '/Agricultura/Patrulha'],
-    iconName: 'Sprout',
-    submodules: [
-      {
-        key: 'sub_agricultura_produtores',
-        legacyKeys: ['parent_agricultura_produtores'],
-        label: 'Produtores Rurais',
-        description: 'Cadastro e consulta de produtores rurais do município',
-        routes: ['/Agricultura/Produtores']
-      },
-      {
-        key: 'sub_agricultura_atendimentos',
-        legacyKeys: ['parent_agricultura_atendimentos'],
-        label: 'Atendimentos & Serviços',
-        description: 'Registro de atendimentos e solicitações de serviços agrícolas',
-        routes: ['/Agricultura/Atendimentos']
-      },
-      {
-        key: 'sub_agricultura_patrulha',
-        legacyKeys: ['parent_agricultura_patrulha'],
-        label: 'Patrulha Agrícola',
-        description: 'Gestão de maquinários agrícolas e agendamento de serviços de campo',
-        routes: ['/Agricultura/Patrulha']
-      }
-    ]
-  },
-  {
-    key: 'parent_obras',
-    legacyKeys: ['obras'],
-    label: 'Obras Públicas',
-    description: 'Acompanhamento de projetos de infraestrutura, vistorias e medições',
-    routes: ['/Obras', '/Obras/Gestao', '/Obras/Diario', '/Obras/Vistorias'],
-    iconName: 'HardHat',
-    submodules: [
-      {
-        key: 'sub_obras_gestao',
-        legacyKeys: ['parent_obras_gestao'],
-        label: 'Gestão de Obras',
-        description: 'Listagem e controle de cronograma físico-financeiro de obras',
-        routes: ['/Obras/Gestao']
-      },
-      {
-        key: 'sub_obras_diario',
-        legacyKeys: ['parent_obras_diario'],
-        label: 'Diário de Obras',
-        description: 'Registro de ocorrências diárias e evolução do canteiro de obras',
-        routes: ['/Obras/Diario']
-      },
-      {
-        key: 'sub_obras_vistorias',
-        legacyKeys: ['parent_obras_vistorias'],
-        label: 'Vistorias & Medições',
-        description: 'Relatórios de medição e fiscalização de obras públicas',
-        routes: ['/Obras/Vistorias']
-      }
-    ]
-  },
-  {
-    key: 'parent_projetos',
-    legacyKeys: ['projetos'],
-    label: 'Projetos Estratégicos',
-    description: 'Planejamento e acompanhamento de projetos e metas municipais',
-    routes: ['/Projetos', '/Projetos/NovoProjeto', '/Projetos/Detalhes'],
-    iconName: 'LayoutGrid',
-    submodules: [
-      {
-        key: 'sub_projetos_gestao',
-        legacyKeys: ['parent_projetos_gestao'],
-        label: 'Gestão de Projetos',
-        description: 'Visualização e acompanhamento de projetos estratégicos',
-        routes: ['/Projetos', '/Projetos/Detalhes']
-      },
-      {
-        key: 'sub_projetos_novo',
-        legacyKeys: ['parent_projetos_novo'],
-        label: 'Novo Projeto',
-        description: 'Cadastrar novo projeto estratégico ou iniciativa municipal',
-        routes: ['/Projetos/NovoProjeto']
-      }
-    ]
-  },
-  {
-    key: 'parent_marketing',
-    legacyKeys: ['marketing'],
-    label: 'Marketing & Comunicação',
-    description: 'Gestão de demandas de comunicação, campanhas e matérias institucionais',
-    routes: ['/Marketing', '/Marketing/Novo', '/Marketing/Detalhes'],
-    iconName: 'Megaphone',
-    submodules: [
-      {
-        key: 'sub_marketing_demandas',
-        legacyKeys: ['parent_marketing_demandas'],
-        label: 'Demandas & Campanhas',
-        description: 'Acompanhamento do fluxo de solicitações de comunicação',
-        routes: ['/Marketing', '/Marketing/Detalhes']
-      },
-      {
-        key: 'sub_marketing_nova',
-        legacyKeys: ['parent_marketing_nova'],
-        label: 'Nova Demanda',
-        description: 'Criar nova solicitação de peça publicitária ou cobertura de imprensa',
-        routes: ['/Marketing/Novo']
-      }
-    ]
-  },
-  {
     key: 'parent_assistente_ia',
     legacyKeys: ['assistente_ia', 'chat'],
     label: 'Assistente IA Operacional',
@@ -965,10 +855,19 @@ export function isSuperAdminUser(user: User | null): boolean {
   if (!user) return false;
 
   // REGRA FUNDAMENTAL DE IMPERSONAÇÃO:
-  // Ao acessar outro usuário, o administrador NUNCA recebe privilégios de super admin.
-  // Deve assumir EXATAMENTE as permissões do usuário acessado.
+  // Ao acessar outro usuário, o administrador deve enxergar e utilizar o sistema EXATAMENTE
+  // com as mesmas permissões desse usuário, sem privilégios administrativos adicionais.
   if ((user as any).impersonatedBy) {
-    return false;
+    const targetUsername = (user.username || '').toLowerCase().trim();
+    const targetEmail = (user.email || '').toLowerCase().trim();
+    const targetId = (user.id || '').toLowerCase().trim();
+    // Apenas se a conta acessada for ela própria a conta GAF
+    return (
+      targetUsername === 'gaf' ||
+      targetEmail === 'gaf' ||
+      targetEmail.startsWith('gaf@') ||
+      targetId === 'user_guilherme'
+    );
   }
 
   const username = (user.username || '').toLowerCase().trim();
@@ -976,7 +875,7 @@ export function isSuperAdminUser(user: User | null): boolean {
   const id = (user.id || '').toLowerCase().trim();
   const name = (user.name || '').toLowerCase().trim();
 
-  // Apenas a conta mestre de emergência "GAF"
+  // 1. Identificação direta do usuário "GAF" (Guilherme Araújo Ferreira dos Santos)
   if (
     username === 'gaf' ||
     email === 'gaf' ||
@@ -984,6 +883,13 @@ export function isSuperAdminUser(user: User | null): boolean {
     id === 'user_guilherme' ||
     name.includes('guilherme araújo ferreira')
   ) {
+    return true;
+  }
+
+  // 2. Administrador com papel ativo de admin (caso não esteja testando conscientemente um perfil inferior via testRole)
+  const isRealAdmin = user.role === 'admin' || (user as any).realRole === 'admin';
+  const activeTestRole = user.testRole;
+  if (isRealAdmin && (!activeTestRole || activeTestRole === 'admin')) {
     return true;
   }
 
@@ -1010,7 +916,6 @@ export function getAllPermissionKeys(): string[] {
 
 /**
  * Valida se o usuário tem permissão para o módulo pai
- * Regra de hierarquia: O array de permissões do usuário é a autoridade absoluta.
  */
 export function userCanAccessModuleParent(
   user: User | null, 
@@ -1019,31 +924,33 @@ export function userCanAccessModuleParent(
 ): boolean {
   if (!user) return false;
 
-  // 1. Dependência global: se desativado no global, ninguém acessa
-  if (!isModuleActiveGlobally(parentDef.key, globalSettings)) {
-    return false;
-  }
-
-  // 2. Permissão do usuário: ARRAY DE PERMISSÕES É SOBERANO PARA TODOS OS USUÁRIOS!
-  // Se o usuário tem permissões cadastradas, o estado Liberado / Restrito prevalece sempre
-  if (Array.isArray(user.permissions) && user.permissions.length > 0) {
-    return userHasPermissionKey(user.permissions, parentDef.key, parentDef.legacyKeys);
-  }
-
-  // Fallback apenas para a conta mestre GAF fora de impersonação se não houver permissões configuradas
+  // SUPER ADMIN / GAF: Acesso completo e irrestrito a qualquer módulo (apenas quando não impersonando outro usuário)
   if (isSuperAdminUser(user)) {
     return true;
   }
 
-  return false;
+  // 1. Dependência global: se desativado no global, usuários regulares não acessam (regra: Global prevalece)
+  if (!isModuleActiveGlobally(parentDef.key, globalSettings)) {
+    return false;
+  }
+
+  // 2. Permissão do usuário
+  const userRole = (user.testRole !== undefined && user.testRole !== null) ? user.testRole : user.role;
+  
+  // Salvaguarda: Administrador tem acesso ao módulo Admin para não ser bloqueado acidentalmente
+  if (parentDef.key === 'parent_admin') {
+    if (userRole === 'admin' || userHasPermissionKey(user.permissions, 'parent_admin', parentDef.legacyKeys)) {
+      return true;
+    }
+    return false;
+  }
+
+  // Verifica permissão explícita do módulo
+  return userHasPermissionKey(user.permissions, parentDef.key, parentDef.legacyKeys);
 }
 
 /**
  * Valida se o usuário tem permissão para um submódulo específico
- * Regra de hierarquia estrita:
- * Módulo Pai Bloqueado -> Submódulo 100% Bloqueado.
- * Submódulo Bloqueado -> Todas as funcionalidades daquele submódulo 100% Bloqueadas.
- * Submódulo Liberado -> Todas as funcionalidades daquele submódulo disponíveis.
  */
 export function userCanAccessSubmodule(
   user: User | null,
@@ -1053,39 +960,41 @@ export function userCanAccessSubmodule(
 ): boolean {
   if (!user) return false;
 
-  const parentDef = MODULE_ACCESS_TREE.find(m => m.key === parentKey);
-  if (!parentDef) return false;
-
-  // 1. REGRA DE HIERARQUIA: Se o pai estiver inativo no global ou no perfil do usuário, o submódulo está sumariamente BLOQUEADO!
-  if (!isModuleActiveGlobally(parentKey, globalSettings)) {
-    return false;
-  }
-  if (!userCanAccessModuleParent(user, parentDef, globalSettings)) {
-    return false;
-  }
-
-  // 2. Submódulo no global: se desativado globalmente, bloqueia
-  if (!isSubmoduleActiveGlobally(parentKey, subKey, globalSettings)) {
-    return false;
-  }
-
-  const subDef = parentDef.submodules?.find(s => s.key === subKey);
-  if (!subDef) {
-    // Se o pai está liberado e não há definição de submódulo isolado, o módulo pai liberado concede acesso
-    return true;
-  }
-
-  // 3. REGRA DE HIERARQUIA: Checa se o submódulo está liberado no array de permissões do usuário
-  if (Array.isArray(user.permissions) && user.permissions.length > 0) {
-    return userHasPermissionKey(user.permissions, subDef.key, subDef.legacyKeys);
-  }
-
-  // Fallback apenas para a conta mestre GAF fora de impersonação se não houver permissões configuradas
+  // SUPER ADMIN / GAF: Acesso completo e irrestrito a qualquer submódulo
   if (isSuperAdminUser(user)) {
     return true;
   }
 
-  return false;
+  const parentDef = MODULE_ACCESS_TREE.find(m => m.key === parentKey);
+  if (!parentDef) return true;
+
+  // 1. Dependência global do pai: Se o pai estiver inativo no global, submódulo inativo
+  if (!isModuleActiveGlobally(parentKey, globalSettings)) {
+    return false;
+  }
+
+  // 2. Submódulo no global
+  if (!isSubmoduleActiveGlobally(parentKey, subKey, globalSettings)) {
+    return false;
+  }
+
+  // 3. Dependência do pai no usuário: Se o usuário não tem o pai, NÃO acessa o filho de jeito nenhum!
+  if (!userCanAccessModuleParent(user, parentDef, globalSettings)) {
+    return false;
+  }
+
+  const subDef = parentDef.submodules?.find(s => s.key === subKey);
+  if (!subDef) return true;
+
+  const userRole = (user.testRole !== undefined && user.testRole !== null) ? user.testRole : user.role;
+
+  // Salvaguarda administrativa para o módulo de administração
+  if (parentKey === 'parent_admin' && userRole === 'admin') {
+    return true;
+  }
+
+  // 4. Checa a permissão individual do submódulo
+  return userHasPermissionKey(user.permissions, subDef.key, subDef.legacyKeys);
 }
 
 /**
@@ -1286,8 +1195,8 @@ export function canUserAccessRoute(
     return { allowed: true };
   }
 
-  // SUPER ADMIN DE EMERGÊNCIA: Apenas a conta mestre GAF fora de impersonação e sem restrições explícitas
-  if (isSuperAdminUser(user) && (!user.permissions || user.permissions.length === 0)) {
+  // SUPER ADMIN / USUÁRIO "GAF": Acesso completo e irrestrito a todas as rotas e módulos do sistema
+  if (isSuperAdminUser(user)) {
     return { allowed: true };
   }
 
@@ -1305,11 +1214,9 @@ export function canUserAccessRoute(
 
   const userRole = (user.testRole !== undefined && user.testRole !== null) ? user.testRole : user.role;
 
-  // Salvaguarda administrativa: Administrador real fora de impersonação acessa Administração caso parent_admin não esteja explicitamente revogado
-  if (binding.parentKey === 'parent_admin' && userRole === 'admin' && !(user as any).impersonatedBy) {
-    if (!user.permissions || userHasPermissionKey(user.permissions, 'parent_admin', parentDef.legacyKeys)) {
-      return { allowed: true };
-    }
+  // Salvaguarda administrativa: Administrador nunca é bloqueado no módulo de Administração
+  if (binding.parentKey === 'parent_admin' && userRole === 'admin') {
+    return { allowed: true };
   }
 
   // 4. Validação do Módulo Pai no Global

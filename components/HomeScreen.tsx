@@ -616,7 +616,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                             </div>
 
                             {/* Banner de Viagem em Andamento */}
-                            {activeTrip && canAccessDiarias && (
+                            {activeTrip && (
                                 <div
                                     onClick={() => {
                                         window.history.pushState({}, '', `/Diarias/Viajar/Detalhes?id=${activeTrip.id}`);
