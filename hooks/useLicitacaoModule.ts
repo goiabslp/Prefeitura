@@ -11,12 +11,13 @@ export const licitacaoKeys = {
     detail: (id: string) => [...licitacaoKeys.details(), id] as const,
 };
 
-export const useLicitacaoProcesses = (options?: { refetchInterval?: number | false }) => {
+export const useLicitacaoProcesses = (options?: { refetchInterval?: number | false; enabled?: boolean }) => {
     return useQuery({
         queryKey: licitacaoKeys.lists(),
         queryFn: licitacaoService.getLicitacaoProcesses,
         refetchInterval: options?.refetchInterval !== undefined ? options.refetchInterval : false,
-        refetchOnWindowFocus: true
+        refetchOnWindowFocus: true,
+        enabled: options?.enabled !== undefined ? options.enabled : true
     });
 };
 

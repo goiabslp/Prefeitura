@@ -105,6 +105,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
 
             if (data) {
+                let finalPermissions = data.permissions || [];
+                try {
+                    const savedPerms = localStorage.getItem(`sys_user_permissions_${data.id}`) || 
+                                       localStorage.getItem(`sys_user_permissions_${(data.username || '').toLowerCase()}`);
+                    if (savedPerms) {
+                        const parsed = JSON.parse(savedPerms);
+                        if (Array.isArray(parsed)) {
+                            finalPermissions = parsed;
+                        }
+                    }
+                } catch (e) {}
+
                 const appUser: User = {
                     id: data.id,
                     username: data.username || email.split('@')[0], // Fallback username
@@ -116,7 +128,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     jobTitle: data.job_title,
                     jobId: data.job_id,
                     allowedSignatureIds: data.allowed_signature_ids || [],
-                    permissions: data.permissions || [],
+                    permissions: finalPermissions,
                     tempPassword: data.temp_password || undefined,
                     tempPasswordExpiresAt: data.temp_password_expires_at || undefined,
                     email: data.email || email,

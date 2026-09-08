@@ -14,10 +14,12 @@ export const purchaseOrderKeys = {
 };
 
 // Hook to fetch lightweight list
-export const usePurchaseOrders = () => {
+export const usePurchaseOrders = (options?: { enabled?: boolean }) => {
     const queryClient = useQueryClient();
+    const isEnabled = options?.enabled !== undefined ? options.enabled : true;
 
     useEffect(() => {
+        if (!isEnabled) return;
         const channel = supabase
             .channel('realtime:purchase_orders')
             .on(
@@ -32,7 +34,7 @@ export const usePurchaseOrders = () => {
         return () => {
             supabase.removeChannel(channel);
         };
-    }, [queryClient]);
+    }, [queryClient, isEnabled]);
 
     return useQuery({
         queryKey: purchaseOrderKeys.lists(),
@@ -42,6 +44,7 @@ export const usePurchaseOrders = () => {
         },
         staleTime: 1000 * 60 * 5, // 5 minutes
         refetchOnWindowFocus: false,
+        enabled: isEnabled
     });
 };
 
