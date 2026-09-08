@@ -6,7 +6,7 @@ import {
   Plus, Search, Edit2, Trash2, ShieldCheck, Users, Save, X, Key,
   PenTool, LayoutGrid, User as UserIcon, CheckCircle2, Gavel, ShoppingCart, Briefcase, Network,
   Eye, EyeOff, RotateCcw, AlertTriangle, Clock, Lock, Copy, Check, Info, Trash, ToggleRight, ArrowLeft, RefreshCw, Megaphone, FlaskConical, Calendar,
-  ChevronDown, ChevronUp, CheckSquare, Square, Filter
+  ChevronDown, ChevronUp, CheckSquare, Square, Filter, UserCheck, ShieldAlert
 } from 'lucide-react';
 import { googleCalendarService } from '../services/googleCalendarService';
 import { ModuleAccessControlTree } from './admin/ModuleAccessControlTree';
@@ -52,6 +52,7 @@ interface UserManagementScreenProps {
   onAddUser: (user: User) => void;
   onUpdateUser: (user: User) => void;
   onDeleteUser: (userId: string) => void;
+  onImpersonateUser?: (user: User) => void;
   availableSignatures: Signature[];
   jobs: Job[];
   sectors: Sector[];
@@ -94,6 +95,7 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
   onAddUser,
   onUpdateUser,
   onDeleteUser,
+  onImpersonateUser,
   availableSignatures,
   jobs,
   sectors,
@@ -118,6 +120,12 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
   const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean, title: string, message: string, onConfirm: () => void, type: 'danger' | 'warning' | 'info' }>({
     isOpen: false, title: '', message: '', onConfirm: () => { }, type: 'info'
   });
+  // Modal de Confirmação de Impersonação Administrativa
+  const [impersonateModal, setImpersonateModal] = useState<{
+    isOpen: boolean;
+    targetUser: User | null;
+  }>({ isOpen: false, targetUser: null });
+
   const [toast, setToast] = useState<{ show: boolean, message: string, type: 'success' | 'error' }>({ show: false, message: '', type: 'success' });
   const [googleLoading, setGoogleLoading] = useState(false);
   const [isGoogleConnectModalOpen, setIsGoogleConnectModalOpen] = useState(false);
@@ -724,6 +732,18 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
 
                   {/* Actions - Modernized */}
                   <div className="flex items-center gap-3 w-full md:w-auto justify-end border-t md:border-t-0 border-slate-100 pt-4 md:pt-0">
+                    {isAdmin && user.id !== currentUser.id && onImpersonateUser && (
+                      <button
+                        type="button"
+                        onClick={() => setImpersonateModal({ isOpen: true, targetUser: user })}
+                        className="group/btn relative px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/90 text-amber-900 hover:from-amber-100 hover:to-orange-100 hover:border-amber-300 hover:shadow-md hover:shadow-amber-500/15 hover:-translate-y-0.5 transition-all duration-300 flex items-center gap-2 font-bold text-xs uppercase tracking-wide cursor-pointer"
+                        title="Acessar o sistema com a visão e permissões deste usuário"
+                      >
+                        <UserCheck className="w-4 h-4 text-amber-600 group-hover/btn:scale-110 transition-transform" />
+                        <span className="hidden sm:inline">Acessar como usuário</span>
+                      </button>
+                    )}
+
                     <button
                       onClick={() => handleOpenEditUser(user)}
                       className="group/btn relative px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-500 hover:text-indigo-600 hover:border-indigo-200 hover:shadow-lg hover:shadow-indigo-500/10 hover:-translate-y-0.5 transition-all duration-300 flex items-center gap-2 font-bold text-xs uppercase tracking-wide cursor-pointer"
@@ -1863,6 +1883,118 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                     className="w-full py-4 bg-white text-slate-400 font-black text-xs uppercase tracking-[0.2em] rounded-2xl border border-slate-200 hover:bg-slate-50 hover:text-slate-600 transition-all"
                   >
                     Voltar / Cancelar
+                  </button>
+                </div>
+              </div>
+            </div>,
+            document.body
+          )
+        }
+
+        {/* MODAL DE CONFIRMAÇÃO DE ACESSO COMO USUÁRIO (IMPERSONATION) */}
+        {
+          impersonateModal.isOpen && impersonateModal.targetUser && createPortal(
+            <div className="fixed inset-0 z-[220] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md animate-fade-in">
+              <div className="w-full max-w-lg bg-white rounded-[2.5rem] shadow-2xl overflow-hidden animate-slide-up border border-slate-100 flex flex-col">
+                {/* Header do Modal */}
+                <div className="p-6 md:p-8 bg-gradient-to-br from-amber-500 via-amber-600 to-orange-600 text-white relative overflow-hidden">
+                  <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
+                    <UserCheck className="w-36 h-36" />
+                  </div>
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="p-2.5 bg-white/20 backdrop-blur-md rounded-2xl border border-white/30 text-white shadow-inner">
+                      <ShieldAlert className="w-6 h-6" />
+                    </div>
+                    <span className="px-3 py-1 bg-black/25 backdrop-blur-md rounded-full text-[10px] font-black uppercase tracking-widest text-amber-100 border border-white/20">
+                      Sessão Administrativa Temporária
+                    </span>
+                  </div>
+                  <h3 className="text-2xl font-black tracking-tight text-white">
+                    Acessar como Usuário
+                  </h3>
+                  <p className="text-amber-100/90 text-xs md:text-sm font-medium mt-1">
+                    Você visualizará o sistema exatamente com o perfil, telas e permissões do usuário selecionado.
+                  </p>
+                </div>
+
+                {/* Corpo com Detalhes do Usuário */}
+                <div className="p-6 md:p-8 space-y-6">
+                  {/* Card do Usuário Alvo */}
+                  <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 flex items-center gap-4">
+                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center text-xl font-black shadow-inner shrink-0 overflow-hidden">
+                      {impersonateModal.targetUser.avatar ? (
+                        <img src={impersonateModal.targetUser.avatar} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        impersonateModal.targetUser.name.charAt(0).toUpperCase()
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h4 className="font-bold text-base text-slate-900 truncate">
+                        {impersonateModal.targetUser.name}
+                      </h4>
+                      <p className="text-xs text-slate-500 font-medium">
+                        @{impersonateModal.targetUser.username} {impersonateModal.targetUser.email ? `• ${impersonateModal.targetUser.email}` : ''}
+                      </p>
+                      <div className="flex items-center gap-2 mt-2 flex-wrap">
+                        <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-100 rounded text-[10px] font-bold uppercase tracking-wider">
+                          Cargo: {impersonateModal.targetUser.role}
+                        </span>
+                        {impersonateModal.targetUser.sector && (
+                          <span className="px-2 py-0.5 bg-slate-200 text-slate-700 rounded text-[10px] font-semibold">
+                            {impersonateModal.targetUser.sector}
+                          </span>
+                        )}
+                        <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded text-[10px] font-bold">
+                          {impersonateModal.targetUser.permissions?.length || 0} permissões
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Termos de Segurança e Auditoria */}
+                  <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200 text-amber-950 space-y-2 text-xs">
+                    <div className="flex items-center gap-2 font-bold text-amber-900 uppercase tracking-wider text-[11px]">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                      Regras de Auditoria e Conformidade
+                    </div>
+                    <ul className="space-y-1.5 pl-5 list-disc text-amber-900/90 leading-relaxed font-medium">
+                      <li>
+                        A sessão é <strong>temporária</strong> e auditada em tempo real no banco de dados.
+                      </li>
+                      <li>
+                        Todas as ações registradas manterão a autoria do administrador real (<strong>{currentUser.name}</strong>).
+                      </li>
+                      <li>
+                        Nenhuma senha do usuário será visualizada, alterada ou exigida.
+                      </li>
+                      <li>
+                        Um banner fixo permanecerá no topo de todas as páginas para permitir o encerramento imediato a qualquer instante.
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+
+                {/* Ações do Modal */}
+                <div className="p-6 bg-slate-50 border-t border-slate-100 flex flex-col sm:flex-row gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (impersonateModal.targetUser && onImpersonateUser) {
+                        onImpersonateUser(impersonateModal.targetUser);
+                      }
+                      setImpersonateModal({ isOpen: false, targetUser: null });
+                    }}
+                    className="flex-1 py-3.5 px-6 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-black text-xs uppercase tracking-widest rounded-2xl shadow-lg shadow-amber-600/25 hover:shadow-xl hover:scale-[1.01] active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <UserCheck className="w-4 h-4" />
+                    <span>Confirmar e Iniciar Acesso</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setImpersonateModal({ isOpen: false, targetUser: null })}
+                    className="py-3.5 px-6 bg-white hover:bg-slate-100 text-slate-600 font-black text-xs uppercase tracking-wider rounded-2xl border border-slate-200 hover:border-slate-300 transition-all cursor-pointer"
+                  >
+                    Cancelar
                   </button>
                 </div>
               </div>

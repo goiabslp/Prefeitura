@@ -53,14 +53,53 @@ export const auditLogService = {
     try {
       const user = await this.getCurrentUser();
 
+      // Verifica se há impersonação ativa para auditoria indelével
+      let activeImpersonation: any = null;
+      if (typeof window !== 'undefined') {
+        try {
+          const raw = window.sessionStorage.getItem('sys_active_impersonation_session');
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (new Date(parsed.expiresAt).getTime() > Date.now()) {
+              activeImpersonation = parsed;
+            }
+          }
+        } catch (e) {
+          // Fallback silencioso caso storage esteja inacessível
+        }
+      }
+
+      let finalUserName = user?.name || 'Usuário Anônimo';
+      let finalDescription = log.description;
+      const finalDetails = { ...(log.details || {}) };
+
+      // Se a ação for o próprio início ou término da impersonação, preserva a descrição original
+      const isImpersonationLifecycle = log.action_type === 'IMPERSONATION_START' || log.action_type === 'IMPERSONATION_END';
+
+      if (activeImpersonation && !isImpersonationLifecycle) {
+        finalUserName = `${activeImpersonation.realAdmin.name} [Visualizando como: ${activeImpersonation.targetUser.name}]`;
+        finalDescription = `[ACESSO ADMINISTRATIVO - Operando como: ${activeImpersonation.targetUser.name}] ${log.description}`;
+        finalDetails.audit_impersonation = {
+          is_impersonating: true,
+          session_id: activeImpersonation.sessionId,
+          real_admin_id: activeImpersonation.realAdmin.id,
+          real_admin_name: activeImpersonation.realAdmin.name,
+          real_admin_username: activeImpersonation.realAdmin.username,
+          real_admin_email: activeImpersonation.realAdmin.email,
+          target_user_id: activeImpersonation.targetUser.id,
+          target_user_name: activeImpersonation.targetUser.name,
+          target_user_username: activeImpersonation.targetUser.username
+        };
+      }
+
       const { error } = await supabase.from('audit_logs').insert([{
         user_id: user?.id || null,
-        user_name: user?.name || 'Usuário Anônimo',
+        user_name: finalUserName,
         user_email: user?.email || '',
         action_type: log.action_type,
         module: log.module || null,
-        description: log.description,
-        details: log.details || {}
+        description: finalDescription,
+        details: finalDetails
       }]);
       
       if (error) {

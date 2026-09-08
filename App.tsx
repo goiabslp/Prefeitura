@@ -24,6 +24,7 @@ import * as oficiosService from './services/oficiosService';
 import * as settingsService from './services/settingsService';
 import * as db from './services/dbService';
 import { auditLogService } from './services/auditLogService';
+import { impersonationService, ImpersonationSession } from './services/impersonationService';
 import {
   INITIAL_STATE,
   DEFAULT_USERS,
@@ -397,8 +398,24 @@ const App: React.FC = () => {
 
   const { user: rawUser, signIn, signOut, refreshUser, loading: authLoading } = useAuth();
 
+  // Estado da Sessão Ativa de Impersonação Administrativa
+  const [impersonationSession, setImpersonationSession] = useState<ImpersonationSession | null>(() => {
+    return impersonationService.getActiveImpersonation();
+  });
+
   const currentUser = React.useMemo(() => {
     if (!rawUser) return null;
+
+    // Se houver impersonação administrativa ativa:
+    // O currentUser assume a visão, dados e permissões do usuário alvo
+    if (impersonationSession) {
+      return {
+        ...impersonationSession.targetUser,
+        realRole: rawUser.role,
+        impersonatedBy: impersonationSession.realAdmin
+      };
+    }
+
     const isUserAdmin = rawUser.role === 'admin' || rawUser.realRole === 'admin';
     const activeTestRole = rawUser.testRole || (isUserAdmin ? (localStorage.getItem(`test_role_${rawUser.id}`) as UserRole) : null);
 
@@ -441,7 +458,7 @@ const App: React.FC = () => {
       realRole: rawUser.role,
       permissions: testPermissions
     };
-  }, [rawUser]);
+  }, [rawUser, impersonationSession]);
 
   const { moduleStatus } = useSystemSettings();
   const isModuleActive = (key: string) => moduleStatus[key] !== false;
@@ -3489,6 +3506,36 @@ const App: React.FC = () => {
     setIsFinalizedView(false);
   };
 
+  const handleStartImpersonation = async (targetUser: User) => {
+    if (!rawUser) return;
+    try {
+      const session = await impersonationService.startImpersonation(rawUser, targetUser);
+      setImpersonationSession(session);
+      setCurrentView('home');
+      setActiveBlock(null);
+      window.history.pushState(null, '', '/PaginaInicial');
+      showToast(`Acesso Administrativo iniciado: visualizando como "${targetUser.name}".`, "success");
+    } catch (err: any) {
+      console.error('Erro ao iniciar impersonação:', err);
+      alert(err.message || 'Erro ao iniciar acesso como usuário.');
+    }
+  };
+
+  const handleStopImpersonation = async () => {
+    try {
+      await impersonationService.stopImpersonation();
+      setImpersonationSession(null);
+      setCurrentView('admin');
+      setAdminTab('users');
+      window.history.pushState(null, '', '/Admin/Usuarios');
+      showToast("Sessão administrativa encerrada com sucesso.", "success");
+    } catch (err: any) {
+      console.error('Erro ao encerrar impersonação:', err);
+      impersonationService.clearSession();
+      setImpersonationSession(null);
+    }
+  };
+
   const handleLogout = async () => {
     if (currentUser) {
       await auditLogService.logAction({
@@ -3497,6 +3544,8 @@ const App: React.FC = () => {
         description: `Logout efetuado com sucesso pelo usuário ${currentUser.name}`
       });
     }
+    impersonationService.clearSession();
+    setImpersonationSession(null);
     auditLogService.clearCache();
     await signOut();
     clearDraft(); // Clear draft on logout
@@ -4178,6 +4227,8 @@ const App: React.FC = () => {
               onRefresh={refreshData}
               currentSubView={appState.view}
               systemUpdateCountdown={systemUpdateCountdown}
+              impersonationSession={impersonationSession}
+              onStopImpersonation={handleStopImpersonation}
             />}
           </div>
           <div className="flex-1 flex relative overflow-hidden">
@@ -4255,6 +4306,7 @@ const App: React.FC = () => {
                       <UserManagementScreen
                         users={users}
                         currentUser={currentUser}
+                        onImpersonateUser={handleStartImpersonation}
                         onAddUser={async (u) => {
                           // Prepare user data for Supabase
                           const email = u.username.includes('@') ? u.username : `${u.username}@projeto.local`;

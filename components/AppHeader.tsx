@@ -12,9 +12,12 @@ import {
   Bot,
   ShieldCheck,
   ShieldOff,
+  ShieldAlert,
+  Eye,
   Tv
 } from 'lucide-react';
 import { User, UIConfig, BlockType } from '../types';
+import { ImpersonationSession } from '../services/impersonationService';
 import { useNotification } from '../contexts/NotificationContext';
 import { useChat } from '../contexts/ChatContext';
 import { NotificationCenter } from './NotificationCenter';
@@ -36,6 +39,8 @@ interface AppHeaderProps {
   isRefreshing: boolean;
   currentSubView?: string;
   systemUpdateCountdown: number | null;
+  impersonationSession?: ImpersonationSession | null;
+  onStopImpersonation?: () => void;
 }
 
 export const AppHeader: React.FC<AppHeaderProps> = ({
@@ -49,7 +54,9 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   onRefresh,
   isRefreshing,
   currentSubView,
-  systemUpdateCountdown
+  systemUpdateCountdown,
+  impersonationSession,
+  onStopImpersonation
 }) => {
   const isAdmin = currentUser?.role === 'admin';
   const isNotHome = currentView !== 'home';
@@ -288,7 +295,60 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   };
 
   return (
-    <header className="sticky top-0 z-[60] w-full border-b shrink-0 transition-all duration-500 ease-in-out bg-white/80 backdrop-blur-md border-slate-200">
+    <header className={`sticky top-0 z-[60] w-full border-b shrink-0 transition-all duration-500 ease-in-out backdrop-blur-md ${
+      impersonationSession
+        ? 'bg-amber-50/90 border-amber-300 shadow-lg shadow-amber-900/5'
+        : 'bg-white/80 border-slate-200'
+    }`}>
+      {/* Banner Permanente de Impersonação Administrativa */}
+      {impersonationSession && (
+        <div className="w-full bg-gradient-to-r from-amber-600 via-amber-500 to-amber-700 text-white px-4 md:px-8 py-2.5 shadow-md flex flex-col sm:flex-row items-center justify-between gap-3 border-b border-amber-400/40 animate-slide-down">
+          <div className="flex items-center gap-3 flex-wrap justify-center sm:justify-start">
+            <span className="flex items-center gap-1.5 px-2.5 py-1 bg-black/25 backdrop-blur-md text-amber-100 rounded-lg text-[10px] md:text-xs font-black uppercase tracking-widest border border-white/20 shadow-inner">
+              <ShieldAlert className="w-3.5 h-3.5 text-amber-200 animate-pulse" />
+              ACESSO ADMINISTRATIVO
+            </span>
+            <span className="text-white/70 hidden sm:inline text-sm">•</span>
+            <div className="flex items-center gap-2 text-xs md:text-sm">
+              <span className="font-medium text-amber-100">Visualizando como:</span>
+              <span className="font-black text-white bg-white/20 px-2.5 py-0.5 rounded-md border border-white/25 shadow-xs">
+                {impersonationSession.targetUser.name}
+              </span>
+              <span className="text-amber-200/90 text-xs font-semibold">
+                (@{impersonationSession.targetUser.username})
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 hidden md:flex">
+              <span className="px-2 py-0.5 bg-black/20 text-white text-[10px] font-bold uppercase rounded tracking-wider">
+                {impersonationSession.targetUser.role}
+              </span>
+              {impersonationSession.targetUser.sector && (
+                <span className="px-2 py-0.5 bg-white/20 text-white text-[10px] font-semibold rounded">
+                  {impersonationSession.targetUser.sector}
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 shrink-0">
+            <span className="hidden xl:inline text-[11px] text-amber-100/90 font-medium">
+              Admin Real: <strong>{impersonationSession.realAdmin.name}</strong>
+            </span>
+            {onStopImpersonation && (
+              <button
+                type="button"
+                onClick={onStopImpersonation}
+                className="flex items-center gap-2 px-3.5 py-1.5 bg-white hover:bg-amber-50 text-amber-950 font-black text-xs uppercase tracking-wider rounded-xl shadow-md hover:shadow-xl hover:scale-105 active:scale-95 transition-all cursor-pointer border border-white/90"
+                title="Encerrar impersonação e retornar para a conta do administrador"
+              >
+                <LogOut className="w-3.5 h-3.5 text-amber-800" />
+                <span>Sair do acesso administrativo</span>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="max-w-[1920px] mx-auto px-6 h-16 flex items-center justify-between">
 
         {/* Lado Esquerdo: Logo e Título */}
