@@ -5,6 +5,7 @@ import { HorasExtrasHistory } from './HorasExtrasHistory';
 import { Users, ArrowLeft, History, PlusCircle } from 'lucide-react';
 import { HorasExtrasPdfGenerator } from './HorasExtrasPdfGenerator';
 import { useSystemSettings } from '../../contexts/SystemSettingsContext';
+import { userCanAccessSubmodule } from '../../services/permissionService';
 
 interface RHModuleProps {
     currentView: string;
@@ -53,16 +54,17 @@ export const RHModule: React.FC<RHModuleProps> = ({
         return moduleStatus[key] !== false;
     };
 
-    const currentUser = users.find(u => u.id === userId);
-    const userPerms = currentUser?.permissions || [];
-    const hasCustomPerms = Array.isArray(userPerms) && userPerms.length > 0;
-    const isDefaultAdmin = userRole === 'admin' && !hasCustomPerms;
+    const currentUser = users.find(u => u.id === userId) || {
+        id: userId,
+        name: userName,
+        username: userName,
+        role: userRole as any,
+        permissions: []
+    };
+    const activeGlobalStatus = isMobileViewport ? mobileModuleStatus : moduleStatus;
 
-    const isHorasExtrasAllowed = isDefaultAdmin || userPerms.includes('sub_rh_horas_extras') || userPerms.includes('parent_rh_horas_extras') || userPerms.includes('parent_rh');
-    const isHistoricoAllowed = isDefaultAdmin || userPerms.includes('sub_rh_historico') || userPerms.includes('parent_rh_historico') || userPerms.includes('parent_rh');
-
-    const isHorasExtrasActive = (isModuleActive('sub_rh_horas_extras') || isModuleActive('parent_rh_horas_extras')) && isHorasExtrasAllowed;
-    const isHistoricoActive = (isModuleActive('sub_rh_historico') || isModuleActive('parent_rh_historico')) && isHistoricoAllowed;
+    const isHorasExtrasActive = userCanAccessSubmodule(currentUser, 'parent_rh', 'sub_rh_horas_extras', activeGlobalStatus);
+    const isHistoricoActive = userCanAccessSubmodule(currentUser, 'parent_rh', 'sub_rh_historico', activeGlobalStatus);
 
     const showHorasExtras = subView === 'horas-extras' && isHorasExtrasActive;
     const showHistorico = subView === 'historico' && isHistoricoActive;

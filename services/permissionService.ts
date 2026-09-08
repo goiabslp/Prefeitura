@@ -617,9 +617,24 @@ export const MODULE_ACCESS_TREE: ModuleItemDefinition[] = [
     legacyKeys: ['upload'],
     label: 'Upload Rápido',
     description: 'Hub para envio rápido de documentos e anexos via QR Code ou arquivo',
-    routes: ['/Upload'],
+    routes: ['/Upload', '/Upload/Anexar', '/Upload/Transferir'],
     iconName: 'Upload',
-    submodules: []
+    submodules: [
+      {
+        key: 'sub_upload_anexar',
+        legacyKeys: ['parent_upload_anexar'],
+        label: 'Anexar Documento',
+        description: 'Envio de documentos e anexos via QR Code ou upload direto',
+        routes: ['/Upload/Anexar']
+      },
+      {
+        key: 'sub_upload_transferir',
+        legacyKeys: ['parent_upload_transferir'],
+        label: 'Transferir Arquivos',
+        description: 'Transferência rápida de arquivos em tempo real',
+        routes: ['/Upload/Transferir']
+      }
+    ]
   },
   {
     key: 'parent_art',
@@ -1024,8 +1039,15 @@ export function userCanAccessSubmodule(
     return true;
   }
 
-  // 4. Checa a permissão individual do submódulo
-  return userHasPermissionKey(user.permissions, subDef.key, subDef.legacyKeys);
+  // 4. Checa a permissão individual do submódulo ou herança do módulo pai
+  // REGRA CANÔNICA DE HERANÇA:
+  // Se o usuário possui acesso habilitado ao módulo pai, ele possui acesso TOTAL
+  // a todas as funcionalidades e submódulos daquele módulo.
+  // Se o usuário possui acesso ao submódulo específico, ele também possui acesso total àquele submódulo.
+  const hasSubPerm = userHasPermissionKey(user.permissions, subDef.key, subDef.legacyKeys);
+  const hasParentPerm = userHasPermissionKey(user.permissions, parentDef.key, parentDef.legacyKeys);
+
+  return hasSubPerm || hasParentPerm;
 }
 
 /**

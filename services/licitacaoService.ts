@@ -528,7 +528,7 @@ export const deleteLicitacaoDocument = async (id: string, url?: string): Promise
 
         if (error) throw error;
         if (count === 0) {
-            throw new Error('Você não tem permissão para excluir este documento ou ele não existe.');
+            throw new Error('O documento solicitado não foi encontrado ou já foi excluído.');
         }
 
         // Try to delete the physical file if url is provided

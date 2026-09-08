@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { User } from '../../types';
 import { Search, ClipboardList, Package, Settings, History, Pill, Users, ShieldCheck } from 'lucide-react';
 import { useSystemSettings } from '../../contexts/SystemSettingsContext';
+import { userCanAccessSubmodule } from '../../services/permissionService';
 
 interface FarmaciaDashboardProps {
     currentUser: User | null;
@@ -35,17 +36,13 @@ export const FarmaciaDashboard: React.FC<FarmaciaDashboardProps> = ({
     const isPacientesActive = isModuleActive('sub_farmacia_pacientes') || isModuleActive('parent_farmacia_pacientes');
     const isGestorActive = isModuleActive('sub_farmacia_gestor') || isModuleActive('parent_farmacia_gestor');
 
-    const userPerms = currentUser?.permissions || [];
-    const hasCustomPerms = Array.isArray(currentUser?.permissions) && currentUser.permissions.length > 0;
-    const isDefaultAdmin = currentUser?.role === 'admin' && !hasCustomPerms;
-
-    const canAccessConsultar = (isDefaultAdmin || userPerms.includes('sub_farmacia_consultar') || userPerms.includes('parent_farmacia_consultar')) && isConsultarActive;
-    const canAccessRetirar = (isDefaultAdmin || userPerms.includes('sub_farmacia_retirar') || userPerms.includes('parent_farmacia_retirar')) && isRetirarActive;
-    const canAccessEstoque = (isDefaultAdmin || userPerms.includes('sub_farmacia_estoque') || userPerms.includes('parent_farmacia_estoque')) && isEstoqueActive;
-    const canAccessHistorico = isDefaultAdmin || userPerms.includes('sub_farmacia_dashboard') || userPerms.includes('parent_farmacia_dashboard') || userPerms.includes('parent_farmacia');
-    const canAccessDados = (isDefaultAdmin || userPerms.includes('sub_farmacia_dashboard') || userPerms.includes('parent_farmacia_dashboard')) && isDashboardActive;
-    const canAccessPacientes = (isDefaultAdmin || userPerms.includes('sub_farmacia_pacientes') || userPerms.includes('parent_farmacia_pacientes')) && isPacientesActive;
-    const canAccessGestor = (isDefaultAdmin || userPerms.includes('sub_farmacia_gestor') || userPerms.includes('parent_farmacia_gestor')) && isGestorActive;
+    const canAccessConsultar = userCanAccessSubmodule(currentUser, 'parent_farmacia', 'sub_farmacia_consultar', isMobileViewport ? mobileModuleStatus : moduleStatus);
+    const canAccessRetirar = userCanAccessSubmodule(currentUser, 'parent_farmacia', 'sub_farmacia_retirar', isMobileViewport ? mobileModuleStatus : moduleStatus);
+    const canAccessEstoque = userCanAccessSubmodule(currentUser, 'parent_farmacia', 'sub_farmacia_estoque', isMobileViewport ? mobileModuleStatus : moduleStatus);
+    const canAccessDados = userCanAccessSubmodule(currentUser, 'parent_farmacia', 'sub_farmacia_dashboard', isMobileViewport ? mobileModuleStatus : moduleStatus);
+    const canAccessHistorico = canAccessDados;
+    const canAccessPacientes = userCanAccessSubmodule(currentUser, 'parent_farmacia', 'sub_farmacia_pacientes', isMobileViewport ? mobileModuleStatus : moduleStatus);
+    const canAccessGestor = userCanAccessSubmodule(currentUser, 'parent_farmacia', 'sub_farmacia_gestor', isMobileViewport ? mobileModuleStatus : moduleStatus);
 
     return (
         <div className="flex-1 flex flex-col justify-center items-center w-full max-w-7xl mx-auto px-4 py-8 animate-in fade-in slide-in-from-bottom-6 duration-500">

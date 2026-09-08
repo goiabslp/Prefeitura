@@ -247,6 +247,12 @@ const VIEW_TO_PATH: Record<string, string> = {
   'noticias:boletim-semanal': '/Noticias/BoletimSemanal',
   'noticias:boletim-mensal': '/Noticias/BoletimMensal',
   'upload': '/Upload',
+  'upload:anexar': '/Upload/Anexar',
+  'upload:transferir': '/Upload/Transferir',
+  'admin:fleet:dashboard': '/Frota/Dashboard',
+  'admin:fleet:leve': '/Frota/Leve',
+  'admin:fleet:pesada': '/Frota/Pesada',
+  'admin:fleet:acessorios': '/Frota/Acessorios',
   'politica-privacidade': '/PoliticaPrivacidade',
   'politica-privacidade-app': '/PoliticaPrivacidadeApp',
   'assistente-ia': '/AssistenteIA',
@@ -1495,6 +1501,36 @@ const App: React.FC = () => {
         }
         else if (state.view === 'tarefas') {
           if (state.sub === 'dashboard') setCurrentView('tarefas:dashboard' as any);
+        }
+        else if (state.view === 'home') {
+          if (state.sub) {
+            setActiveBlock(state.sub);
+          } else {
+            setActiveBlock(null);
+          }
+          setIsAdminSidebarOpen(false);
+        }
+        else if (state.view === 'upload') {
+          setCurrentView('upload');
+          setActiveBlock(null);
+          setIsAdminSidebarOpen(false);
+        }
+        else if (state.view === 'art') {
+          setCurrentView('art');
+          setActiveBlock(null);
+          setIsAdminSidebarOpen(false);
+        }
+        else if (state.view === 'noticias') {
+          setCurrentView('noticias');
+          setAppState(prev => ({ ...prev, view: state.sub }));
+          setActiveBlock(null);
+          setIsAdminSidebarOpen(false);
+        }
+        else if (state.view === 'calendario') {
+          setCurrentView('calendario');
+          setAppState(prev => ({ ...prev, view: state.sub }));
+          setActiveBlock(null);
+          setIsAdminSidebarOpen(false);
         }
         else if (state.view === 'rh') {
           setAppState(prev => ({ ...prev, view: state.sub }));

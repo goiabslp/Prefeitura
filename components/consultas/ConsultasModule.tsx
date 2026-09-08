@@ -10,6 +10,7 @@ import { LiberarVagasScreen } from './LiberarVagasScreen';
 import { PacientesTab } from '../common/PacientesTab';
 import { ModuleGestorScreen } from '../common/ModuleGestorScreen';
 import { useSystemSettings } from '../../contexts/SystemSettingsContext';
+import { userCanAccessSubmodule } from '../../services/permissionService';
 
 interface ConsultasModuleProps {
     currentView: string;
@@ -52,17 +53,13 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
     const isPacientesActive = isModuleActive('sub_consultas_pacientes') || isModuleActive('parent_consultas_pacientes');
     const isGestorActive = isModuleActive('sub_consultas_gestor') || isModuleActive('parent_consultas_gestor');
 
-    const userPerms = currentUser?.permissions || [];
-    const hasCustomPerms = Array.isArray(currentUser?.permissions) && currentUser.permissions.length > 0;
-    const isDefaultAdmin = currentUser?.role === 'admin' && !hasCustomPerms;
-
-    const canAccessNovoAgendamento = (isDefaultAdmin || userPerms.includes('sub_consultas_novo_agendamento') || userPerms.includes('parent_consultas_novo_agendamento')) && isNovoAgendamentoActive;
-    const canAccessLiberarVagas = (isDefaultAdmin || userPerms.includes('sub_consultas_liberar_vagas') || userPerms.includes('parent_consultas_liberar_vagas')) && isLiberarVagasActive;
-    const canAccessAgendar = (isDefaultAdmin || userPerms.includes('sub_consultas_agendar') || userPerms.includes('parent_consultas_agendar')) && isAgendarActive;
-    const canAccessAcompanhar = (isDefaultAdmin || userPerms.includes('sub_consultas_acompanhar') || userPerms.includes('parent_consultas_acompanhar') || userPerms.includes('sub_consultas_definir_agenda') || userPerms.includes('parent_consultas_definir_agenda')) && isAcompanharActive;
-    const canAccessDados = (isDefaultAdmin || userPerms.includes('sub_consultas_dados') || userPerms.includes('parent_consultas_dados')) && isDadosActive;
-    const canAccessPacientes = (isDefaultAdmin || userPerms.includes('sub_consultas_pacientes') || userPerms.includes('parent_consultas_pacientes')) && isPacientesActive;
-    const canAccessGestor = (isDefaultAdmin || userPerms.includes('sub_consultas_gestor') || userPerms.includes('parent_consultas_gestor')) && isGestorActive;
+    const canAccessNovoAgendamento = userCanAccessSubmodule(currentUser, 'parent_consultas', 'sub_consultas_novo_agendamento', isMobileViewport ? mobileModuleStatus : moduleStatus);
+    const canAccessLiberarVagas = userCanAccessSubmodule(currentUser, 'parent_consultas', 'sub_consultas_liberar_vagas', isMobileViewport ? mobileModuleStatus : moduleStatus);
+    const canAccessAgendar = userCanAccessSubmodule(currentUser, 'parent_consultas', 'sub_consultas_agendar', isMobileViewport ? mobileModuleStatus : moduleStatus);
+    const canAccessAcompanhar = userCanAccessSubmodule(currentUser, 'parent_consultas', 'sub_consultas_acompanhar', isMobileViewport ? mobileModuleStatus : moduleStatus);
+    const canAccessDados = userCanAccessSubmodule(currentUser, 'parent_consultas', 'sub_consultas_dados', isMobileViewport ? mobileModuleStatus : moduleStatus);
+    const canAccessPacientes = userCanAccessSubmodule(currentUser, 'parent_consultas', 'sub_consultas_pacientes', isMobileViewport ? mobileModuleStatus : moduleStatus);
+    const canAccessGestor = userCanAccessSubmodule(currentUser, 'parent_consultas', 'sub_consultas_gestor', isMobileViewport ? mobileModuleStatus : moduleStatus);
 
     const showNovoAgendamento = (subView === 'novo-agendamento' || (subView?.startsWith('novo-agendamento') ?? false) || subView === 'vagas-reservadas') && canAccessNovoAgendamento;
     const showLiberarVagas = (subView === 'liberar-vagas') && canAccessLiberarVagas;

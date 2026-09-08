@@ -377,7 +377,11 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
     const genericAttachmentRef = useRef<HTMLInputElement>(null);
 
     const isAdmin = currentUser.role === 'admin';
-    const isComprasUser = currentUser.role === 'compras';
+    const isComprasUser = currentUser.role === 'compras' || 
+                          (currentUser.permissions as string[])?.includes('sub_compras_historico') ||
+                          (currentUser.permissions as string[])?.includes('parent_compras') ||
+                          (currentUser.permissions as string[])?.includes('compras') ||
+                          currentUser.sector?.toLowerCase().includes('compras');
     const isLicitacaoUser = currentUser.role === 'licitacao' || (currentUser.permissions as string[])?.includes('parent_licitacao_processos') || (currentUser.permissions as string[])?.includes('parent_licitacao') || (currentUser.permissions as string[])?.includes('licitacao') || currentUser.sector?.toLowerCase().includes('licitação') || currentUser.sector?.toLowerCase().includes('licitacao');
     const isCompras = activeBlock === 'compras';
 
@@ -416,7 +420,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
         if (!matchesBlock) return false;
 
         let hasPermission = false;
-        const isPurchasingManager = currentUser.role === 'admin' || currentUser.role === 'compras';
+        const isPurchasingManager = isAdmin || isComprasUser;
 
         if (isCompras) {
             const orderSector = order.documentSnapshot?.content?.requesterSector || order.requestingSector || '';
@@ -1970,7 +1974,7 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                     {(Object.keys(purchaseStatusMap) as Array<keyof typeof purchaseStatusMap>).map((key) => {
                                                         const cfg = purchaseStatusMap[key];
                                                         const isActive = statusSelectionOrder.purchaseStatus === key;
-                                                        const isDisabled = key === 'aprovacao_orcamento' && !isAdmin;
+                                                        const isDisabled = key === 'aprovacao_orcamento' && !isAdmin && !isComprasUser;
 
                                                         return (
                                                             <button

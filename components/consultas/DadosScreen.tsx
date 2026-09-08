@@ -7,6 +7,7 @@ import { ResponsiveContainer, AreaChart, XAxis, YAxis, Tooltip, Area, CartesianG
 import { PacientesTab, formatPatientName } from '../common/PacientesTab';
 import { AgentesSaudeTab, AgentesSaudeHeaderMetrics } from './AgentesSaudeTab';
 import { ConsultasDashboardView } from './dashboard/ConsultasDashboardView';
+import { userCanAccessSubmodule } from '../../services/permissionService';
 
 interface DadosScreenProps {
     currentUser: User;
@@ -24,13 +25,14 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
     onNavigate
 }) => {
     const isAdmin = currentUser.role === 'admin';
+    const canAccessGestor = isAdmin || userCanAccessSubmodule(currentUser, 'parent_consultas', 'sub_consultas_gestor');
     // Current Active Tab derived from URL sub-view state
     const activeTab = (() => {
         if (subView === 'dados-pacientes') return 'pacientes';
         if (subView === 'dados-procedimentos') return 'procedimentos';
         if (subView === 'dados-historico') return 'historico';
         if (subView === 'dados-agentes') return 'agentes';
-        if (subView === 'dados-gestor' && isAdmin) return 'gestor';
+        if (subView === 'dados-gestor' && canAccessGestor) return 'gestor';
         return 'dashboard';
     })();
     const [loading, setLoading] = useState(false);
@@ -305,7 +307,7 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
     const [gestorFilter, setGestorFilter] = useState<'all' | 'gestores' | 'non_gestores'>('all');
 
     const handleToggleGestor = async (userId: string) => {
-        if (!isAdmin) return;
+        if (!canAccessGestor) return;
         setLoading(true);
         try {
             if (gestorUserIds.includes(userId)) {
@@ -349,7 +351,7 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                 const data = await db.getProcedimentos();
                 setProcedures(data);
             } else if (activeTab === 'gestor') {
-                if (isAdmin) {
+                if (canAccessGestor) {
                     const [usersData, gestoresData] = await Promise.all([
                         db.getSystemUsers(),
                         db.getConsultasGestores()
@@ -581,7 +583,7 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                         icon: UserCheck,
                         activeClass: 'bg-teal-50/80 text-teal-700 border-teal-200/60 shadow-sm shadow-teal-500/5'
                     },
-                    ...(isAdmin ? [{ 
+                    ...((isAdmin || canAccessGestor) ? [{ 
                         id: 'gestor', 
                         label: 'Gestor', 
                         icon: ShieldCheck,
@@ -1108,8 +1110,8 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                     </div>
                 )}
 
-                {/* 5. GESTOR TAB (APENAS ADMINISTRADORES) */}
-                {activeTab === 'gestor' && isAdmin && (
+                {/* 5. GESTOR TAB */}
+                {activeTab === 'gestor' && (isAdmin || canAccessGestor) && (
                     <div className="space-y-6 animate-in fade-in duration-300">
                         {/* Header Banner do Gestor */}
                         <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-amber-950 text-white p-6 rounded-3xl shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border border-amber-500/20 relative overflow-hidden">

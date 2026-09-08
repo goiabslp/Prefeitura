@@ -13,6 +13,7 @@ import { DashboardScreen } from './DashboardScreen';
 import { FarmaciaAlertProvider } from './FarmaciaAlertContext';
 import { PacientesTab } from '../common/PacientesTab';
 import { ModuleGestorScreen } from '../common/ModuleGestorScreen';
+import { userCanAccessSubmodule } from '../../services/permissionService';
 
 interface FarmaciaModuleProps {
     currentView: string;
@@ -217,17 +218,13 @@ export const FarmaciaModule: React.FC<FarmaciaModuleProps> = ({
     const isPacientesActive = isModuleActive('sub_farmacia_pacientes') || isModuleActive('parent_farmacia_pacientes');
     const isGestorActive = isModuleActive('sub_farmacia_gestor') || isModuleActive('parent_farmacia_gestor');
 
-    const userPerms = currentUser?.permissions || [];
-    const hasCustomPerms = Array.isArray(currentUser?.permissions) && currentUser.permissions.length > 0;
-    const isDefaultAdmin = isAdmin && !hasCustomPerms;
-
-    const canAccessConsultar = (isDefaultAdmin || userPerms.includes('sub_farmacia_consultar') || userPerms.includes('parent_farmacia_consultar')) && isConsultarActive;
-    const canAccessRetirar = (isDefaultAdmin || userPerms.includes('sub_farmacia_retirar') || userPerms.includes('parent_farmacia_retirar')) && isRetirarActive;
-    const canAccessEstoque = (isDefaultAdmin || userPerms.includes('sub_farmacia_estoque') || userPerms.includes('parent_farmacia_estoque')) && isEstoqueActive;
-    const canAccessHistorico = isDefaultAdmin || userPerms.includes('sub_farmacia_dashboard') || userPerms.includes('parent_farmacia_dashboard') || userPerms.includes('parent_farmacia');
-    const canAccessDados = (isDefaultAdmin || userPerms.includes('sub_farmacia_dashboard') || userPerms.includes('parent_farmacia_dashboard')) && isDashboardActive;
-    const canAccessPacientes = (isDefaultAdmin || userPerms.includes('sub_farmacia_pacientes') || userPerms.includes('parent_farmacia_pacientes')) && isPacientesActive;
-    const canAccessGestor = (isDefaultAdmin || userPerms.includes('sub_farmacia_gestor') || userPerms.includes('parent_farmacia_gestor')) && isGestorActive;
+    const canAccessConsultar = userCanAccessSubmodule(currentUser, 'parent_farmacia', 'sub_farmacia_consultar', moduleStatus);
+    const canAccessRetirar = userCanAccessSubmodule(currentUser, 'parent_farmacia', 'sub_farmacia_retirar', moduleStatus);
+    const canAccessEstoque = userCanAccessSubmodule(currentUser, 'parent_farmacia', 'sub_farmacia_estoque', moduleStatus);
+    const canAccessDados = userCanAccessSubmodule(currentUser, 'parent_farmacia', 'sub_farmacia_dashboard', moduleStatus);
+    const canAccessHistorico = canAccessDados;
+    const canAccessPacientes = userCanAccessSubmodule(currentUser, 'parent_farmacia', 'sub_farmacia_pacientes', moduleStatus);
+    const canAccessGestor = userCanAccessSubmodule(currentUser, 'parent_farmacia', 'sub_farmacia_gestor', moduleStatus);
 
     const showConsultar = subView === 'consultar' && canAccessConsultar;
     const showRetirar = subView === 'retirar' && canAccessRetirar;

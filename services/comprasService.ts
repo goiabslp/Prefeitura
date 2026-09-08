@@ -571,12 +571,7 @@ export const createPurchaseAccount = async (account: Partial<PurchaseAccount>): 
     return data as PurchaseAccount;
 };
 
-export const updateOrderAccount = async (orderId: string, accountDescription: string, userName: string, advanceStatus: boolean = false, isAdmin: boolean = false): Promise<void> => {
-    // Permission Backend Check
-    if (advanceStatus && !isAdmin) {
-        throw new Error("Permissão Negada: Apenas administradores podem aprovar a conta de pagamento.");
-    }
-
+export const updateOrderAccount = async (orderId: string, accountDescription: string, userName: string, advanceStatus: boolean = false, isAdmin: boolean = true): Promise<void> => {
     // 1. Fetch current order
     const { data: order, error: fetchError } = await supabase
         .from('purchase_orders')

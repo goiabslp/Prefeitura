@@ -272,7 +272,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
 
     const isAdmin = currentUser.role === 'admin';
     const isGestor = gestorUserIds.includes(currentUser.id);
-    const canSeeSlots = isAdmin || isGestor;
+    const canSeeSlots = true; // Acesso completo às funcionalidades da tela liberada
 
     useEffect(() => {
         const handleOutsideClick = (e: MouseEvent) => {

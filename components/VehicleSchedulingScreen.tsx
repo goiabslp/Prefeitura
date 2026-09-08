@@ -18,6 +18,8 @@ import { VehicleScheduleApprovals } from './VehicleScheduleApprovals';
 import { SelectionModal } from './SelectionModal';
 import { VehicleScheduleDashboard } from './VehicleScheduleDashboard';
 import { useSystemSettings } from '../contexts/SystemSettingsContext';
+import { userCanAccessSubmodule } from '../services/permissionService';
+import { User } from '../types';
 
 interface VehicleSchedulingScreenProps {
   schedules: VehicleSchedule[];
@@ -203,20 +205,21 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
   const isAprovacoesActive = isModuleActive('sub_agendamento_aprovacoes') || isModuleActive('parent_agendamento_veiculo_aprovacoes');
   const isDashboardActive = isModuleActive('sub_agendamento_dashboard') || isModuleActive('parent_agendamento_veiculo_dashboard');
 
-  const hasCustomPerms = Array.isArray(currentUserPermissions) && currentUserPermissions.length > 0;
-  const isDefaultAdmin = currentUserRole === 'admin' && !hasCustomPerms;
+  const userObj = useMemo(() => ({
+    id: currentUserId,
+    name: currentUserName || '',
+    username: currentUserName || '',
+    role: currentUserRole,
+    permissions: currentUserPermissions
+  } as User), [currentUserId, currentUserName, currentUserRole, currentUserPermissions]);
 
-  const canAccessAgendar = (
-    isDefaultAdmin || 
-    currentUserPermissions.includes('sub_agendamento_agendar') || 
-    currentUserPermissions.includes('parent_agendamento_veiculo_agendar') ||
-    currentUserPermissions.includes('sub_agendamento_dia') ||
-    currentUserPermissions.includes('parent_agendamento_veiculo_dia')
-  ) && isAgendarActive;
+  const activeGlobalStatus = isMobileViewport ? mobileModuleStatus : moduleStatus;
+
+  const canAccessAgendar = userCanAccessSubmodule(userObj, 'parent_agendamento_veiculo', 'sub_agendamento_agendar', activeGlobalStatus);
   const canAccessDia = canAccessAgendar; // O dia é parte integrante e inseparável do fluxo de agendamento
-  const canAccessMeus = (isDefaultAdmin || currentUserPermissions.includes('sub_agendamento_historico') || currentUserPermissions.includes('parent_agendamento_veiculo_meus')) && isMeusActive;
-  const canAccessAprovacoes = (isDefaultAdmin || currentUserPermissions.includes('sub_agendamento_aprovacoes') || currentUserPermissions.includes('parent_agendamento_veiculo_aprovacoes')) && isAprovacoesActive;
-  const canAccessDashboard = (isDefaultAdmin || currentUserPermissions.includes('sub_agendamento_dashboard') || currentUserPermissions.includes('parent_agendamento_veiculo_dashboard')) && isDashboardActive;
+  const canAccessMeus = userCanAccessSubmodule(userObj, 'parent_agendamento_veiculo', 'sub_agendamento_historico', activeGlobalStatus);
+  const canAccessAprovacoes = userCanAccessSubmodule(userObj, 'parent_agendamento_veiculo', 'sub_agendamento_aprovacoes', activeGlobalStatus);
+  const canAccessDashboard = userCanAccessSubmodule(userObj, 'parent_agendamento_veiculo', 'sub_agendamento_dashboard', activeGlobalStatus);
 
 
   useEffect(() => {
