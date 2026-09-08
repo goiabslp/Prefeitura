@@ -25,7 +25,7 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
     onNavigate
 }) => {
     const isAdmin = currentUser.role === 'admin';
-    const canAccessGestor = isAdmin || userCanAccessSubmodule(currentUser, 'parent_consultas', 'sub_consultas_gestor');
+    const canAccessGestor = isAdmin;
     // Current Active Tab derived from URL sub-view state
     const activeTab = (() => {
         if (subView === 'dados-pacientes') return 'pacientes';
@@ -583,7 +583,7 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                         icon: UserCheck,
                         activeClass: 'bg-teal-50/80 text-teal-700 border-teal-200/60 shadow-sm shadow-teal-500/5'
                     },
-                    ...((isAdmin || canAccessGestor) ? [{ 
+                    ...(isAdmin ? [{ 
                         id: 'gestor', 
                         label: 'Gestor', 
                         icon: ShieldCheck,
@@ -1111,7 +1111,7 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                 )}
 
                 {/* 5. GESTOR TAB */}
-                {activeTab === 'gestor' && (isAdmin || canAccessGestor) && (
+                {activeTab === 'gestor' && isAdmin && (
                     <div className="space-y-6 animate-in fade-in duration-300">
                         {/* Header Banner do Gestor */}
                         <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-amber-950 text-white p-6 rounded-3xl shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border border-amber-500/20 relative overflow-hidden">
