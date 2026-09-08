@@ -199,7 +199,6 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
   };
 
   const isAgendarActive = isModuleActive('sub_agendamento_agendar') || isModuleActive('parent_agendamento_veiculo_agendar');
-  const isDiaActive = isModuleActive('sub_agendamento_dia') || isModuleActive('parent_agendamento_veiculo_dia');
   const isMeusActive = isModuleActive('sub_agendamento_historico') || isModuleActive('parent_agendamento_veiculo_meus');
   const isAprovacoesActive = isModuleActive('sub_agendamento_aprovacoes') || isModuleActive('parent_agendamento_veiculo_aprovacoes');
   const isDashboardActive = isModuleActive('sub_agendamento_dashboard') || isModuleActive('parent_agendamento_veiculo_dashboard');
@@ -207,8 +206,14 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
   const hasCustomPerms = Array.isArray(currentUserPermissions) && currentUserPermissions.length > 0;
   const isDefaultAdmin = currentUserRole === 'admin' && !hasCustomPerms;
 
-  const canAccessAgendar = (isDefaultAdmin || currentUserPermissions.includes('sub_agendamento_agendar') || currentUserPermissions.includes('parent_agendamento_veiculo_agendar')) && isAgendarActive;
-  const canAccessDia = (isDefaultAdmin || currentUserPermissions.includes('sub_agendamento_dia') || currentUserPermissions.includes('parent_agendamento_veiculo_dia')) && isDiaActive;
+  const canAccessAgendar = (
+    isDefaultAdmin || 
+    currentUserPermissions.includes('sub_agendamento_agendar') || 
+    currentUserPermissions.includes('parent_agendamento_veiculo_agendar') ||
+    currentUserPermissions.includes('sub_agendamento_dia') ||
+    currentUserPermissions.includes('parent_agendamento_veiculo_dia')
+  ) && isAgendarActive;
+  const canAccessDia = canAccessAgendar; // O dia é parte integrante e inseparável do fluxo de agendamento
   const canAccessMeus = (isDefaultAdmin || currentUserPermissions.includes('sub_agendamento_historico') || currentUserPermissions.includes('parent_agendamento_veiculo_meus')) && isMeusActive;
   const canAccessAprovacoes = (isDefaultAdmin || currentUserPermissions.includes('sub_agendamento_aprovacoes') || currentUserPermissions.includes('parent_agendamento_veiculo_aprovacoes')) && isAprovacoesActive;
   const canAccessDashboard = (isDefaultAdmin || currentUserPermissions.includes('sub_agendamento_dashboard') || currentUserPermissions.includes('parent_agendamento_veiculo_dashboard')) && isDashboardActive;
@@ -695,7 +700,7 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
                 </button>
               )}
 
-              {!canAccessAgendar && !canAccessDia && !canAccessMeus && !canAccessAprovacoes && !canAccessDashboard && (
+              {!canAccessAgendar && !canAccessMeus && !canAccessAprovacoes && !canAccessDashboard && (
                 <div className="col-span-full text-center p-8 bg-white border border-slate-200 rounded-[2rem] shadow-sm max-w-md mx-auto">
                   <Car className="w-12 h-12 text-slate-300 mx-auto mb-4" />
                   <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Gestão de Veículos</h3>
@@ -1238,11 +1243,11 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
           <button onClick={() => handleSubViewChange('menu')} className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold uppercase">Voltar ao Menu</button>
         </div>
       ))}
-      {activeSubView === 'day' && ((canAccessDia || canAccessAgendar) ? renderDayView() : (
+      {activeSubView === 'day' && (canAccessAgendar ? renderDayView() : (
         <div className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-50 text-center">
           <Lock className="w-12 h-12 text-slate-300 mb-4" />
           <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Acesso Indisponível</h3>
-          <p className="text-xs text-slate-500 mt-2 mb-4">Você não possui permissão para visualizar o dia ou este recurso está desabilitado.</p>
+          <p className="text-xs text-slate-500 mt-2 mb-4">Você não possui permissão para agendar veículos ou este recurso está desabilitado.</p>
           <button onClick={() => handleSubViewChange('menu')} className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold uppercase">Voltar ao Menu</button>
         </div>
       ))}

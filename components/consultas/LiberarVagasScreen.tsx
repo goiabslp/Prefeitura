@@ -62,11 +62,23 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
             document.removeEventListener('mousedown', handleClickOutside);
         };
     }, [isTimeDropdownOpen]);
-    // Modal de Editar Vaga
+    // Modal de Editar Vaga Individual
     const [editingVaga, setEditingVaga] = useState<ConsultaVaga | null>(null);
     const [editDate, setEditDate] = useState('');
     const [editTime, setEditTime] = useState('');
     const [editStatus, setEditStatus] = useState<'Disponível' | 'Pausada'>('Disponível');
+
+    // Estados de Ações em Lote (Bulk Actions)
+    const [isBulkEditModalOpen, setIsBulkEditModalOpen] = useState(false);
+    const [bulkEditScope, setBulkEditScope] = useState<'all' | 'date'>('all');
+    const [bulkEditSelectedDate, setBulkEditSelectedDate] = useState<string>('');
+    const [bulkEditNewDate, setBulkEditNewDate] = useState<string>('');
+    const [bulkEditNewTime, setBulkEditNewTime] = useState<string>('');
+    const [bulkEditNewStatus, setBulkEditNewStatus] = useState<'Disponível' | 'Pausada' | 'manter'>('manter');
+
+    const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
+    const [bulkDeleteScope, setBulkDeleteScope] = useState<'all' | 'date'>('all');
+    const [bulkDeleteSelectedDate, setBulkDeleteSelectedDate] = useState<string>('');
 
     // Carregar procedimentos
     const fetchProcedures = async () => {
@@ -418,6 +430,119 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
         }
     };
 
+    // Helper: slots pertencentes ao escopo da ação em lote
+    const getTargetSlotsForScope = (scope: 'all' | 'date', targetDate?: string) => {
+        if (scope === 'date' && targetDate) {
+            return vagas.filter(v => v.data === targetDate);
+        }
+        return vagas;
+    };
+
+    // Ação: Pausar / Ativar Todas as Vagas em Lote
+    const handleTogglePauseAll = async (scope: 'all' | 'date', targetDate?: string) => {
+        if (!selectedProc || vagas.length === 0) return;
+        const targetSlots = getTargetSlotsForScope(scope, targetDate);
+        if (targetSlots.length === 0) return;
+
+        const hasActive = targetSlots.some(v => v.status !== 'Pausada');
+        const actionLabel = hasActive ? 'pausar' : 'ativar';
+        const count = targetSlots.length;
+        const scopeDesc = scope === 'date' && targetDate ? `da data ${formatReadableDate(targetDate)}` : 'deste procedimento';
+
+        if (!window.confirm(`Deseja realmente ${actionLabel} todas as ${count} vaga(s) ${scopeDesc}?`)) {
+            return;
+        }
+
+        setActionLoading(true);
+        try {
+            const slotIds = targetSlots.map(v => v.id);
+            if (hasActive) {
+                await db.pauseAllVagas(selectedProc.id, slotIds);
+            } else {
+                await db.unpauseAllVagas(selectedProc.id, slotIds);
+            }
+            await reloadProcVagas(selectedProc.id);
+        } catch (err: any) {
+            console.error(`Erro ao ${actionLabel} vagas em lote:`, err);
+            alert(err.message || `Erro ao ${actionLabel} vagas.`);
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    // Ação: Abrir Modal de Edição em Lote
+    const handleOpenBulkEdit = (scope: 'all' | 'date', targetDate?: string) => {
+        setBulkEditScope(scope);
+        setBulkEditSelectedDate(targetDate || '');
+        setBulkEditNewDate(targetDate || '');
+        setBulkEditNewTime('');
+        setBulkEditNewStatus('manter');
+        setIsBulkEditModalOpen(true);
+    };
+
+    // Ação: Salvar Edição em Lote
+    const handleConfirmBulkEdit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!selectedProc) return;
+
+        const targetSlots = getTargetSlotsForScope(bulkEditScope, bulkEditSelectedDate);
+        if (targetSlots.length === 0) {
+            alert('Nenhuma vaga encontrada para o escopo selecionado.');
+            return;
+        }
+
+        if (!bulkEditNewDate && !bulkEditNewTime && bulkEditNewStatus === 'manter') {
+            alert('Por favor, defina ao menos um campo para alterar (Data, Horário ou Status).');
+            return;
+        }
+
+        const updates: Partial<ConsultaVaga> = {};
+        if (bulkEditNewDate) updates.data = bulkEditNewDate;
+        if (bulkEditNewTime) updates.hora = bulkEditNewTime;
+        if (bulkEditNewStatus !== 'manter') updates.status = bulkEditNewStatus;
+
+        setActionLoading(true);
+        try {
+            const slotIds = targetSlots.map(v => v.id);
+            await db.updateAllVagas(selectedProc.id, updates, slotIds);
+            setIsBulkEditModalOpen(false);
+            await reloadProcVagas(selectedProc.id);
+        } catch (err: any) {
+            console.error('Erro ao editar vagas em lote:', err);
+            alert(err.message || 'Erro ao editar vagas em lote.');
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    // Ação: Abrir Modal de Exclusão em Lote
+    const handleOpenBulkDelete = (scope: 'all' | 'date', targetDate?: string) => {
+        setBulkDeleteScope(scope);
+        setBulkDeleteSelectedDate(targetDate || '');
+        setIsBulkDeleteModalOpen(true);
+    };
+
+    // Ação: Confirmar Exclusão em Lote
+    const handleConfirmBulkDelete = async () => {
+        if (!selectedProc) return;
+
+        const targetSlots = getTargetSlotsForScope(bulkDeleteScope, bulkDeleteSelectedDate);
+        if (targetSlots.length === 0) return;
+
+        setActionLoading(true);
+        try {
+            const slotIds = targetSlots.map(v => v.id);
+            await db.deleteAllVagas(selectedProc.id, slotIds);
+            setIsBulkDeleteModalOpen(false);
+            await reloadProcVagas(selectedProc.id);
+        } catch (err: any) {
+            console.error('Erro ao excluir vagas em lote:', err);
+            alert(err.message || 'Erro ao excluir vagas em lote.');
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
     // Agrupamento de vagas por data
     const groupedVagas = useMemo(() => {
         const map: Record<string, ConsultaVaga[]> = {};
@@ -481,14 +606,62 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
                             <span>Cotas Livres: <strong className="text-emerald-700 font-black">{globalStats.totalCotasDisponiveis}</strong></span>
                         </div>
                     ) : (
-                        <div className="flex items-center gap-1.5">
-                            <div className="hidden sm:flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 bg-white border border-slate-200 px-2.5 py-1 rounded-lg shadow-xs">
+                        <div className="flex items-center gap-2">
+                            <div className="hidden lg:flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 bg-white border border-slate-200 px-2.5 py-1 rounded-lg shadow-xs">
                                 <span>Total: <strong className="text-slate-900 font-black">{procStats.total}</strong></span>
                                 <span className="text-slate-300">•</span>
                                 <span className="text-emerald-700">Livres: <strong className="font-black">{procStats.disponiveis}</strong></span>
                                 <span className="text-slate-300">•</span>
                                 <span className="text-amber-700">Pausadas: <strong className="font-black">{procStats.pausadas}</strong></span>
                             </div>
+
+                            {/* Botões de Ações em Lote (Editar, Pausar/Ativar, Excluir Todas) */}
+                            {vagas.length > 0 && (
+                                <div className="flex items-center gap-1 bg-white border border-slate-200 p-0.5 rounded-lg shadow-xs">
+                                    <button
+                                        onClick={() => handleOpenBulkEdit('all')}
+                                        disabled={actionLoading}
+                                        className="px-2.5 py-1.5 text-slate-700 hover:text-sky-700 hover:bg-sky-50 font-bold text-xs rounded-md transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                                        title="Editar data, hora ou status de todas as vagas deste procedimento"
+                                    >
+                                        <Edit2 className="w-3.5 h-3.5 text-sky-600" />
+                                        <span className="hidden sm:inline">Editar Todas</span>
+                                    </button>
+
+                                    <button
+                                        onClick={() => handleTogglePauseAll('all')}
+                                        disabled={actionLoading}
+                                        className={`px-2.5 py-1.5 font-bold text-xs rounded-md transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50 ${
+                                            vagas.some(v => v.status !== 'Pausada')
+                                                ? 'text-amber-700 hover:text-amber-800 hover:bg-amber-50'
+                                                : 'text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50'
+                                        }`}
+                                        title={vagas.some(v => v.status !== 'Pausada') ? "Pausar todas as vagas deste procedimento" : "Ativar todas as vagas deste procedimento"}
+                                    >
+                                        {vagas.some(v => v.status !== 'Pausada') ? (
+                                            <>
+                                                <PauseCircle className="w-3.5 h-3.5 text-amber-600" />
+                                                <span className="hidden sm:inline">Pausar Todas</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <PlayCircle className="w-3.5 h-3.5 text-emerald-600" />
+                                                <span className="hidden sm:inline">Ativar Todas</span>
+                                            </>
+                                        )}
+                                    </button>
+
+                                    <button
+                                        onClick={() => handleOpenBulkDelete('all')}
+                                        disabled={actionLoading}
+                                        className="px-2.5 py-1.5 text-rose-700 hover:text-rose-800 hover:bg-rose-50 font-bold text-xs rounded-md transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                                        title="Excluir todas as vagas deste procedimento"
+                                    >
+                                        <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                                        <span className="hidden sm:inline">Excluir Todas</span>
+                                    </button>
+                                </div>
+                            )}
 
                             <button
                                 onClick={() => {
@@ -687,9 +860,46 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
                                                         {formatReadableDate(dateStr)}
                                                     </span>
                                                 </div>
-                                                <span className="text-[10px] font-bold text-slate-400">
-                                                    {dateSlots.length} horário(s)
-                                                </span>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-[10px] font-bold text-slate-400">
+                                                        {dateSlots.length} horário(s)
+                                                    </span>
+                                                    {/* Ações em Lote do Dia */}
+                                                    <div className="flex items-center gap-0.5 border-l border-slate-200 pl-2">
+                                                        <button
+                                                            onClick={() => handleOpenBulkEdit('date', dateStr)}
+                                                            title="Editar vagas deste dia"
+                                                            disabled={actionLoading}
+                                                            className="p-1 text-slate-500 hover:text-sky-600 hover:bg-sky-50 rounded transition-all cursor-pointer disabled:opacity-50"
+                                                        >
+                                                            <Edit2 className="w-3 h-3" />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleTogglePauseAll('date', dateStr)}
+                                                            title={dateSlots.some(v => v.status !== 'Pausada') ? "Pausar vagas deste dia" : "Ativar vagas deste dia"}
+                                                            disabled={actionLoading}
+                                                            className={`p-1 rounded transition-all cursor-pointer disabled:opacity-50 ${
+                                                                dateSlots.some(v => v.status !== 'Pausada')
+                                                                    ? 'text-amber-600 hover:bg-amber-50'
+                                                                    : 'text-emerald-600 hover:bg-emerald-50'
+                                                            }`}
+                                                        >
+                                                            {dateSlots.some(v => v.status !== 'Pausada') ? (
+                                                                <PauseCircle className="w-3 h-3" />
+                                                            ) : (
+                                                                <PlayCircle className="w-3 h-3" />
+                                                            )}
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleOpenBulkDelete('date', dateStr)}
+                                                            title="Excluir vagas deste dia"
+                                                            disabled={actionLoading}
+                                                            className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-all cursor-pointer disabled:opacity-50"
+                                                        >
+                                                            <Trash2 className="w-3 h-3" />
+                                                        </button>
+                                                    </div>
+                                                </div>
                                             </div>
 
                                             {/* Pílulas Compactas de Horários */}
@@ -1400,6 +1610,211 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
                     </div>
                 </div>
             )}
+
+            {/* Modal de Edição em Lote (Bulk Edit) */}
+            {isBulkEditModalOpen && selectedProc && (() => {
+                const targetSlots = getTargetSlotsForScope(bulkEditScope, bulkEditSelectedDate);
+                const scopeTitle = bulkEditScope === 'date' && bulkEditSelectedDate
+                    ? `Vagas do dia ${formatReadableDate(bulkEditSelectedDate)}`
+                    : `Todas as Vagas de "${selectedProc.name}"`;
+
+                return (
+                    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+                        <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-150">
+                            <div className="px-5 py-4 bg-sky-50/70 border-b border-sky-100 flex items-center justify-between">
+                                <div className="flex items-center gap-2.5">
+                                    <div className="p-2 bg-sky-100 text-sky-700 rounded-xl">
+                                        <Edit2 className="w-4 h-4" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-sm font-black text-slate-800">
+                                            Editar Vagas em Lote
+                                        </h3>
+                                        <p className="text-[11px] font-semibold text-slate-500">
+                                            {scopeTitle} ({targetSlots.length} vaga(s))
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => setIsBulkEditModalOpen(false)}
+                                    className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+                                >
+                                    <X className="w-4 h-4" />
+                                </button>
+                            </div>
+
+                            <form onSubmit={handleConfirmBulkEdit} className="p-5 space-y-4">
+                                <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 text-xs font-medium space-y-1">
+                                    <p className="font-bold flex items-center gap-1.5 text-amber-800">
+                                        <AlertTriangle className="w-3.5 h-3.5" />
+                                        Campos Opcionais:
+                                    </p>
+                                    <p className="text-[11px] text-amber-700">
+                                        Preencha apenas o que desejar atualizar em massa. Campos em branco manterão os valores atuais de cada vaga.
+                                    </p>
+                                </div>
+
+                                <div>
+                                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                                        Nova Data (opcional)
+                                    </label>
+                                    <input
+                                        type="date"
+                                        value={bulkEditNewDate}
+                                        onChange={(e) => setBulkEditNewDate(e.target.value)}
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-800 outline-none focus:border-sky-500 focus:bg-white transition-all"
+                                    />
+                                    <span className="text-[10px] text-slate-400">Deixe em branco para não alterar a data das vagas.</span>
+                                </div>
+
+                                <div>
+                                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                                        Novo Horário (opcional)
+                                    </label>
+                                    <input
+                                        type="time"
+                                        value={bulkEditNewTime}
+                                        onChange={(e) => setBulkEditNewTime(e.target.value)}
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-800 outline-none focus:border-sky-500 focus:bg-white transition-all"
+                                    />
+                                    <span className="text-[10px] text-slate-400">Deixe em branco para manter os horários originais.</span>
+                                </div>
+
+                                <div>
+                                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                                        Status das Vagas
+                                    </label>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {[
+                                            { id: 'manter', label: 'Manter Atual' },
+                                            { id: 'Disponível', label: 'Disponível' },
+                                            { id: 'Pausada', label: 'Pausada' }
+                                        ].map(item => (
+                                            <button
+                                                key={item.id}
+                                                type="button"
+                                                onClick={() => setBulkEditNewStatus(item.id as any)}
+                                                className={`py-2 px-2 text-center rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                                                    bulkEditNewStatus === item.id
+                                                        ? 'bg-sky-600 text-white border-sky-600 shadow-xs'
+                                                        : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                                                }`}
+                                            >
+                                                {item.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsBulkEditModalOpen(false)}
+                                        className="px-3.5 py-2 border border-slate-200 text-slate-600 font-bold rounded-xl text-xs uppercase cursor-pointer hover:bg-slate-50 transition-all"
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={actionLoading || targetSlots.length === 0}
+                                        className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white font-bold rounded-xl text-xs uppercase shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50 transition-all"
+                                    >
+                                        {actionLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                                        <span>Salvar {targetSlots.length} Vaga(s)</span>
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                );
+            })()}
+
+            {/* Modal de Exclusão em Lote (Bulk Delete) */}
+            {isBulkDeleteModalOpen && selectedProc && (() => {
+                const targetSlots = getTargetSlotsForScope(bulkDeleteScope, bulkDeleteSelectedDate);
+                const bookedCount = targetSlots.filter(v => slotAssignments.has(v.id)).length;
+                const freeCount = targetSlots.length - bookedCount;
+                const scopeTitle = bulkDeleteScope === 'date' && bulkDeleteSelectedDate
+                    ? `da data ${formatReadableDate(bulkDeleteSelectedDate)}`
+                    : `de todo o procedimento "${selectedProc.name}"`;
+
+                return (
+                    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+                        <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-150">
+                            <div className="px-5 py-4 bg-rose-50 border-b border-rose-100 flex items-center justify-between">
+                                <div className="flex items-center gap-2.5">
+                                    <div className="p-2 bg-rose-100 text-rose-700 rounded-xl">
+                                        <Trash2 className="w-4 h-4" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-sm font-black text-slate-800">
+                                            Excluir Vagas em Lote
+                                        </h3>
+                                        <p className="text-[11px] font-semibold text-rose-700">
+                                            Ação irreversível
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => setIsBulkDeleteModalOpen(false)}
+                                    className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+                                >
+                                    <X className="w-4 h-4" />
+                                </button>
+                            </div>
+
+                            <div className="p-5 space-y-4">
+                                <p className="text-xs text-slate-600 leading-relaxed">
+                                    Você tem certeza que deseja excluir <strong>{targetSlots.length} vaga(s)</strong> {scopeTitle}?
+                                </p>
+
+                                <div className="grid grid-cols-2 gap-2 text-center">
+                                    <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
+                                        <div className="text-lg font-black text-slate-800">{freeCount}</div>
+                                        <div className="text-[10px] font-bold text-slate-500 uppercase">Vagas Livres/Pausadas</div>
+                                    </div>
+                                    <div className={`p-2.5 rounded-xl border ${
+                                        bookedCount > 0 
+                                            ? 'bg-amber-50 border-amber-200 text-amber-900' 
+                                            : 'bg-slate-50 border-slate-200 text-slate-800'
+                                    }`}>
+                                        <div className="text-lg font-black">{bookedCount}</div>
+                                        <div className="text-[10px] font-bold uppercase">Com Paciente Alocado</div>
+                                    </div>
+                                </div>
+
+                                {bookedCount > 0 && (
+                                    <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 text-xs flex items-start gap-2">
+                                        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                                        <p className="text-[11px] leading-relaxed">
+                                            <strong>Atenção:</strong> {bookedCount} vaga(s) já possuem pacientes promovidos/alocados. Ao excluir essas vagas, os pacientes voltarão para a fila de espera ou aguardarão novas vagas.
+                                        </p>
+                                    </div>
+                                )}
+
+                                <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsBulkDeleteModalOpen(false)}
+                                        className="px-3.5 py-2 border border-slate-200 text-slate-600 font-bold rounded-xl text-xs uppercase cursor-pointer hover:bg-slate-50 transition-all"
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleConfirmBulkDelete}
+                                        disabled={actionLoading || targetSlots.length === 0}
+                                        className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs uppercase shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50 transition-all"
+                                    >
+                                        {actionLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                                        <span>Confirmar Exclusão</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
         </div>
     );
 };

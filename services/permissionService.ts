@@ -384,17 +384,10 @@ export const MODULE_ACCESS_TREE: ModuleItemDefinition[] = [
     submodules: [
       {
         key: 'sub_agendamento_agendar',
-        legacyKeys: ['parent_agendamento_veiculo_agendar'],
+        legacyKeys: ['parent_agendamento_veiculo_agendar', 'sub_agendamento_dia', 'parent_agendamento_veiculo_dia'],
         label: 'Agendar Veículo',
-        description: 'Nova solicitação de veículo para deslocamento',
-        routes: ['/AgendamentoVeiculos/Agendar']
-      },
-      {
-        key: 'sub_agendamento_dia',
-        legacyKeys: ['parent_agendamento_veiculo_dia'],
-        label: 'Agendar por Dia',
-        description: 'Visualização da escala diária de motoristas e veículos',
-        routes: ['/AgendamentoVeiculos/Agendar/Dia']
+        description: 'Solicitação e agendamento de veículos, calendário e escalas diárias',
+        routes: ['/AgendamentoVeiculos/Agendar', '/AgendamentoVeiculos/Agendar/Dia', '/AgendamentoVeiculos/Novo']
       },
       {
         key: 'sub_agendamento_historico',

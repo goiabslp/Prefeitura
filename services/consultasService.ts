@@ -1028,6 +1028,142 @@ export const deleteVaga = async (id: string): Promise<boolean> => {
     }
 };
 
+/**
+ * Pausa todas as vagas de um procedimento em lote (ou uma lista específica de IDs).
+ */
+export const pauseAllVagas = async (procedimentoId: string, vagaIds?: string[]): Promise<boolean> => {
+    try {
+        let query = supabase
+            .from('consultas_vagas')
+            .update({ status: 'Pausada' });
+
+        if (vagaIds && vagaIds.length > 0) {
+            query = query.in('id', vagaIds);
+        } else {
+            query = query.eq('procedimento_id', procedimentoId);
+        }
+
+        const { error } = await query;
+        if (error) throw error;
+
+        await recalculateAndPersistQueuePositions();
+
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('consultas-vagas-changed'));
+            window.dispatchEvent(new CustomEvent('consultas-procedimentos-changed'));
+        }
+
+        return true;
+    } catch (error) {
+        const appError = handleSupabaseError(error);
+        console.error('[consultasService] pauseAllVagas Error:', appError.message);
+        throw appError;
+    }
+};
+
+/**
+ * Ativa / Despausa todas as vagas de um procedimento em lote (ou uma lista específica de IDs).
+ */
+export const unpauseAllVagas = async (procedimentoId: string, vagaIds?: string[]): Promise<boolean> => {
+    try {
+        let query = supabase
+            .from('consultas_vagas')
+            .update({ status: 'Disponível' });
+
+        if (vagaIds && vagaIds.length > 0) {
+            query = query.in('id', vagaIds);
+        } else {
+            query = query.eq('procedimento_id', procedimentoId);
+        }
+
+        const { error } = await query;
+        if (error) throw error;
+
+        await recalculateAndPersistQueuePositions();
+
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('consultas-vagas-changed'));
+            window.dispatchEvent(new CustomEvent('consultas-procedimentos-changed'));
+        }
+
+        return true;
+    } catch (error) {
+        const appError = handleSupabaseError(error);
+        console.error('[consultasService] unpauseAllVagas Error:', appError.message);
+        throw appError;
+    }
+};
+
+/**
+ * Exclui todas as vagas de um procedimento em lote (ou uma lista específica de IDs).
+ */
+export const deleteAllVagas = async (procedimentoId: string, vagaIds?: string[]): Promise<boolean> => {
+    try {
+        let query = supabase
+            .from('consultas_vagas')
+            .delete();
+
+        if (vagaIds && vagaIds.length > 0) {
+            query = query.in('id', vagaIds);
+        } else {
+            query = query.eq('procedimento_id', procedimentoId);
+        }
+
+        const { error } = await query;
+        if (error) throw error;
+
+        await recalculateAndPersistQueuePositions();
+
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('consultas-vagas-changed'));
+            window.dispatchEvent(new CustomEvent('consultas-procedimentos-changed'));
+        }
+
+        return true;
+    } catch (error) {
+        const appError = handleSupabaseError(error);
+        console.error('[consultasService] deleteAllVagas Error:', appError.message);
+        throw appError;
+    }
+};
+
+/**
+ * Edita campos em lote para todas as vagas de um procedimento (ou lista específica de IDs).
+ */
+export const updateAllVagas = async (
+    procedimentoId: string, 
+    updates: Partial<ConsultaVaga>, 
+    vagaIds?: string[]
+): Promise<boolean> => {
+    try {
+        let query = supabase
+            .from('consultas_vagas')
+            .update(updates);
+
+        if (vagaIds && vagaIds.length > 0) {
+            query = query.in('id', vagaIds);
+        } else {
+            query = query.eq('procedimento_id', procedimentoId);
+        }
+
+        const { error } = await query;
+        if (error) throw error;
+
+        await recalculateAndPersistQueuePositions();
+
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('consultas-vagas-changed'));
+            window.dispatchEvent(new CustomEvent('consultas-procedimentos-changed'));
+        }
+
+        return true;
+    } catch (error) {
+        const appError = handleSupabaseError(error);
+        console.error('[consultasService] updateAllVagas Error:', appError.message);
+        throw appError;
+    }
+};
+
 // --- GESTORES DO MÓDULO DE CONSULTAS ---
 
 export const getSystemUsers = async (): Promise<any[]> => {
