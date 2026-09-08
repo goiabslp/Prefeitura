@@ -154,12 +154,11 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
     const isExistingMed = !!selectedExistingMed;
 
 
-    // Permissions
-    const isAdmin = currentUser?.role === 'admin';
-    const canCreate = currentUser?.permissions?.includes('parent_farmacia_estoque') || currentUser?.permissions?.includes('parent_farmacia') || currentUser?.permissions?.includes('parent_farmacia_criar') || isAdmin;
-    const canEdit = currentUser?.permissions?.includes('parent_farmacia_estoque') || currentUser?.permissions?.includes('parent_farmacia') || currentUser?.permissions?.includes('parent_farmacia_editar') || isAdmin;
-    const canDelete = currentUser?.permissions?.includes('parent_farmacia_estoque') || currentUser?.permissions?.includes('parent_farmacia') || currentUser?.permissions?.includes('parent_farmacia_excluir') || isAdmin;
-    const canApprove = currentUser?.permissions?.includes('parent_farmacia_estoque') || currentUser?.permissions?.includes('parent_farmacia') || currentUser?.permissions?.includes('parent_farmacia_aprovar') || isAdmin;
+    // Regra de 2 Níveis: Uma vez no submódulo Estoque, todas as operações estão liberadas
+    const canCreate = true;
+    const canEdit = true;
+    const canDelete = true;
+    const canApprove = true;
 
     const handleImportMeds = async () => {
         const medsList = getMedsToImport(RAW_MEDS);

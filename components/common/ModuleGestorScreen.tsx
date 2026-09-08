@@ -58,10 +58,6 @@ export const ModuleGestorScreen: React.FC<ModuleGestorScreenProps> = ({
         { id: 'parent_farmacia_dashboard', label: 'Tela: Dashboard & Indicadores', description: 'Permissão para estatísticas e indicadores de dispensação', category: 'tela' },
         { id: 'parent_farmacia_pacientes', label: 'Tela: Gestão de Pacientes', description: 'Permissão para visualizar pacientes atendidos pela farmácia', category: 'tela' },
         { id: 'parent_farmacia_gestor', label: 'Submódulo: Gestor (Permissões)', description: 'Permissão para gerenciar acessos de outros usuários', category: 'tela' },
-        { id: 'parent_farmacia_criar', label: 'Ação: Criar / Entrada de Medicamento', description: 'Permissão para cadastrar novos itens e lotes', category: 'acao' },
-        { id: 'parent_farmacia_editar', label: 'Ação: Editar Registros', description: 'Permissão para alterar dados cadastrais de medicamentos', category: 'acao' },
-        { id: 'parent_farmacia_excluir', label: 'Ação: Excluir Registros', description: 'Permissão para remover dados e itens do estoque', category: 'acao' },
-        { id: 'parent_farmacia_aprovar', label: 'Ação: Aprovar Dispensações', description: 'Permissão para aprovar saídas de medicamentos restritos', category: 'acao' },
       ];
     }
   }, [moduleType]);

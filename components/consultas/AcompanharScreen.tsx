@@ -1218,13 +1218,13 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
         fetchGestores();
     }, []);
 
-    // Permissions check: apenas gestores e administradores conseguem excluir!
+    // Regra de 2 Níveis: Uma vez no submódulo Acompanhar, todas as funcionalidades estão liberadas
     const isAdmin = currentUser.role === 'admin';
     const isGestor = gestorUserIds.includes(currentUser.id);
-    const canCancel = currentUser.permissions?.includes('parent_consultas_novo_agendamento') || isAdmin || isGestor;
-    const canComplete = currentUser.permissions?.includes('parent_consultas_novo_agendamento') || isAdmin || isGestor;
-    const canEdit = currentUser.permissions?.includes('parent_consultas_novo_agendamento') || isAdmin || isGestor;
-    const canDelete = isAdmin || isGestor;
+    const canCancel = true;
+    const canComplete = true;
+    const canEdit = true;
+    const canDelete = true;
 
     const formatDateBr = (d: string) => {
         if (!d) return '';
