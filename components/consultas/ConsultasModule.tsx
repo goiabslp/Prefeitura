@@ -44,26 +44,25 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
         return moduleStatus[key] !== false;
     };
 
-    const isNovoAgendamentoActive = isModuleActive('parent_consultas_novo_agendamento');
-    const isLiberarVagasActive = isModuleActive('parent_consultas_liberar_vagas') !== false;
-    const isAgendarActive = isModuleActive('parent_consultas_agendar') !== false;
-    const isAcompanharActive = isModuleActive('parent_consultas_acompanhar');
-    const isDadosActive = isModuleActive('parent_consultas_dados');
-    const isPacientesActive = isModuleActive('parent_consultas_pacientes');
-    const isGestorActive = isModuleActive('parent_consultas_gestor');
+    const isNovoAgendamentoActive = isModuleActive('sub_consultas_novo_agendamento') || isModuleActive('parent_consultas_novo_agendamento');
+    const isLiberarVagasActive = isModuleActive('sub_consultas_liberar_vagas') !== false || isModuleActive('parent_consultas_liberar_vagas') !== false;
+    const isAgendarActive = isModuleActive('sub_consultas_agendar') !== false || isModuleActive('parent_consultas_agendar') !== false;
+    const isAcompanharActive = isModuleActive('sub_consultas_acompanhar') || isModuleActive('parent_consultas_acompanhar');
+    const isDadosActive = isModuleActive('sub_consultas_dados') || isModuleActive('parent_consultas_dados');
+    const isPacientesActive = isModuleActive('sub_consultas_pacientes') || isModuleActive('parent_consultas_pacientes');
+    const isGestorActive = isModuleActive('sub_consultas_gestor') || isModuleActive('parent_consultas_gestor');
 
     const userPerms = currentUser?.permissions || [];
     const hasCustomPerms = Array.isArray(currentUser?.permissions) && currentUser.permissions.length > 0;
     const isDefaultAdmin = currentUser?.role === 'admin' && !hasCustomPerms;
-    const isAdmin = currentUser?.role === 'admin';
 
-    const canAccessNovoAgendamento = (isDefaultAdmin || userPerms.includes('parent_consultas_novo_agendamento')) && isNovoAgendamentoActive;
-    const canAccessLiberarVagas = (isDefaultAdmin || userPerms.includes('parent_consultas_liberar_vagas') || userPerms.includes('parent_consultas_dados') || isAdmin) && isLiberarVagasActive;
-    const canAccessAgendar = (isDefaultAdmin || userPerms.includes('parent_consultas_agendar') || userPerms.includes('sub_consultas_agendar') || userPerms.includes('parent_consultas_acompanhar') || userPerms.includes('parent_consultas_novo_agendamento') || isAdmin) && isAgendarActive;
-    const canAccessAcompanhar = (isDefaultAdmin || userPerms.includes('parent_consultas_acompanhar')) && isAcompanharActive;
-    const canAccessDados = (isDefaultAdmin || userPerms.includes('parent_consultas_dados')) && isDadosActive;
-    const canAccessPacientes = (isDefaultAdmin || userPerms.includes('parent_consultas_pacientes')) && isPacientesActive;
-    const canAccessGestor = (isDefaultAdmin || userPerms.includes('parent_consultas_gestor')) && isGestorActive;
+    const canAccessNovoAgendamento = (isDefaultAdmin || userPerms.includes('sub_consultas_novo_agendamento') || userPerms.includes('parent_consultas_novo_agendamento')) && isNovoAgendamentoActive;
+    const canAccessLiberarVagas = (isDefaultAdmin || userPerms.includes('sub_consultas_liberar_vagas') || userPerms.includes('parent_consultas_liberar_vagas')) && isLiberarVagasActive;
+    const canAccessAgendar = (isDefaultAdmin || userPerms.includes('sub_consultas_agendar') || userPerms.includes('parent_consultas_agendar')) && isAgendarActive;
+    const canAccessAcompanhar = (isDefaultAdmin || userPerms.includes('sub_consultas_acompanhar') || userPerms.includes('parent_consultas_acompanhar') || userPerms.includes('sub_consultas_definir_agenda') || userPerms.includes('parent_consultas_definir_agenda')) && isAcompanharActive;
+    const canAccessDados = (isDefaultAdmin || userPerms.includes('sub_consultas_dados') || userPerms.includes('parent_consultas_dados')) && isDadosActive;
+    const canAccessPacientes = (isDefaultAdmin || userPerms.includes('sub_consultas_pacientes') || userPerms.includes('parent_consultas_pacientes')) && isPacientesActive;
+    const canAccessGestor = (isDefaultAdmin || userPerms.includes('sub_consultas_gestor') || userPerms.includes('parent_consultas_gestor')) && isGestorActive;
 
     const showNovoAgendamento = (subView === 'novo-agendamento' || (subView?.startsWith('novo-agendamento') ?? false) || subView === 'vagas-reservadas') && canAccessNovoAgendamento;
     const showLiberarVagas = (subView === 'liberar-vagas') && canAccessLiberarVagas;
@@ -297,7 +296,7 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
                         </button>
                     )}
 
-                    {!canAccessNovoAgendamento && !canAccessLiberarVagas && !canAccessAcompanhar && !canAccessPacientes && !canAccessDados && !canAccessGestor && (
+                    {!canAccessNovoAgendamento && !canAccessLiberarVagas && !canAccessAgendar && !canAccessAcompanhar && !canAccessPacientes && !canAccessDados && !canAccessGestor && (
                         <div className="col-span-full text-center p-8 bg-white border border-slate-200 rounded-[2rem] shadow-sm max-w-md mx-auto">
                             <Activity className="w-12 h-12 text-slate-300 mx-auto mb-4" />
                             <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Regulação & Consultas</h3>

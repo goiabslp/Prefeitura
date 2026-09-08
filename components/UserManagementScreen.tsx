@@ -399,6 +399,18 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
 
       setEditingUser(prev => prev ? { ...prev, permissions: updatedPerms as AppPermission[] } : null);
 
+      // Se houver impersonação ativa deste usuário, sincroniza imediatamente o sessionStorage
+      try {
+        const rawSession = window.sessionStorage.getItem('sys_active_impersonation_session');
+        if (rawSession) {
+          const parsed = JSON.parse(rawSession);
+          if (parsed.targetUser && parsed.targetUser.id === updatedUser.id) {
+            parsed.targetUser = updatedUser;
+            window.sessionStorage.setItem('sys_active_impersonation_session', JSON.stringify(parsed));
+          }
+        }
+      } catch (e) {}
+
       // Persiste imediatamente no Supabase e atualiza o estado global sem recarregar
       onUpdateUser(updatedUser);
       showToast("Permissão atualizada em tempo real!", "success");

@@ -28,25 +28,24 @@ export const FarmaciaDashboard: React.FC<FarmaciaDashboardProps> = ({
         return moduleStatus[key] !== false;
     };
 
-    const isConsultarActive = isModuleActive('parent_farmacia_consultar');
-    const isRetirarActive = isModuleActive('parent_farmacia_retirar');
-    const isEstoqueActive = isModuleActive('parent_farmacia_estoque');
-    const isDashboardActive = isModuleActive('parent_farmacia_dashboard');
-    const isPacientesActive = isModuleActive('parent_farmacia_pacientes');
-    const isGestorActive = isModuleActive('parent_farmacia_gestor');
+    const isConsultarActive = isModuleActive('sub_farmacia_consultar') || isModuleActive('parent_farmacia_consultar');
+    const isRetirarActive = isModuleActive('sub_farmacia_retirar') || isModuleActive('parent_farmacia_retirar');
+    const isEstoqueActive = isModuleActive('sub_farmacia_estoque') || isModuleActive('parent_farmacia_estoque');
+    const isDashboardActive = isModuleActive('sub_farmacia_dashboard') || isModuleActive('parent_farmacia_dashboard');
+    const isPacientesActive = isModuleActive('sub_farmacia_pacientes') || isModuleActive('parent_farmacia_pacientes');
+    const isGestorActive = isModuleActive('sub_farmacia_gestor') || isModuleActive('parent_farmacia_gestor');
 
     const userPerms = currentUser?.permissions || [];
     const hasCustomPerms = Array.isArray(currentUser?.permissions) && currentUser.permissions.length > 0;
     const isDefaultAdmin = currentUser?.role === 'admin' && !hasCustomPerms;
-    const isAdmin = currentUser?.role === 'admin';
 
-    const canAccessConsultar = (isDefaultAdmin || userPerms.includes('parent_farmacia_consultar')) && isConsultarActive;
-    const canAccessRetirar = (isDefaultAdmin || userPerms.includes('parent_farmacia_retirar')) && isRetirarActive;
-    const canAccessEstoque = (isDefaultAdmin || userPerms.includes('parent_farmacia_estoque')) && isEstoqueActive;
-    const canAccessHistorico = isDefaultAdmin || userPerms.includes('parent_farmacia');
-    const canAccessDados = (isDefaultAdmin || userPerms.includes('parent_farmacia_dashboard')) && isDashboardActive;
-    const canAccessPacientes = (isDefaultAdmin || userPerms.includes('parent_farmacia_pacientes')) && isPacientesActive;
-    const canAccessGestor = (isDefaultAdmin || userPerms.includes('parent_farmacia_gestor')) && isGestorActive;
+    const canAccessConsultar = (isDefaultAdmin || userPerms.includes('sub_farmacia_consultar') || userPerms.includes('parent_farmacia_consultar')) && isConsultarActive;
+    const canAccessRetirar = (isDefaultAdmin || userPerms.includes('sub_farmacia_retirar') || userPerms.includes('parent_farmacia_retirar')) && isRetirarActive;
+    const canAccessEstoque = (isDefaultAdmin || userPerms.includes('sub_farmacia_estoque') || userPerms.includes('parent_farmacia_estoque')) && isEstoqueActive;
+    const canAccessHistorico = isDefaultAdmin || userPerms.includes('sub_farmacia_dashboard') || userPerms.includes('parent_farmacia_dashboard') || userPerms.includes('parent_farmacia');
+    const canAccessDados = (isDefaultAdmin || userPerms.includes('sub_farmacia_dashboard') || userPerms.includes('parent_farmacia_dashboard')) && isDashboardActive;
+    const canAccessPacientes = (isDefaultAdmin || userPerms.includes('sub_farmacia_pacientes') || userPerms.includes('parent_farmacia_pacientes')) && isPacientesActive;
+    const canAccessGestor = (isDefaultAdmin || userPerms.includes('sub_farmacia_gestor') || userPerms.includes('parent_farmacia_gestor')) && isGestorActive;
 
     return (
         <div className="flex-1 flex flex-col justify-center items-center w-full max-w-7xl mx-auto px-4 py-8 animate-in fade-in slide-in-from-bottom-6 duration-500">
@@ -208,6 +207,14 @@ export const FarmaciaDashboard: React.FC<FarmaciaDashboardProps> = ({
                             Gerenciamento individual de permissões do módulo.
                         </p>
                     </button>
+                )}
+
+                {!canAccessConsultar && !canAccessRetirar && !canAccessEstoque && !canAccessDados && !canAccessPacientes && !canAccessGestor && (
+                    <div className="col-span-full text-center p-8 bg-white border border-slate-200 rounded-[2rem] shadow-sm max-w-md mx-auto">
+                        <Pill className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+                        <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Farmácia Popular</h3>
+                        <p className="text-xs text-slate-500 mt-2">Nenhuma funcionalidade deste módulo está disponível para o seu perfil ou dispositivo.</p>
+                    </div>
                 )}
             </div>
         </div>

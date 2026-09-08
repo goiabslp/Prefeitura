@@ -808,10 +808,14 @@ export function cleanPermissionsArray(
   const parentDef = MODULE_ACCESS_TREE.find(m => m.key === targetKey || m.legacyKeys?.includes(targetKey));
   if (parentDef && (parentDef.key === targetKey || parentDef.legacyKeys?.includes(targetKey))) {
     if (enabled) {
-      // Ativa o pai e garante que submódulos sejam ativados
+      // Ativa o pai e garante que submódulos sejam ativados (canônicos e legados)
       perms.add(parentDef.key);
+      parentDef.legacyKeys?.forEach(lk => perms.add(lk));
       if (parentDef.submodules) {
-        parentDef.submodules.forEach(sub => perms.add(sub.key));
+        parentDef.submodules.forEach(sub => {
+          perms.add(sub.key);
+          sub.legacyKeys?.forEach(lk => perms.add(lk));
+        });
       }
     } else {
       // DESATIVAÇÃO DO PAI:
@@ -833,14 +837,26 @@ export function cleanPermissionsArray(
     const subDef = p.submodules?.find(s => s.key === targetKey || s.legacyKeys?.includes(targetKey));
     if (subDef) {
       if (enabled) {
-        // Ativa o submódulo e garante o pai ativo
+        // Ativa o submódulo (canônico e legado) e garante o pai ativo (canônico e legado)
         perms.add(subDef.key);
+        subDef.legacyKeys?.forEach(lk => perms.add(lk));
         perms.add(p.key);
+        p.legacyKeys?.forEach(lk => perms.add(lk));
       } else {
         // DESATIVAÇÃO DO SUBMÓDULO:
         // Remove a chave canônica e TODAS as suas chaves legadas
         perms.delete(subDef.key);
         subDef.legacyKeys?.forEach(lk => perms.delete(lk));
+
+        // Se após remover este submódulo não restou nenhum outro submódulo desse pai ativo,
+        // remove também a chave do pai para consistência estrita
+        const hasRemainingSubmodules = p.submodules?.some(s =>
+          perms.has(s.key) || (s.legacyKeys && s.legacyKeys.some(lk => perms.has(lk)))
+        );
+        if (!hasRemainingSubmodules) {
+          perms.delete(p.key);
+          p.legacyKeys?.forEach(lk => perms.delete(lk));
+        }
       }
       return Array.from(perms);
     }
@@ -952,8 +968,23 @@ export function userCanAccessModuleParent(
     return false;
   }
 
-  // Verifica permissão explícita do módulo
-  return userHasPermissionKey(user.permissions, parentDef.key, parentDef.legacyKeys);
+  // Verifica permissão explícita do módulo pai
+  if (userHasPermissionKey(user.permissions, parentDef.key, parentDef.legacyKeys)) {
+    return true;
+  }
+
+  // REGRA OBRIGATÓRIA DE 2 NÍVEIS:
+  // Se qualquer submódulo (ou todos) estiver liberado para o usuário, o módulo pai DEVE obrigatoriamente aparecer e estar acessível.
+  if (parentDef.submodules && parentDef.submodules.length > 0) {
+    const hasAnySubmodule = parentDef.submodules.some(sub =>
+      userHasPermissionKey(user.permissions, sub.key, sub.legacyKeys)
+    );
+    if (hasAnySubmodule) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 /**

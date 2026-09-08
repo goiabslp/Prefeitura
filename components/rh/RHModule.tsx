@@ -37,14 +37,32 @@ export const RHModule: React.FC<RHModuleProps> = ({
     onLogout,
     onSaveForm
 }) => {
-    const { moduleStatus } = useSystemSettings();
+    const { moduleStatus, mobileModuleStatus } = useSystemSettings();
+    const [isMobileViewport, setIsMobileViewport] = useState(typeof window !== 'undefined' ? window.innerWidth < 768 : false);
+
+    useEffect(() => {
+        const handleResize = () => setIsMobileViewport(window.innerWidth < 768);
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
+    const isModuleActive = (key: string) => {
+        if (isMobileViewport) {
+            return mobileModuleStatus[key] !== false;
+        }
+        return moduleStatus[key] !== false;
+    };
+
     const currentUser = users.find(u => u.id === userId);
     const userPerms = currentUser?.permissions || [];
-    const isHorasExtrasAllowed = userPerms.includes('parent_rh_horas_extras');
-    const isHistoricoAllowed = userPerms.includes('parent_rh_historico');
+    const hasCustomPerms = Array.isArray(userPerms) && userPerms.length > 0;
+    const isDefaultAdmin = userRole === 'admin' && !hasCustomPerms;
 
-    const isHorasExtrasActive = moduleStatus['parent_rh_horas_extras'] !== false && isHorasExtrasAllowed;
-    const isHistoricoActive = moduleStatus['parent_rh_historico'] !== false && isHistoricoAllowed;
+    const isHorasExtrasAllowed = isDefaultAdmin || userPerms.includes('sub_rh_horas_extras') || userPerms.includes('parent_rh_horas_extras') || userPerms.includes('parent_rh');
+    const isHistoricoAllowed = isDefaultAdmin || userPerms.includes('sub_rh_historico') || userPerms.includes('parent_rh_historico') || userPerms.includes('parent_rh');
+
+    const isHorasExtrasActive = (isModuleActive('sub_rh_horas_extras') || isModuleActive('parent_rh_horas_extras')) && isHorasExtrasAllowed;
+    const isHistoricoActive = (isModuleActive('sub_rh_historico') || isModuleActive('parent_rh_historico')) && isHistoricoAllowed;
 
     const showHorasExtras = subView === 'horas-extras' && isHorasExtrasActive;
     const showHistorico = subView === 'historico' && isHistoricoActive;

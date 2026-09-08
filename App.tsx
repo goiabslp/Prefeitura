@@ -399,6 +399,9 @@ const App: React.FC = () => {
 
   const { user: rawUser, signIn, signOut, refreshUser, loading: authLoading } = useAuth();
 
+  // Lista de Usuários do Sistema
+  const [users, setUsers] = useState<User[]>(DEFAULT_USERS);
+
   // Estado da Sessão Ativa de Impersonação Administrativa
   const [impersonationSession, setImpersonationSession] = useState<ImpersonationSession | null>(() => {
     return impersonationService.getActiveImpersonation();
@@ -410,7 +413,8 @@ const App: React.FC = () => {
     // Se houver impersonação administrativa ativa:
     // O currentUser assume 100% a visão, dados e permissões do usuário alvo, sem privilégios administrativos adicionais
     if (impersonationSession) {
-      const target = impersonationSession.targetUser;
+      const freshTarget = users.find(u => u.id === impersonationSession.targetUser.id) || impersonationSession.targetUser;
+      const target = freshTarget;
       const safeAvatar = target.avatar && 
                          target.avatar.trim() !== '' && 
                          target.avatar.toLowerCase() !== 'sem avatar' && 
@@ -478,7 +482,7 @@ const App: React.FC = () => {
       realRole: rawUser.role,
       permissions: testPermissions
     };
-  }, [rawUser, impersonationSession]);
+  }, [rawUser, impersonationSession, users]);
 
   // Presence do Administrador: mantém o estado ativo publicado para o usuário alvo
   useEffect(() => {
@@ -650,7 +654,6 @@ const App: React.FC = () => {
 
   const [tasks, setTasks] = useState<Order[]>([]);
 
-  const [users, setUsers] = useState<User[]>(DEFAULT_USERS);
   // const [signatures, setSignatures] = useState<Signature[]>([]); // DEPRECATED: Signatures are now derived from Users
   const [globalCounter, setGlobalCounter] = useState(0);
 

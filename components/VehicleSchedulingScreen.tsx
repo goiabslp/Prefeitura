@@ -198,18 +198,20 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
     return moduleStatus[key] !== false;
   };
 
-  const isAgendarActive = isModuleActive('parent_agendamento_veiculo_agendar');
-  const isMeusActive = isModuleActive('parent_agendamento_veiculo_meus');
-  const isAprovacoesActive = isModuleActive('parent_agendamento_veiculo_aprovacoes');
-  const isDashboardActive = isModuleActive('parent_agendamento_veiculo_dashboard');
+  const isAgendarActive = isModuleActive('sub_agendamento_agendar') || isModuleActive('parent_agendamento_veiculo_agendar');
+  const isDiaActive = isModuleActive('sub_agendamento_dia') || isModuleActive('parent_agendamento_veiculo_dia');
+  const isMeusActive = isModuleActive('sub_agendamento_historico') || isModuleActive('parent_agendamento_veiculo_meus');
+  const isAprovacoesActive = isModuleActive('sub_agendamento_aprovacoes') || isModuleActive('parent_agendamento_veiculo_aprovacoes');
+  const isDashboardActive = isModuleActive('sub_agendamento_dashboard') || isModuleActive('parent_agendamento_veiculo_dashboard');
 
   const hasCustomPerms = Array.isArray(currentUserPermissions) && currentUserPermissions.length > 0;
   const isDefaultAdmin = currentUserRole === 'admin' && !hasCustomPerms;
 
-  const canAccessAgendar = (isDefaultAdmin || currentUserPermissions.includes('parent_agendamento_veiculo_agendar')) && isAgendarActive;
-  const canAccessMeus = (isDefaultAdmin || currentUserPermissions.includes('parent_agendamento_veiculo_meus')) && isMeusActive;
-  const canAccessAprovacoes = (isDefaultAdmin || currentUserPermissions.includes('parent_agendamento_veiculo_aprovacoes')) && isAprovacoesActive && canViewApprovals;
-  const canAccessDashboard = (isDefaultAdmin || currentUserPermissions.includes('parent_agendamento_veiculo_dashboard')) && isDashboardActive;
+  const canAccessAgendar = (isDefaultAdmin || currentUserPermissions.includes('sub_agendamento_agendar') || currentUserPermissions.includes('parent_agendamento_veiculo_agendar')) && isAgendarActive;
+  const canAccessDia = (isDefaultAdmin || currentUserPermissions.includes('sub_agendamento_dia') || currentUserPermissions.includes('parent_agendamento_veiculo_dia')) && isDiaActive;
+  const canAccessMeus = (isDefaultAdmin || currentUserPermissions.includes('sub_agendamento_historico') || currentUserPermissions.includes('parent_agendamento_veiculo_meus')) && isMeusActive;
+  const canAccessAprovacoes = (isDefaultAdmin || currentUserPermissions.includes('sub_agendamento_aprovacoes') || currentUserPermissions.includes('parent_agendamento_veiculo_aprovacoes')) && isAprovacoesActive;
+  const canAccessDashboard = (isDefaultAdmin || currentUserPermissions.includes('sub_agendamento_dashboard') || currentUserPermissions.includes('parent_agendamento_veiculo_dashboard')) && isDashboardActive;
 
 
   useEffect(() => {
@@ -596,14 +598,33 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
             </div>
 
             {/* Actions Grid - Responsive & Auto-adjusting */}
-            <div className="w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 max-w-7xl animate-in zoom-in duration-500 fill-mode-backwards p-2">
+            <div className="w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 md:gap-6 max-w-7xl animate-in zoom-in duration-500 fill-mode-backwards p-2">
+
+              {/* Card: Agendar por Dia */}
+              {canAccessDia && (
+                <button
+                  onClick={() => handleSubViewChange('day')}
+                  className="group relative w-full min-h-[140px] md:min-h-[180px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-sky-500/30 hover:border-sky-200 hover:from-white hover:to-sky-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden"
+                  style={{ animationDelay: '0ms' }}
+                >
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-sky-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
+                  <div className="absolute bottom-0 left-0 w-24 h-24 bg-sky-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
+
+                  <div className="w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-gradient-to-br from-sky-500 to-sky-600 flex items-center justify-center mb-3 text-white group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300 shadow-lg shadow-sky-500/30 ring-4 ring-white">
+                    <CalendarDays className="w-6 h-6 md:w-7 md:h-7 drop-shadow-md" />
+                  </div>
+
+                  <h3 className="text-lg md:text-2xl font-bold text-slate-800 mb-1 group-hover:text-slate-900 tracking-tight">Agendar por Dia</h3>
+                  <p className="text-[10px] md:text-xs font-bold text-slate-400 group-hover:text-sky-600 transition-colors uppercase tracking-widest">Escala diária de saídas</p>
+                </button>
+              )}
 
               {/* Card: Agendar Veículo */}
               {canAccessAgendar && (
                 <button
                   onClick={() => handleSubViewChange('calendar')}
                   className="group relative w-full min-h-[140px] md:min-h-[180px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-indigo-500/30 hover:border-indigo-200 hover:from-white hover:to-indigo-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden"
-                  style={{ animationDelay: '0ms' }}
+                  style={{ animationDelay: '50ms' }}
                 >
                   <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
                   <div className="absolute bottom-0 left-0 w-24 h-24 bg-indigo-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
@@ -674,7 +695,7 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
                 </button>
               )}
 
-              {!canAccessAgendar && !canAccessMeus && !canAccessAprovacoes && !canAccessDashboard && (
+              {!canAccessAgendar && !canAccessDia && !canAccessMeus && !canAccessAprovacoes && !canAccessDashboard && (
                 <div className="col-span-full text-center p-8 bg-white border border-slate-200 rounded-[2rem] shadow-sm max-w-md mx-auto">
                   <Car className="w-12 h-12 text-slate-300 mx-auto mb-4" />
                   <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Gestão de Veículos</h3>
@@ -1217,7 +1238,7 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
           <button onClick={() => handleSubViewChange('menu')} className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold uppercase">Voltar ao Menu</button>
         </div>
       ))}
-      {activeSubView === 'day' && (canAccessAgendar ? renderDayView() : (
+      {activeSubView === 'day' && ((canAccessDia || canAccessAgendar) ? renderDayView() : (
         <div className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-50 text-center">
           <Lock className="w-12 h-12 text-slate-300 mb-4" />
           <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Acesso Indisponível</h3>
