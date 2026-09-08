@@ -14,6 +14,11 @@ const AVATAR_CONFIGS = Array.from({ length: 14 }, (_, i) => ({
 }));
 
 export const AvatarSelectionModal: React.FC<AvatarSelectionModalProps> = ({ currentUser }) => {
+  // Se estiver em modo de impersonação administrativa, não exibe o modal
+  if (typeof window !== 'undefined' && window.sessionStorage.getItem('sys_active_impersonation_session')) {
+    return null;
+  }
+
   const { refreshUser } = useAuth();
   const [selectedSeed, setSelectedSeed] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);

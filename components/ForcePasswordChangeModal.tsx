@@ -10,6 +10,11 @@ interface ForcePasswordChangeModalProps {
 }
 
 export const ForcePasswordChangeModal: React.FC<ForcePasswordChangeModalProps> = ({ currentUser, onSuccess, onLogout }) => {
+    // Se estiver em modo de impersonação administrativa, não exibe o modal
+    if (typeof window !== 'undefined' && window.sessionStorage.getItem('sys_active_impersonation_session')) {
+        return null;
+    }
+
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);

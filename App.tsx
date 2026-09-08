@@ -407,10 +407,21 @@ const App: React.FC = () => {
     if (!rawUser) return null;
 
     // Se houver impersonação administrativa ativa:
-    // O currentUser assume a visão, dados e permissões do usuário alvo
+    // O currentUser assume a visão, dados e permissões do usuário alvo, ignorando onboarding e configurações pendentes
     if (impersonationSession) {
+      const target = impersonationSession.targetUser;
+      const safeAvatar = target.avatar && 
+                         target.avatar.trim() !== '' && 
+                         target.avatar.toLowerCase() !== 'sem avatar' && 
+                         target.avatar.toLowerCase() !== 'sem_avatar'
+        ? target.avatar
+        : '/avatars/avatar1.png';
+
       return {
-        ...impersonationSession.targetUser,
+        ...target,
+        avatar: safeAvatar,
+        mustChangePassword: false,
+        tempPassword: undefined,
         realRole: rawUser.role,
         impersonatedBy: impersonationSession.realAdmin
       };
@@ -4168,7 +4179,8 @@ const App: React.FC = () => {
     );
   }
 
-  if (currentUser && (currentUser.mustChangePassword || (currentUser.tempPassword && currentUser.tempPassword.trim() !== ''))) {
+  // Se estiver em impersonação administrativa, ignora completamente exigência de troca de senha
+  if (!impersonationSession && currentUser && (currentUser.mustChangePassword || (currentUser.tempPassword && currentUser.tempPassword.trim() !== ''))) {
     return (
       <ForcePasswordChangeModal
         currentUser={currentUser}
@@ -4187,7 +4199,8 @@ const App: React.FC = () => {
                            currentUser.avatar.toLowerCase() === 'sem avatar' ||
                            currentUser.avatar.toLowerCase() === 'sem_avatar';
 
-  if (currentUser && hasInvalidAvatar) {
+  // Se estiver em impersonação administrativa, ignora completamente a seleção obrigatória de avatar
+  if (!impersonationSession && currentUser && hasInvalidAvatar) {
     return (
       <AvatarSelectionModal currentUser={currentUser} />
     );
