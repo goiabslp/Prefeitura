@@ -979,15 +979,170 @@ export function userCanAccessSubmodule(
 }
 
 /**
+ * Interface com os dados detalhados para auditoria de acesso bloqueado
+ */
+export interface AccessDeniedDetails {
+  /** Rota URL ou caminho tentado (ex: /Editor/Compras) */
+  route?: string;
+  /** Nome amigável da função ou funcionalidade bloqueada (ex: "Novo Pedido", "Viajar") */
+  actionName?: string;
+  /** Nome amigável do módulo (ex: "Compras", "Diárias & Custeio") */
+  moduleLabel?: string;
+  /** Chave do módulo pai (ex: "parent_compras") */
+  parentKey?: string;
+  /** Submódulo ou funcionalidade filha (ex: "sub_compras_novo") */
+  subKey?: string;
+  /** Rótulo da funcionalidade filha */
+  itemLabel?: string;
+  /** Chave canônica de permissão requerida (ex: "sub_compras_novo") */
+  requiredKey?: string;
+  /** Chaves legadas alternativas aceitas */
+  legacyKeys?: string[];
+  /** Motivo detalhado do bloqueio */
+  reason: string;
+  /** Usuário que tentou acessar */
+  user: User | null;
+  /** Indica se o bloqueio decorreu de desativação global do módulo/recurso */
+  isGlobalDisabled?: boolean;
+}
+
+/**
+ * Exibe no console, de forma destacada e de facílima identificação,
+ * exatamente qual acesso foi bloqueado, a função correspondente,
+ * a chave de permissão necessária e o usuário que tentou a ação.
+ */
+export function logAccessDenied(details: AccessDeniedDetails): void {
+  const headerStyle = 'background: #b91c1c; color: #ffffff; font-weight: bold; font-size: 12px; padding: 4px 8px; border-radius: 4px;';
+  const labelStyle = 'font-weight: bold; color: #ef4444;';
+  const textStyle = 'color: #f1f5f9; font-weight: 500;';
+  const keyStyle = 'color: #fde047; font-weight: bold; background: #451a03; padding: 2px 6px; border-radius: 3px;';
+  const userStyle = 'color: #38bdf8; font-weight: 500;';
+
+  const resourceTitle = details.actionName || details.itemLabel || details.route || 'Recurso Restrito';
+
+  console.groupCollapsed(`%c⛔ [ACESSO BLOQUEADO] Função: "${resourceTitle}" | Rota: ${details.route || 'N/A'}`, headerStyle);
+
+  console.log(`%c● Rota / Caminho URL:%c ${details.route || 'Chamada interna de função'}`, labelStyle, textStyle);
+  console.log(`%c● Função / Recurso Bloqueado:%c ${details.actionName || details.itemLabel || 'Não especificada'}`, labelStyle, textStyle);
+
+  if (details.moduleLabel || details.parentKey) {
+    console.log(`%c● Módulo do Sistema:%c ${details.moduleLabel || 'N/A'} (Chave: ${details.parentKey || 'N/A'})`, labelStyle, textStyle);
+  }
+
+  if (details.requiredKey) {
+    console.log(`%c● Chave de Permissão Requerida:%c ${details.requiredKey}`, labelStyle, keyStyle);
+  }
+  if (details.legacyKeys && details.legacyKeys.length > 0) {
+    console.log(`%c● Chaves Legadas Aceitas:%c ${details.legacyKeys.join(', ')}`, labelStyle, textStyle);
+  }
+
+  console.log(`%c● Motivo do Bloqueio:%c ${details.reason}`, labelStyle, 'color: #fca5a5; font-weight: bold;');
+
+  if (details.user) {
+    console.log(`%c● Usuário Solicitante:%c ${details.user.name || 'Sem nome'} (@${details.user.username || 'sem_username'})`, labelStyle, userStyle);
+    console.log(`%c● ID do Usuário:%c ${details.user.id}`, labelStyle, userStyle);
+    console.log(`%c● Cargo / Role:%c ${details.user.testRole || details.user.role || 'Não definido'}`, labelStyle, userStyle);
+    console.log(`%c● Setor / Secretaria:%c ${details.user.sector || 'Geral'}`, labelStyle, userStyle);
+    console.log(`%c● Total de Permissões Ativas:%c ${details.user.permissions?.length || 0}`, labelStyle, textStyle);
+    console.log(`%c● Array de Permissões do Usuário:`, labelStyle, details.user.permissions || []);
+  } else {
+    console.log(`%c● Usuário:%c Nenhum usuário autenticado na sessão atual`, labelStyle, 'color: #f87171; font-weight: bold;');
+  }
+
+  // Tabela e objeto estruturado para depuração imediata
+  console.log('📋 Detalhes estruturados do bloqueio de acesso:', {
+    acessoBloqueado: details.route || details.actionName || details.itemLabel,
+    funcao: details.actionName || details.itemLabel,
+    rota: details.route,
+    modulo: details.moduleLabel,
+    chaveModulo: details.parentKey,
+    chaveSubmodulo: details.subKey,
+    permissaoNecessaria: details.requiredKey,
+    chavesLegadasAceitas: details.legacyKeys,
+    motivo: details.reason,
+    bloqueioPorModuloGlobal: details.isGlobalDisabled || false,
+    usuario: details.user ? {
+      id: details.user.id,
+      nome: details.user.name,
+      username: details.user.username,
+      cargo: details.user.role,
+      cargoTeste: details.user.testRole,
+      setor: details.user.sector,
+      totalPermissoes: details.user.permissions?.length || 0,
+      permissoes: details.user.permissions
+    } : null
+  });
+
+  console.groupEnd();
+}
+
+/**
+ * Valida a permissão de uma ação/função no sistema e, em caso de bloqueio,
+ * registra detalhadamente no console a função e a chave de acesso bloqueadas.
+ */
+export function checkUserPermissionAndLog(
+  user: User | null,
+  permissionKey: string,
+  functionName: string,
+  moduleName?: string,
+  legacyKeys?: string[]
+): boolean {
+  if (!user) {
+    logAccessDenied({
+      actionName: functionName,
+      moduleLabel: moduleName,
+      requiredKey: permissionKey,
+      legacyKeys,
+      reason: `Tentativa de executar "${functionName}" sem nenhum usuário autenticado.`,
+      user: null
+    });
+    return false;
+  }
+
+  if (isSuperAdminUser(user)) {
+    return true;
+  }
+
+  const hasPerm = userHasPermissionKey(user.permissions, permissionKey, legacyKeys);
+  if (!hasPerm) {
+    logAccessDenied({
+      actionName: functionName,
+      moduleLabel: moduleName,
+      requiredKey: permissionKey,
+      legacyKeys,
+      reason: `Usuário "${user.name || user.username}" não possui a permissão "${permissionKey}" necessária para a função "${functionName}".`,
+      user
+    });
+    return false;
+  }
+
+  return true;
+}
+
+export interface RouteAccessCheckResult {
+  allowed: boolean;
+  reason?: string;
+  redirectPath?: string;
+  blockedRoute?: string;
+  moduleKey?: string;
+  moduleLabel?: string;
+  subKey?: string;
+  itemLabel?: string;
+  requiredKey?: string;
+  legacyKeys?: string[];
+  user?: User | null;
+}
+
+/**
  * ROUTE GUARD CENTRALIZADO
  * Valida se o usuário logado pode acessar a rota informada.
- * Retorna { allowed: boolean, reason?: string, redirectPath?: string }
+ * Quando o acesso é negado, emite no console todas as informações da função e do bloqueio.
  */
 export function canUserAccessRoute(
   path: string,
   user: User | null,
   globalSettings?: Record<string, boolean>
-): { allowed: boolean; reason?: string; redirectPath?: string } {
+): RouteAccessCheckResult {
   if (!path) return { allowed: true };
 
   const normalized = path.split('?')[0].replace(/\/$/, '').toLowerCase();
@@ -1000,7 +1155,20 @@ export function canUserAccessRoute(
 
   // 2. Sem usuário autenticado -> Redireciona para login
   if (!user) {
-    return { allowed: false, reason: 'Usuário não autenticado', redirectPath: '/Login' };
+    const reason = 'Usuário não autenticado no sistema.';
+    logAccessDenied({
+      route: path,
+      actionName: 'Autenticação de Sessão',
+      reason,
+      user: null
+    });
+    return { 
+      allowed: false, 
+      reason: 'Usuário não autenticado', 
+      redirectPath: '/Login',
+      blockedRoute: path,
+      user: null
+    };
   }
 
   // Rota Home (/PaginaInicial ou /) sempre permitida para usuário logado
@@ -1034,19 +1202,57 @@ export function canUserAccessRoute(
 
   // 4. Validação do Módulo Pai no Global
   if (!isModuleActiveGlobally(binding.parentKey, globalSettings)) {
+    const reason = `O módulo "${binding.moduleLabel}" está temporariamente desativado no sistema.`;
+    logAccessDenied({
+      route: path,
+      actionName: binding.moduleLabel,
+      itemLabel: binding.itemLabel,
+      moduleLabel: binding.moduleLabel,
+      parentKey: binding.parentKey,
+      requiredKey: binding.parentKey,
+      legacyKeys: parentDef.legacyKeys,
+      reason,
+      user,
+      isGlobalDisabled: true
+    });
     return {
       allowed: false,
-      reason: `O módulo "${binding.moduleLabel}" está temporariamente desativado no sistema.`,
-      redirectPath: '/PaginaInicial'
+      reason,
+      redirectPath: '/PaginaInicial',
+      blockedRoute: path,
+      moduleKey: binding.parentKey,
+      moduleLabel: binding.moduleLabel,
+      requiredKey: binding.parentKey,
+      legacyKeys: parentDef.legacyKeys,
+      user
     };
   }
 
   // 5. Validação do Módulo Pai no Usuário
   if (!userCanAccessModuleParent(user, parentDef, globalSettings)) {
+    const reason = `Seu usuário não possui permissão de acesso ao módulo "${binding.moduleLabel}".`;
+    logAccessDenied({
+      route: path,
+      actionName: binding.moduleLabel,
+      itemLabel: binding.itemLabel,
+      moduleLabel: binding.moduleLabel,
+      parentKey: binding.parentKey,
+      requiredKey: binding.parentKey,
+      legacyKeys: parentDef.legacyKeys,
+      reason,
+      user,
+      isGlobalDisabled: false
+    });
     return {
       allowed: false,
-      reason: `Seu usuário não possui permissão de acesso ao módulo "${binding.moduleLabel}".`,
-      redirectPath: '/PaginaInicial'
+      reason,
+      redirectPath: '/PaginaInicial',
+      blockedRoute: path,
+      moduleKey: binding.parentKey,
+      moduleLabel: binding.moduleLabel,
+      requiredKey: binding.parentKey,
+      legacyKeys: parentDef.legacyKeys,
+      user
     };
   }
 
@@ -1057,22 +1263,67 @@ export function canUserAccessRoute(
 
     // Submódulo no Global
     if (!isSubmoduleActiveGlobally(binding.parentKey, binding.subKey, globalSettings)) {
+      const reason = `A funcionalidade "${itemTitle}" do módulo "${binding.moduleLabel}" está temporariamente desativada no sistema.`;
+      logAccessDenied({
+        route: path,
+        actionName: itemTitle,
+        itemLabel: itemTitle,
+        moduleLabel: binding.moduleLabel,
+        parentKey: binding.parentKey,
+        subKey: binding.subKey,
+        requiredKey: subDef?.key || binding.subKey,
+        legacyKeys: subDef?.legacyKeys,
+        reason,
+        user,
+        isGlobalDisabled: true
+      });
       return {
         allowed: false,
-        reason: `A funcionalidade "${itemTitle}" do módulo "${binding.moduleLabel}" está temporariamente desativada no sistema.`,
-        redirectPath: '/PaginaInicial'
+        reason,
+        redirectPath: '/PaginaInicial',
+        blockedRoute: path,
+        moduleKey: binding.parentKey,
+        moduleLabel: binding.moduleLabel,
+        subKey: binding.subKey,
+        itemLabel: itemTitle,
+        requiredKey: subDef?.key || binding.subKey,
+        legacyKeys: subDef?.legacyKeys,
+        user
       };
     }
 
     // Submódulo no Usuário
     if (!userCanAccessSubmodule(user, binding.parentKey, binding.subKey, globalSettings)) {
+      const reason = `Seu usuário não possui permissão para acessar "${itemTitle}" em "${binding.moduleLabel}".`;
+      logAccessDenied({
+        route: path,
+        actionName: itemTitle,
+        itemLabel: itemTitle,
+        moduleLabel: binding.moduleLabel,
+        parentKey: binding.parentKey,
+        subKey: binding.subKey,
+        requiredKey: subDef?.key || binding.subKey,
+        legacyKeys: subDef?.legacyKeys,
+        reason,
+        user,
+        isGlobalDisabled: false
+      });
       return {
         allowed: false,
-        reason: `Seu usuário não possui permissão para acessar "${itemTitle}" em "${binding.moduleLabel}".`,
-        redirectPath: '/PaginaInicial'
+        reason,
+        redirectPath: '/PaginaInicial',
+        blockedRoute: path,
+        moduleKey: binding.parentKey,
+        moduleLabel: binding.moduleLabel,
+        subKey: binding.subKey,
+        itemLabel: itemTitle,
+        requiredKey: subDef?.key || binding.subKey,
+        legacyKeys: subDef?.legacyKeys,
+        user
       };
     }
   }
 
   return { allowed: true };
 }
+
