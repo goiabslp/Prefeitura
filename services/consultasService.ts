@@ -39,10 +39,19 @@ export const getPacienteById = async (id: string): Promise<ConsultaPaciente | nu
 
 export const getPacienteByCpf = async (cpf: string): Promise<ConsultaPaciente | null> => {
     try {
+        const clean = cpf ? cpf.replace(/\D/g, '').trim() : '';
+        if (!clean) return null;
+
+        const formatted = clean.length === 11
+            ? `${clean.slice(0, 3)}.${clean.slice(3, 6)}.${clean.slice(6, 9)}-${clean.slice(9, 11)}`
+            : clean;
+
+        // Busca tanto por CPF limpo quanto por CPF formatado com máscara
         const { data, error } = await supabase
             .from('consultas_pacientes')
             .select('*')
-            .eq('cpf', cpf.replace(/\D/g, ''))
+            .or(`cpf.eq.${clean},cpf.eq.${formatted}`)
+            .limit(1)
             .maybeSingle();
 
         if (error) throw error;
@@ -56,9 +65,40 @@ export const getPacienteByCpf = async (cpf: string): Promise<ConsultaPaciente | 
 
 export const createPaciente = async (paciente: Omit<ConsultaPaciente, 'id' | 'created_at' | 'updated_at'>): Promise<ConsultaPaciente | null> => {
     try {
+        const cleanCpf = paciente.cpf ? paciente.cpf.replace(/\D/g, '').trim() : '';
+        const cleanSus = paciente.sus_number && paciente.sus_number.trim().length > 0 ? paciente.sus_number.trim() : null;
+
+        // 1. Verificação prévia: se o paciente já existir no banco por CPF, atualiza e retorna o registro
+        if (cleanCpf.length === 11) {
+            const existing = await getPacienteByCpf(cleanCpf);
+            if (existing) {
+                console.log('[consultasService] Paciente com este CPF já existe no banco. Atualizando e retornando existente...', existing.id);
+                const updated = await updatePaciente(existing.id, {
+                    name: paciente.name || existing.name,
+                    nickname: paciente.nickname !== undefined ? (paciente.nickname?.trim() || null) : existing.nickname,
+                    birth_date: paciente.birth_date || existing.birth_date,
+                    phone: paciente.phone !== undefined ? (paciente.phone?.trim() || null) : existing.phone,
+                    neighborhood: paciente.neighborhood !== undefined ? (paciente.neighborhood?.trim() || null) : existing.neighborhood,
+                    street: paciente.street !== undefined ? (paciente.street?.trim() || null) : existing.street,
+                    city: paciente.city !== undefined ? (paciente.city?.trim() || null) : existing.city,
+                    sus_number: cleanSus || existing.sus_number,
+                    agente_saude: paciente.agente_saude !== undefined ? (paciente.agente_saude?.trim() || null) : existing.agente_saude
+                });
+                return updated || existing;
+            }
+        }
+
         const cleanPaciente: any = {
-            ...paciente,
-            cpf: paciente.cpf.replace(/\D/g, '') // strip mask
+            name: paciente.name?.trim().toUpperCase(),
+            nickname: paciente.nickname?.trim() ? paciente.nickname.trim().toUpperCase() : null,
+            cpf: cleanCpf,
+            birth_date: paciente.birth_date,
+            phone: paciente.phone?.trim() ? paciente.phone.trim() : null,
+            neighborhood: paciente.neighborhood?.trim() ? paciente.neighborhood.trim().toUpperCase() : null,
+            street: paciente.street?.trim() ? paciente.street.trim().toUpperCase() : null,
+            city: paciente.city?.trim() ? paciente.city.trim().toUpperCase() : 'SÃO JOSÉ DO GOIABAL -MG',
+            sus_number: cleanSus,
+            agente_saude: paciente.agente_saude?.trim() ? paciente.agente_saude.trim() : null
         };
 
         let { data, error } = await supabase
@@ -73,7 +113,7 @@ export const createPaciente = async (paciente: Omit<ConsultaPaciente, 'id' | 'cr
             console.warn('[consultasService] Coluna(s) ausente(s) no Supabase. Tentando fallback progressivo...', error.message);
 
             // Lista de colunas opcionais que podem não existir ainda na tabela
-            const optionalCols = ['agente_saude', 'sus_number', 'phone'];
+            const optionalCols = ['agente_saude', 'sus_number', 'phone', 'neighborhood', 'street', 'nickname', 'city'];
             let fallbackPaciente = { ...cleanPaciente };
             let lastError = error;
 
@@ -96,6 +136,15 @@ export const createPaciente = async (paciente: Omit<ConsultaPaciente, 'id' | 'cr
             }
 
             error = lastError;
+        }
+
+        // Se deu erro de duplicidade (23505), busca o paciente existente por CPF e retorna com sucesso
+        if (error && error.code === '23505' && cleanCpf.length === 11) {
+            console.warn('[consultasService] Conflito de duplicidade 23505 capturado. Buscando paciente existente por CPF...');
+            const existing = await getPacienteByCpf(cleanCpf);
+            if (existing) {
+                return existing;
+            }
         }
 
         if (error) throw error;

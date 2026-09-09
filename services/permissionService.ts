@@ -1039,15 +1039,29 @@ export function userCanAccessSubmodule(
     return true;
   }
 
-  // 4. Checa a permissão individual do submódulo ou herança do módulo pai
-  // REGRA CANÔNICA DE HERANÇA:
-  // Se o usuário possui acesso habilitado ao módulo pai, ele possui acesso TOTAL
-  // a todas as funcionalidades e submódulos daquele módulo.
-  // Se o usuário possui acesso ao submódulo específico, ele também possui acesso total àquele submódulo.
+  // 4. Checa a permissão individual do submódulo
+  // Para que o usuário acesse o submódulo específico, ele DEVE possuir a permissão explícita
+  // do submódulo (chave canônica ou chaves legadas aceitas).
+  // A posse da permissão do módulo pai concede acesso ao módulo em geral, mas NÃO sobrepõe
+  // a desativação de submódulos individuais quando configurados no controle de acesso.
   const hasSubPerm = userHasPermissionKey(user.permissions, subDef.key, subDef.legacyKeys);
-  const hasParentPerm = userHasPermissionKey(user.permissions, parentDef.key, parentDef.legacyKeys);
+  if (hasSubPerm) {
+    return true;
+  }
 
-  return hasSubPerm || hasParentPerm;
+  // Se o usuário possui qualquer outro submódulo configurado para este módulo pai,
+  // significa que suas permissões já estão no modelo granular e este submódulo foi expressamente desativado.
+  const hasAnyOtherSubPerm = parentDef.submodules?.some(s =>
+    userHasPermissionKey(user.permissions, s.key, s.legacyKeys)
+  );
+  if (hasAnyOtherSubPerm) {
+    return false;
+  }
+
+  // Salvaguarda para usuários legados: se o usuário possui APENAS a chave pai antiga e nenhuma
+  // permissão granular de submódulos registrada no array, mantém compatibilidade retrógrada.
+  const hasParentPerm = userHasPermissionKey(user.permissions, parentDef.key, parentDef.legacyKeys);
+  return hasParentPerm;
 }
 
 /**

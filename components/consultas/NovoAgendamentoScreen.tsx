@@ -357,26 +357,50 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
         const delayDebounceFn = setTimeout(async () => {
             if (patientQuery.trim().length >= 3) {
                 setSearching(true);
-                const query = patientQuery.toLowerCase();
+                const query = patientQuery.toLowerCase().trim();
+                const cleanQuery = query.replace(/\D/g, '');
+
+                // 1. Se digitou ou colou um CPF de 11 dígitos, busca diretamente no banco com máxima precisão
+                if (cleanQuery.length === 11) {
+                    try {
+                        const directPatient = await db.getPacienteByCpf(cleanQuery);
+                        if (directPatient) {
+                            setPatientResults([directPatient]);
+                            setSelectedPatient(directPatient);
+                            setShowCpfNotFoundModal(false);
+                            setSearching(false);
+                            return;
+                        }
+                    } catch (e) {
+                        console.warn('[NovoAgendamentoScreen] Erro na busca direta por CPF:', e);
+                    }
+                }
+
                 const allPatients = await db.getPacientes();
                 
-                // Filter by name, nickname, CPF or SUS number
-                const results = allPatients.filter(p => 
-                    p.name.toLowerCase().includes(query) || 
-                    (p.nickname || '').toLowerCase().includes(query) ||
-                    p.cpf.includes(query.replace(/\D/g, '')) ||
-                    (p.sus_number || '').includes(query.replace(/\D/g, ''))
-                );
+                // Filter by name, nickname, CPF or SUS number normalizando dígitos
+                const results = allPatients.filter(p => {
+                    const patName = (p.name || '').toLowerCase();
+                    const patNickname = (p.nickname || '').toLowerCase();
+                    const patCpfClean = (p.cpf || '').replace(/\D/g, '');
+                    const patSusClean = (p.sus_number || '').replace(/\D/g, '');
+
+                    const matchesName = patName.includes(query) || patNickname.includes(query);
+                    const matchesCpf = cleanQuery.length >= 3 && patCpfClean.includes(cleanQuery);
+                    const matchesSus = cleanQuery.length >= 3 && patSusClean.includes(cleanQuery);
+
+                    return matchesName || matchesCpf || matchesSus || (p.cpf && p.cpf.toLowerCase().includes(query));
+                });
                 
                 setPatientResults(results);
                 setSearching(false);
 
-                // Ao pesquisar um CPF de 11 dígitos não cadastrado, deve abrir o modal de cadastro imediatamente
-                const cleanQuery = query.replace(/\D/g, '');
+                // Ao pesquisar um CPF de 11 dígitos não cadastrado, abre o modal de cadastro rápido
                 if (cleanQuery.length === 11) {
-                    const found = results.find(p => p.cpf.replace(/\D/g, '') === cleanQuery);
+                    const found = results.find(p => (p.cpf || '').replace(/\D/g, '') === cleanQuery);
                     if (found) {
                         setSelectedPatient(found);
+                        setShowCpfNotFoundModal(false);
                     } else {
                         const formattedCpf = `${cleanQuery.slice(0, 3)}.${cleanQuery.slice(3, 6)}.${cleanQuery.slice(6, 9)}-${cleanQuery.slice(9, 11)}`;
                         setNewPatientCpf(formattedCpf);
@@ -414,14 +438,14 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
         setLoading(true);
         try {
             const newPatient = await db.createPaciente({
-                name: newPatientName,
-                nickname: newPatientNickname.trim() || null,
+                name: newPatientName.trim().toUpperCase(),
+                nickname: newPatientNickname.trim() ? newPatientNickname.trim().toUpperCase() : null,
                 cpf: newPatientCpf,
                 birth_date: newPatientBirthDate,
                 phone: newPatientPhone.trim() || null,
-                neighborhood: newPatientNeighborhood.trim() || null,
-                street: newPatientStreet.trim() || null,
-                city: newPatientCity.trim() || null,
+                neighborhood: newPatientNeighborhood.trim() ? newPatientNeighborhood.trim().toUpperCase() : null,
+                street: newPatientStreet.trim() ? newPatientStreet.trim().toUpperCase() : null,
+                city: newPatientCity.trim() ? newPatientCity.trim().toUpperCase() : 'SÃO JOSÉ DO GOIABAL -MG',
                 sus_number: newPatientSusNumber.trim() || null,
                 agente_saude: newPatientAgenteSaude.trim() || null
             });

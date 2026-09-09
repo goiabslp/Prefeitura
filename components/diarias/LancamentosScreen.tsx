@@ -1,10 +1,11 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { 
   ArrowLeft, Loader2, Calendar, MapPin, Users, RefreshCw, 
   FileText, Search, Hash as HashIcon, CheckCircle2, 
   X, AlertTriangle, Upload, Paperclip, Check, Trash2,
   Car, Navigation, Hotel, BookOpen, Copy, Download, FileDown, XCircle, Receipt, Pencil,
-  UserPlus, Square, Timer, Clock, Plus, ArrowRightLeft, UserCheck, Play, ShieldCheck, Camera, Save
+  UserPlus, Square, Timer, Clock, Plus, ArrowRightLeft, UserCheck, Play, ShieldCheck, Camera, Save,
+  ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { getDiariasDespesasEnabled, setDiariasDespesasEnabled } from '../../services/diariasSettingsService';
 import { DiariaEvento, User, Attachment, Sector, Job, Person, Order } from '../../types';
@@ -78,7 +79,23 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [startingTripId, setStartingTripId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [gestoresMap, setGestoresMap] = useState<Record<string, string>>({});
+  const gestoresLoadedRef = useRef(false);
+
+  // Estados de Paginação e Feedback não bloqueante
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+
+  // Debounce na busca de texto (250ms) para digitação fluida sem engasgos
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+      setCurrentPage(1);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
   // Controle de Modais
   const [selectedEvento, setSelectedEvento] = useState<DiariaEvento | null>(null);
@@ -220,13 +237,6 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
         saida_validada: true
       } as any);
 
-      // Disparar sincronização local e global em tempo real
-      window.dispatchEvent(new Event('diarias_eventos_updated'));
-      window.dispatchEvent(new CustomEvent('diarias_checkpoint_updated', {
-        detail: { tripId: adminEmPercursoModal.id }
-      }));
-
-      await fetchEventos(false);
       setAdminEmPercursoModal(null);
     } catch (error: any) {
       console.error('Erro ao definir em percurso:', error);
@@ -388,27 +398,50 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
     loadAuxiliaryData();
   }, []);
 
-  // Assinatura em tempo real para checkpoints de localização e viagens com polling ativo de 15 segundos
+  // Assinatura em tempo real completa para INSERT, UPDATE e DELETE na tabela diarias_eventos
   useEffect(() => {
     const channel = supabase
-      .channel('realtime_diarias_checkpoints_channel')
+      .channel('realtime_diarias_lancamentos_sync')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'diarias_eventos' },
+        { event: 'INSERT', schema: 'public', table: 'diarias_eventos' },
+        (payload) => {
+          if (payload.new) {
+            const newEvt = payload.new as DiariaEvento;
+            setEventos(prev => {
+              if (prev.some(e => String(e.id) === String(newEvt.id))) return prev;
+              return [newEvt, ...prev];
+            });
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'diarias_eventos' },
         (payload) => {
           if (payload.new) {
             const updated = payload.new as DiariaEvento;
-            setEventos(prev => prev.map(e => e.id === updated.id ? { ...e, ...updated } : e));
-            setSelectedEvento(prev => (prev && prev.id === updated.id) ? { ...prev, ...updated } : prev);
+            setEventos(prev => prev.map(e => String(e.id) === String(updated.id) ? { ...e, ...updated } : e));
+            setSelectedEvento(prev => (prev && String(prev.id) === String(updated.id)) ? { ...prev, ...updated } : prev);
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'diarias_eventos' },
+        (payload) => {
+          const deletedId = (payload.old as any)?.id;
+          if (deletedId) {
+            setEventos(prev => prev.filter(e => String(e.id) !== String(deletedId)));
           }
         }
       )
       .subscribe();
 
-    // Polling a cada 15s para garantir sincronização no painel de lançamentos
+    // Sincronização leve de fallback (2 minutos) para caso a conexão WebSocket sofra oscilação
     const pollInterval = setInterval(() => {
       fetchEventos(false);
-    }, 15000);
+    }, 120000);
 
     return () => {
       supabase.removeChannel(channel);
@@ -419,22 +452,22 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
   const fetchEventos = async (showFullLoading = false) => {
     if (showFullLoading) setIsLoading(true);
     try {
-      // 1. Buscar gestores mapeados
-      const gestores = await getDiariasGestores();
-      const gMap: Record<string, string> = {};
-      gestores.forEach(g => {
-        gMap[g.pessoa_id] = g.gestor_id;
-      });
-      setGestoresMap(gMap);
+      // 1. Buscar gestores mapeados com cache em ref para evitar requisições redundantes ao banco
+      if (!gestoresLoadedRef.current) {
+        const gestores = await getDiariasGestores();
+        const gMap: Record<string, string> = {};
+        gestores.forEach(g => {
+          gMap[g.pessoa_id] = g.gestor_id;
+        });
+        setGestoresMap(gMap);
+        gestoresLoadedRef.current = true;
+      }
 
-      // 2. Buscar eventos
-      let data: DiariaEvento[] = [];
-      // Buscamos todos os eventos para poder cruzar as permissões de gestor no front-end de forma flexível
-      data = await getAllDiariaEventos();
+      // 2. Buscar eventos otimizados
+      const data = await getAllDiariaEventos();
       setEventos(data);
     } catch (error) {
-      console.error(error);
-      alert("Erro ao buscar lançamentos.");
+      console.error('Erro ao buscar lançamentos:', error);
     } finally {
       setIsLoading(false);
     }
@@ -448,22 +481,34 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
     const handleRefresh = (e?: any) => {
       if (e?.detail?.checkpoint && e?.detail?.tripId) {
         const { tripId, checkpoint } = e.detail;
-        setEventos(prev => prev.map(evt => evt.id === tripId ? {
+        setEventos(prev => prev.map(evt => String(evt.id) === String(tripId) ? {
           ...evt,
           ultimo_checkpoint: checkpoint,
           checklist: { ...((evt as any).checklist || {}), ultimo_checkpoint: checkpoint }
         } : evt));
-      } else {
+      } else if (e?.detail?.updatedEvento) {
+        const updated = e.detail.updatedEvento as DiariaEvento;
+        setEventos(prev => prev.map(evt => String(evt.id) === String(updated.id) ? { ...evt, ...updated } : evt));
+        setSelectedEvento(prev => (prev && String(prev.id) === String(updated.id)) ? { ...prev, ...updated } : prev);
+      } else if (e?.detail?.newEvento) {
+        const newEvt = e.detail.newEvento as DiariaEvento;
+        setEventos(prev => {
+          if (prev.some(evt => String(evt.id) === String(newEvt.id))) return prev;
+          return [newEvt, ...prev];
+        });
+      } else if (e?.detail?.deletedId) {
+        const delId = String(e.detail.deletedId);
+        setEventos(prev => prev.filter(evt => String(evt.id) !== delId));
+      } else if (!e?.detail) {
+        // Apenas recarrega caso seja um evento intencional sem dados pontuais
         fetchEventos(false);
       }
     };
     window.addEventListener('diarias_eventos_updated', handleRefresh);
     window.addEventListener('diarias_checkpoint_updated', handleRefresh);
-    window.addEventListener('popstate', handleRefresh);
     return () => {
       window.removeEventListener('diarias_eventos_updated', handleRefresh);
       window.removeEventListener('diarias_checkpoint_updated', handleRefresh);
-      window.removeEventListener('popstate', handleRefresh);
     };
   }, []);
 
@@ -487,7 +532,9 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
       saida_validada: true
     };
 
-    // 1. Atualização otimista na tela sem sair da página
+    const previousEventos = [...eventos];
+
+    // 1. Atualização otimista imediata na tela sem sair da página
     setEventos(prev => prev.map(e => e.id === evento.id ? optimisticEvento : e));
 
     // 2. Envio em segundo plano para o banco de dados
@@ -500,11 +547,10 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
         saida_validada: true
       } as any);
       setEventos(prev => prev.map(e => e.id === evento.id ? updated : e));
-      window.dispatchEvent(new Event('diarias_eventos_updated'));
     } catch (err) {
       console.error('Erro ao iniciar viagem:', err);
       alert('Falha ao iniciar a viagem. Tente novamente.');
-      fetchEventos(false);
+      setEventos(previousEventos);
     } finally {
       setStartingTripId(null);
     }
@@ -581,41 +627,61 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
     }
   };
 
-  const filteredEventos = eventos.filter(evento => {
-    const term = searchTerm.toLowerCase();
-    const matchesSearch = evento.destino.toLowerCase().includes(term) ||
-           evento.motivo.toLowerCase().includes(term) ||
-           evento.pessoas.some(p => p.name.toLowerCase().includes(term)) ||
-           (evento.status || '').toLowerCase().includes(term);
+  const filteredEventos = useMemo(() => {
+    const term = debouncedSearchTerm.toLowerCase().trim();
 
-    if (!matchesSearch) return false;
+    return eventos.filter(evento => {
+      if (term) {
+        const matchesSearch = 
+          (evento.destino && evento.destino.toLowerCase().includes(term)) ||
+          (evento.motivo && evento.motivo.toLowerCase().includes(term)) ||
+          (evento.pessoas && evento.pessoas.some(p => p?.name && p.name.toLowerCase().includes(term))) ||
+          ((evento.status || '').toLowerCase().includes(term)) ||
+          (String(evento.id).toLowerCase().includes(term));
 
-    // 1. ADMINISTRADOR deve visualizar todos os lançamentos de todos os usuários e gestores
-    if (currentUser?.role === 'admin') {
-      return true;
+        if (!matchesSearch) return false;
+      }
+
+      // 1. ADMINISTRADOR deve visualizar todos os lançamentos de todos os usuários e gestores
+      if (currentUser?.role === 'admin') {
+        return true;
+      }
+
+      // 2. GESTOR / SERVIDOR só deve ver viagem que ele mesmo lançou, ou que ele é o gestor responsável, ou participante
+      const isOwner = evento.user_id === currentUser?.id;
+      
+      const isParticipant = evento.pessoas && Array.isArray(evento.pessoas) && evento.pessoas.some(p => {
+        if (!p || !currentUser) return false;
+        if (p.id === currentUser.id) return true;
+        const normalize = (t: string) => t ? t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim() : "";
+        return p.name && currentUser.name && normalize(p.name) === normalize(currentUser.name);
+      });
+
+      const isGestorOfAnyPerson = evento.pessoas && Array.isArray(evento.pessoas) && evento.pessoas.some(p => {
+        const gId = gestoresMap[p.id] || gestoresMap[p.name];
+        return gId === currentUser?.id;
+      });
+
+      const isTransferredGestor = evento.gestor_transferido_cargo && currentUser?.jobTitle
+        ? currentUser.jobTitle.trim().toLowerCase() === evento.gestor_transferido_cargo.trim().toLowerCase()
+        : false;
+
+      return isOwner || isParticipant || isGestorOfAnyPerson || isTransferredGestor;
+    });
+  }, [eventos, debouncedSearchTerm, currentUser, gestoresMap]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredEventos.length / pageSize));
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(1);
     }
+  }, [totalPages, currentPage]);
 
-    // 2. GESTOR / SERVIDOR só deve ver viagem que ele mesmo lançou, ou que ele é o gestor responsável, ou participante
-    const isOwner = evento.user_id === currentUser?.id;
-    
-    const isParticipant = evento.pessoas && Array.isArray(evento.pessoas) && evento.pessoas.some(p => {
-      if (!p || !currentUser) return false;
-      if (p.id === currentUser.id) return true;
-      const normalize = (t: string) => t ? t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim() : "";
-      return p.name && currentUser.name && normalize(p.name) === normalize(currentUser.name);
-    });
-
-    const isGestorOfAnyPerson = evento.pessoas && Array.isArray(evento.pessoas) && evento.pessoas.some(p => {
-      const gId = gestoresMap[p.id] || gestoresMap[p.name];
-      return gId === currentUser?.id;
-    });
-
-    const isTransferredGestor = evento.gestor_transferido_cargo && currentUser?.jobTitle
-      ? currentUser.jobTitle.trim().toLowerCase() === evento.gestor_transferido_cargo.trim().toLowerCase()
-      : false;
-
-    return isOwner || isParticipant || isGestorOfAnyPerson || isTransferredGestor;
-  });
+  const paginatedEventos = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredEventos.slice(start, start + pageSize);
+  }, [filteredEventos, currentPage, pageSize]);
 
   const mappedOrdersForReport: Order[] = useMemo(() => {
     return filteredEventos.map(evt => {
@@ -733,35 +799,38 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
     if (!selectedEvento) return;
     setIsSavingFullEdit(true);
 
+    const previousEvento = { ...selectedEvento };
+    const previousEventos = [...eventos];
+
+    const updatedPayload: Partial<DiariaEvento> = {
+      status: 'aguardando_gestor', // Retorna obrigatoriamente para a revisão do gestor
+      destino: editDestino,
+      motivo: editMotivo,
+      veiculo: editVeiculo,
+      veiculo_outro: editVeiculoOutro,
+      distancia: Number(editDistancia) || 0,
+      data_saida: editDataSaida ? editDataSaida : selectedEvento.data_saida,
+      data_retorno: editDataRetorno ? editDataRetorno : selectedEvento.data_retorno,
+      hospedagem_dias: Number(editHospedagemDias) || 0,
+      valor_diaria: Number(valorDiaria) || selectedEvento.valor_diaria || 0,
+      justificativa_gestor: justificativaGestor,
+      relatorio_viagem: relatorioViagem,
+      gestor_transferido_cargo: transferGestorCargo,
+      comprovantes_gestor: comprovantes
+    };
+
+    const updatedEvento = { ...selectedEvento, ...updatedPayload };
+    setSelectedEvento(updatedEvento);
+    setEventos(prev => prev.map(evt => evt.id === selectedEvento.id ? updatedEvento : evt));
+
     try {
-      const updatedPayload: Partial<DiariaEvento> = {
-        status: 'aguardando_gestor', // Retorna obrigatoriamente para a revisão do gestor
-        destino: editDestino,
-        motivo: editMotivo,
-        veiculo: editVeiculo,
-        veiculo_outro: editVeiculoOutro,
-        distancia: Number(editDistancia) || 0,
-        data_saida: editDataSaida ? editDataSaida : selectedEvento.data_saida,
-        data_retorno: editDataRetorno ? editDataRetorno : selectedEvento.data_retorno,
-        hospedagem_dias: Number(editHospedagemDias) || 0,
-        valor_diaria: Number(valorDiaria) || selectedEvento.valor_diaria || 0,
-        justificativa_gestor: justificativaGestor,
-        relatorio_viagem: relatorioViagem,
-        gestor_transferido_cargo: transferGestorCargo,
-        comprovantes_gestor: comprovantes
-      };
-
       await updateDiariaEvento(selectedEvento.id, updatedPayload as any);
-
-      const updatedEvento = { ...selectedEvento, ...updatedPayload };
-      setSelectedEvento(updatedEvento);
-      setEventos(prev => prev.map(evt => evt.id === selectedEvento.id ? updatedEvento : evt));
-      window.dispatchEvent(new Event('diarias_eventos_updated'));
-
       alert('Solicitação atualizada! O evento retornou ao status de revisão pelo gestor e está pronto para seguir o fluxo.');
     } catch (err) {
       console.error('Erro ao salvar alterações da solicitação:', err);
-      alert('Falha ao salvar as alterações da viagem.');
+      setSelectedEvento(previousEvento);
+      setEventos(previousEventos);
+      alert('Falha ao salvar as alterações da viagem no servidor.');
     } finally {
       setIsSavingFullEdit(false);
     }
@@ -934,6 +1003,8 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
     const useHospedagem = diffHours >= 12 ? finalHospedagem : (finalizeEventoModal.hospedagem || false);
     const useHospedagemDias = diffHours >= 12 ? (finalHospedagem ? finalHospedagemDias : 0) : (finalizeEventoModal.hospedagem_dias || 0);
 
+    const previousEventos = [...eventos];
+
     try {
       const updated = await updateDiariaEvento(finalizeEventoModal.id, {
         pessoas: updatedPessoas,
@@ -946,10 +1017,10 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
       setEventos(prev => prev.map(e => e.id === finalizeEventoModal.id ? updated : e));
       setFinalizeEventoModal(null);
       alert('Viagem finalizada com sucesso!');
-      fetchEventos(false);
     } catch (err) {
       console.error('Erro ao finalizar viagem em Lançamentos:', err);
-      alert('Falha ao finalizar a viagem.');
+      setEventos(previousEventos);
+      alert('Falha ao finalizar a viagem no servidor.');
     } finally {
       setIsFinalizingSubmitting(false);
     }
@@ -958,36 +1029,58 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
   const handleGestorApprove = async () => {
     if (!selectedEvento) return;
 
-    setIsSubmitting(true);
-    try {
-      const isTransferring = Boolean(transferGestorCargo);
+    const previousEventos = [...eventos];
+    const previousSelected = { ...selectedEvento };
+    const eventoId = selectedEvento.id;
 
-      if (isTransferring) {
-        await updateDiariaEvento(selectedEvento.id, {
+    const isTransferring = Boolean(transferGestorCargo);
+
+    // Verifica se a data de retorno é anterior à data e hora atual
+    const agora = new Date();
+    const retornoRaw = editDataRetorno || selectedEvento.data_retorno;
+    const isRetornoSentinela = retornoRaw && String(retornoRaw).startsWith('2099');
+
+    let isRetornoNoPassado = false;
+    if (retornoRaw && !isRetornoSentinela) {
+      try {
+        const dtRetorno = new Date(retornoRaw);
+        if (!isNaN(dtRetorno.getTime()) && dtRetorno < agora) {
+          isRetornoNoPassado = true;
+        }
+      } catch (e) {}
+    }
+
+    const nextStatus = isTransferring
+      ? 'aguardando_gestor'
+      : (isRetornoNoPassado ? 'aguardando_administrador' : 'viagem_programada');
+
+    const updatedPayload: Partial<DiariaEvento> = isTransferring
+      ? {
           justificativa_gestor: justificativaGestor.trim() || undefined,
           comprovantes_gestor: comprovantes,
           gestor_transferido_cargo: transferGestorCargo || undefined,
           status: 'aguardando_gestor'
-        });
-        await fetchEventos();
-        handleCloseModal();
-        return;
-      }
+        }
+      : {
+          status: nextStatus,
+          justificativa_gestor: justificativaGestor.trim() || undefined,
+          comprovantes_gestor: comprovantes,
+          gestor_transferido_cargo: undefined
+        };
 
-      // Aprovação da viagem pelo Gestor: define status como viagem_programada
-      await updateDiariaEvento(selectedEvento.id, {
-        status: 'viagem_programada',
-        justificativa_gestor: justificativaGestor.trim() || undefined,
-        comprovantes_gestor: comprovantes,
-        gestor_transferido_cargo: undefined
-      });
-      await fetchEventos();
-      handleCloseModal();
+    // Atualização otimista imediata na interface
+    const optimisticEvento: DiariaEvento = { ...selectedEvento, ...updatedPayload };
+    setEventos(prev => prev.map(e => e.id === eventoId ? optimisticEvento : e));
+    handleCloseModal();
+
+    // Sincronização em background com rollback automático em caso de erro
+    try {
+      await updateDiariaEvento(eventoId, updatedPayload as any);
     } catch (err) {
       console.error('Erro ao aprovar solicitação de viagem:', err);
-      alert("Erro ao aprovar solicitação de viagem.");
-    } finally {
-      setIsSubmitting(false);
+      setEventos(previousEventos);
+      setSelectedEvento(previousSelected);
+      alert("Erro ao salvar aprovação no servidor. As alterações foram revertidas.");
     }
   };
 
@@ -996,21 +1089,29 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
       alert("Por favor, preencha a justificativa de rejeição.");
       return;
     }
-    setIsSubmitting(true);
+
+    const previousEventos = [...eventos];
+    const previousSelected = { ...selectedEvento };
+    const eventoId = selectedEvento.id;
+
+    const updatedPayload: Partial<DiariaEvento> = {
+      status: 'rejeitado_gestor',
+      justificativa_gestor: `[REJEITADO pelo GESTOR] ${rejectionReason.trim()}`
+    };
+
+    // Atualização otimista imediata
+    setEventos(prev => prev.map(e => e.id === eventoId ? { ...e, ...updatedPayload } : e));
+    setIsRejectModalOpen(false);
+    setRejectionReason('');
+    handleCloseModal();
+
     try {
-      await updateDiariaEvento(selectedEvento.id, {
-        status: 'rejeitado_gestor',
-        justificativa_gestor: `[REJEITADO pelo GESTOR] ${rejectionReason.trim()}`
-      });
-      fetchEventos();
-      setIsRejectModalOpen(false);
-      setRejectionReason('');
-      handleCloseModal();
+      await updateDiariaEvento(eventoId, updatedPayload as any);
     } catch (err) {
       console.error(err);
-      alert("Erro ao rejeitar a diária.");
-    } finally {
-      setIsSubmitting(false);
+      setEventos(previousEventos);
+      setSelectedEvento(previousSelected);
+      alert("Erro ao salvar rejeição no servidor. Ação revertida.");
     }
   };
 
@@ -1865,12 +1966,17 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
         signerName: currentUser?.name || 'Administrador'
       };
 
-      await updateDiariaEvento(selectedEvento.id, {
+      const previousEventos = [...eventos];
+      const previousSelected = { ...selectedEvento };
+      const eventoId = selectedEvento.id;
+
+      const optimisticEvento: DiariaEvento = {
+        ...selectedEvento,
         valor_diaria: valorFloat,
         relatorio_viagem: relatorioViagem.trim(),
         status: 'concluido',
         digital_signature: digitalSigData
-      });
+      };
 
       const sNome = selectedEvento.pessoas[0]?.name || 'Servidor não informado';
       const pessoaObj = selectedEvento.pessoas[0];
@@ -1926,6 +2032,10 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
         return `<div class="comprovantes-grid">${cardsHtml}</div>`;
       })();
 
+      // Atualização otimista imediata e fechamento do modal
+      setEventos(prev => prev.map(e => e.id === eventoId ? optimisticEvento : e));
+      handleCloseModal();
+
       // 1. Gera e dispara o PDF oficial direto
       generateDiariaPDF(
         selectedEvento,
@@ -1941,15 +2051,19 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
         comprovantesList
       );
 
-      await fetchEventos();
-      handleCloseModal();
-
-      // 2. Redireciona o usuário para a rota /Diarias/Lancamentos
+      // Redireciona o usuário para a rota canônica /Diarias/Lancamentos
       window.history.pushState({}, '', '/Diarias/Lancamentos');
-      window.dispatchEvent(new Event('popstate'));
+
+      // Persistência em background com rollback em caso de falha
+      await updateDiariaEvento(eventoId, {
+        valor_diaria: valorFloat,
+        relatorio_viagem: relatorioViagem.trim(),
+        status: 'concluido',
+        digital_signature: digitalSigData
+      });
     } catch (err) {
       console.error(err);
-      alert("Erro ao finalizar a aprovação e gerar a diária.");
+      alert("Erro ao finalizar a aprovação no servidor.");
     } finally {
       setIsSubmitting(false);
     }
@@ -1958,13 +2072,18 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
   const handleDelete = async (id: string) => {
     if (window.confirm("Tem certeza que deseja excluir permanentemente este lançamento de viagem?")) {
       const targetId = String(id).trim();
+      const previousEventos = [...eventos];
+
+      // 1. Atualização otimista imediata na interface
       setEventos(prev => prev.filter(e => String(e.id).trim() !== targetId));
+
+      // 2. Exclusão no banco com rollback se houver falha
       try {
         await deleteDiariaEvento(targetId);
-        await fetchEventos();
       } catch (err) {
         console.error(err);
-        await fetchEventos();
+        setEventos(previousEventos);
+        alert('Erro ao excluir o lançamento no servidor. Ação revertida.');
       }
     }
   };
@@ -2095,7 +2214,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
               </div>
 
               <div className="divide-y divide-slate-100">
-                {filteredEventos.map(evento => {
+                {paginatedEventos.map(evento => {
                   const createdDate = new Date(evento.created_at || new Date());
                   const monthName = createdDate.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '').toUpperCase();
                   const yearLabel = createdDate.toLocaleDateString('pt-BR', { year: '2-digit' });
@@ -2359,6 +2478,60 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                   );
                 })}
               </div>
+
+              {/* Barra de Paginação Fluida e Moderna */}
+              {filteredEventos.length > 0 && (
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 bg-slate-50/70 border-t border-slate-100 shrink-0 text-xs">
+                  <div className="flex items-center gap-2 text-slate-500 font-medium text-[11px]">
+                    <span>
+                      Exibindo <strong className="text-slate-800">{(currentPage - 1) * pageSize + 1}</strong> a <strong className="text-slate-800">{Math.min(currentPage * pageSize, filteredEventos.length)}</strong> de <strong className="text-slate-800">{filteredEventos.length}</strong> {filteredEventos.length === 1 ? 'viagem' : 'viagens'}
+                    </span>
+                    <span className="hidden sm:inline text-slate-300">|</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="hidden sm:inline">Por página:</span>
+                      <select
+                        value={pageSize}
+                        onChange={(e) => {
+                          setPageSize(Number(e.target.value));
+                          setCurrentPage(1);
+                        }}
+                        className="bg-white border border-slate-200 rounded-lg px-2 py-0.5 text-[11px] font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-2xs"
+                      >
+                        <option value={15}>15</option>
+                        <option value={25}>25</option>
+                        <option value={50}>50</option>
+                        <option value={100}>100</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {totalPages > 1 && (
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                        disabled={currentPage === 1}
+                        className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-2xs"
+                        title="Página anterior"
+                      >
+                        <ChevronLeft className="w-3.5 h-3.5" />
+                      </button>
+
+                      <span className="px-2.5 py-1 text-[11px] font-bold text-slate-700 bg-white border border-slate-200 rounded-lg shadow-2xs">
+                        Página {currentPage} de {totalPages}
+                      </span>
+
+                      <button
+                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                        disabled={currentPage === totalPages}
+                        className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-2xs"
+                        title="Próxima página"
+                      >
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -13,9 +13,32 @@ export const markEventAsDeleted = async (id: string | number) => {
 };
 
 export const checkAndApplyAutoCancellation = (events: DiariaEvento[]): DiariaEvento[] => {
-  // Viagens aprovadas/programadas nunca devem ser canceladas automaticamente no banco de dados,
-  // preservando a aprovação legítima realizada pelo gestor ou administrador.
-  return events;
+  const agora = new Date();
+
+  return events.map(evt => {
+    // Viagem programada é somente para viagens com data de saída ou retorno futuro.
+    // Se a data de retorno for anterior à data e hora atual e a viagem não estiver em andamento,
+    // transiciona para 'aguardando_administrador' para o fechamento final pelo administrador.
+    const retornoRaw = evt.data_retorno;
+    const isRetornoSentinela = retornoRaw && String(retornoRaw).startsWith('2099');
+
+    if (evt.status === 'viagem_programada' && retornoRaw && !isRetornoSentinela) {
+      try {
+        const dtRetorno = new Date(retornoRaw);
+        if (!isNaN(dtRetorno.getTime()) && dtRetorno < agora) {
+          const hasActiveTravel = evt.pessoas && Array.isArray(evt.pessoas) && evt.pessoas.some(p => (p as any).viagem_inicio && !(p as any).viagem_fim);
+          if (!hasActiveTravel) {
+            updateDiariaEvento(evt.id, { status: 'aguardando_administrador' }).catch(err => {
+              console.warn('Erro ao atualizar viagem retroativa para aguardando_administrador:', err);
+            });
+            return { ...evt, status: 'aguardando_administrador' };
+          }
+        }
+      } catch (e) {}
+    }
+
+    return evt;
+  });
 };
 
 const filterValidUserIds = async (userIds: Set<string>): Promise<string[]> => {
@@ -30,10 +53,12 @@ const filterValidUserIds = async (userIds: Set<string>): Promise<string[]> => {
 };
 
 const mergeDespesasFlag = async (events: DiariaEvento[]): Promise<DiariaEvento[]> => {
-  const deletedIds = await getDeletedEventIds();
+  const [deletedIds, map] = await Promise.all([
+    getDeletedEventIds(),
+    getEnabledDespesasEventsMap()
+  ]);
   const validEvents = events.filter(evt => !deletedIds.has(String(evt.id)));
   const processedEvents = checkAndApplyAutoCancellation(validEvents);
-  const map = await getEnabledDespesasEventsMap();
   return processedEvents.map(evt => {
     const sId = String(evt.id);
     const isEnabled = map[sId] !== undefined ? !!map[sId] : !!(evt as any).permitir_despesas_pos_finalizacao;
@@ -95,6 +120,8 @@ export const createDiariaEvento = async (evento: Omit<DiariaEvento, 'id' | 'crea
   } catch (err) {
     console.warn('Erro ao notificar criacao de viagem:', err);
   }
+
+  window.dispatchEvent(new CustomEvent('diarias_eventos_updated', { detail: { newEvento: createdData } }));
 
   return createdData;
 };
@@ -186,12 +213,13 @@ export const updateDiariaEvento = async (id: string, updates: Partial<DiariaEven
       .single();
 
     if (!fallbackRes.error) {
-      window.dispatchEvent(new Event('diarias_eventos_updated'));
       const map = await getEnabledDespesasEventsMap();
-      return {
+      const fallbackData = {
         ...fallbackRes.data,
         permitir_despesas_pos_finalizacao: isDespesasEnabledOverride ?? !!map[id]
       } as DiariaEvento;
+      window.dispatchEvent(new CustomEvent('diarias_eventos_updated', { detail: { updatedEvento: fallbackData } }));
+      return fallbackData;
     }
   }
 
@@ -200,12 +228,13 @@ export const updateDiariaEvento = async (id: string, updates: Partial<DiariaEven
     throw new Error('Falha ao atualizar o lançamento de viagem.');
   }
 
-  window.dispatchEvent(new Event('diarias_eventos_updated'));
   const map = await getEnabledDespesasEventsMap();
   const updatedData = {
     ...data,
     permitir_despesas_pos_finalizacao: isDespesasEnabledOverride ?? !!map[id]
   } as DiariaEvento;
+
+  window.dispatchEvent(new CustomEvent('diarias_eventos_updated', { detail: { updatedEvento: updatedData } }));
 
   // Notificações de mudança de status da viagem
   try {
@@ -324,6 +353,8 @@ export const deleteDiariaEvento = async (id: string): Promise<boolean> => {
   } catch (err) {
     console.warn('Exclusão tratada:', err);
   }
+
+  window.dispatchEvent(new CustomEvent('diarias_eventos_updated', { detail: { deletedId: cleanId } }));
 
   return true;
 };

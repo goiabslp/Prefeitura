@@ -1721,7 +1721,7 @@ const App: React.FC = () => {
     }, 500);
 
     return () => clearTimeout(timeoutId);
-  }, [currentView, activeBlock, adminTab, editingOrder, queryClient, refreshData]);
+  }, [currentView, activeBlock, adminTab, editingOrder, queryClient, refreshData, moduleStatus, currentUser]);
 
   // Garante que SEMPRE que entrar em uma nova página, aba ou submódulo a rolagem fique 100% no topo
   useEffect(() => {
