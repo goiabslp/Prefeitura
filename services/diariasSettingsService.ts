@@ -1,8 +1,38 @@
 import { supabase } from './supabaseClient';
 
+// Cache em memória com TTL de 60s para evitar requisições redundantes de 1.6s a organization_settings
+let memoryUiConfigCache: any = null;
+let lastCacheFetchTime = 0;
+const CACHE_TTL_MS = 60000;
+
+async function getCachedUiConfig(forceRefresh = false): Promise<any> {
+  const now = Date.now();
+  if (!forceRefresh && memoryUiConfigCache && (now - lastCacheFetchTime < CACHE_TTL_MS)) {
+    return memoryUiConfigCache;
+  }
+
+  try {
+    const { data } = await supabase
+      .from('organization_settings')
+      .select('ui_config')
+      .eq('id', 'global_config')
+      .single();
+
+    if (data?.ui_config) {
+      memoryUiConfigCache = data.ui_config;
+      lastCacheFetchTime = now;
+      return memoryUiConfigCache;
+    }
+  } catch (e) {
+    console.warn('Erro ao buscar ui_config no Supabase:', e);
+  }
+
+  return memoryUiConfigCache || {};
+}
+
 export const getDiariasDespesasEnabled = async (): Promise<boolean> => {
   try {
-    // 1. Tenta buscar no localStorage primeiro
+    // 1. Tenta buscar no localStorage primeiro para retorno ultra-rápido (0ms)
     const stored = localStorage.getItem('diarias_despesas_enabled');
     if (stored !== null) {
       return JSON.parse(stored);
@@ -12,15 +42,10 @@ export const getDiariasDespesasEnabled = async (): Promise<boolean> => {
   }
 
   try {
-    // 2. Tenta buscar das configurações globais no Supabase
-    const { data } = await supabase
-      .from('organization_settings')
-      .select('ui_config')
-      .eq('id', 'global_config')
-      .single();
-
-    if (data?.ui_config && typeof data.ui_config.diarias_despesas_enabled === 'boolean') {
-      const isEnabled = data.ui_config.diarias_despesas_enabled;
+    // 2. Busca do cache em memória/Supabase
+    const uiConfig = await getCachedUiConfig();
+    if (uiConfig && typeof uiConfig.diarias_despesas_enabled === 'boolean') {
+      const isEnabled = uiConfig.diarias_despesas_enabled;
       try {
         localStorage.setItem('diarias_despesas_enabled', JSON.stringify(isEnabled));
       } catch {}
@@ -43,17 +68,13 @@ export const setDiariasDespesasEnabled = async (enabled: boolean): Promise<boole
   }
 
   try {
-    const { data: orgData } = await supabase
-      .from('organization_settings')
-      .select('ui_config')
-      .eq('id', 'global_config')
-      .single();
-
-    const currentUiConfig = orgData?.ui_config || {};
+    const uiConfig = await getCachedUiConfig(true);
     const updatedUiConfig = {
-      ...currentUiConfig,
+      ...uiConfig,
       diarias_despesas_enabled: enabled
     };
+    memoryUiConfigCache = updatedUiConfig;
+    lastCacheFetchTime = Date.now();
 
     await supabase
       .from('organization_settings')
@@ -79,14 +100,9 @@ export const getEnabledDespesasEventsMap = async (): Promise<Record<string, bool
   }
 
   try {
-    const { data } = await supabase
-      .from('organization_settings')
-      .select('ui_config')
-      .eq('id', 'global_config')
-      .single();
-
-    if (data?.ui_config && typeof data.ui_config.diarias_despesas_events_map === 'object') {
-      const dbMap = data.ui_config.diarias_despesas_events_map || {};
+    const uiConfig = await getCachedUiConfig();
+    if (uiConfig && typeof uiConfig.diarias_despesas_events_map === 'object') {
+      const dbMap = uiConfig.diarias_despesas_events_map || {};
       const mergedMap = { ...localMap, ...dbMap };
       try {
         localStorage.setItem('diarias_despesas_events_map', JSON.stringify(mergedMap));
@@ -113,17 +129,13 @@ export const setEventoDespesasEnabled = async (eventId: string | number, enabled
   }
 
   try {
-    const { data: orgData } = await supabase
-      .from('organization_settings')
-      .select('ui_config')
-      .eq('id', 'global_config')
-      .single();
-
-    const currentUiConfig = orgData?.ui_config || {};
+    const uiConfig = await getCachedUiConfig(true);
     const updatedUiConfig = {
-      ...currentUiConfig,
+      ...uiConfig,
       diarias_despesas_events_map: updatedMap
     };
+    memoryUiConfigCache = updatedUiConfig;
+    lastCacheFetchTime = Date.now();
 
     await supabase
       .from('organization_settings')
@@ -148,14 +160,9 @@ export const getGlobalDeletedEventIds = async (): Promise<string[]> => {
   }
 
   try {
-    const { data } = await supabase
-      .from('organization_settings')
-      .select('ui_config')
-      .eq('id', 'global_config')
-      .single();
-
-    if (data?.ui_config && Array.isArray(data.ui_config.deleted_diarias_eventos_ids)) {
-      const dbIds: string[] = data.ui_config.deleted_diarias_eventos_ids;
+    const uiConfig = await getCachedUiConfig();
+    if (uiConfig && Array.isArray(uiConfig.deleted_diarias_eventos_ids)) {
+      const dbIds: string[] = uiConfig.deleted_diarias_eventos_ids;
       const mergedIds = Array.from(new Set([...localIds, ...dbIds]));
       try {
         localStorage.setItem('deleted_diarias_eventos_ids', JSON.stringify(mergedIds));

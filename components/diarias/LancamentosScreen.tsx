@@ -75,8 +75,21 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
   onBack,
   onGenerateDiaria
 }) => {
-  const [eventos, setEventos] = useState<DiariaEvento[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [eventos, setEventos] = useState<DiariaEvento[]>(() => {
+    try {
+      const cached = sessionStorage.getItem('cached_diarias_eventos') || localStorage.getItem('cached_diarias_eventos');
+      if (cached) return JSON.parse(cached);
+    } catch (e) {}
+    return [];
+  });
+  const [isLoading, setIsLoading] = useState(() => {
+    try {
+      const cached = sessionStorage.getItem('cached_diarias_eventos') || localStorage.getItem('cached_diarias_eventos');
+      return !cached;
+    } catch (e) {
+      return true;
+    }
+  });
   const [startingTripId, setStartingTripId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
@@ -450,7 +463,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
   }, []);
 
   const fetchEventos = async (showFullLoading = false) => {
-    if (showFullLoading) setIsLoading(true);
+    if (showFullLoading && eventos.length === 0) setIsLoading(true);
     try {
       // 1. Buscar gestores mapeados com cache em ref para evitar requisições redundantes ao banco
       if (!gestoresLoadedRef.current) {
@@ -466,12 +479,25 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
       // 2. Buscar eventos otimizados
       const data = await getAllDiariaEventos();
       setEventos(data);
+      try {
+        sessionStorage.setItem('cached_diarias_eventos', JSON.stringify(data));
+        localStorage.setItem('cached_diarias_eventos', JSON.stringify(data));
+      } catch (e) {}
     } catch (error) {
       console.error('Erro ao buscar lançamentos:', error);
     } finally {
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (eventos && eventos.length > 0) {
+      try {
+        sessionStorage.setItem('cached_diarias_eventos', JSON.stringify(eventos));
+        localStorage.setItem('cached_diarias_eventos', JSON.stringify(eventos));
+      } catch (e) {}
+    }
+  }, [eventos]);
 
   useEffect(() => {
     fetchEventos(eventos.length === 0);
@@ -2169,7 +2195,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
         </div>
 
         <div className="flex-1 overflow-auto bg-slate-100/80">
-          {isLoading ? (
+          {isLoading && eventos.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center space-y-4">
               <Loader2 className="w-10 h-10 text-indigo-600 animate-spin" />
               <p className="text-slate-400 font-medium text-sm animate-pulse">Carregando lançamentos...</p>
