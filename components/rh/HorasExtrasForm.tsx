@@ -360,7 +360,7 @@ export const HorasExtrasForm: React.FC<HorasExtrasFormProps> = ({
                                 {entries.map((entry, index) => {
                                     return (
                                         <div key={index} className={`group relative flex items-start p-4 bg-white border ${entry.status === 'Pendente' ? 'border-amber-200 bg-amber-50/30' : 'border-slate-100 hover:border-indigo-100'} rounded-2xl shadow-sm hover:shadow-md transition-all animate-in slide-in-from-right-4 duration-300`}>
-                                            {/* Avatar initial */}
+                                            {/* Inicial do Colaborador */}
                                             <div className={`w-10 h-10 rounded-full ${entry.status === 'Pendente' ? 'bg-amber-100 text-amber-600' : 'bg-indigo-50 text-indigo-600'} flex items-center justify-center font-bold text-sm shrink-0 mr-3 mt-0.5`}>
                                                 {entry.name?.charAt(0) || 'U'}
                                             </div>

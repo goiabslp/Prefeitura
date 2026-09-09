@@ -126,8 +126,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     twoFactorEnabled2: data.two_factor_enabled_2,
                     twoFactorSecret2: data.two_factor_secret_2,
                     mustChangePassword: !!data.must_change_password,
-                    status: data.status || 'active',
-                    avatar: data.avatar
+                    status: data.status || 'active'
                 };
 
                 if (appUser.status === 'blocked') {
@@ -153,7 +152,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                         event: 'user-login',
                         payload: {
                             username: appUser.name,
-                            avatarUrl: null, // Add avatar logic later if we have it
                             role: appUser.role
                         }
                     });

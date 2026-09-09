@@ -142,43 +142,6 @@ export const SYSTEM_SCREENS: Record<string, ScreenMetadata> = {
     howToGuide: 'Consulte os veículos disponíveis e viagens programadas para os próximos dias.'
   },
 
-  // --- TAREFAS ---
-  '/Tarefas/NovaTarefa': {
-    route: '/Tarefas/NovaTarefa',
-    canonicalRoute: '/Tarefas/NovaTarefa',
-    module: 'Tarefas',
-    submodule: 'Nova Tarefa',
-    title: 'Criação de Nova Tarefa Operacional',
-    description: 'Cadastro de demandas, prazos e atribuição de responsabilidades a setores e servidores.',
-    permissionKey: 'sub_tarefas_novo',
-    fields: [
-      { name: 'titulo', label: 'Título da Tarefa', type: 'text', required: true, placeholder: 'Ex: Revisar relatório quadrimestral' },
-      { 
-        name: 'prioridade', 
-        label: 'Nível de Prioridade', 
-        type: 'select', 
-        required: true, 
-        options: ['Alta', 'Média', 'Baixa', 'Urgente'] 
-      },
-      { name: 'responsavel', label: 'Responsável Atribuído', type: 'text', required: false, placeholder: 'Nome ou setor responsável' },
-      { name: 'prazo', label: 'Prazo Limite / Vencimento', type: 'date', required: false, placeholder: 'Ex: 15/10/2026' },
-      { name: 'descricao', label: 'Detalhamento da Tarefa', type: 'textarea', required: false }
-    ],
-    availableActions: ['Salvar Tarefa', 'Atribuir a Servidor', 'Definir Lembrete'],
-    howToGuide: 'Defina o título da atividade, selecione a prioridade e o prazo de conclusão. A tarefa será vinculada ao painel de acompanhamento do setor.'
-  },
-  '/Tarefas': {
-    route: '/Tarefas',
-    canonicalRoute: '/Tarefas',
-    module: 'Tarefas',
-    title: 'Gestão de Tarefas e Demandas',
-    description: 'Quadro de tarefas pendentes, em andamento e concluídas dos setores da prefeitura.',
-    permissionKey: 'parent_tarefas',
-    fields: [],
-    availableActions: ['Filtrar por Status', 'Criar Nova Tarefa', 'Concluir Tarefa'],
-    howToGuide: 'Acompanhe as tarefas sob sua responsabilidade ou do seu departamento.'
-  },
-
   // --- OFÍCIOS ---
   '/Editor/Oficio': {
     route: '/Editor/Oficio',

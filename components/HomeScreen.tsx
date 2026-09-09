@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { FilePlus, Package, History, FileText, ArrowRight, ArrowLeft, ShoppingCart, Gavel, Wallet, Inbox, CalendarRange, FileSearch, Droplet, Fuel, BarChart3, TrendingUp, LogOut, Sprout, HardHat, Activity, Car, ChevronDown, CalendarDays, Users, LayoutGrid, Megaphone, Database, Pill, Timer, Upload, Banknote, Newspaper, Sparkles, Star, AlertTriangle, Palette } from 'lucide-react';
+import { FilePlus, Package, History, FileText, ArrowRight, ArrowLeft, ShoppingCart, Gavel, Wallet, Inbox, CalendarRange, FileSearch, Droplet, Fuel, BarChart3, TrendingUp, LogOut, Activity, Car, ChevronDown, CalendarDays, Users, LayoutGrid, Megaphone, Database, Pill, Timer, Upload, Banknote, Newspaper, Sparkles, Star, AlertTriangle, Palette } from 'lucide-react';
 import { UserRole, UIConfig, AppPermission, BlockType, DiariaEvento, Order, User } from '../types';
-import { TasksDashboard } from './dashboard/TasksDashboard';
-import { QuickTaskCreation } from './dashboard/QuickTaskCreation';
 import { UpcomingEventsNotification } from './calendario/UpcomingEventsNotification';
 import { useSystemSettings } from '../contexts/SystemSettingsContext';
 import { ExcelImportModal } from './compras/ExcelImportModal';
@@ -19,8 +17,6 @@ interface HomeScreenProps {
     onLogout: () => void;
     onOpenAdmin: (tab?: string | null) => void;
     onAbastecimento?: (sub: string) => void;
-    onAgricultura?: () => void;
-    onObras?: () => void;
     onRH?: () => void;
     onProjetos?: () => void;
     onMarketing?: () => void;
@@ -28,7 +24,6 @@ interface HomeScreenProps {
     onFarmacia?: () => void;
     onNoticias?: () => void;
     onArt?: () => void;
-    onViewTasksDashboard?: () => void;
     currentUser?: User | null;
     userRole: UserRole;
     userName: string;
@@ -46,7 +41,6 @@ interface HomeScreenProps {
     orders?: Order[];
     onViewOrder?: (order: Order) => void;
     allUsers?: User[];
-    onTaskCreated?: (task: Order) => void;
     onManageInventory?: () => void;
     subView?: string;
 }
@@ -69,8 +63,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     onManageLicitacaoScreening,
     onViewAllLicitacao,
     onAbastecimento,
-    onAgricultura,
-    onObras,
     onRH,
     onProjetos,
     onMarketing,
@@ -79,11 +71,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     onNoticias,
     onArt,
     onLogout,
-    onViewTasksDashboard,
-    orders = [], // Receive orders for Tasks Dashboard
-    onViewOrder, // Callback to view order details
+    orders = [],
+    onViewOrder,
     onManageInventory,
-    allUsers = [], // Add access to users for task assignment (Need to add to Props interface first, but for now assuming it flows via spreading or defined explicitly if strict)
+    allUsers = [],
     subView = ''
 }) => {
     // Permission Checks
@@ -153,9 +144,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     const canAccessLicitacaoTriagem = permissions.includes('parent_licitacao_triagem');
     const canAccessLicitacaoProcessos = permissions.includes('parent_licitacao_processos');
     const canAccessAbastecimento = checkModuleAccess('parent_abastecimento');
-    const canAccessAgricultura = checkModuleAccess('parent_agricultura');
-    const canAccessObras = checkModuleAccess('parent_obras');
-    const canAccessTarefas = checkModuleAccess('parent_tarefas');
     const canAccessCalendario = checkModuleAccess('parent_calendario');
     const canAccessRh = checkModuleAccess('parent_rh');
     const canAccessProjetos = checkModuleAccess('parent_projetos');
@@ -197,20 +185,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     const getIconContainerClass = (color: string) => {
         return `w-12 h-12 desktop:w-16 desktop:h-16 rounded-xl desktop:rounded-2xl flex items-center justify-center mb-2 desktop:mb-3 transition-transform duration-500 ease-spring group-hover:scale-110 group-hover:rotate-3 shadow-lg bg-gradient-to-br from-${color}-500 to-${color}-600 text-white ring-4 ring-white`;
     };
-
-    const [isTasksDrawerOpen, setIsTasksDrawerOpen] = React.useState(false);
-    const [isTaskCreationOpen, setIsTaskCreationOpen] = React.useState(false);
-
-    React.useEffect(() => {
-        if (activeBlock === 'tarefas') {
-            if (subView === 'new') setIsTaskCreationOpen(true);
-            else if (subView === 'dashboard') setIsTasksDrawerOpen(true);
-            else {
-                setIsTaskCreationOpen(false);
-                setIsTasksDrawerOpen(false);
-            }
-        }
-    }, [activeBlock, subView]);
 
     // --- Render Module Button ---
     const renderModuleButton = (
@@ -297,9 +271,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 case 'diarias': return { name: "Diárias e Custeio", color: 'amber', icon: Wallet };
                 case 'agendamento': return { name: "Agendamento", color: 'indigo', icon: CalendarRange };
                 case 'abastecimento': return { name: "Abastecimento", color: 'cyan', icon: Fuel };
-                case 'agricultura': return { name: "Agricultura", color: 'emerald', icon: Sprout };
-                case 'obras': return { name: "Obras", color: 'orange', icon: HardHat };
-                case 'tarefas': return { name: "Gestão de Tarefas", color: 'pink', icon: Activity };
                 default: return { name: "", color: 'slate', icon: Package };
             }
         };
@@ -453,31 +424,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                         window.dispatchEvent(new Event('popstate'));
                     },
                     color: 'amber'
-                });
-            }
-        }
-
-        // Tarefas Specific Buttons
-        if (activeBlock === 'tarefas') {
-            if (canAccessSub('parent_tarefas', 'sub_tarefas_nova')) {
-                actionButtons.push({
-                    label: 'Nova Tarefa',
-                    desc: "Criar nova atividade",
-                    icon: FilePlus,
-                    onClick: () => {
-                        window.history.pushState({}, '', '/Tarefas/NovaTarefa');
-                        setIsTaskCreationOpen(true);
-                    },
-                    color: 'pink'
-                });
-            }
-            if (canAccessSub('parent_tarefas', 'sub_tarefas_minhas')) {
-                actionButtons.push({
-                    label: 'Minhas Tarefas',
-                    desc: "Dashboard de Atividades",
-                    icon: History,
-                    onClick: onViewTasksDashboard,
-                    color: 'purple'
                 });
             }
         }
@@ -662,7 +608,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                                 {canAccessLicitacao && renderModuleButton(() => setActiveBlock('licitacao'), 'blue', Gavel, 'Licitação', 'Processos', '200ms', false, getPendingCount('licitacao'))}
 
                                 {/* Management Modules */}
-                                {canAccessTarefas && renderModuleButton(() => setActiveBlock('tarefas'), 'pink', Activity, 'Tarefas', 'Atividades', '225ms', false, getPendingCount('tarefas'))}
                                 {canAccessCalendario && renderModuleButton(() => onCalendario?.(), 'rose', CalendarDays, 'Calendário', 'Agenda', '235ms', false, getPendingCount('calendario'))}
                                 {canAccessRh && renderModuleButton(() => onRH?.(), 'fuchsia', Users, 'RH', 'Gestão', '240ms', false, getPendingCount('rh'))}
                                 {canAccessProjetos && renderModuleButton(() => onProjetos?.(), 'teal', LayoutGrid, 'Projetos', 'Gestão', '245ms', false, getPendingCount('projetos'))}
@@ -684,10 +629,6 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                                     window.history.pushState({}, '', '/Upload');
                                     window.dispatchEvent(new Event('popstate'));
                                 }, 'sky', Upload, 'Upload Rápido', 'Anexar documentos', '320ms', false)}
-
-                                {/* Field Modules */}
-                                {canAccessAgricultura && renderModuleButton(() => onAgricultura?.(), 'emerald', Sprout, 'Agricultura', 'Gestão rural', '350ms', false, getPendingCount('agricultura'))}
-                                {canAccessObras && renderModuleButton(() => onObras?.(), 'orange', HardHat, 'Obras', 'Gestão de obras', '400ms', false, getPendingCount('obras'))}
 
                                 {/* Admin Shortcut */}
                                 {canAccessFleet && renderModuleButton(() => onOpenAdmin('fleet'), 'slate', Car, 'Frotas', 'Gestão', '450ms', false)}
@@ -720,57 +661,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
 
 
-            {/* TASKS DRAWER OVERLAY */}
-            {isTasksDrawerOpen && subView !== 'dashboard' && (
-                <div className="fixed inset-0 z-[100] flex justify-end">
-                    {/* Backdrop */}
-                    <div
-                        className="absolute inset-0 bg-slate-900/20 backdrop-blur-sm animate-in fade-in duration-300"
-                        onClick={() => setIsTasksDrawerOpen(false)}
-                    />
 
-                    {/* Drawer Content */}
-                    <div className="relative z-10 w-full max-w-md h-full bg-white/60 backdrop-blur-xl border-l border-white/50 shadow-2xl animate-in slide-in-from-right duration-300 flex flex-col p-4 desktop:p-6">
-                        <TasksDashboard
-                            orders={orders}
-                            userRole={userRole}
-                            userName={userName}
-                            userId={userId}
-                            onViewOrder={(order) => {
-                                onViewOrder?.(order);
-                                setIsTasksDrawerOpen(false); // Close drawer on selection
-                            }}
-                            onViewAll={(type) => {
-                                onTrackOrder();
-                                setIsTasksDrawerOpen(false);
-                            }}
-                            onClose={() => {
-                                setIsTasksDrawerOpen(false);
-                                if (activeBlock === 'tarefas') window.history.pushState({}, '', '/Tarefas');
-                            }}
-                        />
-                    </div>
-                </div>
-            )}
-            {/* TASK CREATION MODAL */}
-            <QuickTaskCreation
-                isOpen={isTaskCreationOpen}
-                onClose={() => {
-                    setIsTaskCreationOpen(false);
-                    if (activeBlock === 'tarefas') window.history.pushState({}, '', '/Tarefas');
-                }}
-                currentUserId={userId}
-                currentUserName={userName}
-                users={allUsers || []}
-                onTaskCreated={(task) => {
-                    // Optional: Trigger any immediate UI update if needed, 
-                    // though App.tsx should handle the state update via prop callback if we wired it there 
-                    // or simply rely on Realtime/Refresh.
-                    // Ideally we call a prop method to inject it into local state for instant feedback.
-                    // Assuming App.tsx passes a handler or we rely on the refresh cycle triggered by the parent.
-                    // For now, let's close.
-                }}
-            />
 
             {/* EXCEL IMPORT MODAL */}
             {isExcelModalOpen && (

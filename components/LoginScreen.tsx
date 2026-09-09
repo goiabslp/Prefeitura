@@ -10,8 +10,8 @@ import {
   ShoppingCart, 
   Truck, 
   Users, 
-  Leaf, 
-  HardHat, 
+  HeartPulse, 
+  FileText, 
   ScanFace, 
   Zap, 
   KeyRound, 
@@ -60,8 +60,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, uiConfig, onL
     { name: 'Licitação e Contratos', desc: 'Gestão transparente de processos e aditivos.', icon: ShoppingCart, color: 'text-indigo-600', bg: 'bg-indigo-100', border: 'border-indigo-200' },
     { name: 'Recursos Humanos', desc: 'Controle de folha, diárias, e horas extras.', icon: Users, color: 'text-emerald-600', bg: 'bg-emerald-100', border: 'border-emerald-200' },
     { name: 'Gestão de Frotas', desc: 'Controle rigoroso de veículos e abastecimentos.', icon: Truck, color: 'text-amber-600', bg: 'bg-amber-100', border: 'border-amber-200' },
-    { name: 'Obras Públicas', desc: 'Acompanhamento de medições e execuções.', icon: HardHat, color: 'text-orange-600', bg: 'bg-orange-100', border: 'border-orange-200' },
-    { name: 'Agricultura e Serviços', desc: 'Agendamento e controle de patrulha rural.', icon: Leaf, color: 'text-green-600', bg: 'bg-green-100', border: 'border-green-200' },
+    { name: 'Regulação & Consultas', desc: 'Agendamento de consultas médicas e regulação.', icon: HeartPulse, color: 'text-sky-600', bg: 'bg-sky-100', border: 'border-sky-200' },
+    { name: 'Ofícios & Protocolo', desc: 'Emissão e tramitação eletrônica de documentos.', icon: FileText, color: 'text-violet-600', bg: 'bg-violet-100', border: 'border-violet-200' },
   ];
 
   useEffect(() => {

@@ -509,30 +509,6 @@ export const MODULE_ACCESS_TREE: ModuleItemDefinition[] = [
     ]
   },
   {
-    key: 'parent_tarefas',
-    legacyKeys: ['tarefas'],
-    label: 'Tarefas',
-    description: 'Quadro de gestão de tarefas internas, prazos e delegações',
-    routes: ['/Tarefas'],
-    iconName: 'CheckSquare',
-    submodules: [
-      {
-        key: 'sub_tarefas_nova',
-        legacyKeys: ['parent_tarefas_nova'],
-        label: 'Nova Tarefa',
-        description: 'Criar e delegar tarefa para servidores ou setores',
-        routes: ['/Tarefas/NovaTarefa']
-      },
-      {
-        key: 'sub_tarefas_minhas',
-        legacyKeys: ['parent_tarefas_minhas'],
-        label: 'Minhas Tarefas',
-        description: 'Quadro de tarefas atribuídas e em andamento',
-        routes: ['/Tarefas/MinhasTarefas']
-      }
-    ]
-  },
-  {
     key: 'parent_admin',
     legacyKeys: ['admin'],
     label: 'Administração do Sistema',

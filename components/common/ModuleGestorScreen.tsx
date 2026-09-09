@@ -81,7 +81,6 @@ export const ModuleGestorScreen: React.FC<ModuleGestorScreenProps> = ({
           jobTitle: u.job_title || '',
           permissions: Array.isArray(u.permissions) ? u.permissions : [],
           email: u.email || '',
-          avatar: u.avatar || '',
           status: u.status || 'active'
         }));
 

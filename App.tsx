@@ -42,7 +42,6 @@ import * as licitacaoService from './services/licitacaoService';
 import * as vehicleSchedulingService from './services/vehicleSchedulingService';
 
 import { AbastecimentoService } from './services/abastecimentoService';
-import * as taskService from './services/taskService';
 import { marketingSyncService } from './services/marketingSyncService';
 import { saveRhHorasExtras, updateRhHorasExtras } from './services/rhService';
 import { Send, CheckCircle2, X, Download, Save, FilePlus, Package, History, FileText, Settings, LogOut, ChevronRight, ChevronDown, Search, Filter, Upload, Trash2, Printer, Edit, ArrowLeft, Loader2, ShieldAlert, MousePointer, Tv, Power, ShieldCheck, Clock } from 'lucide-react';
@@ -80,7 +79,6 @@ import { AbastecimentoList } from './components/abastecimento/AbastecimentoList'
 import { AbastecimentoDashboard } from './components/abastecimento/AbastecimentoDashboard';
 import { ForcePasswordChangeModal } from './components/ForcePasswordChangeModal';
 import { isAuthSessionValid, recordAuthSuccess } from './services/authTimeService';
-import { AvatarSelectionModal } from './components/modals/AvatarSelectionModal';
 import { NotificationProvider, useNotification } from './contexts/NotificationContext';
 import { SystemSettingsProvider, useSystemSettings } from './contexts/SystemSettingsContext';
 import { useQueryClient } from '@tanstack/react-query';
@@ -91,11 +89,7 @@ import { createPortal } from 'react-dom';
 import { ChatProvider } from './contexts/ChatContext';
 import { ChatWidget } from './components/chat/ChatWidget';
 import { ChatWindow } from './components/chat/ChatWindow';
-import { ChatNotificationPopup } from './components/chat/ChatNotificationPopup';
-import { AgricultureModule } from './components/agriculture/AgricultureModule';
-import { ObrasModule } from './components/obras/ObrasModule';
 import { OrderDetailsScreen } from './components/OrderDetailsScreen';
-import { TasksDashboard } from './components/dashboard/TasksDashboard';
 import { PurchaseItemsScreen } from './components/PurchaseItemsScreen';
 import { Calendario } from './components/calendario/Calendario';
 import { RHModule } from './components/rh/RHModule';
@@ -143,7 +137,6 @@ const VIEW_TO_PATH: Record<string, string> = {
   'admin:access_control': '/Admin/ControleAcesso',
   'admin:logs': '/Admin/logs',
   'admin:remote_access': '/Admin/AcessoRemoto',
-  'tasks-dashboard': '/Tarefas/MinhasTarefas',
   'tracking:oficio': '/Historico/Oficio',
   'tracking:compras': '/Historico/Compras',
   'tracking:diarias': '/Historico/Diarias',
@@ -172,12 +165,7 @@ const VIEW_TO_PATH: Record<string, string> = {
   'abastecimento:management': '/Abastecimento/GestaoAbastecimento',
   'abastecimento:dashboard': '/Abastecimento/DashboardAbastecimento',
   'abastecimento:dashboard:motorista': '/Abastecimento/DashboardAbastecimento/Motoristas',
-  'agricultura': '/Agricultura',
-  'obras': '/Obras',
   'order-details': '/Historico/Compras/Visualizar',
-  'tarefas': '/Tarefas',
-  'tarefas:new': '/Tarefas/NovaTarefa',
-  'tarefas:dashboard': '/Tarefas/MinhasTarefas',
   'calendario': '/Calendario',
   'calendario:novo': '/Calendario/Novo',
   'calendario:novo:identificacao': '/Calendario/Novo/Identificacao',
@@ -331,7 +319,7 @@ const mapLicitacaoProcessToOrder = (process: any): Order => {
 
 const App: React.FC = () => {
   // State controlling the active module view
-  const [currentView, setCurrentView] = useState<'login' | 'home' | 'admin' | 'tracking' | 'editor' | 'vehicle-scheduling' | 'abastecimento' | 'agricultura' | 'obras' | 'order-details' | 'tasks-dashboard' | 'purchase-inventory' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'diarias-novo-evento' | 'diarias-lancamentos' | 'diarias-gestores' | 'diarias-viajar' | 'diarias-adiantamento' | 'diarias-adiantamento-servidor' | 'diarias-adiantamento-viagem' | 'diarias-adiantamento-valores' | 'diarias-adiantamento-bancario' | 'diarias-adiantamento-justificativa' | 'licitacao' | 'licitacao:new' | 'licitacao:view' | 'licitacao:details' | 'licitacao:kanban' | 'licitacao:kanban-view' | 'licitacao-all' | 'licitacao-screening' | 'consultas' | 'farmacia' | 'noticias' | 'upload' | 'politica-privacidade' | 'politica-privacidade-app' | 'assistente-ia' | 'chat' | 'art'>(() => {
+  const [currentView, setCurrentView] = useState<'login' | 'home' | 'admin' | 'tracking' | 'editor' | 'vehicle-scheduling' | 'abastecimento' | 'order-details' | 'purchase-inventory' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'diarias-novo-evento' | 'diarias-lancamentos' | 'diarias-gestores' | 'diarias-viajar' | 'diarias-adiantamento' | 'diarias-adiantamento-servidor' | 'diarias-adiantamento-viagem' | 'diarias-adiantamento-valores' | 'diarias-adiantamento-bancario' | 'diarias-adiantamento-justificativa' | 'licitacao' | 'licitacao:new' | 'licitacao:view' | 'licitacao:details' | 'licitacao:kanban' | 'licitacao:kanban-view' | 'licitacao-all' | 'licitacao-screening' | 'consultas' | 'farmacia' | 'noticias' | 'upload' | 'politica-privacidade' | 'politica-privacidade-app' | 'assistente-ia' | 'chat' | 'art'>(() => {
     if (typeof window !== 'undefined') {
       let rawPath = window.location.pathname;
       try { rawPath = decodeURIComponent(rawPath); } catch (e) {}
@@ -420,16 +408,9 @@ const App: React.FC = () => {
     if (impersonationSession) {
       const freshTarget = users.find(u => u.id === impersonationSession.targetUser.id) || impersonationSession.targetUser;
       const target = freshTarget;
-      const safeAvatar = target.avatar && 
-                         target.avatar.trim() !== '' && 
-                         target.avatar.toLowerCase() !== 'sem avatar' && 
-                         target.avatar.toLowerCase() !== 'sem_avatar'
-        ? target.avatar
-        : '/avatars/avatar1.png';
 
       return {
         ...target,
-        avatar: safeAvatar,
         mustChangePassword: false,
         tempPassword: undefined,
         role: target.role,
@@ -461,8 +442,8 @@ const App: React.FC = () => {
         'parent_criar_oficio', 'parent_admin', 'parent_compras', 'parent_diarias', 'parent_diarias_editor',
         'parent_diarias_historico', 'parent_diarias_novo_evento', 'parent_diarias_lancamentos', 'parent_diarias_gestores',
         'parent_diarias_viajar', 'parent_frotas', 'parent_agendamento_veiculo', 'parent_abastecimento',
-        'parent_abastecimento_novo', 'parent_abastecimento_gestao', 'parent_abastecimento_dashboard', 'parent_agricultura',
-        'parent_obras', 'parent_tarefas', 'parent_calendario', 'parent_rh', 'parent_rh_horas_extras', 'parent_rh_historico',
+        'parent_abastecimento_novo', 'parent_abastecimento_gestao', 'parent_abastecimento_dashboard',
+        'parent_calendario', 'parent_rh', 'parent_rh_horas_extras', 'parent_rh_historico',
         'parent_projetos', 'parent_marketing', 'parent_compras_itens', 'parent_compras_dados', 'parent_licitacao',
         'parent_licitacao_processos', 'parent_licitacao_triagem', 'parent_consultas', 'parent_consultas_novo_agendamento',
         'parent_consultas_acompanhar', 'parent_consultas_dados', 'parent_farmacia', 'parent_farmacia_criar',
@@ -656,8 +637,6 @@ const App: React.FC = () => {
 
   const [oficios, setOficios] = useState<Order[]>([]);
   const [serviceRequests, setServiceRequests] = useState<Order[]>([]);
-
-  const [tasks, setTasks] = useState<Order[]>([]);
 
   // const [signatures, setSignatures] = useState<Signature[]>([]); // DEPRECATED: Signatures are now derived from Users
   const [globalCounter, setGlobalCounter] = useState(0);
@@ -943,12 +922,9 @@ const App: React.FC = () => {
       const fetchOficios = (!scope || scope === 'oficio') && isModuleActive('parent_criar_oficio');
       const fetchMarketing = (!scope || scope === 'marketing') && isModuleActive('parent_marketing');
       const fetchRh = (!scope || scope === 'rh') && isModuleActive('parent_rh');
-      const fetchAgriculture = (!scope || scope === 'agriculture') && isModuleActive('parent_agricultura');
-      const fetchObras = (!scope || scope === 'obras') && isModuleActive('parent_obras');
       const fetchProjetos = (!scope || scope === 'projetos') && isModuleActive('parent_projetos');
       const fetchLicitacao = (!scope || scope === 'licitacao') && isModuleActive('parent_licitacao');
       const fetchCalendar = (!scope || scope === 'calendar') && isModuleActive('parent_calendario');
-      const fetchTasks = (!scope || scope === 'transactions') && isModuleActive('parent_tarefas');
 
       // Batch 1: Metadata & Config (Fast)
       if (fetchMetadata || fetchAbastecimento) {
@@ -1042,7 +1018,6 @@ const App: React.FC = () => {
       let savedPurchaseOrders = purchaseOrders; // Preserve existing
 
       let savedSchedules = schedules;
-      let savedTasks = tasks;
 
       const promises: Promise<any>[] = [];
 
@@ -1055,9 +1030,6 @@ const App: React.FC = () => {
       if (fetchVehicleSchedules || (fetchTransactions && isModuleActive('parent_frotas'))) {
         promises.push(vehicleSchedulingService.getSchedules().then(d => { savedSchedules = d; }));
       }
-      if (fetchTasks || (fetchTransactions && isModuleActive('parent_tarefas'))) {
-        promises.push(taskService.getTasks().then(d => { savedTasks = d; }));
-      }
       if (fetchMarketing && currentUser) {
         // Marketing sync triggers
         promises.push(marketingSyncService.syncWeeklyBirthdays(currentUser.id, currentUser.name));
@@ -1069,21 +1041,18 @@ const App: React.FC = () => {
       await Promise.all(promises);
 
       // Update States based on what was fetched
-      // Update States based on what was fetched
       if (fetchCompras || (fetchTransactions && isModuleActive('parent_compras'))) {
         // setPurchaseOrders(savedPurchaseOrders); // Derived
       }
 
       if (fetchVehicleSchedules || (fetchTransactions && isModuleActive('parent_frotas'))) setSchedules(savedSchedules);
-      if (fetchTasks || (fetchTransactions && isModuleActive('parent_tarefas'))) setTasks(savedTasks);
 
       // Update Consolidated Orders only if meaningful changes could have happened
       if (fetchCompras || fetchOficios || fetchDiarias || fetchTransactions) {
         // Note: Generic Transactions covers all.
         // Re-merging with existing state for components not fetched
         const allOrders = [
-          ...savedPurchaseOrders,
-          ...savedTasks
+          ...savedPurchaseOrders
           // ... others (managed by RQ or not fetched here)
         ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         setOrders(allOrders);
@@ -1097,7 +1066,7 @@ const App: React.FC = () => {
     } finally {
       setIsRefreshing(false);
     }
-  }, [purchaseOrders, schedules, tasks]);
+  }, [purchaseOrders, schedules]);
 
   // Realtime Listeners for Abastecimento Entities
   useEffect(() => {
@@ -1168,8 +1137,7 @@ const App: React.FC = () => {
             twoFactorSecret: ru.two_factor_secret,
             twoFactorEnabled2: ru.two_factor_enabled_2,
             twoFactorSecret2: ru.two_factor_secret_2,
-            status: ru.status,
-            avatar: ru.avatar
+            status: ru.status
           };
           if (payload.eventType === 'INSERT') {
             setUsers(prev => [...prev, mappedUser]);
@@ -1224,40 +1192,7 @@ const App: React.FC = () => {
       activeChannels.push(purchaseChannel);
     }
 
-    // TASKS Realtime Channel (Tarefas)
-    if (isModuleActive('parent_tarefas') && currentView === 'tasks-dashboard') {
-      const tasksChannel = supabase.channel('public:tasks_realtime')
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'tasks' },
-          async (payload) => {
-            if (payload.eventType === 'DELETE') {
-              setTasks(prev => prev.filter(t => t.id !== payload.old.id));
-              return;
-            }
-            const updatedTask = await taskService.getTaskById(payload.new.id);
-            if (updatedTask) {
-              if (payload.eventType === 'INSERT') setTasks(prev => [updatedTask, ...prev]);
-              else setTasks(prev => prev.map(t => t.id === updatedTask.id ? updatedTask : t));
-            }
-          }
-        )
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'task_assignments' },
-          async (payload) => {
-            if (payload.eventType === 'DELETE') {
-              const updatedTask = await taskService.getTaskById(payload.old.task_id);
-              if (updatedTask) setTasks(prev => prev.map(t => t.id === updatedTask.id ? updatedTask : t));
-              return;
-            }
-            const updatedTask = await taskService.getTaskById(payload.new.task_id);
-            if (updatedTask) setTasks(prev => prev.map(t => t.id === updatedTask.id ? updatedTask : t));
-          }
-        )
-        .subscribe();
-      activeChannels.push(tasksChannel);
-    }
+
 
     // Licitacao Channel (subscrição também para telas de TV e links públicos)
     if ((isModuleActive('parent_licitacao') && activeBlock === 'licitacao') || (currentView && String(currentView).startsWith('licitacao:'))) {
@@ -1677,7 +1612,6 @@ const App: React.FC = () => {
       if (block === 'compras') return 'compras';
       if (block === 'diarias' || view.startsWith('diarias')) return 'diarias';
       if (block === 'oficio') return 'oficio';
-      if (view === 'tasks-dashboard') return 'transactions'; // 'transactions' covers tasks
       if (view === 'rh') return 'rh';
       if (view === 'marketing') return 'marketing';
       if (view === 'home') return 'metadata'; // apenas metadados leves
@@ -4265,7 +4199,6 @@ const App: React.FC = () => {
       two_factor_enabled_2: u.twoFactorEnabled2,
       two_factor_secret_2: u.twoFactorSecret2,
       status: u.status,
-      avatar: u.avatar,
       sector_id: u.sectorId,
       job_id: u.jobId
     };
@@ -4389,17 +4322,7 @@ const App: React.FC = () => {
     );
   }
 
-  const hasInvalidAvatar = !currentUser?.avatar || 
-                           currentUser.avatar.trim() === '' || 
-                           currentUser.avatar.toLowerCase() === 'sem avatar' ||
-                           currentUser.avatar.toLowerCase() === 'sem_avatar';
 
-  // Se estiver em impersonação administrativa, ignora completamente a seleção obrigatória de avatar
-  if (!impersonationSession && currentUser && hasInvalidAvatar) {
-    return (
-      <AvatarSelectionModal currentUser={currentUser} />
-    );
-  }
 
 
   return (
@@ -4850,7 +4773,6 @@ const App: React.FC = () => {
                 ...orders.map(o => [o.id, o] as [string, Order]),
                 ...oficios.map(o => [o.id, o] as [string, Order]),
                 ...serviceRequests.map(o => [o.id, o] as [string, Order]),
-                ...tasks.map(o => [o.id, o] as [string, Order]),
                 ...mappedLicitacaoOrders.map(o => [o.id, o] as [string, Order])
               ]).values());
 
@@ -4873,12 +4795,6 @@ const App: React.FC = () => {
                 onViewAllLicitacao={() => setCurrentView('licitacao-all')}
                 onManageLicitacaoScreening={() => setCurrentView('licitacao-screening')}
                 onVehicleScheduling={() => setCurrentView('vehicle-scheduling')}
-                onViewTasksDashboard={() => {
-                  setCurrentView('tasks-dashboard');
-                  setActiveBlock('tarefas');
-                  window.history.pushState({ view: 'tarefas', sub: 'dashboard' }, '', '/Tarefas/MinhasTarefas');
-                  window.history.pushState({ view: 'tarefas', sub: 'dashboard' }, '', '/Tarefas/MinhasTarefas');
-                }}
                 onManageInventory={() => {
                   setActiveBlock('compras');
                   setCurrentView('purchase-inventory');
@@ -4893,8 +4809,6 @@ const App: React.FC = () => {
                   setCurrentView('abastecimento');
                   setAppState(prev => ({ ...prev, view: sub }));
                 }}
-                onAgricultura={() => setCurrentView('agricultura')}
-                onObras={() => setCurrentView('obras')}
                 onRH={() => setCurrentView('rh')}
                 onProjetos={() => setCurrentView('projetos')}
                 onMarketing={() => setCurrentView('marketing')}
@@ -4924,10 +4838,7 @@ const App: React.FC = () => {
                     return;
                   }
                   setActiveBlock(block);
-                  if (block === 'tarefas') {
-                    window.history.pushState({}, '', '/Tarefas');
-                    setAppState(prev => ({ ...prev, view: '' }));
-                  } else if (block === null) {
+                  if (block === null) {
                     window.history.pushState({}, '', '/PaginaInicial');
                   }
                 }}
@@ -4949,17 +4860,7 @@ const App: React.FC = () => {
                 onViewOrder={(order) => {
                   setViewingOrder(order);
                   setActiveBlock(order.blockType);
-                  // Determine appropriate view based on block type
-                  if (order.blockType === 'licitacao') {
-                    setCurrentView('order-details');
-                  } else if (order.blockType === 'tarefas') {
-                    // Tasks might be viewable in a specific view or just sidebar?
-                    // For now, reuse order details or just ignore if handled by sidebar
-                    setViewingOrder(order);
-                    setCurrentView('order-details');
-                  } else {
-                    setCurrentView('order-details');
-                  }
+                  setCurrentView('order-details');
                 }}
               />
               );
@@ -5132,25 +5033,7 @@ const App: React.FC = () => {
               />
             )}
 
-            {currentView === 'agricultura' && (
-              <AgricultureModule
-                onBack={() => {
-                  setCurrentView('home');
-                  setActiveBlock(null);
-                  window.history.pushState({}, '', '/PaginaInicial');
-                }}
-              />
-            )}
 
-            {currentView === 'obras' && (
-              <ObrasModule
-                onBack={() => {
-                  setCurrentView('home');
-                  setActiveBlock(null);
-                  window.history.pushState({}, '', '/PaginaInicial');
-                }}
-              />
-            )}
 
             {currentView === 'licitacao' && (
               <LicitacaoDashboard
@@ -5844,28 +5727,7 @@ const App: React.FC = () => {
               />
             )}
 
-            {currentView === 'tasks-dashboard' && (
-              <div className="fixed inset-0 z-[100] bg-white">
-                <TasksDashboard
-                  orders={orders}
-                  userRole={currentUser?.role || 'collaborator'}
-                  userName={currentUser?.name || ''}
-                  userId={currentUser?.id || ''}
-                  onViewOrder={(order) => {
-                    setViewingOrder(order);
-                    setActiveBlock(order.blockType);
-                    setCurrentView('order-details');
-                  }}
-                  onViewAll={handleTrackOrder}
-                  onClose={() => {
-                    setCurrentView('home');
-                    setActiveBlock('tarefas');
-                    window.history.pushState({ view: 'tarefas' }, '', '/Tarefas');
-                  }}
-                  fullScreen={true}
-                />
-              </div>
-            )}
+
 
             {currentView === 'calendario' && (
               (permissions.includes('parent_calendario') || currentUser?.role === 'admin') && isModuleActive('parent_calendario') ? (

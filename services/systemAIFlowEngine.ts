@@ -247,53 +247,7 @@ const WORKFLOW_DEFS: WorkflowDef[] = [
     ]
   },
 
-  // 4. Nova Tarefa
-  {
-    key: 'nova_tarefa',
-    name: 'Criação de Tarefa',
-    module: 'Tarefas',
-    route: '/Tarefas/NovaTarefa',
-    permissionKey: 'sub_tarefas_novo',
-    triggerKeywords: ['tarefa', 'nova tarefa', 'criar tarefa', 'demanda', 'lembrete', 'atribuir tarefa'],
-    fields: [
-      {
-        name: 'titulo',
-        label: 'Título da Tarefa',
-        type: 'text',
-        suggestedChips: ['Revisar prestação de contas', 'Preparar documentação de licitação', 'Vistoria em obras municipais'],
-        question: () => 'Qual é o título ou objetivo principal da tarefa?',
-        extract: (t) => {
-          const clean = t.replace(/^(?:criar|nova|cadastrar|adicionar)\s+tarefa\s*(?:para|sobre|de)?\s*/i, '').trim();
-          return clean.length > 3 ? clean : null;
-        }
-      },
-      {
-        name: 'prioridade',
-        label: 'Prioridade',
-        type: 'select',
-        options: ['Alta', 'Média', 'Baixa', 'Urgente'],
-        suggestedChips: ['Alta', 'Média', 'Baixa', 'Urgente'],
-        question: () => 'Qual o nível de prioridade da tarefa?',
-        extract: (t) => {
-          if (/urgente/i.test(t)) return 'Urgente';
-          if (/alta/i.test(t)) return 'Alta';
-          if (/baixa/i.test(t)) return 'Baixa';
-          if (/m[eé]dia/i.test(t)) return 'Média';
-          return null;
-        }
-      },
-      {
-        name: 'prazo',
-        label: 'Prazo Limite',
-        type: 'date',
-        suggestedChips: ['Hoje até 17h', 'Amanhã', 'Próxima Sexta', 'Fim do Mês'],
-        question: () => 'Qual é o prazo de conclusão?',
-        extract: () => null
-      }
-    ]
-  },
-
-  // 5. Novo Evento no Calendário Oficial
+  // 4. Novo Evento no Calendário Oficial
   {
     key: 'novo_evento',
     name: 'Novo Evento no Calendário',
@@ -681,7 +635,6 @@ export class SystemAIFlowEngine {
 
     const toolMap: Record<string, string> = {
       novo_evento: 'criar_evento_calendario',
-      nova_tarefa: 'criar_nova_tarefa',
       agendamento_veiculo: 'agendar_veiculo',
       solicitacao_diaria: 'solicitar_diaria_viagem',
       agendamento_consulta: 'agendar_nova_consulta'

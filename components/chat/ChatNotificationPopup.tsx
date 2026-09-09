@@ -93,7 +93,7 @@ export const ChatNotificationPopup: React.FC = () => {
                     {/* Decorative Background Blur */}
                     <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-indigo-500/10 to-purple-500/10 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2" />
 
-                    {/* Avatar / Icon */}
+                    {/* Inicial ou Ícone do Remetente */}
                     <div className="relative shrink-0">
                         <div className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-indigo-500/20">
                             {activeToast.sender?.name ? activeToast.sender.name.charAt(0).toUpperCase() : <User className="w-6 h-6" />}

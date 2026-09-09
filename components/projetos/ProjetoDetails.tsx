@@ -411,7 +411,7 @@ export const ProjetoDetails: React.FC<ProjetoDetailsProps> = ({
 
                                 return (
                                     <div key={hist.id} className={`flex items-start gap-4 transition-all animate-fade-in`} style={{ animationDelay: `${index * 50}ms` }}>
-                                        {/* AVATAR/ICON */}
+                                        {/* Ícone do Autor */}
                                         <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 shadow-sm z-10 border-4 border-white ${isSystem ? 'bg-slate-100 text-slate-500' :
                                             isMe ? 'bg-indigo-600 text-white' : 'bg-white text-slate-700'
                                             }`}>

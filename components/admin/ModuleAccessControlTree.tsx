@@ -85,7 +85,6 @@ export const ModuleAccessControlTree: React.FC<ModuleAccessControlTreeProps> = (
       case 'parent_abastecimento': return <Fuel className={iconClass} />;
       case 'parent_frotas': return <Truck className={iconClass} />;
       case 'parent_criar_oficio': return <FileText className={iconClass} />;
-      case 'parent_tarefas': return <CheckSquare className={iconClass} />;
       case 'parent_admin': return <ShieldAlert className={iconClass} />;
       case 'parent_upload': return <Upload className={iconClass} />;
       case 'parent_art': return <Palette className={iconClass} />;

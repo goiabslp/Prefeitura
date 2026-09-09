@@ -21,7 +21,7 @@ export interface AIMessage {
     result?: ToolExecutionResult;
   };
   cardData?: any;
-  cardType?: 'tarefas' | 'calendario' | 'veiculos' | 'consultas' | 'farmacia' | 'perfil' | 'usuarios' | 'info';
+  cardType?: 'calendario' | 'veiculos' | 'consultas' | 'farmacia' | 'perfil' | 'usuarios' | 'info';
   pendingConfirmation?: {
     actionName: string;
     description: string;

@@ -686,7 +686,7 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
 
                 <div className="relative p-6 flex flex-col md:flex-row items-center justify-between gap-6 z-10">
                   <div className="flex items-center gap-5 w-full md:w-auto">
-                    {/* Avatar Moderno */}
+                    {/* Iniciais do Usuário com Estilo Moderno */}
                     <div className={`relative w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-black shadow-inner overflow-hidden shrink-0 group-hover:scale-105 transition-transform duration-300
                       ${user.role === 'admin' ? 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white' :
                         user.role === 'compras' ? 'bg-gradient-to-br from-emerald-500 to-teal-500 text-white' :
@@ -694,11 +694,7 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                             user.role === 'marketing' ? 'bg-gradient-to-br from-fuchsia-500 to-pink-600 text-white' :
                               'bg-gradient-to-br from-slate-700 to-slate-800 text-white'
                       }`}>
-                      {user.avatar ? (
-                        <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
-                      ) : (
-                        user.name.charAt(0).toUpperCase()
-                      )}
+                      {user.name.charAt(0).toUpperCase()}
                     </div>
 
                     <div>
@@ -909,59 +905,8 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
           {/* ABA: DADOS */}
           {activeUserTab === 'dados' && (
             <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm p-5 md:p-7 space-y-6 animate-fade-in">
-                {/* Seleção de Avatar Compacta */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className={labelClass}>Avatar (Monarquia/Medieval 3D)</label>
-                    <span className="text-[11px] text-slate-400 font-medium">Role para o lado para ver todos</span>
-                  </div>
-                  <div className="flex gap-2.5 overflow-x-auto pb-2 custom-scrollbar snap-x items-center">
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14].map(num => {
-                      const avatarUrl = `/avatars/avatar${num}.png`;
-                      const isSelected = formData.avatar === avatarUrl;
-                      return (
-                        <button
-                          key={num}
-                          type="button"
-                          onClick={() => setFormData({ ...formData, avatar: avatarUrl })}
-                          className={`relative shrink-0 w-14 h-14 rounded-2xl border-2 transition-all duration-200 snap-center cursor-pointer ${
-                            isSelected 
-                              ? 'border-pink-600 scale-105 shadow-md shadow-pink-500/20' 
-                              : 'border-slate-200 hover:border-slate-300 hover:scale-105 opacity-80 hover:opacity-100'
-                          }`}
-                        >
-                          <img src={avatarUrl} alt={`Avatar ${num}`} className="w-full h-full object-cover rounded-[0.9rem] bg-slate-900" />
-                          {isSelected && (
-                            <div className="absolute -bottom-1 -right-1 bg-pink-600 text-white rounded-full p-0.5 border-2 border-white shadow-xs">
-                              <CheckCircle2 className="w-3 h-3" />
-                            </div>
-                          )}
-                        </button>
-                      );
-                    })}
-                    <button
-                      type="button"
-                      onClick={() => setFormData({ ...formData, avatar: '' })}
-                      className={`relative shrink-0 w-14 h-14 rounded-2xl border-2 transition-all duration-200 snap-center flex flex-col items-center justify-center gap-0.5 cursor-pointer ${
-                        !formData.avatar || formData.avatar === ''
-                          ? 'border-slate-500 scale-105 shadow-md shadow-slate-500/10 bg-slate-100 text-slate-700' 
-                          : 'border-slate-200 bg-slate-50 hover:border-slate-300 hover:scale-105 opacity-80 hover:opacity-100 text-slate-400 hover:text-slate-600'
-                      }`}
-                      title="Remover Avatar"
-                    >
-                      <UserIcon className="w-4 h-4" />
-                      <span className="text-[8px] font-black uppercase tracking-tight">Sem Foto</span>
-                      {(!formData.avatar || formData.avatar === '') && (
-                        <div className="absolute -bottom-1 -right-1 bg-slate-600 text-white rounded-full p-0.5 border-2 border-white shadow-xs">
-                          <CheckCircle2 className="w-3 h-3" />
-                        </div>
-                      )}
-                    </button>
-                  </div>
-                </div>
-
                 {/* Tipo de Perfil Compacto */}
-                <div className="space-y-2 pt-3 border-t border-slate-100">
+                <div className="space-y-2">
                   <label className={labelClass}>Tipo de Perfil</label>
                   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
                     {[
@@ -1934,11 +1879,7 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                   {/* Card do Usuário Alvo */}
                   <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 flex items-center gap-4">
                     <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center text-xl font-black shadow-inner shrink-0 overflow-hidden">
-                      {impersonateModal.targetUser.avatar ? (
-                        <img src={impersonateModal.targetUser.avatar} alt="" className="w-full h-full object-cover" />
-                      ) : (
-                        impersonateModal.targetUser.name.charAt(0).toUpperCase()
-                      )}
+                      {impersonateModal.targetUser.name.charAt(0).toUpperCase()}
                     </div>
                     <div className="min-w-0 flex-1">
                       <h4 className="font-bold text-base text-slate-900 truncate">

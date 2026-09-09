@@ -66,7 +66,7 @@ export const FloatingNotification: React.FC = () => {
                         {toast.type === 'info' && <Info className="w-5 h-5" />}
                         {toast.type === 'login' && (
                             <div className="relative">
-                                {/* Simulated User Avatar for Dynamic feel */}
+                                {/* Inicial do Usuário */}
                                 <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-pink-400 to-purple-400 flex items-center justify-center text-[10px] font-bold uppercase ring-2 ring-white/30">
                                     {toast.title.charAt(0)}
                                 </div>

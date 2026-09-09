@@ -7,7 +7,6 @@ import { X } from 'lucide-react';
 interface OnlineUser {
   id: string;
   name: string;
-  avatar: string | undefined;
   jobTitle?: string;
   role?: string;
 }
@@ -44,7 +43,6 @@ export const OnlineUsers: React.FC<{ currentUser: User }> = ({ currentUser }) =>
           await room.track({
             id: currentUser.id,
             name: currentUser.name,
-            avatar: currentUser.avatar,
             jobTitle: currentUser.jobTitle,
             role: currentUser.role
           });
@@ -67,27 +65,22 @@ export const OnlineUsers: React.FC<{ currentUser: User }> = ({ currentUser }) =>
       <div className="flex items-center gap-2 mr-2 md:mr-4 border-r border-slate-200 pr-2 md:pr-4">
         <div className="flex gap-2 overflow-visible">
           {usersArray.map((u, i) => {
-            const hasValidAvatar = u.avatar && 
-                                   u.avatar.trim() !== '' && 
-                                   u.avatar.toLowerCase() !== 'sem avatar' && 
-                                   u.avatar.toLowerCase() !== 'sem_avatar';
+            const initial = u.name ? u.name.charAt(0).toUpperCase() : 'U';
             return (
               <button
                 key={`${u.id}-${i}`}
                 onClick={() => setSelectedUser(u)}
-                className="relative group inline-block focus:outline-none"
+                className="relative group inline-block focus:outline-none cursor-pointer"
               >
-                {hasValidAvatar ? (
-                  <img
-                    src={u.avatar}
-                    alt={u.name}
-                    className="w-8 h-8 rounded-full border-2 border-white object-cover shadow-sm bg-slate-900 group-hover:z-10 group-hover:scale-110 transition-transform"
-                  />
-                ) : (
-                  <div className="w-8 h-8 rounded-full border-2 border-white bg-indigo-100 flex items-center justify-center shadow-sm group-hover:z-10 group-hover:scale-110 transition-transform">
-                    <span className="text-[10px] font-black text-indigo-700">{u.name.charAt(0)}</span>
-                  </div>
-                )}
+                <div className={`w-8 h-8 rounded-full border-2 border-white flex items-center justify-center shadow-sm group-hover:z-10 group-hover:scale-110 transition-transform ${
+                  u.role === 'admin' 
+                    ? 'bg-indigo-600 text-white' 
+                    : u.role === 'compras' || u.role === 'licitacao'
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-slate-700 text-white'
+                }`}>
+                  <span className="text-[11px] font-black">{initial}</span>
+                </div>
                 
                 {/* Status dot verde */}
                 <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-400 border-[1.5px] border-white rounded-full z-20"></div>
@@ -115,7 +108,7 @@ export const OnlineUsers: React.FC<{ currentUser: User }> = ({ currentUser }) =>
             
             <button
               onClick={() => setSelectedUser(null)}
-              className="absolute top-4 right-4 p-2 bg-slate-100/50 hover:bg-slate-200 text-slate-500 rounded-full z-10 transition-colors"
+              className="absolute top-4 right-4 p-2 bg-slate-100/50 hover:bg-slate-200 text-slate-500 rounded-full z-10 transition-colors cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -127,23 +120,15 @@ export const OnlineUsers: React.FC<{ currentUser: User }> = ({ currentUser }) =>
 
             <div className="px-6 pb-8 text-center -mt-12 relative z-10">
               <div className="inline-block relative">
-                {(() => {
-                  const hasValidAvatar = selectedUser.avatar && 
-                                         selectedUser.avatar.trim() !== '' && 
-                                         selectedUser.avatar.toLowerCase() !== 'sem avatar' && 
-                                         selectedUser.avatar.toLowerCase() !== 'sem_avatar';
-                  return hasValidAvatar ? (
-                    <img
-                      src={selectedUser.avatar}
-                      alt={selectedUser.name}
-                      className="w-24 h-24 rounded-full border-4 border-white shadow-xl object-cover bg-slate-900 mx-auto"
-                    />
-                  ) : (
-                    <div className="w-24 h-24 rounded-full border-4 border-white shadow-xl bg-indigo-100 flex items-center justify-center mx-auto">
-                      <span className="text-3xl font-black text-indigo-700">{selectedUser.name.charAt(0)}</span>
-                    </div>
-                  );
-                })()}
+                <div className={`w-24 h-24 rounded-full border-4 border-white shadow-xl flex items-center justify-center mx-auto text-white ${
+                  selectedUser.role === 'admin' 
+                    ? 'bg-gradient-to-br from-indigo-600 to-purple-600' 
+                    : selectedUser.role === 'compras' || selectedUser.role === 'licitacao'
+                    ? 'bg-gradient-to-br from-emerald-600 to-teal-600'
+                    : 'bg-gradient-to-br from-slate-700 to-slate-800'
+                }`}>
+                  <span className="text-3xl font-black">{selectedUser.name ? selectedUser.name.charAt(0).toUpperCase() : 'U'}</span>
+                </div>
                 <div className="absolute bottom-1 right-1 w-5 h-5 bg-green-400 border-2 border-white rounded-full z-20 shadow-md"></div>
               </div>
               

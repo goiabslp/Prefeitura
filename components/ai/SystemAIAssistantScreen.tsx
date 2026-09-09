@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Bot, Send, Sparkles, User as UserIcon, CheckCircle2, 
-  AlertTriangle, Clock, Calendar, CheckSquare, Car, Pill, 
+  AlertTriangle, Clock, Calendar, Car, Pill, 
   RotateCcw, ShieldCheck, ChevronRight, ExternalLink, Loader2,
   Compass, ArrowRight
 } from 'lucide-react';
@@ -192,7 +192,7 @@ Como posso acelerar sua rotina de trabalho agora?`,
   const quickChips = [
     { label: '💡 Como usar esta tela?', query: 'Como faço para usar esta tela?' },
     { label: '📋 Campos obrigatórios', query: 'Quais são os campos obrigatórios desta tela?' },
-    { label: 'Minhas tarefas pendentes', query: 'Quais são as minhas tarefas pendentes?' },
+    { label: 'Consultar Diárias', query: 'Quais diárias de viagem estão registradas?' },
     { label: 'Eventos oficiais agendados', query: 'Mostre os eventos agendados no calendário oficial' },
     { label: 'Agendamentos de veículos', query: 'Quais viagens e agendamentos de veículos estão registrados?' },
     { label: 'Meus módulos permitidos', query: 'Quais módulos meu perfil tem permissão de acesso?' }
@@ -314,7 +314,7 @@ Como posso acelerar sua rotina de trabalho agora?`,
                   {msg.summaryCard && (
                     <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-2.5">
                       <span className="font-extrabold text-slate-900 text-xs md:text-sm flex items-center gap-1.5">
-                        <CheckSquare className="w-4 h-4 text-indigo-600" />
+                        <CheckCircle2 className="w-4 h-4 text-indigo-600" />
                         Resumo: {msg.summaryCard.title}
                       </span>
                       <div className="grid grid-cols-1 gap-1.5 pt-2 border-t border-slate-100">
@@ -391,45 +391,7 @@ Como posso acelerar sua rotina de trabalho agora?`,
                     </div>
                   )}
 
-                  {/* Card Visual de Tarefas Retornadas */}
-                  {msg.cardType === 'tarefas' && Array.isArray(msg.cardData) && msg.cardData.length > 0 && (
-                    <div className="p-3.5 rounded-2xl bg-white border border-slate-200/90 shadow-xs space-y-2">
-                      <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                        <span className="text-xs font-black text-slate-800 flex items-center gap-1.5">
-                          <CheckSquare className="w-3.5 h-3.5 text-indigo-600" />
-                          Tarefas do Sistema ({msg.cardData.length})
-                        </span>
-                        {onNavigate && (
-                          <button
-                            type="button"
-                            onClick={() => onNavigate('/Tarefas/MinhasTarefas')}
-                            className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-0.5 cursor-pointer"
-                          >
-                            Ver Módulo <ExternalLink className="w-2.5 h-2.5" />
-                          </button>
-                        )}
-                      </div>
-                      <div className="space-y-1.5">
-                        {msg.cardData.map((t: any) => (
-                          <div key={t.id} className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between text-xs">
-                            <div className="min-w-0 pr-2">
-                              <span className="font-bold text-slate-900 block truncate">{t.title}</span>
-                              <span className="text-[10px] text-slate-400 font-mono">{t.protocol || t.id.slice(0, 8)}</span>
-                            </div>
-                            <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded ${
-                              t.status === 'completed'
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : t.status === 'in_progress'
-                                ? 'bg-sky-100 text-sky-800'
-                                : 'bg-amber-100 text-amber-800'
-                            }`}>
-                              {t.status === 'completed' ? 'Concluída' : t.status === 'in_progress' ? 'Em Andamento' : 'Pendente'}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+
 
                   {/* Card Visual de Eventos de Calendário */}
                   {msg.cardType === 'calendario' && Array.isArray(msg.cardData) && msg.cardData.length > 0 && (

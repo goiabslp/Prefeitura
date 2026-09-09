@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Bot, X, Send, Maximize2, AlertTriangle, CheckCircle2, 
-  RotateCcw, Clock, CheckSquare, Calendar, Car, Compass, Loader2, ArrowRight
+  RotateCcw, Clock, Calendar, Car, Compass, Loader2, ArrowRight
 } from 'lucide-react';
 import { useChat } from '../../contexts/ChatContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -330,7 +330,7 @@ Diga o que você deseja realizar ou peça orientações sobre esta tela!`,
                 {msg.summaryCard && (
                   <div className="p-3 rounded-2xl bg-white border border-orange-200 shadow-xs space-y-2 text-xs">
                     <span className="font-extrabold text-orange-950 text-[11px] flex items-center gap-1">
-                      <CheckSquare className="w-3.5 h-3.5 text-orange-600" />
+                      <CheckCircle2 className="w-3.5 h-3.5 text-orange-600" />
                       Resumo: {msg.summaryCard.title}
                     </span>
                     <div className="grid grid-cols-1 gap-1 pt-1.5 border-t border-orange-100">
@@ -401,23 +401,7 @@ Diga o que você deseja realizar ou peça orientações sobre esta tela!`,
                   </div>
                 )}
 
-                {/* Cards Operacionais de Dados (Tarefas / Veículos / Calendário) */}
-                {msg.cardType === 'tarefas' && Array.isArray(msg.cardData) && msg.cardData.length > 0 && (
-                  <div className="p-2.5 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-1.5 text-xs">
-                    <span className="font-bold text-slate-800 flex items-center gap-1 text-[11px]">
-                      <CheckSquare className="w-3 h-3 text-orange-600" />
-                      Tarefas Localizadas ({msg.cardData.length})
-                    </span>
-                    {msg.cardData.slice(0, 3).map((t: any) => (
-                      <div key={t.id} className="p-1.5 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-between text-[11px]">
-                        <span className="truncate pr-1 text-slate-900 font-medium">{t.title}</span>
-                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 uppercase">
-                          {t.status || 'Pendente'}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
+
 
                 {/* Card de Calendário */}
                 {msg.cardType === 'calendario' && Array.isArray(msg.cardData) && msg.cardData.length > 0 && (
@@ -470,10 +454,10 @@ Diga o que você deseja realizar ou peça orientações sobre esta tela!`,
         </button>
         <button
           type="button"
-          onClick={() => handleSendMessage('Minhas tarefas pendentes')}
+          onClick={() => handleSendMessage('Consultar diárias de viagem')}
           className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 hover:bg-orange-50 hover:text-orange-800 transition-colors whitespace-nowrap cursor-pointer shrink-0"
         >
-          Tarefas
+          Diárias
         </button>
       </div>
 

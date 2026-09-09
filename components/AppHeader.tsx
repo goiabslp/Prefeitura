@@ -166,10 +166,6 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
       scope = 'marketing';
     } else if (currentView === 'rh') {
       scope = 'rh';
-    } else if (currentView === 'agricultura') {
-      scope = 'agriculture';
-    } else if (currentView === 'obras') {
-      scope = 'obras';
     } else if (currentView === 'projetos') {
       scope = 'projetos';
     } else if (currentView === 'calendario') {
@@ -214,20 +210,13 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
       return "Módulo de Abastecimento";
     }
 
-    if (activeBlock === 'tarefas') {
-      if (currentSubView === 'new') return "Nova Tarefa";
-      if (currentSubView === 'dashboard') return "Minhas Tarefas";
-      return "Gestão de Tarefas";
-    }
-
     switch (activeBlock) {
       case 'oficio': return "Módulo de Ofícios";
       case 'compras': return "Módulo de Compras";
       case 'licitacao': return "Módulo de Licitação";
       case 'diarias': return "Módulo de Diárias";
       case 'abastecimento': return "Módulo de Abastecimento";
-      case 'tarefas' as any: return "Gestão de Tarefas";
-      default: return "Página Inicial";
+      default: return "Prefeitura Municipal";
     }
   };
 

@@ -454,7 +454,7 @@ export const SystemLogs: React.FC<SystemLogsProps> = ({ onBack }) => {
                       className="group bg-white rounded-2xl border border-slate-200/60 p-5 shadow-[0_1px_3px_rgba(0,0,0,0.01)] hover:shadow-md hover:border-slate-300/80 hover:-translate-y-0.5 transition-all duration-300 cursor-pointer flex items-center justify-between gap-6 animate-fade-in"
                     >
                       <div className="flex items-center gap-4 min-w-0">
-                        {/* Avatar */}
+                        {/* Iniciais do Usuário */}
                         <div className="w-12 h-12 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center font-black text-sm text-indigo-600 shadow-inner group-hover:bg-indigo-600 group-hover:text-white transition-all duration-500 shrink-0">
                           {u.user_name.substring(0, 2).toUpperCase()}
                         </div>

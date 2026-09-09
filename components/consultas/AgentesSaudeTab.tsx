@@ -411,7 +411,7 @@ export const AgentesSaudeTab: React.FC<AgentesSaudeTabProps> = ({
                                                 {String(index + 1).padStart(2, '0')}
                                             </td>
 
-                                            {/* Nome com Avatar Compacto */}
+                                            {/* Nome com Iniciais do Agente */}
                                             <td className="py-2.5 px-4">
                                                 <div className="flex items-center gap-3">
                                                     <div className="w-7 h-7 rounded-lg bg-teal-50 border border-teal-200/70 text-teal-700 font-black text-[10px] flex items-center justify-center shrink-0">

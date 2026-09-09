@@ -1,7 +1,6 @@
 import { User } from '../types';
 import { canUserAccessRoute, isSuperAdminUser } from './permissionService';
 import { auditLogService } from './auditLogService';
-import * as taskService from './taskService';
 import { calendarService } from './calendarService';
 import * as vehicleService from './vehicleSchedulingService';
 import * as consultasService from './consultasService';
@@ -38,7 +37,7 @@ export interface ToolExecutionResult {
   success: boolean;
   message: string;
   data?: any;
-  cardType?: 'tarefas' | 'calendario' | 'veiculos' | 'consultas' | 'farmacia' | 'perfil' | 'usuarios' | 'info';
+  cardType?: 'calendario' | 'veiculos' | 'consultas' | 'farmacia' | 'perfil' | 'usuarios' | 'info';
   requiresConfirmation?: boolean;
   confirmationDetails?: {
     actionName: string;
@@ -63,29 +62,26 @@ export const SYSTEM_AI_TOOLS: Record<string, ToolDefinition> = {
       properties: {}
     },
     execute: async (_params, user) => {
-      const isSuper = isSuperAdminUser(user);
       return {
         success: true,
         message: `Perfil de ${user.name || user.username} identificado.`,
         data: {
-          id: user.id,
           nome: user.name,
-          username: user.username,
+          usuario: user.username,
           cargo: user.role,
-          email: user.email,
-          superAdmin: isSuper,
-          totalPermissoes: user.permissions?.length || 0,
-          permissoes: user.permissions || []
+          setor: user.sector,
+          funcao: user.jobTitle,
+          permissoesAtivas: user.permissions?.length || 0
         },
         cardType: 'perfil'
       };
     }
   },
 
-  // 2. Módulos Disponíveis para o Usuário
-  consultar_modulos_disponiveis: {
-    name: 'consultar_modulos_disponiveis',
-    description: 'Lista todos os módulos e funcionalidades que o usuário atual possui autorização para utilizar.',
+  // 2. Módulos Liberados para o Usuário
+  consultar_meus_modulos_acessiveis: {
+    name: 'consultar_meus_modulos_acessiveis',
+    description: 'Verifica quais módulos e rotas do sistema o usuário logado possui permissão para acessar.',
     module: 'Sistema',
     parameters: {
       type: 'object',
@@ -93,7 +89,6 @@ export const SYSTEM_AI_TOOLS: Record<string, ToolDefinition> = {
     },
     execute: async (_params, user) => {
       const modulos = [
-        { nome: 'Tarefas', rota: '/Tarefas/MinhasTarefas', permitido: checkRouteAccess(user, '/Tarefas') },
         { nome: 'Calendário Oficial', rota: '/Calendario', permitido: checkRouteAccess(user, '/Calendario') },
         { nome: 'Agendamento de Veículos', rota: '/AgendamentoVeiculos', permitido: checkRouteAccess(user, '/AgendamentoVeiculos') },
         { nome: 'Consultas e Saúde', rota: '/Consultas', permitido: checkRouteAccess(user, '/Consultas') },
@@ -109,158 +104,6 @@ export const SYSTEM_AI_TOOLS: Record<string, ToolDefinition> = {
         data: modulos.filter(m => m.permitido || isSuperAdminUser(user)),
         cardType: 'info'
       };
-    }
-  },
-
-  // 3. Consultar Tarefas
-  consultar_minhas_tarefas: {
-    name: 'consultar_minhas_tarefas',
-    description: 'Consulta as tarefas atribuídas ao usuário ou tarefas ativas no sistema.',
-    module: 'Tarefas',
-    requiredRoute: '/Tarefas',
-    parameters: {
-      type: 'object',
-      properties: {
-        status: {
-          type: 'string',
-          description: 'Filtrar por status da tarefa',
-          enum: ['todos', 'pending', 'in_progress', 'completed']
-        }
-      }
-    },
-    execute: async (params, user) => {
-      if (!checkRouteAccess(user, '/Tarefas')) {
-        return {
-          success: false,
-          message: 'Seu usuário não possui autorização para consultar o módulo de Tarefas.'
-        };
-      }
-
-      try {
-        const tasks = await taskService.getTasks();
-        const filtered = tasks.filter(t => {
-          const matchUser = t.assigned_user_id === user.id || t.userId === user.id || isSuperAdminUser(user);
-          if (!matchUser) return false;
-          if (params.status && params.status !== 'todos') {
-            return t.status === params.status;
-          }
-          return true;
-        }).slice(0, 15);
-
-        return {
-          success: true,
-          message: `Encontradas ${filtered.length} tarefas relevantes.`,
-          data: filtered,
-          cardType: 'tarefas'
-        };
-      } catch (err: any) {
-        return { success: false, message: `Erro ao consultar tarefas: ${err.message}` };
-      }
-    }
-  },
-
-  // 4. Criar Nova Tarefa
-  criar_nova_tarefa: {
-    name: 'criar_nova_tarefa',
-    description: 'Cria uma nova tarefa no sistema com título, descrição e prazo.',
-    module: 'Tarefas',
-    requiredRoute: '/Tarefas/NovaTarefa',
-    requiresConfirmation: true,
-    parameters: {
-      type: 'object',
-      properties: {
-        titulo: { type: 'string', description: 'Título da tarefa' },
-        descricao: { type: 'string', description: 'Detalhamento do que deve ser feito' },
-        publica: { type: 'boolean', description: 'Se a tarefa é visível para o setor' }
-      },
-      required: ['titulo']
-    },
-    execute: async (params, user) => {
-      if (!checkRouteAccess(user, '/Tarefas/NovaTarefa')) {
-        return {
-          success: false,
-          message: 'Acesso negado: Seu usuário não possui autorização para criar novas tarefas.'
-        };
-      }
-
-      try {
-        const newTask = await taskService.createTask({
-          title: params.titulo,
-          description: params.descricao || '',
-          status: 'pending',
-          is_public: params.publica ?? true,
-          userId: user.id,
-          userName: user.name || user.username,
-          assigned_user_id: user.id
-        });
-
-        if (!newTask) {
-          return { success: false, message: 'Não foi possível salvar a tarefa no banco de dados.' };
-        }
-
-        await auditLogService.logAction({
-          action_type: 'AI_ASSISTANT_ACTION',
-          module: 'Tarefas',
-          description: `IA criou nova tarefa: "${params.titulo}"`,
-          details: { taskId: newTask.id, protocol: newTask.protocol }
-        });
-
-        return {
-          success: true,
-          message: `Tarefa criada com sucesso! Protocolo: ${newTask.protocol}`,
-          data: newTask,
-          cardType: 'tarefas'
-        };
-      } catch (err: any) {
-        return { success: false, message: `Falha ao criar tarefa: ${err.message}` };
-      }
-    }
-  },
-
-  // 5. Atualizar Status de Tarefa
-  atualizar_status_tarefa: {
-    name: 'atualizar_status_tarefa',
-    description: 'Atualiza o status de uma tarefa para pending, in_progress ou completed.',
-    module: 'Tarefas',
-    requiredRoute: '/Tarefas',
-    requiresConfirmation: true,
-    parameters: {
-      type: 'object',
-      properties: {
-        tarefaId: { type: 'string', description: 'ID da tarefa a ser atualizada' },
-        novoStatus: {
-          type: 'string',
-          description: 'Novo status da tarefa',
-          enum: ['pending', 'in_progress', 'completed']
-        }
-      },
-      required: ['tarefaId', 'novoStatus']
-    },
-    execute: async (params, user) => {
-      if (!checkRouteAccess(user, '/Tarefas')) {
-        return { success: false, message: 'Seu usuário não possui autorização para gerenciar tarefas.' };
-      }
-
-      try {
-        const ok = await taskService.updateTaskStatus(params.tarefaId, params.novoStatus);
-        if (!ok) return { success: false, message: 'Não foi possível atualizar o status da tarefa.' };
-
-        await auditLogService.logAction({
-          action_type: 'AI_ASSISTANT_ACTION',
-          module: 'Tarefas',
-          description: `IA alterou status da tarefa ${params.tarefaId} para ${params.novoStatus}`,
-          details: { taskId: params.tarefaId, novoStatus: params.novoStatus }
-        });
-
-        return {
-          success: true,
-          message: `Status da tarefa atualizado para "${params.novoStatus}" com sucesso.`,
-          data: { id: params.tarefaId, status: params.novoStatus },
-          cardType: 'tarefas'
-        };
-      } catch (err: any) {
-        return { success: false, message: `Erro ao atualizar status: ${err.message}` };
-      }
     }
   },
 

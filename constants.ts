@@ -199,7 +199,7 @@ export const DEFAULT_USERS: User[] = [
     sector: 'Secretaria de Administração',
     jobTitle: 'Tecnico Administrativo',
     allowedSignatureIds: ['sig1', 'sig2', 'sig3'],
-    permissions: ['parent_criar_oficio', 'parent_compras', 'parent_diarias', 'parent_diarias_novo_evento', 'parent_diarias_lancamentos', 'parent_diarias_viajar', 'parent_admin', 'parent_agendamento_veiculo', 'parent_agricultura', 'parent_obras', 'parent_calendario', 'parent_rh']
+    permissions: ['parent_criar_oficio', 'parent_compras', 'parent_diarias', 'parent_diarias_novo_evento', 'parent_diarias_lancamentos', 'parent_diarias_viajar', 'parent_admin', 'parent_agendamento_veiculo', 'parent_calendario', 'parent_rh']
   },
   {
     id: 'user_maria',
@@ -243,7 +243,7 @@ export const DEFAULT_USERS: User[] = [
     sector: 'Departamento de Informática',
     jobTitle: 'Tecnico de TI',
     allowedSignatureIds: ['sig1', 'sig2', 'sig3', 'sig4'],
-    permissions: ['parent_criar_oficio', 'parent_compras', 'parent_diarias', 'parent_diarias_novo_evento', 'parent_diarias_lancamentos', 'parent_diarias_viajar', 'parent_admin', 'parent_agendamento_veiculo', 'parent_agricultura', 'parent_obras', 'parent_calendario', 'parent_rh']
+    permissions: ['parent_criar_oficio', 'parent_compras', 'parent_diarias', 'parent_diarias_novo_evento', 'parent_diarias_lancamentos', 'parent_diarias_viajar', 'parent_admin', 'parent_agendamento_veiculo', 'parent_calendario', 'parent_rh']
   }
 ];
 

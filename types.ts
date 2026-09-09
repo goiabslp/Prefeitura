@@ -204,7 +204,7 @@ export type AppPermission =
   | 'sub_agendamento_agendar' | 'sub_agendamento_dia' | 'sub_agendamento_historico'
   | 'sub_agendamento_aprovacoes' | 'sub_agendamento_dashboard'
   | 'parent_abastecimento' | 'parent_abastecimento_novo' | 'parent_abastecimento_gestao' | 'parent_abastecimento_dashboard'
-  | 'parent_agricultura' | 'parent_obras' | 'parent_tarefas' | 'parent_calendario'
+  | 'parent_calendario'
   | 'parent_rh' | 'parent_rh_horas_extras' | 'parent_rh_historico' | 'sub_rh_horas_extras' | 'sub_rh_historico'
   | 'parent_projetos' | 'parent_marketing' | 'parent_compras_itens' | 'parent_compras_dados'
   | 'parent_licitacao' | 'parent_licitacao_processos' | 'parent_licitacao_triagem'
@@ -224,7 +224,7 @@ export type AppPermission =
   | 'sub_art_logos' | 'sub_art_referencias'
   | (string & {});
 
-export type BlockType = 'oficio' | 'compras' | 'diarias' | 'agendamento' | 'abastecimento' | 'vs_calendar' | 'vs_day' | 'vs_history' | 'vs_approvals' | 'dashboard' | 'agricultura' | 'obras' | 'tarefas' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'licitacao' | 'consultas' | 'farmacia' | 'art';
+export type BlockType = 'oficio' | 'compras' | 'diarias' | 'agendamento' | 'abastecimento' | 'vs_calendar' | 'vs_day' | 'vs_history' | 'vs_approvals' | 'dashboard' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'licitacao' | 'consultas' | 'farmacia' | 'art';
 
 export interface FarmaciaMedicamento {
   id: string;
@@ -297,7 +297,6 @@ export interface User {
   twoFactorSecret2?: string;
   email?: string;
   whatsapp?: string;
-  avatar?: string;
   status?: 'active' | 'blocked';
   google_connected?: boolean;
   impersonatedBy?: {
