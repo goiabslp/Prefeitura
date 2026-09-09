@@ -172,7 +172,6 @@ const VIEW_TO_PATH: Record<string, string> = {
   'abastecimento:management': '/Abastecimento/GestaoAbastecimento',
   'abastecimento:dashboard': '/Abastecimento/DashboardAbastecimento',
   'abastecimento:dashboard:motorista': '/Abastecimento/DashboardAbastecimento/Motoristas',
-  'abastecimento': '/Abastecimento',
   'agricultura': '/Agricultura',
   'obras': '/Obras',
   'order-details': '/Historico/Compras/Visualizar',
@@ -1433,6 +1432,11 @@ const App: React.FC = () => {
         setCurrentView('admin');
         setAdminTab('users');
         return;
+      } else if (path === '/abastecimento') {
+        setCurrentView('home');
+        setActiveBlock('abastecimento');
+        setIsAdminSidebarOpen(false);
+        return;
       }
 
       const matchedEntry = Object.entries(PATH_TO_STATE).find(
@@ -1642,7 +1646,7 @@ const App: React.FC = () => {
       else if (currentView === 'home') stateKey = 'home:licitacao';
       else if (currentView === 'order-details' && viewingOrder) stateKey = 'licitacao-details';
     } else if (currentView === 'abastecimento') {
-      stateKey = `abastecimento:${appState.view || 'management'}`;
+      stateKey = appState.view ? `abastecimento:${appState.view}` : 'home:abastecimento';
     } else {
       // Standard Keys
       if (currentView === 'admin' && adminTab) {

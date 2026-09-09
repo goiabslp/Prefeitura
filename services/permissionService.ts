@@ -1006,22 +1006,22 @@ export function userCanAccessSubmodule(
 ): boolean {
   if (!user) return false;
 
-  // SUPER ADMIN / GAF: Acesso completo e irrestrito a qualquer submódulo
-  if (isSuperAdminUser(user)) {
-    return true;
-  }
-
   const parentDef = MODULE_ACCESS_TREE.find(m => m.key === parentKey);
   if (!parentDef) return true;
 
-  // 1. Dependência global do pai: Se o pai estiver inativo no global, submódulo inativo
+  // 1. Dependência global do pai: Se o pai estiver inativo no global, submódulo inativo para todos
   if (!isModuleActiveGlobally(parentKey, globalSettings)) {
     return false;
   }
 
-  // 2. Submódulo no global
+  // 2. Submódulo no global: Se o submódulo estiver inativo no global, inativo para todos
   if (!isSubmoduleActiveGlobally(parentKey, subKey, globalSettings)) {
     return false;
+  }
+
+  // 3. SUPER ADMIN / GAF: Acesso completo caso o módulo e submódulo estejam ativos globalmente
+  if (isSuperAdminUser(user)) {
+    return true;
   }
 
   // 3. Dependência do pai no usuário: Se o usuário não tem o pai, NÃO acessa o filho de jeito nenhum!
@@ -1248,11 +1248,6 @@ export function canUserAccessRoute(
     return { allowed: true };
   }
 
-  // SUPER ADMIN / USUÁRIO "GAF": Acesso completo e irrestrito a todas as rotas e módulos do sistema
-  if (isSuperAdminUser(user)) {
-    return { allowed: true };
-  }
-
   // 3. Localiza a vinculação na árvore canônica
   const binding = getRouteBinding(normalized);
   if (!binding) {
@@ -1272,7 +1267,7 @@ export function canUserAccessRoute(
     return { allowed: true };
   }
 
-  // 4. Validação do Módulo Pai no Global
+  // 4. Validação do Módulo Pai no Global: SE O PAI ESTIVER DESATIVADO NO GLOBAL, NENHUM USUÁRIO ACESSA!
   if (!isModuleActiveGlobally(binding.parentKey, globalSettings)) {
     const reason = `O módulo "${binding.moduleLabel}" está temporariamente desativado no sistema.`;
     logAccessDenied({
@@ -1300,40 +1295,11 @@ export function canUserAccessRoute(
     };
   }
 
-  // 5. Validação do Módulo Pai no Usuário
-  if (!userCanAccessModuleParent(user, parentDef, globalSettings)) {
-    const reason = `Seu usuário não possui permissão de acesso ao módulo "${binding.moduleLabel}".`;
-    logAccessDenied({
-      route: path,
-      actionName: binding.moduleLabel,
-      itemLabel: binding.itemLabel,
-      moduleLabel: binding.moduleLabel,
-      parentKey: binding.parentKey,
-      requiredKey: binding.parentKey,
-      legacyKeys: parentDef.legacyKeys,
-      reason,
-      user,
-      isGlobalDisabled: false
-    });
-    return {
-      allowed: false,
-      reason,
-      redirectPath: '/PaginaInicial',
-      blockedRoute: path,
-      moduleKey: binding.parentKey,
-      moduleLabel: binding.moduleLabel,
-      requiredKey: binding.parentKey,
-      legacyKeys: parentDef.legacyKeys,
-      user
-    };
-  }
-
-  // 6. Se a rota possui submódulo específico, valida o submódulo
+  // 5. Se a rota possui submódulo específico, valida o Submódulo no Global: SE ESTIVER DESATIVADO NO GLOBAL, NENHUM USUÁRIO ACESSA!
   if (binding.subKey) {
     const subDef = parentDef.submodules?.find(s => s.key === binding.subKey);
     const itemTitle = subDef?.label || binding.itemLabel;
 
-    // Submódulo no Global
     if (!isSubmoduleActiveGlobally(binding.parentKey, binding.subKey, globalSettings)) {
       const reason = `A funcionalidade "${itemTitle}" do módulo "${binding.moduleLabel}" está temporariamente desativada no sistema.`;
       logAccessDenied({
@@ -1363,8 +1329,46 @@ export function canUserAccessRoute(
         user
       };
     }
+  }
 
-    // Submódulo no Usuário
+  // 6. SUPER ADMIN / USUÁRIO "GAF": Acesso completo e irrestrito caso o módulo e submódulo estejam ativos globalmente
+  if (isSuperAdminUser(user)) {
+    return { allowed: true };
+  }
+
+  // 7. Validação do Módulo Pai no Usuário
+  if (!userCanAccessModuleParent(user, parentDef, globalSettings)) {
+    const reason = `Seu usuário não possui permissão de acesso ao módulo "${binding.moduleLabel}".`;
+    logAccessDenied({
+      route: path,
+      actionName: binding.moduleLabel,
+      itemLabel: binding.itemLabel,
+      moduleLabel: binding.moduleLabel,
+      parentKey: binding.parentKey,
+      requiredKey: binding.parentKey,
+      legacyKeys: parentDef.legacyKeys,
+      reason,
+      user,
+      isGlobalDisabled: false
+    });
+    return {
+      allowed: false,
+      reason,
+      redirectPath: '/PaginaInicial',
+      blockedRoute: path,
+      moduleKey: binding.parentKey,
+      moduleLabel: binding.moduleLabel,
+      requiredKey: binding.parentKey,
+      legacyKeys: parentDef.legacyKeys,
+      user
+    };
+  }
+
+  // 8. Se a rota possui submódulo específico, valida no Usuário
+  if (binding.subKey) {
+    const subDef = parentDef.submodules?.find(s => s.key === binding.subKey);
+    const itemTitle = subDef?.label || binding.itemLabel;
+
     if (!userCanAccessSubmodule(user, binding.parentKey, binding.subKey, globalSettings)) {
       const reason = `Seu usuário não possui permissão para acessar "${itemTitle}" em "${binding.moduleLabel}".`;
       logAccessDenied({
