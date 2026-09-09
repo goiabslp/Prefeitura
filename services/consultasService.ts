@@ -368,15 +368,18 @@ export const orderConsultasQueue = (bookings: ConsultaAgendamento[]): ConsultaAg
         return 0;
     };
 
-    // 1. Separa estritamente nas 3 categorias de prioridade obrigatórias:
+    // 1. Separa estritamente nas categorias de prioridade obrigatórias:
     // 1º Agendamentos Especiais — prioridade máxima.
-    // 2º Urgentes — após os agendamentos especiais.
-    // 3º Normais — após os urgentes.
+    // 2º Retornos — 2º nível de prioridade (respeitando ordem cronológica entre os retornos).
+    // 3º Urgentes — comuns urgentes.
+    // 4º Normais — comuns normais.
     const isEspecial = (b: ConsultaAgendamento) => b.priority === 'Especial';
-    const isUrgente = (b: ConsultaAgendamento) => b.priority === 'Urgência' || (b.priority as string) === 'Urgente';
-    const isNormal = (b: ConsultaAgendamento) => !isEspecial(b) && !isUrgente(b);
+    const isRetorno = (b: ConsultaAgendamento) => !isEspecial(b) && (b.is_retorno === true || !!b.retorno_tipo || b.status === 'Retorno');
+    const isUrgente = (b: ConsultaAgendamento) => !isEspecial(b) && !isRetorno(b) && (b.priority === 'Urgência' || (b.priority as string) === 'Urgente');
+    const isNormal = (b: ConsultaAgendamento) => !isEspecial(b) && !isRetorno(b) && !isUrgente(b);
 
     const especiais = bookings.filter(isEspecial);
+    const retornos = bookings.filter(isRetorno);
     const urgentes = bookings.filter(isUrgente);
     const normais = bookings.filter(isNormal);
 
@@ -388,10 +391,11 @@ export const orderConsultasQueue = (bookings: ConsultaAgendamento[]): ConsultaAg
     };
 
     especiais.sort(sortByTime);
+    retornos.sort(sortByTime);
     urgentes.sort(sortByTime);
     normais.sort(sortByTime);
 
-    // 3. A fila efetiva organiza na ordem definitiva: Especial -> Urgente -> Normal
+    // 3. A fila efetiva organiza na ordem definitiva: Especial -> Retornos -> Urgente -> Normal
     const filaFinal: ConsultaAgendamento[] = [];
     let positionCounter = 1;
 
@@ -400,6 +404,14 @@ export const orderConsultasQueue = (bookings: ConsultaAgendamento[]): ConsultaAg
             ...item,
             queue_position: positionCounter++,
             special_sequence: idx + 1
+        });
+    });
+
+    retornos.forEach(item => {
+        filaFinal.push({
+            ...item,
+            queue_position: positionCounter++,
+            special_sequence: undefined
         });
     });
 
@@ -430,8 +442,8 @@ export const recalculateAndPersistQueuePositions = async (): Promise<void> => {
     try {
         const { data: queueItems, error } = await supabase
             .from('consultas_agendamentos')
-            .select('id, procedimento_id, priority, status, created_at, solicitation_date')
-            .in('status', ['Fila de espera', 'Aguardando Data', 'Solicitado']);
+            .select('id, procedimento_id, priority, status, created_at, solicitation_date, is_retorno, retorno_tipo, retorno_grau')
+            .in('status', ['Fila de espera', 'Aguardando Data', 'Solicitado', 'Retorno']);
 
         if (error || !queueItems || queueItems.length === 0) return;
 
@@ -576,10 +588,11 @@ export const createAgendamento = async (agendamento: Omit<ConsultaAgendamento, '
             }
         }
 
-        // 2. Insert agendamento. The DB trigger handles decrementing availability & checking bounds
-        const { data, error } = await supabase
+        // 2. Insert agendamento com suporte a fallback resiliente para novas colunas
+        let insertPayload: any = { ...agendamento };
+        let { data, error } = await supabase
             .from('consultas_agendamentos')
-            .insert([agendamento])
+            .insert([insertPayload])
             .select(`
                 *,
                 paciente:consultas_pacientes(*),
@@ -587,6 +600,34 @@ export const createAgendamento = async (agendamento: Omit<ConsultaAgendamento, '
                 responsavel:profiles(name)
             `)
             .single();
+
+        if (error && (error.code === 'PGRST204' || error.message?.includes('column') || error.message?.includes('schema cache'))) {
+            console.warn('[consultasService] Colunas opcionais ausentes na tabela consultas_agendamentos (createAgendamento). Tentando fallback...', error.message);
+            const optionalCols = ['retorno_tipo', 'retorno_grau', 'solicitation_date', 'appointment_time', 'is_retorno'];
+            let fallbackPayload = { ...insertPayload };
+            let lastError = error;
+
+            for (const col of optionalCols) {
+                if (lastError && (lastError.code === 'PGRST204' || lastError.message?.includes('column') || lastError.message?.includes('schema cache'))) {
+                    delete fallbackPayload[col];
+                    const retryRes = await supabase
+                        .from('consultas_agendamentos')
+                        .insert([fallbackPayload])
+                        .select(`
+                            *,
+                            paciente:consultas_pacientes(*),
+                            procedimento:consultas_procedimentos(*),
+                            responsavel:profiles(name)
+                        `)
+                        .single();
+
+                    data = retryRes.data;
+                    lastError = retryRes.error;
+                    if (!lastError) break;
+                }
+            }
+            error = lastError;
+        }
 
         if (error) {
             // Check if it's the trigger error
@@ -746,7 +787,7 @@ export const updateAgendamento = async (
         if (error && (error.code === 'PGRST204' || error.message?.includes('column') || error.message?.includes('schema cache'))) {
             console.warn('[consultasService] Coluna(s) ausente(s) no Supabase (updateAgendamento). Tentando fallback progressivo...', error.message);
 
-            const optionalCols = ['solicitation_date', 'appointment_time', 'is_retorno', 'cancellation_reason', 'canceled_by', 'canceled_by_name', 'canceled_at'];
+            const optionalCols = ['retorno_tipo', 'retorno_grau', 'solicitation_date', 'appointment_time', 'is_retorno', 'cancellation_reason', 'canceled_by', 'canceled_by_name', 'canceled_at'];
             let fallbackUpdates = { ...cleanUpdates };
             let lastError = error;
 

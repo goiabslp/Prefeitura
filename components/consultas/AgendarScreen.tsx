@@ -4,7 +4,7 @@ import { User, AppState, ConsultaAgendamento, ConsultaProcedimento, ConsultaVaga
 import { 
     ArrowLeft, CalendarCheck, Clock, Calendar, CheckCircle2, 
     Sparkles, AlertCircle, Search, Filter, Loader2, User as UserIcon,
-    Activity, Stethoscope, ChevronRight, Check, RefreshCw
+    Activity, Stethoscope, ChevronRight, Check, RefreshCw, RotateCcw
 } from 'lucide-react';
 import * as db from '../../services/consultasService';
 
@@ -140,17 +140,19 @@ export const AgendarScreen: React.FC<AgendarScreenProps> = ({
 
             // Ordena o conjunto final pela regra oficial obrigatória:
             // 1º Agendamento Especial
-            // 2º Urgente
-            // 3º Normal
+            // 2º Retorno
+            // 3º Urgente
+            // 4º Normal
             // E cronológico (FIFO) dentro de cada nível
             elegiveis.sort((a, b) => {
-                const getScore = (p: string) => {
-                    if (p === 'Especial') return 1;
-                    if (p === 'Urgência' || (p as any) === 'Urgente') return 2;
-                    return 3;
+                const getScore = (item: ConsultaAgendamento) => {
+                    if (item.priority === 'Especial') return 1;
+                    if (item.is_retorno || item.retorno_tipo || item.status === 'Retorno') return 2;
+                    if (item.priority === 'Urgência' || (item.priority as any) === 'Urgente') return 3;
+                    return 4;
                 };
-                const scoreA = getScore(a.priority);
-                const scoreB = getScore(b.priority);
+                const scoreA = getScore(a);
+                const scoreB = getScore(b);
                 if (scoreA !== scoreB) return scoreA - scoreB;
 
                 const posA = a.queue_position ?? 999;
@@ -424,8 +426,9 @@ export const AgendarScreen: React.FC<AgendarScreenProps> = ({
                     <div className="grid grid-cols-1 gap-4">
                         {filteredBookings.map((b, index) => {
                             const isSpecial = b.priority === 'Especial';
-                            const isUrgente = b.priority === 'Urgência' || (b.priority as any) === 'Urgente';
-                            const isNormal = !isSpecial && !isUrgente;
+                            const isRetorno = !isSpecial && (b.is_retorno === true || !!b.retorno_tipo || b.status === 'Retorno');
+                            const isUrgente = !isSpecial && !isRetorno && (b.priority === 'Urgência' || (b.priority as any) === 'Urgente');
+                            const isNormal = !isSpecial && !isRetorno && !isUrgente;
 
                             const procVagas = vagasMap[b.procedimento_id] || [];
                             const procBookings = bookingsMap[b.procedimento_id] || [];
@@ -455,23 +458,29 @@ export const AgendarScreen: React.FC<AgendarScreenProps> = ({
                             // Cores e estilos dinâmicos baseados na prioridade
                             const cardBorderClass = isSpecial
                                 ? 'border-amber-300 ring-2 ring-amber-400/25 bg-gradient-to-r from-amber-50/20 via-white to-white'
+                                : isRetorno
+                                ? 'border-teal-300 ring-2 ring-teal-400/25 bg-gradient-to-r from-teal-50/20 via-white to-white'
                                 : isUrgente
                                 ? 'border-rose-300 ring-2 ring-rose-400/25 bg-gradient-to-r from-rose-50/20 via-white to-white'
                                 : 'border-slate-200/90 hover:border-emerald-300 bg-white';
 
                             const stripClass = isSpecial
                                 ? 'bg-gradient-to-b from-amber-400 via-yellow-500 to-amber-600'
+                                : isRetorno
+                                ? 'bg-gradient-to-b from-teal-400 via-emerald-500 to-teal-600'
                                 : isUrgente
                                 ? 'bg-gradient-to-b from-rose-500 via-red-500 to-rose-700'
-                                : 'bg-gradient-to-b from-emerald-400 via-emerald-500 to-teal-600';
+                                : 'bg-gradient-to-b from-slate-400 via-slate-500 to-slate-600';
 
                             const positionBoxClass = isSpecial
                                 ? 'bg-gradient-to-br from-amber-100 via-yellow-100 to-amber-200 border-amber-400 text-amber-950 shadow-amber-200/50'
+                                : isRetorno
+                                ? 'bg-gradient-to-br from-teal-100 via-emerald-100 to-teal-200 border-teal-300 text-teal-950 shadow-teal-200/50'
                                 : isUrgente
                                 ? 'bg-gradient-to-br from-rose-100 via-red-100 to-rose-200 border-rose-300 text-rose-950 shadow-rose-200/50'
                                 : 'bg-slate-50 border-slate-200 text-slate-900 shadow-slate-200/30';
 
-                            const priorityTitle = isSpecial ? 'ESPECIAL' : isUrgente ? 'URGENTE' : 'NORMAL';
+                            const priorityTitle = isSpecial ? 'ESPECIAL' : isRetorno ? 'RETORNO' : isUrgente ? 'URGENTE' : 'NORMAL';
 
                             return (
                                 <div
@@ -487,7 +496,7 @@ export const AgendarScreen: React.FC<AgendarScreenProps> = ({
                                             {/* Posição na Fila com Estilo por Categoria */}
                                             <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex flex-col items-center justify-center shrink-0 border shadow-2xs ${positionBoxClass}`}>
                                                 <span className={`text-[8px] font-black uppercase tracking-wider leading-none ${
-                                                    isSpecial ? 'text-amber-900' : isUrgente ? 'text-rose-900' : 'text-slate-600'
+                                                    isSpecial ? 'text-amber-900' : isRetorno ? 'text-teal-900' : isUrgente ? 'text-rose-900' : 'text-slate-600'
                                                 }`}>
                                                     {priorityTitle}
                                                 </span>
@@ -515,19 +524,27 @@ export const AgendarScreen: React.FC<AgendarScreenProps> = ({
                                                         </span>
                                                     )}
 
-                                                    {/* Badge de Prioridade 2: Urgente */}
-                                                    {isUrgente && (
-                                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider text-rose-900 bg-rose-100 border border-rose-300 shadow-2xs ring-1 ring-rose-400/20">
-                                                            <AlertCircle className="w-3 h-3 text-rose-600 shrink-0" />
-                                                            <span>2º PRIORIDADE: URGÊNCIA</span>
+                                                    {/* Badge de Prioridade 2: Retorno */}
+                                                    {isRetorno && (
+                                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider text-teal-950 bg-teal-100 border border-teal-300 shadow-2xs ring-1 ring-teal-400/20">
+                                                            <RotateCcw className="w-3 h-3 text-teal-700 shrink-0" />
+                                                            <span>2º RETORNO — {(b.retorno_tipo || '1º RETORNO').toUpperCase()}</span>
                                                         </span>
                                                     )}
 
-                                                    {/* Badge de Prioridade 3: Normal */}
+                                                    {/* Badge de Prioridade 3: Urgente */}
+                                                    {isUrgente && (
+                                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider text-rose-900 bg-rose-100 border border-rose-300 shadow-2xs ring-1 ring-rose-400/20">
+                                                            <AlertCircle className="w-3 h-3 text-rose-600 shrink-0" />
+                                                            <span>3º PRIORIDADE: URGÊNCIA</span>
+                                                        </span>
+                                                    )}
+
+                                                    {/* Badge de Prioridade 4: Normal */}
                                                     {isNormal && (
                                                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider text-slate-700 bg-slate-100 border border-slate-300 shadow-2xs">
                                                             <UserIcon className="w-3 h-3 text-slate-500 shrink-0" />
-                                                            <span>3º FILA NORMAL</span>
+                                                            <span>4º FILA NORMAL</span>
                                                         </span>
                                                     )}
 

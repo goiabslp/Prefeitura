@@ -660,6 +660,8 @@ export interface ConsultaAgendamento {
   created_by: string;
   created_at?: string;
   is_retorno?: boolean;
+  retorno_tipo?: '1º Retorno' | '2º Retorno' | '3º Retorno' | '4º Retorno' | '5º Retorno' | string;
+  retorno_grau?: number;
   paciente?: ConsultaPaciente;
   procedimento?: ConsultaProcedimento;
   responsavel?: { name: string };

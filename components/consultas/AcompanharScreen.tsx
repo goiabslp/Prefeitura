@@ -419,8 +419,8 @@ const getStatusStyle = (status: string) => {
 
 const getPriorityStyle = (priority: string, is_retorno?: boolean) => {
     if (priority === 'Especial') return 'text-amber-950 bg-amber-200/70 border-amber-400 font-black shadow-2xs';
+    if (is_retorno) return 'text-teal-950 bg-teal-100 border-teal-300 font-black shadow-2xs';
     if (priority === 'Urgência') return 'text-rose-700 bg-rose-500/10 border-rose-300 font-black';
-    if (is_retorno) return 'text-teal-700 bg-teal-500/10 border-teal-300 font-black';
     return 'text-slate-600 bg-slate-500/10 border-slate-200 font-semibold';
 };
 
@@ -579,6 +579,12 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                         ) : null}
                                     </span>
                                 )}
+                                {(booking.is_retorno || booking.retorno_tipo || booking.status === 'Retorno') && booking.priority !== 'Especial' && (
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider text-teal-950 bg-teal-100 border border-teal-300 shadow-2xs ring-1 ring-teal-400/20">
+                                        <RotateCcw className="w-3 h-3 text-teal-700 shrink-0" />
+                                        <span>RETORNO — {(booking.retorno_tipo || '1º RETORNO').toUpperCase()}</span>
+                                    </span>
+                                )}
                                 {booking.priority === 'Urgência' && (
                                     <span className="text-[8px] font-black uppercase tracking-wider text-rose-700 bg-rose-100/70 px-1.5 py-0.2 rounded border border-rose-200 animate-pulse">
                                         Urgente
@@ -659,8 +665,16 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                 {/* PRIORIDADE */}
                                 <DataItem 
                                     label="Prioridade" 
-                                    value={booking.priority === 'Especial' ? 'AGENDAMENTO ESPECIAL' : booking.priority === 'Urgência' ? 'Urgência' : booking.is_retorno ? 'Retorno' : 'Normal'} 
-                                    colorClass={getPriorityStyle(booking.priority, booking.is_retorno)} 
+                                    value={
+                                        booking.priority === 'Especial' 
+                                            ? 'AGENDAMENTO ESPECIAL' 
+                                            : (booking.is_retorno || booking.retorno_tipo || booking.status === 'Retorno')
+                                            ? `RETORNO — ${(booking.retorno_tipo || '1º RETORNO').toUpperCase()}`
+                                            : booking.priority === 'Urgência' 
+                                            ? 'Urgência' 
+                                            : 'Normal'
+                                    } 
+                                    colorClass={getPriorityStyle(booking.priority, booking.is_retorno || !!booking.retorno_tipo || booking.status === 'Retorno')} 
                                     isBadge={true} 
                                     flex="col-span-1 wide:col-span-2" 
                                 />
@@ -1050,6 +1064,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     const [operatingId, setOperatingId] = useState<string | null>(null);
     const [retornoBooking, setRetornoBooking] = useState<ConsultaAgendamento | null>(null);
     const [retornoDate, setRetornoDate] = useState('');
+    const [retornoTipoOption, setRetornoTipoOption] = useState<'1º Retorno' | '2º Retorno' | '3º Retorno' | '4º Retorno' | '5º Retorno'>('1º Retorno');
     const [isRetornoModalOpen, setIsRetornoModalOpen] = useState(false);
 
     // Cancel modal states
@@ -1074,6 +1089,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     const [editSolicitationDate, setEditSolicitationDate] = useState('');
     const [editPriority, setEditPriority] = useState<'Normal' | 'Urgência' | 'Especial'>('Normal');
     const [editIsRetorno, setEditIsRetorno] = useState(false);
+    const [editRetornoTipo, setEditRetornoTipo] = useState<'1º Retorno' | '2º Retorno' | '3º Retorno' | '4º Retorno' | '5º Retorno' | ''>('');
     const [editStatus, setEditStatus] = useState<ConsultaAgendamento['status']>('Solicitado');
     const [editQuantity, setEditQuantity] = useState(1);
     const [editError, setEditError] = useState('');
@@ -1387,15 +1403,19 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                 quantity: 1,
                 priority: 'Normal' as const,
                 status: 'Retorno' as const,
+                is_retorno: true,
+                retorno_tipo: retornoTipoOption,
+                retorno_grau: Number(retornoTipoOption.charAt(0)),
                 created_by: currentUser.id
             };
             await db.createAgendamento(newAgendamento);
-            alert('Retorno agendado com sucesso!');
+            alert(`Retorno (${retornoTipoOption}) agendado com sucesso!`);
         } catch (error: any) {
             alert(error.message || 'Erro ao agendar o retorno.');
         } finally {
             setOperatingId(null);
             setRetornoBooking(null);
+            setRetornoTipoOption('1º Retorno');
         }
     };
 
@@ -1451,7 +1471,8 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
         setEditAppointmentTime(booking.appointment_time || '');
         setEditSolicitationDate(booking.solicitation_date || (booking.created_at ? booking.created_at.split('T')[0] : ''));
         setEditPriority(booking.priority || 'Normal');
-        setEditIsRetorno(booking.is_retorno || false);
+        setEditIsRetorno(booking.is_retorno || !!booking.retorno_tipo || false);
+        setEditRetornoTipo((booking.retorno_tipo as any) || (booking.is_retorno ? '1º Retorno' : '1º Retorno'));
         setEditStatus(booking.status || 'Solicitado');
         setEditQuantity(booking.quantity || 1);
         setEditError('');
@@ -1512,6 +1533,8 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                 solicitation_date: editSolicitationDate ? editSolicitationDate : null,
                 priority: editPriority,
                 is_retorno: editIsRetorno,
+                retorno_tipo: editIsRetorno ? (editRetornoTipo || '1º Retorno') : undefined,
+                retorno_grau: editIsRetorno ? Number((editRetornoTipo || '1º Retorno').charAt(0)) : undefined,
                 status: editStatus,
                 quantity: editQuantity
             });
@@ -1865,6 +1888,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                     quantity={printingBooking.quantity}
                     priority={printingBooking.priority}
                     is_retorno={printingBooking.is_retorno}
+                    retorno_tipo={printingBooking.retorno_tipo || (printingBooking.is_retorno ? '1º Retorno' : undefined)}
                     currentUser={currentUser}
                     state={appState}
                 />
@@ -1899,6 +1923,30 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                     <span className="text-slate-800 uppercase font-black">{retornoBooking.procedimento?.name}</span>
                                 </div>
                             </div>
+
+                            <div>
+                                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Etapa do Retorno</label>
+                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                    {(['1º Retorno', '2º Retorno', '3º Retorno', '4º Retorno', '5º Retorno'] as const).map(op => {
+                                        const isSel = retornoTipoOption === op;
+                                        return (
+                                            <button
+                                                key={op}
+                                                type="button"
+                                                onClick={() => setRetornoTipoOption(op)}
+                                                className={`py-2 px-2.5 rounded-xl border text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                                                    isSel
+                                                        ? 'bg-teal-600 border-teal-600 text-white shadow-md shadow-teal-600/20'
+                                                        : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                                                }`}
+                                            >
+                                                {op}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
                             <div>
                                 <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Data do Retorno</label>
                                 <input
@@ -2528,6 +2576,23 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                             <option value="sim">Sim (Paciente de Retorno)</option>
                                         </select>
                                     </div>
+
+                                    {editIsRetorno && (
+                                        <div>
+                                            <label className="block text-[10px] font-black uppercase text-teal-700 mb-1">Etapa de Retorno</label>
+                                            <select
+                                                value={editRetornoTipo || '1º Retorno'}
+                                                onChange={(e) => setEditRetornoTipo(e.target.value as any)}
+                                                className="w-full p-3 bg-teal-50/50 border border-teal-200 rounded-xl text-xs font-black text-teal-900 focus:bg-white focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 outline-none"
+                                            >
+                                                <option value="1º Retorno">1º Retorno</option>
+                                                <option value="2º Retorno">2º Retorno</option>
+                                                <option value="3º Retorno">3º Retorno</option>
+                                                <option value="4º Retorno">4º Retorno</option>
+                                                <option value="5º Retorno">5º Retorno</option>
+                                            </select>
+                                        </div>
+                                    )}
 
                                     <div>
                                         <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">Quantidade de Vagas</label>
