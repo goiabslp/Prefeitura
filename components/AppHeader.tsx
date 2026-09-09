@@ -142,7 +142,6 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
     
     // Filtros por Módulo
     if (currentView === 'abastecimento' && (activeBlockStr === 'new' || currentSubView === 'new')) return true;
-    if (currentView === 'tarefas' && (activeBlockStr === 'new' || currentSubView === 'new')) return true;
     if (currentView === 'rh' && (activeBlockStr === 'horas-extras' || currentSubView === 'horas-extras')) return true;
     if (currentView === 'projetos' && (activeBlockStr === 'new' || currentSubView === 'new')) return true;
     if (currentView === 'marketing' && (activeBlockStr === 'new' || currentSubView === 'new')) return true;

@@ -468,7 +468,24 @@ const App: React.FC = () => {
       realRole: rawUser.role,
       permissions: testPermissions
     };
-  }, [rawUser, impersonationSession, users]);
+  }, [
+    rawUser?.id,
+    rawUser?.role,
+    rawUser?.testRole,
+    rawUser?.username,
+    rawUser?.name,
+    rawUser?.email,
+    rawUser?.sector,
+    rawUser?.sectorId,
+    rawUser?.jobTitle,
+    rawUser?.jobId,
+    rawUser?.permissions,
+    rawUser?.allowedSignatureIds,
+    rawUser?.twoFactorEnabled,
+    rawUser?.twoFactorEnabled2,
+    impersonationSession?.sessionId,
+    impersonationSession ? users : null
+  ]);
 
   // Presence do Administrador: mantém o estado ativo publicado para o usuário alvo
   useEffect(() => {
@@ -883,8 +900,25 @@ const App: React.FC = () => {
     appStateRef.current = { currentView, activeBlock };
   }, [currentView, activeBlock]);
 
+  const refreshInProgressRef = useRef(false);
+  const purchaseOrdersRef = useRef<any[]>(purchaseOrders);
+  purchaseOrdersRef.current = purchaseOrders;
+  const schedulesRef = useRef<any[]>(schedules);
+  schedulesRef.current = schedules;
+  const currentUserRef = useRef<User | null>(currentUser);
+  currentUserRef.current = currentUser;
+  const moduleStatusRef = useRef<any>(moduleStatus);
+  moduleStatusRef.current = moduleStatus;
+  const lastNavKeyRef = useRef<string>('');
+
   // Initial Data Fetch
   const refreshData = useCallback(async (silent = false, scope?: string) => {
+    // Se já houver um refresh em andamento, evita sobreposição
+    if (refreshInProgressRef.current) {
+      if (silent) return;
+    }
+    refreshInProgressRef.current = true;
+
     // Evita atualização automática silenciosa em formulários
     if (silent) {
       const isFormScreen = () => {
@@ -893,16 +927,15 @@ const App: React.FC = () => {
         if (cv === 'editor') return true;
         if (ab === 'new' || ab === 'vs_calendar') return true;
         if (cv === 'abastecimento' && ab === 'new') return true;
-        if (cv === 'tarefas' && ab === 'new') return true;
         if (cv === 'rh' && ab === 'horas-extras') return true;
         if (cv === 'projetos' && ab === 'new') return true;
         if (cv === 'marketing' && ab === 'new') return true;
         return false;
       };
 
-
       if (isFormScreen()) {
         console.log("Auto-refresh bloqueado: Usuário está em uma tela de preenchimento (prevenção de perda de dados).");
+        refreshInProgressRef.current = false;
         return;
       }
     }
@@ -967,8 +1000,19 @@ const App: React.FC = () => {
           twoFactorSecret2: ru.two_factor_secret_2
         }));
 
-        if (mappedUsers.length > 0) setUsers(mappedUsers);
-        else setUsers(DEFAULT_USERS);
+        setUsers(prev => {
+          if (mappedUsers.length > 0) {
+            if (prev.length === mappedUsers.length) {
+              const unchanged = prev.every((u, idx) => {
+                const mu = mappedUsers[idx];
+                return mu && u.id === mu.id && u.role === mu.role && u.name === mu.name && u.jobTitle === mu.jobTitle;
+              });
+              if (unchanged) return prev;
+            }
+            return mappedUsers;
+          }
+          return prev.length > 0 ? prev : DEFAULT_USERS;
+        });
 
         setSectors(savedSectors);
         setJobs(savedJobs);
@@ -1015,45 +1059,33 @@ const App: React.FC = () => {
       }
 
       // Batch 3: Transactional Data
-      let savedPurchaseOrders = purchaseOrders; // Preserve existing
-
-      let savedSchedules = schedules;
+      let savedPurchaseOrders = purchaseOrdersRef.current;
+      let savedSchedules = schedulesRef.current;
 
       const promises: Promise<any>[] = [];
 
       if (fetchCompras || (fetchTransactions && isModuleActive('parent_compras'))) {
         promises.push(comprasService.getAllPurchaseOrders().then(d => { savedPurchaseOrders = d; }));
       }
-      if (fetchTransactions) {
-
-      }
       if (fetchVehicleSchedules || (fetchTransactions && isModuleActive('parent_frotas'))) {
         promises.push(vehicleSchedulingService.getSchedules().then(d => { savedSchedules = d; }));
       }
-      if (fetchMarketing && currentUser) {
+      const activeUser = currentUserRef.current;
+      if (fetchMarketing && activeUser) {
         // Marketing sync triggers
-        promises.push(marketingSyncService.syncWeeklyBirthdays(currentUser.id, currentUser.name));
-      }
-      if (fetchRh) {
-        // Any RH specific global refresh logic if needed
+        promises.push(marketingSyncService.syncWeeklyBirthdays(activeUser.id, activeUser.name));
       }
 
       await Promise.all(promises);
 
-      // Update States based on what was fetched
-      if (fetchCompras || (fetchTransactions && isModuleActive('parent_compras'))) {
-        // setPurchaseOrders(savedPurchaseOrders); // Derived
+      if (fetchVehicleSchedules || (fetchTransactions && isModuleActive('parent_frotas'))) {
+        setSchedules(savedSchedules);
       }
-
-      if (fetchVehicleSchedules || (fetchTransactions && isModuleActive('parent_frotas'))) setSchedules(savedSchedules);
 
       // Update Consolidated Orders only if meaningful changes could have happened
       if (fetchCompras || fetchOficios || fetchDiarias || fetchTransactions) {
-        // Note: Generic Transactions covers all.
-        // Re-merging with existing state for components not fetched
         const allOrders = [
           ...savedPurchaseOrders
-          // ... others (managed by RQ or not fetched here)
         ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         setOrders(allOrders);
       }
@@ -1065,8 +1097,9 @@ const App: React.FC = () => {
       if (!silent) showToast("Erro ao atualizar dados.", "error");
     } finally {
       setIsRefreshing(false);
+      refreshInProgressRef.current = false;
     }
-  }, [purchaseOrders, schedules]);
+  }, []);
 
   // Realtime Listeners for Abastecimento Entities
   useEffect(() => {
@@ -1614,7 +1647,7 @@ const App: React.FC = () => {
       if (block === 'oficio') return 'oficio';
       if (view === 'rh') return 'rh';
       if (view === 'marketing') return 'marketing';
-      if (view === 'home') return 'metadata'; // apenas metadados leves
+      if (view === 'home') return undefined; // Home não precisa de auto-refresh contínuo
       if (view === 'admin') return 'entities';
       return undefined;
     };
@@ -1627,7 +1660,7 @@ const App: React.FC = () => {
       try { targetPath = decodeURIComponent(expectedPath); } catch (e) { targetPath = expectedPath; }
 
       // Route Guard para transições internas:
-      const accessCheck = canUserAccessRoute(expectedPath, currentUser, moduleStatus);
+      const accessCheck = canUserAccessRoute(expectedPath, currentUserRef.current, moduleStatusRef.current);
       if (!accessCheck.allowed) {
         console.warn(`[RouteGuard] Transição interna bloqueada para "${expectedPath}": ${accessCheck.reason}`);
         setCurrentView('home');
@@ -1646,16 +1679,20 @@ const App: React.FC = () => {
       }
     }
 
-    // Auto-refresh on route change (Debounced to prevent timeout floods)
-    const timeoutId = setTimeout(() => {
+    // Auto-refresh apenas quando a chave da rota REALMENTE mudar e não for a Home
+    const currentNavKey = `${currentView}#${activeBlock || ''}#${adminTab || ''}#${appState.view || ''}`;
+    if (lastNavKeyRef.current !== currentNavKey) {
+      lastNavKeyRef.current = currentNavKey;
+
       const scope = getScopeForView(currentView as string, activeBlock as string);
       if (scope) {
-        refreshData(true, scope);
+        const timeoutId = setTimeout(() => {
+          refreshData(true, scope);
+        }, 600);
+        return () => clearTimeout(timeoutId);
       }
-    }, 500);
-
-    return () => clearTimeout(timeoutId);
-  }, [currentView, activeBlock, adminTab, editingOrder, queryClient, refreshData, moduleStatus, currentUser]);
+    }
+  }, [currentView, activeBlock, adminTab, editingOrder, viewingOrder, appState.view]);
 
   // Garante que SEMPRE que entrar em uma nova página, aba ou submódulo a rolagem fique 100% no topo
   useEffect(() => {

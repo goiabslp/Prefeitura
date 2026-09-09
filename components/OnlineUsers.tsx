@@ -11,14 +11,19 @@ interface OnlineUser {
   role?: string;
 }
 
-export const OnlineUsers: React.FC<{ currentUser: User }> = ({ currentUser }) => {
+export const OnlineUsers: React.FC<{ currentUser: User }> = React.memo(({ currentUser }) => {
   const [onlineUsers, setOnlineUsers] = useState<Map<string, OnlineUser>>(new Map());
   const [selectedUser, setSelectedUser] = useState<OnlineUser | null>(null);
 
-  useEffect(() => {
-    if (!currentUser) return;
+  const currentUserId = currentUser?.id;
+  const currentUserName = currentUser?.name;
+  const currentUserJobTitle = currentUser?.jobTitle;
+  const currentUserRole = currentUser?.role;
 
-    // Conectar ao channel de presença
+  useEffect(() => {
+    if (!currentUserId) return;
+
+    // Conectar ao channel de presença único
     const room = supabase.channel('online-users');
 
     room
@@ -35,25 +40,43 @@ export const OnlineUsers: React.FC<{ currentUser: User }> = ({ currentUser }) =>
           });
         });
 
-        setOnlineUsers(newOnlineUsers);
+        setOnlineUsers((prev) => {
+          if (prev.size === newOnlineUsers.size) {
+            let hasChanged = false;
+            for (const [id, user] of newOnlineUsers.entries()) {
+              const prevUser = prev.get(id);
+              if (
+                !prevUser ||
+                prevUser.name !== user.name ||
+                prevUser.role !== user.role ||
+                prevUser.jobTitle !== user.jobTitle
+              ) {
+                hasChanged = true;
+                break;
+              }
+            }
+            if (!hasChanged) return prev; // Mantém referência estável para não re-renderizar
+          }
+          return newOnlineUsers;
+        });
       })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
           // Quando estiver inscrito, envia a própria presença
           await room.track({
-            id: currentUser.id,
-            name: currentUser.name,
-            jobTitle: currentUser.jobTitle,
-            role: currentUser.role
+            id: currentUserId,
+            name: currentUserName || 'Usuário',
+            jobTitle: currentUserJobTitle,
+            role: currentUserRole
           });
         }
       });
 
     return () => {
-      room.untrack();
+      room.untrack().catch(() => {});
       supabase.removeChannel(room);
     };
-  }, [currentUser]);
+  }, [currentUserId, currentUserName, currentUserJobTitle, currentUserRole]);
 
   // Transformar o Map em array para renderizar
   const usersArray = Array.from(onlineUsers.values());
@@ -156,4 +179,5 @@ export const OnlineUsers: React.FC<{ currentUser: User }> = ({ currentUser }) =>
       )}
     </>
   );
-};
+});
+
