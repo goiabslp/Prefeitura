@@ -958,40 +958,34 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
   const handleGestorApprove = async () => {
     if (!selectedEvento) return;
 
-    if (selectedEvento.status === 'em_analise' || selectedEvento.status === 'aguardando_aprovacao') {
-      setIsSubmitting(true);
-      try {
-        await updateDiariaEvento(selectedEvento.id, {
-          status: 'viagem_programada',
-          justificativa_gestor: justificativaGestor.trim() || undefined,
-          comprovantes_gestor: comprovantes
-        });
-        await fetchEventos();
-        handleCloseModal();
-      } catch (err) {
-        console.error(err);
-        alert("Erro ao aprovar solicitação de viagem.");
-      } finally {
-        setIsSubmitting(false);
-      }
-      return;
-    }
-
-    if (justificativaGestor.trim().length < 300) return;
     setIsSubmitting(true);
     try {
       const isTransferring = Boolean(transferGestorCargo);
+
+      if (isTransferring) {
+        await updateDiariaEvento(selectedEvento.id, {
+          justificativa_gestor: justificativaGestor.trim() || undefined,
+          comprovantes_gestor: comprovantes,
+          gestor_transferido_cargo: transferGestorCargo || undefined,
+          status: 'aguardando_gestor'
+        });
+        await fetchEventos();
+        handleCloseModal();
+        return;
+      }
+
+      // Aprovação da viagem pelo Gestor: define status como viagem_programada
       await updateDiariaEvento(selectedEvento.id, {
-        justificativa_gestor: justificativaGestor.trim(),
+        status: 'viagem_programada',
+        justificativa_gestor: justificativaGestor.trim() || undefined,
         comprovantes_gestor: comprovantes,
-        gestor_transferido_cargo: transferGestorCargo || undefined,
-        status: isTransferring ? 'aguardando_gestor' : 'aguardando_administrador'
+        gestor_transferido_cargo: undefined
       });
-      fetchEventos();
+      await fetchEventos();
       handleCloseModal();
     } catch (err) {
-      console.error(err);
-      alert("Erro ao enviar aprovação do gestor.");
+      console.error('Erro ao aprovar solicitação de viagem:', err);
+      alert("Erro ao aprovar solicitação de viagem.");
     } finally {
       setIsSubmitting(false);
     }
@@ -1983,7 +1977,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
       case 'em_viagem':
         return { label: 'Em Viagem', style: 'border-emerald-300 bg-emerald-100 text-emerald-800 animate-pulse' };
       case 'aguardando_aprovacao':
-        return { label: 'Aguardando Aprovação', style: 'border-amber-200 bg-amber-50 text-amber-700' };
+      case 'em_analise':
       case 'aguardando_gestor':
         return { label: 'Aguardando Gestor', style: 'border-amber-200 bg-amber-50 text-amber-700' };
       case 'rejeitado_gestor':
@@ -1996,7 +1990,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
       case 'viagem_cancelada':
         return { label: 'Viagem Cancelada', style: 'border-slate-300 bg-slate-200 text-slate-700 font-bold' };
       default:
-        return { label: 'Registrado', style: 'border-slate-200 bg-slate-50 text-slate-700' };
+        return { label: 'Aguardando Gestor', style: 'border-amber-200 bg-amber-50 text-amber-700' };
     }
   };
 
@@ -2836,9 +2830,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                 >
                   {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
                   <span>
-                    {selectedEvento.status === 'em_analise' || selectedEvento.status === 'aguardando_aprovacao'
-                      ? 'Aprovar Viagem'
-                      : transferGestorCargo ? `Transferir` : 'Aprovar / Enviar'}
+                    {transferGestorCargo ? 'Transferir Viagem' : 'Aprovar Viagem'}
                   </span>
                 </button>
               )}

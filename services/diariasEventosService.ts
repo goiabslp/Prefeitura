@@ -13,29 +13,20 @@ export const markEventAsDeleted = async (id: string | number) => {
 };
 
 export const checkAndApplyAutoCancellation = (events: DiariaEvento[]): DiariaEvento[] => {
-  const agora = new Date();
+  // Viagens aprovadas/programadas nunca devem ser canceladas automaticamente no banco de dados,
+  // preservando a aprovação legítima realizada pelo gestor ou administrador.
+  return events;
+};
 
-  return events.map(evt => {
-    const isProgramado = evt.status === 'viagem_programada' || !evt.status;
-    if (isProgramado && evt.data_saida) {
-      const hasStarted = evt.pessoas && Array.isArray(evt.pessoas) && evt.pessoas.some(p => (p as any).viagem_inicio);
-      if (!hasStarted) {
-        try {
-          const scheduledDate = new Date(evt.data_saida);
-          const limitTime = new Date(scheduledDate.getTime() + 2 * 60 * 60 * 1000);
-
-          if (agora > limitTime) {
-            const cancelledEvt = { ...evt, status: 'cancelado' };
-            updateDiariaEvento(evt.id, { status: 'cancelado' }).catch(err => {
-              console.warn('Erro ao atualizar status cancelado no Supabase:', err);
-            });
-            return cancelledEvt;
-          }
-        } catch (e) {}
-      }
-    }
-    return evt;
-  });
+const filterValidUserIds = async (userIds: Set<string>): Promise<string[]> => {
+  const ids = Array.from(userIds).filter(Boolean);
+  if (ids.length === 0) return [];
+  try {
+    const { data } = await supabase.from('users').select('id').in('id', ids);
+    return (data || []).map((u: any) => u.id);
+  } catch {
+    return [];
+  }
 };
 
 const mergeDespesasFlag = async (events: DiariaEvento[]): Promise<DiariaEvento[]> => {
@@ -91,7 +82,8 @@ export const createDiariaEvento = async (evento: Omit<DiariaEvento, 'id' | 'crea
       createdData.pessoas.forEach(p => { if (p.id) notifyUserIds.add(p.id); });
     }
 
-    for (const userId of notifyUserIds) {
+    const validUserIds = await filterValidUserIds(notifyUserIds);
+    for (const userId of validUserIds) {
       notificationService.createNotification({
         user_id: userId,
         title: '✈️ Nova Viagem Agendada',
@@ -223,8 +215,10 @@ export const updateDiariaEvento = async (id: string, updates: Partial<DiariaEven
       updatedData.pessoas.forEach(p => { if (p.id) notifyUserIds.add(p.id); });
     }
 
+    const validUserIds = await filterValidUserIds(notifyUserIds);
+
     if (updates.status === 'viagem_programada') {
-      for (const userId of notifyUserIds) {
+      for (const userId of validUserIds) {
         notificationService.createNotification({
           user_id: userId,
           title: '✅ Viagem Aprovada!',
@@ -234,7 +228,7 @@ export const updateDiariaEvento = async (id: string, updates: Partial<DiariaEven
         }).catch(e => console.warn(e));
       }
     } else if (updates.status === 'em_viagem') {
-      for (const userId of notifyUserIds) {
+      for (const userId of validUserIds) {
         notificationService.createNotification({
           user_id: userId,
           title: '🚗 Viagem Iniciada!',
@@ -244,7 +238,7 @@ export const updateDiariaEvento = async (id: string, updates: Partial<DiariaEven
         }).catch(e => console.warn(e));
       }
     } else if (updates.status === 'aguardando_gestor' || updates.data_retorno) {
-      for (const userId of notifyUserIds) {
+      for (const userId of validUserIds) {
         notificationService.createNotification({
           user_id: userId,
           title: '🏁 Viagem Finalizada',

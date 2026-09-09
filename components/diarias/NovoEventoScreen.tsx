@@ -1062,7 +1062,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
     setIsLoading(true);
     
     const hasReturn = !!returnDateTime.trim();
-    const initialStatus = 'em_analise';
+    const initialStatus = 'aguardando_gestor';
 
     try {
       // Cria uma viagem individualizada para cada servidor selecionado

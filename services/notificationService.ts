@@ -69,7 +69,12 @@ export const notificationService = {
             .insert([{ ...notification, read: false }]);
 
         if (error) {
-            console.error('Error creating notification:', error);
+            if (error.code === '23503') {
+                console.warn(`[notificationService] Notificação ignorada: o usuário '${notification.user_id}' não possui cadastro na tabela 'users'.`);
+            } else {
+                console.error('Error creating notification:', error);
+            }
+            return;
         }
 
         this.showNativeNotification(notification.title, notification.message, notification.link);
