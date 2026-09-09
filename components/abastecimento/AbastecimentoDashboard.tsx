@@ -1,6 +1,13 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { ArrowLeft, TrendingUp, Droplet, DollarSign, Truck, Settings, LayoutDashboard, Building2, MapPin, CreditCard, Fuel, Save, Plus, Calendar, ChevronDown, History, BarChart3, Search, ChevronRight, FileText, Filter, FileSpreadsheet, Download, CalendarDays, Factory, Car, AlertTriangle, Trash2, CheckSquare, Check, X, ShieldAlert, Users, UserCheck, User } from 'lucide-react';
+import { 
+    ArrowLeft, TrendingUp, TrendingDown, Droplet, DollarSign, Truck, Settings, LayoutDashboard, 
+    Building2, MapPin, CreditCard, Fuel, Save, Plus, Calendar, ChevronDown, History, BarChart3, 
+    Search, ChevronRight, FileText, Filter, FileSpreadsheet, Download, CalendarDays, Factory, 
+    Car, AlertTriangle, Trash2, CheckSquare, Check, X, ShieldAlert, Users, UserCheck, User,
+    Gauge, Zap, Clock, RefreshCw, Layers, ShieldCheck, Wrench, AlertCircle, Award, 
+    ArrowUpRight, ArrowDownRight, Eye, SlidersHorizontal, Sparkles, Activity, Info
+} from 'lucide-react';
 import { ModernSelect } from '../common/ModernSelect';
 import { ModernDateInput } from '../common/ModernDateInput';
 import { MonthYearPicker } from '../common/MonthYearPicker';
@@ -739,6 +746,44 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
     const [driverSearchTerm, setDriverSearchTerm] = useState('');
     const [selectedDriver, setSelectedDriver] = useState<string | null>(null);
     const [allRecords, setAllRecords] = useState<AbastecimentoRecord[]>([]);
+
+    // --- Filtros Globais em Tempo Real do Dashboard da Frota ---
+    const [filterVehicle, setFilterVehicle] = useState<string>('all');
+    const [filterSector, setFilterSector] = useState<string>('all');
+    const [filterFuel, setFilterFuel] = useState<string>('all');
+    const [filterStation, setFilterStation] = useState<string>('all');
+    const [filterCategory, setFilterCategory] = useState<string>('all');
+    const [filterStatus, setFilterStatus] = useState<string>('all');
+    const [filterAnomalyOnly, setFilterAnomalyOnly] = useState<boolean>(false);
+    const [overviewChartMetric, setOverviewChartMetric] = useState<'cost' | 'liters' | 'kml' | 'price'>('cost');
+    const [overviewEvolutionType, setOverviewEvolutionType] = useState<'daily' | 'monthly'>('daily');
+    const [overviewTopTab, setOverviewTopTab] = useState<'cost' | 'liters' | 'km' | 'costPerKm' | 'efficiency' | 'inefficient' | 'count'>('cost');
+
+    // --- Modal de Detalhamento Interativo (Drill-Down) ---
+    const [drillDownModal, setDrillDownModal] = useState<{
+        isOpen: boolean;
+        title: string;
+        subtitle?: string;
+        records: AbastecimentoRecord[];
+        metricType?: string;
+    } | null>(null);
+    const [drillDownSearch, setDrillDownSearch] = useState('');
+
+    const vehicleSectorLookup = useMemo(() => {
+        const sectorMap = new Map<string, string>();
+        sectors.forEach(s => sectorMap.set(s.id, s.name));
+
+        const map = new Map<string, string>();
+        vehicles.forEach(v => {
+            const sectorName = (v.sectorId ? sectorMap.get(v.sectorId) : undefined) || (v as any).sector || '-';
+            if (v.plate) map.set(v.plate.toUpperCase(), sectorName);
+            if (v.id) map.set(v.id, sectorName);
+            if (v.plate && v.model) map.set(`${v.plate} - ${v.model}`.toUpperCase(), sectorName);
+            if (v.model && v.brand) map.set(`${v.model} - ${v.brand}`.toUpperCase(), sectorName);
+        });
+        return map;
+    }, [vehicles, sectors]);
+
     const [showPrintPreview, setShowPrintPreview] = useState(false);
     const [reportMode, setReportMode] = useState<'simplified' | 'complete' | 'listagem' | 'empenhado'>('complete');
     const [appliedFilters, setAppliedFilters] = useState({
@@ -945,50 +990,183 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
     ];
 
     const stats = useMemo(() => {
-        // Current filtered records
+        // Mapas auxiliares para consulta instantânea O(1)
+        const vehicleMap = new Map<string, Vehicle>();
+        vehicles.forEach(v => {
+            if (v.plate) vehicleMap.set(v.plate.toUpperCase(), v);
+            if (v.model && v.brand) vehicleMap.set(`${v.model} - ${v.brand}`.toUpperCase(), v);
+            if (v.id) vehicleMap.set(v.id, v);
+        });
+
+        const sectorMap = new Map<string, Sector>();
+        sectors.forEach(s => sectorMap.set(s.id, s));
+
+        const getVehicleForRecord = (r: AbastecimentoRecord): Vehicle | undefined => {
+            if (!r.vehicle) return undefined;
+            const norm = r.vehicle.toUpperCase().trim();
+            return vehicleMap.get(norm) || vehicles.find(v => 
+                (v.plate && norm.includes(v.plate.toUpperCase())) ||
+                (v.model && norm.includes(v.model.toUpperCase()))
+            );
+        };
+
+        // Identificação prévia de anomalias em todos os registros para permitir filtro rápido
+        const anomalyRecordIdSet = new Set<string>();
+
+        // Registros filtrados pelo período e filtros ativos
         const filtered = allRecords.filter(r => {
+            // 1. Filtro de Data
             if (periodMode === 'daily' && customStartDate && customEndDate) {
                 const rDateStr = r.date.substring(0, 10);
-                return rDateStr >= customStartDate && rDateStr <= customEndDate;
+                if (rDateStr < customStartDate || rDateStr > customEndDate) return false;
+            } else {
+                const date = new Date(r.date);
+                if (date.getMonth() !== selectedMonth || date.getFullYear() !== selectedYear) return false;
             }
-            const date = new Date(r.date);
-            return date.getMonth() === selectedMonth && date.getFullYear() === selectedYear;
+
+            const matchedVeh = getVehicleForRecord(r);
+
+            // 2. Filtro de Veículo
+            if (filterVehicle !== 'all') {
+                const normV = filterVehicle.toUpperCase();
+                const rVehNorm = (r.vehicle || '').toUpperCase();
+                const matchPlate = matchedVeh?.plate?.toUpperCase() === normV;
+                const matchName = rVehNorm === normV || rVehNorm.includes(normV);
+                if (!matchPlate && !matchName) return false;
+            }
+
+            // 3. Filtro de Setor
+            if (filterSector !== 'all') {
+                const vehSectorId = matchedVeh?.sectorId || r.sectorId;
+                const vehSector = vehSectorId ? sectorMap.get(vehSectorId) : undefined;
+                if (vehSectorId !== filterSector && vehSector?.name !== filterSector) return false;
+            }
+
+            // 4. Filtro de Combustível
+            if (filterFuel !== 'all') {
+                const rFuelNorm = (r.fuelType || '').toLowerCase();
+                const filterFuelNorm = filterFuel.toLowerCase();
+                if (!rFuelNorm.includes(filterFuelNorm)) return false;
+            }
+
+            // 5. Filtro de Posto
+            if (filterStation !== 'all') {
+                if ((r.station || '').toLowerCase() !== filterStation.toLowerCase()) return false;
+            }
+
+            // 6. Filtro de Categoria da Frota
+            if (filterCategory !== 'all') {
+                const cat = matchedVeh?.vehicleCategory || matchedVeh?.type;
+                if (cat !== filterCategory) return false;
+            }
+
+            // 7. Filtro de Status do Veículo
+            if (filterStatus !== 'all') {
+                if (matchedVeh && matchedVeh.status !== filterStatus) return false;
+            }
+
+            return true;
         });
 
-        // Previous month records for comparison
+        // Período anterior correspondente com os mesmos filtros
         const prevMonth = selectedMonth === 0 ? 11 : selectedMonth - 1;
         const prevYear = selectedMonth === 0 ? selectedYear - 1 : selectedYear;
+        
+        let prevStartDate = '';
+        let prevEndDate = '';
+        if (periodMode === 'daily' && customStartDate && customEndDate) {
+            const startD = new Date(customStartDate);
+            const endD = new Date(customEndDate);
+            const diffTime = Math.abs(endD.getTime() - startD.getTime());
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+            
+            const pEnd = new Date(startD);
+            pEnd.setDate(pEnd.getDate() - 1);
+            const pStart = new Date(pEnd);
+            pStart.setDate(pStart.getDate() - diffDays + 1);
+
+            prevStartDate = pStart.toISOString().substring(0, 10);
+            prevEndDate = pEnd.toISOString().substring(0, 10);
+        }
+
         const previous = allRecords.filter(r => {
-            const date = new Date(r.date);
-            return date.getMonth() === prevMonth && date.getFullYear() === prevYear;
+            if (periodMode === 'daily' && prevStartDate && prevEndDate) {
+                const rDateStr = r.date.substring(0, 10);
+                if (rDateStr < prevStartDate || rDateStr > prevEndDate) return false;
+            } else {
+                const date = new Date(r.date);
+                if (date.getMonth() !== prevMonth || date.getFullYear() !== prevYear) return false;
+            }
+
+            const matchedVeh = getVehicleForRecord(r);
+
+            if (filterVehicle !== 'all') {
+                const normV = filterVehicle.toUpperCase();
+                const rVehNorm = (r.vehicle || '').toUpperCase();
+                const matchPlate = matchedVeh?.plate?.toUpperCase() === normV;
+                const matchName = rVehNorm === normV || rVehNorm.includes(normV);
+                if (!matchPlate && !matchName) return false;
+            }
+
+            if (filterSector !== 'all') {
+                const vehSectorId = matchedVeh?.sectorId || r.sectorId;
+                const vehSector = vehSectorId ? sectorMap.get(vehSectorId) : undefined;
+                if (vehSectorId !== filterSector && vehSector?.name !== filterSector) return false;
+            }
+
+            if (filterFuel !== 'all') {
+                const rFuelNorm = (r.fuelType || '').toLowerCase();
+                const filterFuelNorm = filterFuel.toLowerCase();
+                if (!rFuelNorm.includes(filterFuelNorm)) return false;
+            }
+
+            if (filterStation !== 'all') {
+                if ((r.station || '').toLowerCase() !== filterStation.toLowerCase()) return false;
+            }
+
+            if (filterCategory !== 'all') {
+                const cat = matchedVeh?.vehicleCategory || matchedVeh?.type;
+                if (cat !== filterCategory) return false;
+            }
+
+            if (filterStatus !== 'all') {
+                if (matchedVeh && matchedVeh.status !== filterStatus) return false;
+            }
+
+            return true;
         });
 
-        const totalCost = filtered.reduce((acc, r) => acc + r.cost, 0);
-        const prevCost = previous.reduce((acc, r) => acc + r.cost, 0);
+        // Totais Básicos
+        const totalCost = filtered.reduce((acc, r) => acc + (Number(r.cost) || 0), 0);
+        const prevCost = previous.reduce((acc, r) => acc + (Number(r.cost) || 0), 0);
         const costDiff = prevCost === 0 ? 0 : ((totalCost - prevCost) / prevCost) * 100;
+        const costSavings = prevCost - totalCost;
 
-        const totalLiters = filtered.reduce((acc, r) => acc + r.liters, 0);
-        const prevLiters = previous.reduce((acc, r) => acc + r.liters, 0);
+        const totalLiters = filtered.reduce((acc, r) => acc + (Number(r.liters) || 0), 0);
+        const prevLiters = previous.reduce((acc, r) => acc + (Number(r.liters) || 0), 0);
         const litersDiff = prevLiters === 0 ? 0 : ((totalLiters - prevLiters) / prevLiters) * 100;
 
-        // Group by vehicle
+        const avgPricePerLiter = totalLiters > 0 ? totalCost / totalLiters : 0;
+        const prevAvgPricePerLiter = prevLiters > 0 ? prevCost / prevLiters : 0;
+        const avgPriceDiff = prevAvgPricePerLiter === 0 ? 0 : ((avgPricePerLiter - prevAvgPricePerLiter) / prevAvgPricePerLiter) * 100;
+
+        // Agrupamento por veículo para detalhamento individual
         const vehicleGroups = filtered.reduce((acc, r) => {
-            if (!acc[r.vehicle]) {
-                // Try to resolve a friendly name if the record stores a Plate
-                const matchedVehicle = vehicles.find(v => v.plate === r.vehicle);
+            const vehKey = r.vehicle;
+            if (!acc[vehKey]) {
+                const matchedVehicle = getVehicleForRecord(r);
                 const displayName = matchedVehicle
                     ? `${matchedVehicle.model} (${matchedVehicle.plate})`
                     : r.vehicle;
 
-                // Solve Sector Name
                 let sectorName = 'Não Identificado';
                 if (matchedVehicle) {
                     const s = sectors.find(sec => sec.id === matchedVehicle.sectorId);
                     if (s) sectorName = s.name;
                 }
 
-                acc[r.vehicle] = {
-                    id: r.vehicle,
+                acc[vehKey] = {
+                    id: vehKey,
                     name: displayName,
                     totalCost: 0,
                     totalLiters: 0,
@@ -998,54 +1176,103 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
                     sectorName: sectorName
                 };
             }
-            acc[r.vehicle].totalCost += r.cost;
-            acc[r.vehicle].totalLiters += r.liters;
-            acc[r.vehicle].count += 1;
-            if (new Date(r.date) > new Date(acc[r.vehicle].lastRef)) {
-                acc[r.vehicle].lastRef = r.date;
+            acc[vehKey].totalCost += (Number(r.cost) || 0);
+            acc[vehKey].totalLiters += (Number(r.liters) || 0);
+            acc[vehKey].count += 1;
+            if (new Date(r.date) > new Date(acc[vehKey].lastRef)) {
+                acc[vehKey].lastRef = r.date;
             }
             return acc;
         }, {} as Record<string, VehicleStat>);
 
-        // Calculate Global Average KM/L (Efficiency) AND Per Vehicle Efficiency
-        // We need to calculate efficiency for each fill-up interval across all vehicles
+        // Cálculo global e individual de Quilometragem e Eficiência (Km/L)
         let totalEfficiencySum = 0;
         let efficiencyCount = 0;
         let prevEfficiencySum = 0;
         let prevEfficiencyCount = 0;
         const vehicleEfficiencySums: Record<string, { sum: number, count: number }> = {};
+        const vehicleDistanceSums: Record<string, number> = {};
 
         let totalDistanceSum = 0;
         let prevDistanceSum = 0;
 
-        // Group ALL records (not just filtered) by vehicle to calculate full history context
-        // We need history to calculate efficiency for the CURRENT and PREVIOUS month records
+        // Agrupar registros históricos completos por veículo para calcular intervalos de hodômetro
         const allByVehicle: Record<string, AbastecimentoRecord[]> = {};
         allRecords.forEach(r => {
             if (!allByVehicle[r.vehicle]) allByVehicle[r.vehicle] = [];
             allByVehicle[r.vehicle].push(r);
         });
 
-        // For each vehicle, calculate efficiencies and distances
+        // Detecção de Inconsistências de Hodômetro e cálculo de KM percorrido
+        const odometerAnomalies: {
+            record: AbastecimentoRecord;
+            vehicleName: string;
+            previousOdometer: number;
+            currentOdometer: number;
+            type: 'regression' | 'jump';
+            diff: number;
+        }[] = [];
+
         Object.values(allByVehicle).forEach(vehicleRecords => {
-            // Sort by date
             const sorted = vehicleRecords.map(r => ({ ...r, dateObj: new Date(r.date) }))
                 .sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
 
             sorted.forEach((record, index) => {
                 const rDate = record.dateObj;
-                const isCurrentPeriod = rDate.getMonth() === selectedMonth && rDate.getFullYear() === selectedYear;
-                const isPrevPeriod = rDate.getMonth() === prevMonth && rDate.getFullYear() === prevYear;
+                let isCurrentPeriod = false;
+                let isPrevPeriod = false;
+
+                if (periodMode === 'daily' && customStartDate && customEndDate) {
+                    const dStr = record.date.substring(0, 10);
+                    isCurrentPeriod = dStr >= customStartDate && dStr <= customEndDate;
+                    if (prevStartDate && prevEndDate) {
+                        isPrevPeriod = dStr >= prevStartDate && dStr <= prevEndDate;
+                    }
+                } else {
+                    isCurrentPeriod = rDate.getMonth() === selectedMonth && rDate.getFullYear() === selectedYear;
+                    isPrevPeriod = rDate.getMonth() === prevMonth && rDate.getFullYear() === prevYear;
+                }
+
+                // Checagem de anomalia de hodômetro em relação ao registro imediatamente anterior
+                if (index > 0 && isCurrentPeriod) {
+                    const prevRec = sorted[index - 1];
+                    const prevOdo = Number(prevRec.odometer) || 0;
+                    const curOdo = Number(record.odometer) || 0;
+
+                    if (prevOdo > 0 && curOdo > 0) {
+                        if (curOdo < prevOdo) {
+                            // Hodômetro menor que o anterior (regressão)
+                            odometerAnomalies.push({
+                                record,
+                                vehicleName: record.vehicle,
+                                previousOdometer: prevOdo,
+                                currentOdometer: curOdo,
+                                type: 'regression',
+                                diff: prevOdo - curOdo
+                            });
+                            anomalyRecordIdSet.add(record.id);
+                        } else if (curOdo - prevOdo > 2000) {
+                            // Salto suspeito de mais de 2.000 km num único intervalo
+                            odometerAnomalies.push({
+                                record,
+                                vehicleName: record.vehicle,
+                                previousOdometer: prevOdo,
+                                currentOdometer: curOdo,
+                                type: 'jump',
+                                diff: curOdo - prevOdo
+                            });
+                            anomalyRecordIdSet.add(record.id);
+                        }
+                    }
+                }
 
                 if (isCurrentPeriod || isPrevPeriod) {
-                    // Check exclusion for Arla
-                    const isArla = record.fuelType.toLowerCase().includes('arla');
+                    const isArla = (record.fuelType || '').toLowerCase().includes('arla');
 
                     if (!isArla) {
-                        // Look ahead for the next NON-Arla record
                         let nextRecord = null;
                         for (let i = index + 1; i < sorted.length; i++) {
-                            if (!sorted[i].fuelType.toLowerCase().includes('arla')) {
+                            if (!sorted[i].fuelType?.toLowerCase().includes('arla')) {
                                 nextRecord = sorted[i];
                                 break;
                             }
@@ -1055,26 +1282,33 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
                             const distanceToNext = Number(nextRecord.odometer) - Number(record.odometer);
                             const nextLiters = Number(nextRecord.liters);
 
-                            if (distanceToNext > 0) {
-                                if (isCurrentPeriod) totalDistanceSum += distanceToNext;
-                                if (isPrevPeriod) prevDistanceSum += distanceToNext;
+                            if (distanceToNext > 0 && distanceToNext < 5000) {
+                                if (isCurrentPeriod) {
+                                    totalDistanceSum += distanceToNext;
+                                    vehicleDistanceSums[record.vehicle] = (vehicleDistanceSums[record.vehicle] || 0) + distanceToNext;
+                                }
+                                if (isPrevPeriod) {
+                                    prevDistanceSum += distanceToNext;
+                                }
 
                                 if (nextLiters > 0) {
                                     const efficiency = distanceToNext / nextLiters;
-                                    if (isCurrentPeriod) {
-                                        totalEfficiencySum += efficiency;
-                                        efficiencyCount++;
+                                    // Filtra eficiências razoáveis (evita distorções de odômetros digitados errados)
+                                    if (efficiency >= 0.5 && efficiency <= 45) {
+                                        if (isCurrentPeriod) {
+                                            totalEfficiencySum += efficiency;
+                                            efficiencyCount++;
 
-                                        // Per Vehicle Accumulation
-                                        if (!vehicleEfficiencySums[record.vehicle]) {
-                                            vehicleEfficiencySums[record.vehicle] = { sum: 0, count: 0 };
+                                            if (!vehicleEfficiencySums[record.vehicle]) {
+                                                vehicleEfficiencySums[record.vehicle] = { sum: 0, count: 0 };
+                                            }
+                                            vehicleEfficiencySums[record.vehicle].sum += efficiency;
+                                            vehicleEfficiencySums[record.vehicle].count++;
                                         }
-                                        vehicleEfficiencySums[record.vehicle].sum += efficiency;
-                                        vehicleEfficiencySums[record.vehicle].count++;
-                                    }
-                                    if (isPrevPeriod) {
-                                        prevEfficiencySum += efficiency;
-                                        prevEfficiencyCount++;
+                                        if (isPrevPeriod) {
+                                            prevEfficiencySum += efficiency;
+                                            prevEfficiencyCount++;
+                                        }
                                     }
                                 }
                             }
@@ -1089,96 +1323,215 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
         const avgKmLDiff = prevAvgKmL === 0 ? 0 : ((avgKmL - prevAvgKmL) / prevAvgKmL) * 100;
         const kmDiffPeriod = prevDistanceSum === 0 ? 0 : ((totalDistanceSum - prevDistanceSum) / prevDistanceSum) * 100;
 
-        // Finalize Vehicle Stats with Efficiency
+        const litersPer100Km = avgKmL > 0 ? (100 / avgKmL) : 0;
+        const costPerKm = totalDistanceSum > 0 ? (totalCost / totalDistanceSum) : 0;
+        const prevCostPerKm = prevDistanceSum > 0 ? (prevCost / prevDistanceSum) : 0;
+        const costPerKmDiff = prevCostPerKm === 0 ? 0 : ((costPerKm - prevCostPerKm) / prevCostPerKm) * 100;
+
+        // Finaliza estatísticas dos veículos
         const vehicleStats = Object.values(vehicleGroups)
-            .map((v: VehicleStat) => ({
-                ...v,
-                avgKmL: vehicleEfficiencySums[v.id] ? (vehicleEfficiencySums[v.id].sum / vehicleEfficiencySums[v.id].count) : 0
-            }))
+            .map((v: VehicleStat) => {
+                const eff = vehicleEfficiencySums[v.id];
+                const km = vehicleDistanceSums[v.id] || 0;
+                const calculatedKmL = eff && eff.count > 0 ? (eff.sum / eff.count) : 0;
+                const calculatedCostPerKm = km > 0 ? (v.totalCost / km) : 0;
+                return {
+                    ...v,
+                    avgKmL: calculatedKmL,
+                    totalKm: km,
+                    costPerKm: calculatedCostPerKm
+                };
+            })
             .sort((a, b) => b.totalCost - a.totalCost);
 
         const activeVehicles = vehicleStats.length;
+        const avgCostPerVehicle = activeVehicles > 0 ? totalCost / activeVehicles : 0;
+        const avgLitersPerVehicle = activeVehicles > 0 ? totalLiters / activeVehicles : 0;
+        const avgKmPerVehicle = activeVehicles > 0 ? totalDistanceSum / activeVehicles : 0;
 
-        // --- NEW AGGREGATIONS FOR CHARTS ---
+        // Frota: Status dos veículos
+        const operationalVehiclesCount = vehicles.filter(v => v.status === 'operacional').length;
+        const maintenanceVehiclesCount = vehicles.filter(v => v.status === 'manutencao' || v.status === 'vistoria').length;
+        const inactiveVehiclesCount = vehicles.filter(v => v.status !== 'operacional' && v.status !== 'manutencao' && v.status !== 'vistoria').length;
 
-        // 1. Spending by Sector
-        const sectorSpending: Record<string, number> = {};
+        // --- PROJEÇÕES INTELIGENTES (RUN-RATE) ---
+        const now = new Date();
+        const daysInMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
+        const isCurrentMonth = selectedYear === now.getFullYear() && selectedMonth === now.getMonth();
+        const daysPassed = isCurrentMonth ? Math.max(1, now.getDate()) : daysInMonth;
+        const daysRemaining = isCurrentMonth ? Math.max(0, daysInMonth - daysPassed) : 0;
+
+        const dailyAvgCost = daysPassed > 0 ? totalCost / daysPassed : 0;
+        const projectedMonthlyCost = isCurrentMonth ? (totalCost + (dailyAvgCost * daysRemaining)) : totalCost;
+        
+        const dailyAvgLiters = daysPassed > 0 ? totalLiters / daysPassed : 0;
+        const projectedMonthlyLiters = isCurrentMonth ? (totalLiters + (dailyAvgLiters * daysRemaining)) : totalLiters;
+        
+        const projectedCostDiff = prevCost > 0 ? ((projectedMonthlyCost - prevCost) / prevCost) * 100 : 0;
+
+        // --- DISTRIBUIÇÃO POR COMBUSTÍVEL ---
+        const fuelMap: Record<string, { name: string; liters: number; cost: number; count: number }> = {};
         filtered.forEach(r => {
-            // Find vehicle to get sector
-            // Try matching by Plate first (new records), then by "Model - Brand" (legacy)
-            const v = vehicles.find(veh => veh.plate === r.vehicle || `${veh.model} - ${veh.brand}` === r.vehicle);
-            if (v) {
-                const s = sectors.find(sec => sec.id === v.sectorId);
-                const sectorName = s?.name || 'Não Identificado';
-                sectorSpending[sectorName] = (sectorSpending[sectorName] || 0) + r.cost;
-            } else {
-                sectorSpending['Desconhecido'] = (sectorSpending['Desconhecido'] || 0) + r.cost;
+            const rawType = r.fuelType || 'Outro';
+            const cleanType = rawType.includes(' - ') ? rawType.split(' - ')[0].trim() : rawType.trim();
+            const upperKey = cleanType.toUpperCase();
+
+            if (!fuelMap[upperKey]) {
+                fuelMap[upperKey] = { name: cleanType, liters: 0, cost: 0, count: 0 };
             }
+            fuelMap[upperKey].liters += (Number(r.liters) || 0);
+            fuelMap[upperKey].cost += (Number(r.cost) || 0);
+            fuelMap[upperKey].count += 1;
         });
-        const sectorChartData = Object.entries(sectorSpending)
-            .map(([name, value]) => ({ name, value }))
-            .sort((a, b) => b.value - a.value)
-            .slice(0, 5); // Top 5
 
-        // 2. Fuel Type Distribution
-        const fuelDist: Record<string, number> = {};
+        const fuelBreakdown = Object.values(fuelMap).map(f => ({
+            ...f,
+            avgPrice: f.liters > 0 ? f.cost / f.liters : 0,
+            percentLiters: totalLiters > 0 ? (f.liters / totalLiters) * 100 : 0,
+            percentCost: totalCost > 0 ? (f.cost / totalCost) * 100 : 0
+        })).sort((a, b) => b.cost - a.cost);
+
+        const fuelChartData = fuelBreakdown.map(f => ({ name: f.name, value: f.liters, cost: f.cost }));
+        const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#64748b'];
+
+        // --- DISTRIBUIÇÃO POR POSTO / FORNECEDOR ---
+        const stationMap: Record<string, { name: string; count: number; liters: number; cost: number }> = {};
         filtered.forEach(r => {
-            // Clean fuel name "DIESEL S10 - DIESEL" -> "DIESEL"
-            const type = r.fuelType.split(' - ')[0];
-            fuelDist[type] = (fuelDist[type] || 0) + r.liters;
+            const stName = (r.station || 'Posto Desconhecido').trim();
+            if (!stationMap[stName]) {
+                stationMap[stName] = { name: stName, count: 0, liters: 0, cost: 0 };
+            }
+            stationMap[stName].count += 1;
+            stationMap[stName].liters += (Number(r.liters) || 0);
+            stationMap[stName].cost += (Number(r.cost) || 0);
         });
-        const fuelChartData = Object.entries(fuelDist).map(([name, value]) => ({ name, value }));
-        const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
 
-        // 3. Monthly Evolution (Last 6 Months)
-        // We need to look at 'allRecords' for this, not just filtered
+        const stationBreakdown = Object.values(stationMap).map(s => ({
+            ...s,
+            avgPrice: s.liters > 0 ? s.cost / s.liters : 0,
+            percentCost: totalCost > 0 ? (s.cost / totalCost) * 100 : 0,
+            percentLiters: totalLiters > 0 ? (s.liters / totalLiters) * 100 : 0
+        })).sort((a, b) => b.cost - a.cost);
+
+        // --- DISTRIBUIÇÃO POR SECRETARIA / SETOR ---
+        const sectorMapStats: Record<string, { id: string; name: string; cost: number; liters: number; count: number; vehicles: Set<string>; km: number }> = {};
+        filtered.forEach(r => {
+            const v = getVehicleForRecord(r);
+            const secId = v?.sectorId || r.sectorId;
+            const secObj = secId ? sectorMap.get(secId) : undefined;
+            const secName = secObj?.name || 'Não Identificado';
+            const secKey = secObj?.id || secName;
+
+            if (!sectorMapStats[secKey]) {
+                sectorMapStats[secKey] = {
+                    id: secKey,
+                    name: secName,
+                    cost: 0,
+                    liters: 0,
+                    count: 0,
+                    vehicles: new Set<string>(),
+                    km: 0
+                };
+            }
+            sectorMapStats[secKey].cost += (Number(r.cost) || 0);
+            sectorMapStats[secKey].liters += (Number(r.liters) || 0);
+            sectorMapStats[secKey].count += 1;
+            sectorMapStats[secKey].vehicles.add(r.vehicle);
+            sectorMapStats[secKey].km += (vehicleDistanceSums[r.vehicle] ? (vehicleDistanceSums[r.vehicle] / Math.max(1, vehicleGroups[r.vehicle]?.count || 1)) : 0);
+        });
+
+        const sectorBreakdown = Object.values(sectorMapStats).map(s => ({
+            id: s.id,
+            name: s.name,
+            cost: s.cost,
+            liters: s.liters,
+            count: s.count,
+            vehicleCount: s.vehicles.size,
+            km: s.km,
+            costPerKm: s.km > 0 ? s.cost / s.km : 0
+        })).sort((a, b) => b.cost - a.cost);
+
+        const sectorChartData = sectorBreakdown.slice(0, 8).map(s => ({ name: s.name, value: s.cost, liters: s.liters }));
+
+        // --- DISTRIBUIÇÃO POR CATEGORIA DA FROTA ---
+        const categoryMapStats: Record<string, { category: string; cost: number; liters: number; vehicleCount: Set<string>; km: number }> = {};
+        filtered.forEach(r => {
+            const v = getVehicleForRecord(r);
+            const cat = v?.vehicleCategory || v?.type || 'Outro';
+            if (!categoryMapStats[cat]) {
+                categoryMapStats[cat] = { category: cat, cost: 0, liters: 0, vehicleCount: new Set(), km: 0 };
+            }
+            categoryMapStats[cat].cost += (Number(r.cost) || 0);
+            categoryMapStats[cat].liters += (Number(r.liters) || 0);
+            categoryMapStats[cat].vehicleCount.add(r.vehicle);
+        });
+
+        const categoryBreakdown = Object.values(categoryMapStats).map(c => ({
+            category: c.category,
+            cost: c.cost,
+            liters: c.liters,
+            vehicleCount: c.vehicleCount.size,
+            percentCost: totalCost > 0 ? (c.cost / totalCost) * 100 : 0
+        })).sort((a, b) => b.cost - a.cost);
+
+        // --- EVOLUÇÃO TEMPORAL (DIÁRIA E MENSAL) ---
+        // 1. Diária no Período
+        const dailyMap: Record<string, { date: string; displayDate: string; cost: number; liters: number; count: number }> = {};
+        filtered.forEach(r => {
+            const dStr = r.date.substring(0, 10);
+            const [y, m, d] = dStr.split('-');
+            const displayDate = `${d}/${m}`;
+
+            if (!dailyMap[dStr]) {
+                dailyMap[dStr] = { date: dStr, displayDate, cost: 0, liters: 0, count: 0 };
+            }
+            dailyMap[dStr].cost += (Number(r.cost) || 0);
+            dailyMap[dStr].liters += (Number(r.liters) || 0);
+            dailyMap[dStr].count += 1;
+        });
+
+        const dailyEvolutionData = Object.keys(dailyMap).sort().map(k => {
+            const item = dailyMap[k];
+            return {
+                ...item,
+                avgPrice: item.liters > 0 ? item.cost / item.liters : 0
+            };
+        });
+
+        // 2. Mensal (Últimos 6 meses)
         const last6MonthsMatches = allRecords.filter(r => {
             const d = new Date(r.date);
-            const referenceDate = new Date(selectedYear, selectedMonth, 1);
             const sixMonthsAgo = new Date(selectedYear, selectedMonth - 5, 1);
-            
-            // Fim do mês selecionado
             const endOfReferenceMonth = new Date(selectedYear, selectedMonth + 1, 0, 23, 59, 59, 999);
-            
             return d >= sixMonthsAgo && d <= endOfReferenceMonth;
         });
 
-        const evolutionMap: Record<string, { month: string, cost: number, liters: number }> = {};
+        const monthlyMap: Record<string, { monthKey: string; month: string; cost: number; liters: number; count: number }> = {};
         last6MonthsMatches.forEach(r => {
             const d = new Date(r.date);
-            const key = `${d.getFullYear()}-${d.getMonth()}`; // sortable key
+            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
             const label = months[d.getMonth()].substring(0, 3);
 
-            if (!evolutionMap[key]) {
-                evolutionMap[key] = { month: label, cost: 0, liters: 0 };
+            if (!monthlyMap[key]) {
+                monthlyMap[key] = { monthKey: key, month: label, cost: 0, liters: 0, count: 0 };
             }
-            evolutionMap[key].cost += r.cost;
-            evolutionMap[key].liters += r.liters;
+            monthlyMap[key].cost += (Number(r.cost) || 0);
+            monthlyMap[key].liters += (Number(r.liters) || 0);
+            monthlyMap[key].count += 1;
         });
-        // Sort by time
-        const evolutionChartData = Object.keys(evolutionMap).sort().map(k => evolutionMap[k]);
 
-        // 4. Vehicle Rankings
-        // Most Expensive (Total Cost)
-        const topConsumptionVehicles = [...vehicleStats]
-            .sort((a, b) => b.totalCost - a.totalCost)
-            .slice(0, 5);
+        const monthlyEvolutionData = Object.keys(monthlyMap).sort().map(k => {
+            const item = monthlyMap[k];
+            return {
+                ...item,
+                avgPrice: item.liters > 0 ? item.cost / item.liters : 0
+            };
+        });
 
-        // Best Efficiency (calculated earlier per vehicle in detail, but here we can approximate or reuse logic)
-        // Since we calculated 'efficiency' per tank in detail, we don't have it easily available in 'vehicleStats' 
-        // without re-running the logic. Let's stick to consumption (R$/km) if possible or just total cost.
-        // Let's add 'totalKm' to vehicleStats to compute R$/km
-
-        // 5. Alerts - Efficiency Check
-        // Filter: Only vehicles with minKml/maxKml defined AND violating the range
+        // --- ALERTAS INTELIGENTES & INDICADORES DE ANOMALIA REAIS ---
+        // 1. Consumo Fora do Padrão (Km/L < min ou > max)
         const costAlerts = vehicleStats.reduce((acc, v) => {
-            // Find full vehicle object
-            const fullVehicle = vehicles.find(veh =>
-                (veh.plate && veh.plate === v.id) ||
-                (`${veh.model} - ${veh.brand}` === v.id) ||
-                (veh.plate && v.id.includes(veh.plate))
-            );
-
+            const fullVehicle = getVehicleForRecord({ vehicle: v.id } as any);
             if (fullVehicle && v.avgKmL > 0) {
                 const min = fullVehicle.minKml;
                 const max = fullVehicle.maxKml;
@@ -1192,42 +1545,190 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
             return acc;
         }, [] as (VehicleStat & { alertType: 'low' | 'high', target: number })[]);
 
-        // Total KM (for filtered period)
-        // We need to sum the distance of intervals in this period.
-        // Re-use logic from Global Avg Calc?
-        let totalKmPeriod = 0;
-        // Logic: iterate filtered sessions? No, because distance is relative.
-        // We can approximate with: sum of (next_odometer - current_odometer) for records in this month.
-        // Let's reuse the Global Avg loop variables if possible, or re-run.
-        // For simplicity, let's create a 'totalDistance' accumulator in the GLOBAL loop we added step 162.
-        // (Wait, I can just modify that loop to export totalDistanceSum)
-        // Re-writing that loop slightly to capture 'totalDistanceSum'
+        // 2. Abastecimentos Frequentes no Mesmo Dia (Suspeitas)
+        const dailyVehicleRefuels: Record<string, AbastecimentoRecord[]> = {};
+        filtered.forEach(r => {
+            const dKey = `${r.date.substring(0, 10)}_${r.vehicle}`;
+            if (!dailyVehicleRefuels[dKey]) dailyVehicleRefuels[dKey] = [];
+            dailyVehicleRefuels[dKey].push(r);
+        });
 
+        const frequentRefuels = Object.entries(dailyVehicleRefuels)
+            .filter(([_, recs]) => recs.length > 1)
+            .map(([key, recs]) => {
+                const [dateStr, veh] = key.split('_');
+                recs.forEach(r => anomalyRecordIdSet.add(r.id));
+                return {
+                    date: dateStr,
+                    vehicle: veh,
+                    count: recs.length,
+                    totalLiters: recs.reduce((sum, r) => sum + (Number(r.liters) || 0), 0),
+                    totalCost: recs.reduce((sum, r) => sum + (Number(r.cost) || 0), 0),
+                    records: recs
+                };
+            });
 
+        // 3. Preços Unitários Atípicos (> 15% de variação em relação à média do combustível no período)
+        const fuelAvgPrices: Record<string, number> = {};
+        fuelBreakdown.forEach(f => {
+            fuelAvgPrices[f.name.toUpperCase()] = f.avgPrice;
+        });
+
+        const unusualPriceRecords = filtered.filter(r => {
+            const rawType = r.fuelType || '';
+            const cleanType = rawType.includes(' - ') ? rawType.split(' - ')[0].trim().toUpperCase() : rawType.trim().toUpperCase();
+            const avgP = fuelAvgPrices[cleanType];
+            const unitP = Number(r.unit_price) || (r.liters > 0 ? r.cost / r.liters : 0);
+
+            if (avgP > 0 && unitP > 0) {
+                const diffPct = Math.abs((unitP - avgP) / avgP);
+                if (diffPct > 0.15) {
+                    anomalyRecordIdSet.add(r.id);
+                    return true;
+                }
+            }
+            return false;
+        });
+
+        // 4. Possíveis Duplicidades (Mesmo veículo, data e valor)
+        const duplicateMap: Record<string, AbastecimentoRecord[]> = {};
+        filtered.forEach(r => {
+            const dupKey = `${r.date.substring(0, 10)}_${r.vehicle}_${r.cost.toFixed(2)}`;
+            if (!duplicateMap[dupKey]) duplicateMap[dupKey] = [];
+            duplicateMap[dupKey].push(r);
+        });
+
+        const duplicateRecordsGroups = Object.values(duplicateMap)
+            .filter(recs => recs.length > 1);
+        duplicateRecordsGroups.forEach(group => group.forEach(r => anomalyRecordIdSet.add(r.id)));
+
+        // 5. Alertas de Manutenção Preventiva (Troca de Óleo / Correia Dentada)
+        const maintenanceAlerts = vehicles.filter(v => {
+            const currentKm = v.currentKm || 0;
+            const oilNext = v.oilNextChange || 0;
+            const beltNext = v.timingBeltNextChange || 0;
+
+            const isOilDue = oilNext > 0 && currentKm >= (oilNext - 500);
+            const isBeltDue = beltNext > 0 && currentKm >= (beltNext - 1000);
+
+            return isOilDue || isBeltDue;
+        }).map(v => {
+            const currentKm = v.currentKm || 0;
+            const oilNext = v.oilNextChange || 0;
+            const isOilOverdue = oilNext > 0 && currentKm >= oilNext;
+            const isOilNear = oilNext > 0 && currentKm >= (oilNext - 500) && !isOilOverdue;
+
+            return {
+                vehicle: v,
+                name: `${v.model} (${v.plate})`,
+                currentKm,
+                oilNext,
+                isOilOverdue,
+                isOilNear,
+                status: isOilOverdue ? 'vencido' : 'proximo'
+            };
+        });
+
+        // 6. Veículos Inativos da Frota Operacional (+30 dias sem abastecer)
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().substring(0, 10);
+
+        const idleVehicles = vehicles.filter(v => {
+            if (v.status !== 'operacional') return false;
+            const vRecords = allByVehicle[v.plate] || allByVehicle[`${v.model} - ${v.brand}`] || [];
+            if (vRecords.length === 0) return true;
+            const lastDate = vRecords.reduce((max, r) => r.date > max ? r.date : max, '');
+            return lastDate < thirtyDaysAgoStr;
+        });
+
+        // --- RANKINGS TOP 10 INTERATIVOS ---
+        const topByCost = [...vehicleStats].sort((a, b) => b.totalCost - a.totalCost).slice(0, 10);
+        const topByLiters = [...vehicleStats].sort((a, b) => b.totalLiters - a.totalLiters).slice(0, 10);
+        const topByKm = [...vehicleStats].sort((a, b) => b.totalKm - a.totalKm).slice(0, 10);
+        const topByCostPerKm = [...vehicleStats].filter(v => v.totalKm > 20 && v.costPerKm > 0).sort((a, b) => b.costPerKm - a.costPerKm).slice(0, 10);
+        const topEfficient = [...vehicleStats].filter(v => v.avgKmL > 0).sort((a, b) => b.avgKmL - a.avgKmL).slice(0, 10);
+        const topInefficient = [...vehicleStats].filter(v => v.avgKmL > 0).sort((a, b) => a.avgKmL - b.avgKmL).slice(0, 10);
+        const topByCount = [...vehicleStats].sort((a, b) => b.count - a.count).slice(0, 10);
 
         return {
             totalCost,
+            prevCost,
             costDiff,
+            costSavings,
             totalLiters,
+            prevLiters,
             litersDiff,
-            activeVehicles,
-            avgKmL,
-            avgKmLDiff,
+            avgPricePerLiter,
+            prevAvgPricePerLiter,
+            avgPriceDiff,
+            totalTransactions: filtered.length,
             totalKmPeriod: totalDistanceSum,
+            prevDistanceSum,
             kmDiffPeriod,
+            avgKmL,
+            prevAvgKmL,
+            avgKmLDiff,
+            litersPer100Km,
+            costPerKm,
+            prevCostPerKm,
+            costPerKmDiff,
+            avgCostPerVehicle,
+            avgLitersPerVehicle,
+            avgKmPerVehicle,
+            activeVehicles,
             allVehiclesCount: vehicles.length,
+            operationalVehiclesCount,
+            maintenanceVehiclesCount,
+            inactiveVehiclesCount,
             filteredCount: filtered.length,
-            vehicleStats,
             records: filtered,
-            // New Data
-            sectorChartData,
+            vehicleStats,
+            // Projeções
+            projectedMonthlyCost,
+            projectedMonthlyLiters,
+            projectedCostDiff,
+            dailyAvgCost,
+            dailyAvgLiters,
+            daysPassed,
+            daysRemaining,
+            isCurrentMonth,
+            // Distribuições
+            fuelBreakdown,
             fuelChartData,
-            evolutionChartData,
-            topConsumptionVehicles,
+            stationBreakdown,
+            sectorBreakdown,
+            sectorChartData,
+            categoryBreakdown,
+            // Evolução Temporal
+            dailyEvolutionData,
+            monthlyEvolutionData,
+            evolutionChartData: monthlyEvolutionData,
+            // Alertas e Anomalias
             costAlerts,
+            odometerAnomalies,
+            frequentRefuels,
+            unusualPriceRecords,
+            duplicateRecordsGroups,
+            maintenanceAlerts,
+            idleVehicles,
+            anomalyRecordIdSet,
+            // Rankings
+            topByCost,
+            topByLiters,
+            topByKm,
+            topByCostPerKm,
+            topEfficient,
+            topInefficient,
+            topByCount,
+            topConsumptionVehicles: topByCost.slice(0, 5),
             COLORS
         };
-    }, [selectedMonth, selectedYear, periodMode, customStartDate, customEndDate, allRecords, vehicles, sectors]);
+    }, [
+        selectedMonth, selectedYear, periodMode, customStartDate, customEndDate, 
+        allRecords, vehicles, sectors, 
+        filterVehicle, filterSector, filterFuel, filterStation, filterCategory, filterStatus
+    ]);
 
     const sectorStats = useMemo(() => {
         // Find vehicles belonging to the selected sector
@@ -1978,316 +2479,1288 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
         }
     };
 
-    useEffect(() => {
-        loadSavedEmpenhoReports();
-    }, []);
+    const renderOverview = () => {
+        const activeFiltersCount = (filterVehicle !== 'all' ? 1 : 0) +
+            (filterSector !== 'all' ? 1 : 0) +
+            (filterFuel !== 'all' ? 1 : 0) +
+            (filterStation !== 'all' ? 1 : 0) +
+            (filterCategory !== 'all' ? 1 : 0) +
+            (filterStatus !== 'all' ? 1 : 0) +
+            (filterAnomalyOnly ? 1 : 0);
 
-    const renderOverview = () => (
-        <div className="space-y-6 animate-fade-in pb-10">
-            {/* 1. Top KPI Row */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {/* Custo Total */}
-                <div className="bg-white p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
-                    <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
-                        <DollarSign className="w-24 h-24 text-emerald-600" />
-                    </div>
-                    <div className="flex items-center gap-3 mb-2">
-                        <div className="p-2 bg-emerald-50 rounded-xl text-emerald-600">
-                            <DollarSign className="w-5 h-5" />
-                        </div>
-                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Custo Total</span>
-                    </div>
-                    <div className="relative z-10">
-                        <h3 className="text-2xl sm:text-3xl font-black text-emerald-900 tracking-tight">
-                            {formatCurrency(stats.totalCost)}
-                        </h3>
-                        <div className={`flex items-center gap-1 mt-1 text-xs font-bold ${stats.costDiff > 0 ? 'text-red-500' : 'text-emerald-500'}`}>
-                            {stats.costDiff > 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingUp className="w-3 h-3 rotate-180" />}
-                            <span>
-                                {stats.costDiff === 0 
-                                    ? 'Sem variação vs mês anterior' 
-                                    : `${Math.abs(stats.costDiff).toFixed(1)}% ${stats.costDiff > 0 ? 'maior' : 'menor'} que o mês anterior`}
-                            </span>
-                        </div>
-                    </div>
-                </div>
+        const resetOverviewFilters = () => {
+            setFilterVehicle('all');
+            setFilterSector('all');
+            setFilterFuel('all');
+            setFilterStation('all');
+            setFilterCategory('all');
+            setFilterStatus('all');
+            setFilterAnomalyOnly(false);
+        };
 
-                {/* Litros */}
-                <div className="bg-white p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
-                    <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
-                        <Droplet className="w-24 h-24 text-cyan-600" />
-                    </div>
-                    <div className="flex items-center gap-3 mb-2">
-                        <div className="p-2 bg-cyan-50 rounded-xl text-cyan-600">
-                            <Droplet className="w-5 h-5" />
+        return (
+            <div className="space-y-6 animate-fade-in pb-12">
+                {/* 1. Barra de Filtros Rápidos da Frota */}
+                <div className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/80 shadow-xs">
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-100">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-2xl">
+                                <SlidersHorizontal className="w-5 h-5" />
+                            </div>
+                            <div>
+                                <h3 className="text-sm font-black text-slate-800 tracking-tight flex items-center gap-2">
+                                    Filtros Dinâmicos da Frota
+                                    {activeFiltersCount > 0 && (
+                                        <span className="px-2 py-0.5 bg-indigo-600 text-white rounded-full text-[10px] font-black">
+                                            {activeFiltersCount} ativo{activeFiltersCount > 1 ? 's' : ''}
+                                        </span>
+                                    )}
+                                </h3>
+                                <p className="text-xs text-slate-400 font-medium">Refine os indicadores, gráficos e relatórios em tempo real</p>
+                            </div>
                         </div>
-                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Volume Total</span>
-                    </div>
-                    <div className="relative z-10">
-                        <h3 className="text-2xl sm:text-3xl font-black text-cyan-900 tracking-tight">
-                            {formatNumber(stats.totalLiters)} L
-                        </h3>
-                        <div className={`flex items-center gap-1 mt-1 text-xs font-bold ${stats.litersDiff > 0 ? 'text-red-500' : 'text-emerald-500'}`}>
-                            {stats.litersDiff > 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingUp className="w-3 h-3 rotate-180" />}
-                            <span>
-                                {stats.litersDiff === 0 
-                                    ? 'Sem variação vs mês anterior' 
-                                    : `${Math.abs(stats.litersDiff).toFixed(1)}% ${stats.litersDiff > 0 ? 'maior' : 'menor'} que o mês anterior`}
-                            </span>
-                            <span className="text-slate-300 mx-1">|</span>
-                            <span className="text-slate-400 font-medium">{stats.filteredCount} abastecimentos</span>
-                        </div>
-                    </div>
-                </div>
 
-                {/* Avg KM/L */}
-                <div className="bg-white p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
-                    <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
-                        <BarChart3 className="w-24 h-24 text-violet-600" />
-                    </div>
-                    <div className="flex items-center gap-3 mb-2">
-                        <div className="p-2 bg-violet-50 rounded-xl text-violet-600">
-                            <BarChart3 className="w-5 h-5" />
-                        </div>
-                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Média Geral</span>
-                    </div>
-                    <div className="relative z-10">
-                        <h3 className="text-2xl sm:text-3xl font-black text-violet-900 tracking-tight">
-                            {formatNumber(stats.avgKmL, 1)} <span className="text-sm sm:text-lg text-slate-400 font-bold">Km/L</span>
-                        </h3>
-                        <div className={`flex items-center gap-1 mt-1 text-xs font-bold ${stats.avgKmLDiff > 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                            {stats.avgKmLDiff > 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingUp className="w-3 h-3 rotate-180" />}
-                            <span>
-                                {stats.avgKmLDiff === 0 
-                                    ? 'Sem variação vs mês anterior' 
-                                    : `${Math.abs(stats.avgKmLDiff).toFixed(1)}% ${stats.avgKmLDiff > 0 ? 'maior' : 'menor'} que o mês anterior`}
-                            </span>
-                        </div>
-                        <p className="text-[10px] font-medium text-slate-400 mt-1.5">Eficiência da frota (S/ Arla)</p>
-                    </div>
-                </div>
+                        <div className="flex items-center gap-2">
+                            {/* Toggle de Anomalias */}
+                            <button
+                                onClick={() => setFilterAnomalyOnly(!filterAnomalyOnly)}
+                                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+                                    filterAnomalyOnly
+                                        ? 'bg-rose-500 text-white shadow-md shadow-rose-500/20 ring-2 ring-rose-300'
+                                        : 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-100'
+                                }`}
+                            >
+                                <AlertTriangle className="w-4 h-4" />
+                                <span>Apenas Anomalias</span>
+                                {stats.odometerAnomalies.length + stats.costAlerts.length + stats.frequentRefuels.length + stats.unusualPriceRecords.length > 0 && (
+                                    <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${filterAnomalyOnly ? 'bg-white text-rose-600' : 'bg-rose-200 text-rose-800'}`}>
+                                        {stats.odometerAnomalies.length + stats.costAlerts.length + stats.frequentRefuels.length + stats.unusualPriceRecords.length}
+                                    </span>
+                                )}
+                            </button>
 
-                {/* Total KM */}
-                <div className="bg-white p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
-                    <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
-                        <MapPin className="w-24 h-24 text-amber-600" />
-                    </div>
-                    <div className="flex items-center gap-3 mb-2">
-                        <div className="p-2 bg-amber-50 rounded-xl text-amber-600">
-                            <MapPin className="w-5 h-5" />
-                        </div>
-                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Rodagem Total</span>
-                    </div>
-                    <div className="relative z-10">
-                        <h3 className="text-2xl sm:text-3xl font-black text-amber-900 tracking-tight">
-                            {formatNumber(stats.totalKmPeriod, 2)} <span className="text-sm sm:text-lg text-slate-400 font-bold">Km</span>
-                        </h3>
-                        <div className={`flex items-center gap-1 mt-1 text-xs font-bold ${stats.kmDiffPeriod > 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                            {stats.kmDiffPeriod > 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingUp className="w-3 h-3 rotate-180" />}
-                            <span>
-                                {stats.kmDiffPeriod === 0 
-                                    ? 'Sem variação vs mês anterior' 
-                                    : `${Math.abs(stats.kmDiffPeriod).toFixed(1)}% ${stats.kmDiffPeriod > 0 ? 'maior' : 'menor'} que o mês anterior`}
-                            </span>
-                        </div>
-                        <p className="text-[10px] font-medium text-slate-400 mt-1.5">Estimado no período</p>
-                    </div>
-                </div>
-            </div>
-
-            {/* 2. Charts Row: Evolution & Fuel Dist */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6">
-                {/* Evolution Chart */}
-                <div className="lg:col-span-2 xl:col-span-3 2xl:col-span-3 bg-white p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] border border-slate-200 shadow-sm">
-                    <div className="mb-6">
-                        <h3 className="text-lg font-black text-slate-800">Evolução de Gastos</h3>
-                        <p className="text-sm text-slate-400 font-medium">Histórico dos últimos 6 meses</p>
-                    </div>
-                    <div className="h-[300px] w-full">
-                        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-                            <AreaChart data={stats.evolutionChartData}>
-                                <defs>
-                                    <linearGradient id="colorCost" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.1} />
-                                        <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                                    </linearGradient>
-                                </defs>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                <XAxis
-                                    dataKey="month"
-                                    axisLine={false}
-                                    tickLine={false}
-                                    tick={{ fill: '#94a3b8', fontSize: 12 }}
-                                    dy={10}
-                                />
-                                <YAxis
-                                    axisLine={false}
-                                    tickLine={false}
-                                    tick={{ fill: '#94a3b8', fontSize: 12 }}
-                                    tickFormatter={(value) => `R$${value / 1000}k`}
-                                />
-                                <Tooltip
-                                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                                    formatter={((value: number) => [`R$ ${value.toLocaleString()}`, 'Gasto']) as any}
-                                />
-                                <Area
-                                    type="monotone"
-                                    dataKey="cost"
-                                    stroke="#10b981"
-                                    strokeWidth={3}
-                                    fillOpacity={1}
-                                    fill="url(#colorCost)"
-                                />
-                            </AreaChart>
-                        </ResponsiveContainer>
-                    </div>
-                </div>
-
-                {/* Fuel Distribution */}
-                <div className="xl:col-span-1 2xl:col-span-2 bg-white p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] border border-slate-200 shadow-sm">
-                    <div className="mb-6">
-                        <h3 className="text-lg font-black text-slate-800">Por Combustível</h3>
-                        <p className="text-sm text-slate-400 font-medium">Distribuição de volume (L)</p>
-                    </div>
-                    <div className="h-[300px] w-full flex flex-col items-center justify-center">
-                        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-                            <PieChart>
-                                <Pie
-                                    data={stats.fuelChartData}
-                                    innerRadius={60}
-                                    outerRadius={80}
-                                    paddingAngle={5}
-                                    dataKey="value"
+                            {activeFiltersCount > 0 && (
+                                <button
+                                    onClick={resetOverviewFilters}
+                                    className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5"
                                 >
-                                    {stats.fuelChartData.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={stats.COLORS[index % stats.COLORS.length]} />
-                                    ))}
-                                </Pie>
-                                <Tooltip
-                                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                                    formatter={((value: number) => [`${formatNumber(value, 2)} L`, 'Volume']) as any}
-                                />
-                                <Legend verticalAlign="bottom" height={36} iconType="circle" />
-                            </PieChart>
-                        </ResponsiveContainer>
+                                    <X className="w-3.5 h-3.5" />
+                                    Limpar Filtros
+                                </button>
+                            )}
+                        </div>
                     </div>
-                </div>
-            </div>
 
-            {/* 3. Charts Row: Sector & Ranking */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-                {/* Spending by Sector */}
-                <div className="xl:col-span-2 bg-white p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] border border-slate-200 shadow-sm">
-                    <div className="mb-6">
-                        <h3 className="text-lg font-black text-slate-800">Gastos por Secretaria</h3>
-                        <p className="text-sm text-slate-400 font-medium">Top 5 setores com maior consumo</p>
-                    </div>
-                    <div className="h-[300px] w-full">
-                        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-                            <BarChart layout="vertical" data={stats.sectorChartData} margin={{ left: 40 }}>
-                                <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f1f5f9" />
-                                <XAxis type="number" hide />
-                                <YAxis
-                                    dataKey="name"
-                                    type="category"
-                                    axisLine={false}
-                                    tickLine={false}
-                                    width={100}
-                                    tick={{ fill: '#64748b', fontSize: 11, fontWeight: 600 }}
-                                />
-                                <Tooltip
-                                    cursor={{ fill: '#f8fafc' }}
-                                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                                    formatter={((value: number) => [formatCurrency(value), 'Gasto']) as any}
-                                />
-                                <Bar dataKey="value" fill="#0ea5e9" radius={[0, 4, 4, 0]} barSize={20} />
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </div>
-                </div>
-
-                {/* Vehicle Ranking */}
-                <div className="xl:col-span-1 bg-white p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] border border-slate-200 shadow-sm">
-                    <div className="mb-6 flex justify-between items-center">
+                    {/* Grid de Controles de Filtros */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                        {/* Veículo */}
                         <div>
-                            <h3 className="text-lg font-black text-slate-800">Ranking de Veículos</h3>
-                            <p className="text-sm text-slate-400 font-medium">Maiores consumidores do mês</p>
+                            <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400 mb-1">Veículo</label>
+                            <select
+                                value={filterVehicle}
+                                onChange={(e) => setFilterVehicle(e.target.value)}
+                                className="w-full bg-slate-50 border border-slate-200 text-slate-700 rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer"
+                            >
+                                <option value="all">Todos os Veículos ({vehicles.length})</option>
+                                {vehicles.map(v => (
+                                    <option key={v.id} value={v.plate || v.model}>
+                                        {v.plate ? `${v.plate} - ${v.model}` : v.model}
+                                    </option>
+                                ))}
+                            </select>
                         </div>
-                        <div className="p-2 bg-red-50 text-red-500 rounded-xl">
-                            <Fuel className="w-5 h-5" />
+
+                        {/* Secretaria / Setor */}
+                        <div>
+                            <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400 mb-1">Secretaria / Setor</label>
+                            <select
+                                value={filterSector}
+                                onChange={(e) => setFilterSector(e.target.value)}
+                                className="w-full bg-slate-50 border border-slate-200 text-slate-700 rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer"
+                            >
+                                <option value="all">Todas as Secretarias</option>
+                                {availableSectors.map(s => (
+                                    <option key={s.id} value={s.id}>{s.name}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {/* Combustível */}
+                        <div>
+                            <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400 mb-1">Combustível</label>
+                            <select
+                                value={filterFuel}
+                                onChange={(e) => setFilterFuel(e.target.value)}
+                                className="w-full bg-slate-50 border border-slate-200 text-slate-700 rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer"
+                            >
+                                <option value="all">Todos os Tipos</option>
+                                <option value="diesel">Diesel (S10 / Comum)</option>
+                                <option value="gasolina">Gasolina</option>
+                                <option value="etanol">Etanol</option>
+                                <option value="arla">Arla 32</option>
+                            </select>
+                        </div>
+
+                        {/* Posto / Fornecedor */}
+                        <div>
+                            <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400 mb-1">Posto / Fornecedor</label>
+                            <select
+                                value={filterStation}
+                                onChange={(e) => setFilterStation(e.target.value)}
+                                className="w-full bg-slate-50 border border-slate-200 text-slate-700 rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer"
+                            >
+                                <option value="all">Todos os Postos</option>
+                                {gasStations.map(st => (
+                                    <option key={st.id} value={st.name}>{st.name}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {/* Categoria do Veículo */}
+                        <div>
+                            <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400 mb-1">Categoria da Frota</label>
+                            <select
+                                value={filterCategory}
+                                onChange={(e) => setFilterCategory(e.target.value)}
+                                className="w-full bg-slate-50 border border-slate-200 text-slate-700 rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer"
+                            >
+                                <option value="all">Todas as Categorias</option>
+                                <option value="Carro">Carros / Leves</option>
+                                <option value="Moto">Motos</option>
+                                <option value="Van">Vans / Utilitários</option>
+                                <option value="Ônibus">Ônibus / Micro-ônibus</option>
+                                <option value="Caminhão">Caminhões / Pesados</option>
+                                <option value="Máquina Pesada">Máquinas Pesadas</option>
+                                <option value="Acessórios">Acessórios / Implementos</option>
+                            </select>
+                        </div>
+
+                        {/* Status */}
+                        <div>
+                            <label className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-400 mb-1">Status Operacional</label>
+                            <select
+                                value={filterStatus}
+                                onChange={(e) => setFilterStatus(e.target.value)}
+                                className="w-full bg-slate-50 border border-slate-200 text-slate-700 rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer"
+                            >
+                                <option value="all">Todos os Status</option>
+                                <option value="operacional">Operacional</option>
+                                <option value="manutencao">Em Manutenção</option>
+                                <option value="vistoria">Em Vistoria</option>
+                                <option value="nao_liberado">Não Liberado / Inativo</option>
+                            </select>
                         </div>
                     </div>
-                    <div className="space-y-4">
-                        {stats.topConsumptionVehicles.map((v, idx) => (
-                            <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl border border-slate-100">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 flex items-center justify-center bg-white text-slate-700 font-black rounded-lg text-xs shadow-sm border border-slate-100">
-                                        {idx + 1}
+                </div>
+
+                {/* 2. Top KPI Grid (8 Cards Principais da Frota) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {/* Custo Total */}
+                    <div 
+                        onClick={() => setDrillDownModal({
+                            isOpen: true,
+                            title: 'Detalhamento: Custo Total de Abastecimento',
+                            subtitle: 'Todos os registros que compõem o gasto do período',
+                            records: stats.records,
+                            metricType: 'cost'
+                        })}
+                        className="bg-white p-5 sm:p-6 rounded-[1.75rem] border border-slate-200/90 shadow-xs relative overflow-hidden group hover:shadow-md hover:border-emerald-300 transition-all cursor-pointer"
+                    >
+                        <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                            <DollarSign className="w-24 h-24 text-emerald-600" />
+                        </div>
+                        <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2.5">
+                                <div className="p-2 bg-emerald-50 rounded-xl text-emerald-600 group-hover:scale-110 transition-transform">
+                                    <DollarSign className="w-5 h-5" />
+                                </div>
+                                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Custo Total</span>
+                            </div>
+                            <span className="text-[10px] font-bold text-emerald-600 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
+                                Ver detalhes <ChevronRight className="w-3 h-3" />
+                            </span>
+                        </div>
+                        <div className="relative z-10">
+                            <h3 className="text-2xl sm:text-3xl font-black text-emerald-950 tracking-tight">
+                                {formatCurrency(stats.totalCost)}
+                            </h3>
+                            <div className={`flex items-center gap-1 mt-1 text-xs font-bold ${stats.costDiff > 0 ? 'text-red-500' : 'text-emerald-500'}`}>
+                                {stats.costDiff > 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+                                <span>
+                                    {stats.costDiff === 0 
+                                        ? 'Sem variação vs anterior' 
+                                        : `${Math.abs(stats.costDiff).toFixed(1)}% ${stats.costDiff > 0 ? 'maior' : 'menor'} vs anterior`}
+                                </span>
+                            </div>
+                            <p className="text-[10px] text-slate-400 font-semibold mt-1">
+                                {stats.costSavings > 0 
+                                    ? `Economia de ${formatCurrency(stats.costSavings)}` 
+                                    : stats.costSavings < 0 
+                                    ? `Aumento de ${formatCurrency(Math.abs(stats.costSavings))}` 
+                                    : 'Estável em relação ao período anterior'}
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Volume Total */}
+                    <div 
+                        onClick={() => setDrillDownModal({
+                            isOpen: true,
+                            title: 'Detalhamento: Volume Total Abastecido',
+                            subtitle: `${formatNumber(stats.totalLiters)} Litros em ${stats.filteredCount} abastecimentos`,
+                            records: stats.records,
+                            metricType: 'liters'
+                        })}
+                        className="bg-white p-5 sm:p-6 rounded-[1.75rem] border border-slate-200/90 shadow-xs relative overflow-hidden group hover:shadow-md hover:border-cyan-300 transition-all cursor-pointer"
+                    >
+                        <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                            <Droplet className="w-24 h-24 text-cyan-600" />
+                        </div>
+                        <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2.5">
+                                <div className="p-2 bg-cyan-50 rounded-xl text-cyan-600 group-hover:scale-110 transition-transform">
+                                    <Droplet className="w-5 h-5" />
+                                </div>
+                                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Volume Total</span>
+                            </div>
+                            <span className="text-[10px] font-bold text-cyan-600 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
+                                Ver detalhes <ChevronRight className="w-3 h-3" />
+                            </span>
+                        </div>
+                        <div className="relative z-10">
+                            <h3 className="text-2xl sm:text-3xl font-black text-cyan-950 tracking-tight">
+                                {formatNumber(stats.totalLiters)} <span className="text-lg text-slate-400 font-bold">L</span>
+                            </h3>
+                            <div className={`flex items-center gap-1 mt-1 text-xs font-bold ${stats.litersDiff > 0 ? 'text-red-500' : 'text-emerald-500'}`}>
+                                {stats.litersDiff > 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+                                <span>
+                                    {stats.litersDiff === 0 
+                                        ? 'Sem variação vs anterior' 
+                                        : `${Math.abs(stats.litersDiff).toFixed(1)}% ${stats.litersDiff > 0 ? 'maior' : 'menor'} vs anterior`}
+                                </span>
+                            </div>
+                            <p className="text-[10px] text-slate-400 font-semibold mt-1">
+                                {stats.filteredCount} abastecimentos realizados
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Preço Médio / Litro */}
+                    <div 
+                        onClick={() => setDrillDownModal({
+                            isOpen: true,
+                            title: 'Detalhamento: Preço Médio por Litro',
+                            subtitle: `Preço médio calculado de ${formatCurrency(stats.avgPricePerLiter)} por litro`,
+                            records: stats.records,
+                            metricType: 'price'
+                        })}
+                        className="bg-white p-5 sm:p-6 rounded-[1.75rem] border border-slate-200/90 shadow-xs relative overflow-hidden group hover:shadow-md hover:border-amber-300 transition-all cursor-pointer"
+                    >
+                        <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                            <CreditCard className="w-24 h-24 text-amber-600" />
+                        </div>
+                        <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2.5">
+                                <div className="p-2 bg-amber-50 rounded-xl text-amber-600 group-hover:scale-110 transition-transform">
+                                    <CreditCard className="w-5 h-5" />
+                                </div>
+                                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Preço Médio / L</span>
+                            </div>
+                            <span className="text-[10px] font-bold text-amber-600 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
+                                Ver detalhes <ChevronRight className="w-3 h-3" />
+                            </span>
+                        </div>
+                        <div className="relative z-10">
+                            <h3 className="text-2xl sm:text-3xl font-black text-amber-950 tracking-tight">
+                                {formatCurrency(stats.avgPricePerLiter)}
+                            </h3>
+                            <div className={`flex items-center gap-1 mt-1 text-xs font-bold ${stats.avgPriceDiff > 0 ? 'text-red-500' : 'text-emerald-500'}`}>
+                                {stats.avgPriceDiff > 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+                                <span>
+                                    {stats.avgPriceDiff === 0 
+                                        ? 'Sem variação vs anterior' 
+                                        : `${Math.abs(stats.avgPriceDiff).toFixed(1)}% ${stats.avgPriceDiff > 0 ? 'mais caro' : 'mais barato'} vs anterior`}
+                                </span>
+                            </div>
+                            <p className="text-[10px] text-slate-400 font-semibold mt-1">
+                                Anterior: {formatCurrency(stats.prevAvgPricePerLiter || 0)} / L
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Média Geral KM/L e L/100km */}
+                    <div 
+                        onClick={() => setDrillDownModal({
+                            isOpen: true,
+                            title: 'Detalhamento: Consumo Médio da Frota',
+                            subtitle: `Eficiência média ponderada de ${formatNumber(stats.avgKmL, 2)} Km/L`,
+                            records: stats.records,
+                            metricType: 'efficiency'
+                        })}
+                        className="bg-white p-5 sm:p-6 rounded-[1.75rem] border border-slate-200/90 shadow-xs relative overflow-hidden group hover:shadow-md hover:border-violet-300 transition-all cursor-pointer"
+                    >
+                        <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                            <Gauge className="w-24 h-24 text-violet-600" />
+                        </div>
+                        <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2.5">
+                                <div className="p-2 bg-violet-50 rounded-xl text-violet-600 group-hover:scale-110 transition-transform">
+                                    <Gauge className="w-5 h-5" />
+                                </div>
+                                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Consumo Médio</span>
+                            </div>
+                            <span className="text-[10px] font-bold text-violet-600 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
+                                Ver detalhes <ChevronRight className="w-3 h-3" />
+                            </span>
+                        </div>
+                        <div className="relative z-10">
+                            <h3 className="text-2xl sm:text-3xl font-black text-violet-950 tracking-tight">
+                                {stats.avgKmL > 0 ? (
+                                    <>
+                                        {formatNumber(stats.avgKmL, 1)} <span className="text-sm sm:text-lg text-slate-400 font-bold">Km/L</span>
+                                    </>
+                                ) : (
+                                    <span className="text-base text-slate-400 font-semibold">Dados insuficientes</span>
+                                )}
+                            </h3>
+                            <div className={`flex items-center gap-1 mt-1 text-xs font-bold ${stats.avgKmLDiff > 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                                {stats.avgKmLDiff > 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+                                <span>
+                                    {stats.avgKmLDiff === 0 
+                                        ? 'Sem variação vs anterior' 
+                                        : `${Math.abs(stats.avgKmLDiff).toFixed(1)}% ${stats.avgKmLDiff > 0 ? 'mais eficiente' : 'menos eficiente'} vs anterior`}
+                                </span>
+                            </div>
+                            <p className="text-[10px] text-slate-400 font-semibold mt-1">
+                                {stats.litersPer100Km > 0 ? `${formatNumber(stats.litersPer100Km, 1)} L / 100 km` : 'Consumo por 100km'}
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Quilometragem Total Rodada */}
+                    <div 
+                        onClick={() => setDrillDownModal({
+                            isOpen: true,
+                            title: 'Detalhamento: Quilometragem Rodada no Período',
+                            subtitle: `${formatNumber(stats.totalKmPeriod)} KM percorridos pelos veículos ativos`,
+                            records: stats.records,
+                            metricType: 'km'
+                        })}
+                        className="bg-white p-5 sm:p-6 rounded-[1.75rem] border border-slate-200/90 shadow-xs relative overflow-hidden group hover:shadow-md hover:border-blue-300 transition-all cursor-pointer"
+                    >
+                        <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                            <MapPin className="w-24 h-24 text-blue-600" />
+                        </div>
+                        <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2.5">
+                                <div className="p-2 bg-blue-50 rounded-xl text-blue-600 group-hover:scale-110 transition-transform">
+                                    <MapPin className="w-5 h-5" />
+                                </div>
+                                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Rodagem Total</span>
+                            </div>
+                            <span className="text-[10px] font-bold text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
+                                Ver detalhes <ChevronRight className="w-3 h-3" />
+                            </span>
+                        </div>
+                        <div className="relative z-10">
+                            <h3 className="text-2xl sm:text-3xl font-black text-blue-950 tracking-tight">
+                                {stats.totalKmPeriod > 0 ? (
+                                    <>
+                                        {formatNumber(stats.totalKmPeriod)} <span className="text-sm sm:text-lg text-slate-400 font-bold">Km</span>
+                                    </>
+                                ) : (
+                                    <span className="text-base text-slate-400 font-semibold">0 Km</span>
+                                )}
+                            </h3>
+                            <div className={`flex items-center gap-1 mt-1 text-xs font-bold ${stats.kmDiffPeriod > 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                                {stats.kmDiffPeriod > 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+                                <span>
+                                    {stats.kmDiffPeriod === 0 
+                                        ? 'Sem variação vs anterior' 
+                                        : `${Math.abs(stats.kmDiffPeriod).toFixed(1)}% ${stats.kmDiffPeriod > 0 ? 'maior' : 'menor'} vs anterior`}
+                                </span>
+                            </div>
+                            <p className="text-[10px] text-slate-400 font-semibold mt-1">
+                                Média de {formatNumber(stats.avgKmPerVehicle, 0)} Km / veículo ativo
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Custo por KM */}
+                    <div 
+                        onClick={() => setDrillDownModal({
+                            isOpen: true,
+                            title: 'Detalhamento: Custo Operacional por KM',
+                            subtitle: `Custo médio de ${formatCurrency(stats.costPerKm)} para cada quilômetro rodado`,
+                            records: stats.records,
+                            metricType: 'costPerKm'
+                        })}
+                        className="bg-white p-5 sm:p-6 rounded-[1.75rem] border border-slate-200/90 shadow-xs relative overflow-hidden group hover:shadow-md hover:border-teal-300 transition-all cursor-pointer"
+                    >
+                        <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                            <Activity className="w-24 h-24 text-teal-600" />
+                        </div>
+                        <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2.5">
+                                <div className="p-2 bg-teal-50 rounded-xl text-teal-600 group-hover:scale-110 transition-transform">
+                                    <Activity className="w-5 h-5" />
+                                </div>
+                                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Custo / KM</span>
+                            </div>
+                            <span className="text-[10px] font-bold text-teal-600 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
+                                Ver detalhes <ChevronRight className="w-3 h-3" />
+                            </span>
+                        </div>
+                        <div className="relative z-10">
+                            <h3 className="text-2xl sm:text-3xl font-black text-teal-950 tracking-tight">
+                                {stats.costPerKm > 0 ? (
+                                    <>
+                                        {formatCurrency(stats.costPerKm)} <span className="text-xs sm:text-sm text-slate-400 font-bold">/ km</span>
+                                    </>
+                                ) : (
+                                    <span className="text-base text-slate-400 font-semibold">Dados insuficientes</span>
+                                )}
+                            </h3>
+                            <div className={`flex items-center gap-1 mt-1 text-xs font-bold ${stats.costPerKmDiff > 0 ? 'text-red-500' : 'text-emerald-500'}`}>
+                                {stats.costPerKmDiff > 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+                                <span>
+                                    {stats.costPerKmDiff === 0 
+                                        ? 'Sem variação vs anterior' 
+                                        : `${Math.abs(stats.costPerKmDiff).toFixed(1)}% ${stats.costPerKmDiff > 0 ? 'maior' : 'menor'} vs anterior`}
+                                </span>
+                            </div>
+                            <p className="text-[10px] text-slate-400 font-semibold mt-1">
+                                Eficiência financeira do deslocamento
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Status da Frota */}
+                    <div 
+                        onClick={() => setActiveTab('vehicle')}
+                        className="bg-white p-5 sm:p-6 rounded-[1.75rem] border border-slate-200/90 shadow-xs relative overflow-hidden group hover:shadow-md hover:border-indigo-300 transition-all cursor-pointer"
+                    >
+                        <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                            <Truck className="w-24 h-24 text-indigo-600" />
+                        </div>
+                        <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2.5">
+                                <div className="p-2 bg-indigo-50 rounded-xl text-indigo-600 group-hover:scale-110 transition-transform">
+                                    <Truck className="w-5 h-5" />
+                                </div>
+                                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Status da Frota</span>
+                            </div>
+                            <span className="text-[10px] font-bold text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
+                                Ver frota <ChevronRight className="w-3 h-3" />
+                            </span>
+                        </div>
+                        <div className="relative z-10">
+                            <h3 className="text-2xl sm:text-3xl font-black text-indigo-950 tracking-tight">
+                                {stats.activeVehicles} <span className="text-sm sm:text-lg text-slate-400 font-bold">/ {stats.allVehiclesCount}</span>
+                            </h3>
+                            <p className="text-xs font-bold text-slate-500 mt-1">
+                                {stats.activeVehicles} veículos ativos no período
+                            </p>
+                            <div className="flex items-center gap-2 mt-2 pt-2 border-t border-slate-100 text-[10px] font-bold">
+                                <span className="text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-md">
+                                    {stats.operationalVehiclesCount} Operacionais
+                                </span>
+                                <span className="text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-md">
+                                    {stats.maintenanceVehiclesCount} Manutenção
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Média por Veículo */}
+                    <div 
+                        onClick={() => setDrillDownModal({
+                            isOpen: true,
+                            title: 'Detalhamento: Médias Gerais por Veículo',
+                            subtitle: `Gasto médio de ${formatCurrency(stats.avgCostPerVehicle)} por veículo ativo`,
+                            records: stats.records,
+                            metricType: 'vehicleAvg'
+                        })}
+                        className="bg-white p-5 sm:p-6 rounded-[1.75rem] border border-slate-200/90 shadow-xs relative overflow-hidden group hover:shadow-md hover:border-purple-300 transition-all cursor-pointer"
+                    >
+                        <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                            <Fuel className="w-24 h-24 text-purple-600" />
+                        </div>
+                        <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2.5">
+                                <div className="p-2 bg-purple-50 rounded-xl text-purple-600 group-hover:scale-110 transition-transform">
+                                    <Fuel className="w-5 h-5" />
+                                </div>
+                                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Média / Veículo</span>
+                            </div>
+                            <span className="text-[10px] font-bold text-purple-600 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
+                                Ver detalhes <ChevronRight className="w-3 h-3" />
+                            </span>
+                        </div>
+                        <div className="relative z-10">
+                            <h3 className="text-2xl sm:text-3xl font-black text-purple-950 tracking-tight">
+                                {formatCurrency(stats.avgCostPerVehicle)}
+                            </h3>
+                            <p className="text-xs font-bold text-slate-500 mt-1">
+                                {formatNumber(stats.avgLitersPerVehicle, 1)} Litros / veículo
+                            </p>
+                            <p className="text-[10px] text-slate-400 font-semibold mt-1">
+                                Média de {stats.activeVehicles > 0 ? (stats.filteredCount / stats.activeVehicles).toFixed(1) : 0} abastecimentos / veículo
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                {/* 3. Bloco de Projeções Inteligentes & Comparativos */}
+                <div className="bg-gradient-to-br from-indigo-900 via-slate-900 to-indigo-950 p-6 sm:p-7 rounded-[2rem] text-white shadow-xl relative overflow-hidden border border-indigo-500/20">
+                    <div className="absolute top-0 right-0 p-6 opacity-10 pointer-events-none">
+                        <Sparkles className="w-48 h-48 text-indigo-400" />
+                    </div>
+
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 relative z-10">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2.5 bg-indigo-500/20 rounded-2xl border border-indigo-400/30 text-indigo-300">
+                                <Sparkles className="w-5 h-5" />
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-black tracking-tight flex items-center gap-2">
+                                    Projeções e Estimativas Inteligentes
+                                    <span className="px-2.5 py-0.5 bg-indigo-500/30 text-indigo-200 border border-indigo-400/30 rounded-full text-[10px] font-bold uppercase tracking-wider">
+                                        Run-Rate Real
+                                    </span>
+                                </h3>
+                                <p className="text-xs text-indigo-200/80 font-medium">
+                                    {stats.isCurrentMonth
+                                        ? `Com base nos ${stats.daysPassed} dias decorridos do mês atual (${stats.daysRemaining} dias restantes)`
+                                        : 'Consolidado histórico do período selecionado'}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-3 bg-white/5 border border-white/10 px-4 py-2 rounded-2xl backdrop-blur-md">
+                            <Clock className="w-4 h-4 text-indigo-300" />
+                            <span className="text-xs font-bold text-indigo-100">
+                                Média Diária: <strong className="text-white">{formatCurrency(stats.dailyAvgCost)}</strong> ({formatNumber(stats.dailyAvgLiters, 1)} L/dia)
+                            </span>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 relative z-10">
+                        {/* Projeção de Gasto */}
+                        <div className="bg-white/10 border border-white/10 p-4 rounded-2xl backdrop-blur-sm">
+                            <span className="text-[10px] font-black uppercase text-indigo-200 tracking-wider">Gasto Projetado no Mês</span>
+                            <h4 className="text-2xl font-black text-white mt-1">
+                                {formatCurrency(stats.projectedMonthlyCost)}
+                            </h4>
+                            <div className="flex items-center gap-1 text-[11px] font-bold mt-1 text-indigo-200">
+                                <span>Estimativa de fechamento</span>
+                            </div>
+                        </div>
+
+                        {/* Projeção de Volume */}
+                        <div className="bg-white/10 border border-white/10 p-4 rounded-2xl backdrop-blur-sm">
+                            <span className="text-[10px] font-black uppercase text-indigo-200 tracking-wider">Volume Projetado no Mês</span>
+                            <h4 className="text-2xl font-black text-white mt-1">
+                                {formatNumber(stats.projectedMonthlyLiters, 0)} <span className="text-sm text-indigo-200 font-bold">L</span>
+                            </h4>
+                            <div className="flex items-center gap-1 text-[11px] font-bold mt-1 text-indigo-200">
+                                <span>Previsão de consumo</span>
+                            </div>
+                        </div>
+
+                        {/* Comparativo vs Mês Anterior */}
+                        <div className="bg-white/10 border border-white/10 p-4 rounded-2xl backdrop-blur-sm">
+                            <span className="text-[10px] font-black uppercase text-indigo-200 tracking-wider">Variação vs Mês Anterior</span>
+                            <h4 className="text-2xl font-black text-white mt-1">
+                                {stats.costDiff > 0 ? `+${stats.costDiff.toFixed(1)}%` : `${stats.costDiff.toFixed(1)}%`}
+                            </h4>
+                            <div className={`flex items-center gap-1 text-[11px] font-bold mt-1 ${stats.costDiff <= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
+                                <span>{stats.costDiff <= 0 ? 'Redução de custos' : 'Aumento de custos'}</span>
+                            </div>
+                        </div>
+
+                        {/* Preço Médio Praticado */}
+                        <div className="bg-white/10 border border-white/10 p-4 rounded-2xl backdrop-blur-sm">
+                            <span className="text-[10px] font-black uppercase text-indigo-200 tracking-wider">Preço Médio da Frota</span>
+                            <h4 className="text-2xl font-black text-white mt-1">
+                                {formatCurrency(stats.avgPricePerLiter)} <span className="text-xs text-indigo-200 font-bold">/ L</span>
+                            </h4>
+                            <div className={`flex items-center gap-1 text-[11px] font-bold mt-1 ${stats.avgPriceDiff <= 0 ? 'text-emerald-300' : 'text-amber-300'}`}>
+                                <span>{stats.avgPriceDiff <= 0 ? 'Preço em queda ou estável' : `+${stats.avgPriceDiff.toFixed(1)}% vs anterior`}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* 4. Central de Alertas Inteligentes & Indicadores de Anomalia */}
+                <div className="bg-white p-6 sm:p-7 rounded-[2rem] border border-slate-200/90 shadow-xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2.5 bg-rose-50 text-rose-600 rounded-2xl">
+                                <AlertTriangle className="w-5 h-5" />
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-black text-slate-800 tracking-tight flex items-center gap-2">
+                                    Central de Alertas & Indicadores de Anomalia
+                                    <span className="px-2.5 py-0.5 bg-rose-100 text-rose-700 rounded-full text-[10px] font-black">
+                                        Auditoria Automática
+                                    </span>
+                                </h3>
+                                <p className="text-xs text-slate-400 font-medium">Inconsistências identificadas automaticamente com base nos registros reais</p>
+                            </div>
+                        </div>
+
+                        <span className="text-xs font-bold text-slate-400">
+                            Clique em qualquer alerta para inspecionar os registros
+                        </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {/* 1. Consumo Fora da Meta */}
+                        {stats.costAlerts.length > 0 ? (
+                            <div 
+                                onClick={() => setDrillDownModal({
+                                    isOpen: true,
+                                    title: 'Alerta: Veículos com Consumo Fora da Meta',
+                                    subtitle: `${stats.costAlerts.length} veículos com Km/L abaixo do mínimo ou acima do máximo`,
+                                    records: stats.records.filter(r => stats.costAlerts.some(a => a.id === r.vehicle)),
+                                    metricType: 'alert_consumption'
+                                })}
+                                className="p-4 bg-rose-50/70 border border-rose-200/80 rounded-2xl hover:bg-rose-100/70 transition-all cursor-pointer group"
+                            >
+                                <div className="flex items-start justify-between">
+                                    <div className="flex items-center gap-2.5">
+                                        <div className="p-2 bg-rose-500 text-white rounded-xl shadow-xs">
+                                            <Gauge className="w-4 h-4" />
+                                        </div>
+                                        <div>
+                                            <h4 className="text-xs font-black text-rose-950 uppercase tracking-tight">Consumo Fora da Meta</h4>
+                                            <p className="text-[11px] font-bold text-rose-600">{stats.costAlerts.length} veículo{stats.costAlerts.length > 1 ? 's' : ''} em desacordo</p>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <p className="text-xs font-bold text-slate-900 uppercase truncate max-w-[120px]">{v.name}</p>
-                                        <p className="text-[10px] text-slate-400 font-semibold">{v.count} abastecimentos</p>
+                                    <ChevronRight className="w-4 h-4 text-rose-400 group-hover:translate-x-0.5 transition-transform" />
+                                </div>
+                                <div className="mt-3 space-y-1.5">
+                                    {stats.costAlerts.slice(0, 2).map((a, i) => (
+                                        <div key={i} className="text-[11px] font-semibold text-rose-900 bg-white/80 px-2.5 py-1.5 rounded-lg flex items-center justify-between">
+                                            <span className="truncate max-w-[140px]">{a.name}</span>
+                                            <span className="font-black text-rose-600">{formatNumber(a.avgKmL, 1)} Km/L</span>
+                                        </div>
+                                    ))}
+                                    {stats.costAlerts.length > 2 && (
+                                        <p className="text-[10px] font-bold text-rose-500 text-center pt-1">+ {stats.costAlerts.length - 2} outros veículos</p>
+                                    )}
+                                </div>
+                            </div>
+                        ) : null}
+
+                        {/* 2. Inconsistência de Hodômetro */}
+                        {stats.odometerAnomalies.length > 0 ? (
+                            <div 
+                                onClick={() => setDrillDownModal({
+                                    isOpen: true,
+                                    title: 'Alerta: Inconsistências no Hodômetro',
+                                    subtitle: `${stats.odometerAnomalies.length} registros com regressão de KM ou saltos suspeitos`,
+                                    records: stats.odometerAnomalies.map(a => a.record),
+                                    metricType: 'alert_odometer'
+                                })}
+                                className="p-4 bg-amber-50/70 border border-amber-200/80 rounded-2xl hover:bg-amber-100/70 transition-all cursor-pointer group"
+                            >
+                                <div className="flex items-start justify-between">
+                                    <div className="flex items-center gap-2.5">
+                                        <div className="p-2 bg-amber-500 text-white rounded-xl shadow-xs">
+                                            <AlertCircle className="w-4 h-4" />
+                                        </div>
+                                        <div>
+                                            <h4 className="text-xs font-black text-amber-950 uppercase tracking-tight">Inconsistência de Hodômetro</h4>
+                                            <p className="text-[11px] font-bold text-amber-600">{stats.odometerAnomalies.length} ocorrência{stats.odometerAnomalies.length > 1 ? 's' : ''}</p>
+                                        </div>
+                                    </div>
+                                    <ChevronRight className="w-4 h-4 text-amber-400 group-hover:translate-x-0.5 transition-transform" />
+                                </div>
+                                <div className="mt-3 space-y-1.5">
+                                    {stats.odometerAnomalies.slice(0, 2).map((a, i) => (
+                                        <div key={i} className="text-[11px] font-semibold text-amber-900 bg-white/80 px-2.5 py-1.5 rounded-lg flex items-center justify-between">
+                                            <span className="truncate max-w-[130px]">{a.vehicleName}</span>
+                                            <span className="font-bold text-amber-700">
+                                                {a.type === 'regression' ? `Regressão (${a.diff} km)` : `Salto (+${a.diff} km)`}
+                                            </span>
+                                        </div>
+                                    ))}
+                                    {stats.odometerAnomalies.length > 2 && (
+                                        <p className="text-[10px] font-bold text-amber-500 text-center pt-1">+ {stats.odometerAnomalies.length - 2} outras inconsistências</p>
+                                    )}
+                                </div>
+                            </div>
+                        ) : null}
+
+                        {/* 3. Abastecimentos Múltiplos no Mesmo Dia */}
+                        {stats.frequentRefuels.length > 0 ? (
+                            <div 
+                                onClick={() => setDrillDownModal({
+                                    isOpen: true,
+                                    title: 'Alerta: Múltiplos Abastecimentos no Mesmo Dia',
+                                    subtitle: `${stats.frequentRefuels.length} veículos abastecidos 2 ou mais vezes na mesma data`,
+                                    records: stats.frequentRefuels.flatMap(f => f.records),
+                                    metricType: 'alert_frequent'
+                                })}
+                                className="p-4 bg-orange-50/70 border border-orange-200/80 rounded-2xl hover:bg-orange-100/70 transition-all cursor-pointer group"
+                            >
+                                <div className="flex items-start justify-between">
+                                    <div className="flex items-center gap-2.5">
+                                        <div className="p-2 bg-orange-500 text-white rounded-xl shadow-xs">
+                                            <Fuel className="w-4 h-4" />
+                                        </div>
+                                        <div>
+                                            <h4 className="text-xs font-black text-orange-950 uppercase tracking-tight">Abastecimentos Múltiplos</h4>
+                                            <p className="text-[11px] font-bold text-orange-600">{stats.frequentRefuels.length} caso{stats.frequentRefuels.length > 1 ? 's' : ''} no mesmo dia</p>
+                                        </div>
+                                    </div>
+                                    <ChevronRight className="w-4 h-4 text-orange-400 group-hover:translate-x-0.5 transition-transform" />
+                                </div>
+                                <div className="mt-3 space-y-1.5">
+                                    {stats.frequentRefuels.slice(0, 2).map((f, i) => (
+                                        <div key={i} className="text-[11px] font-semibold text-orange-900 bg-white/80 px-2.5 py-1.5 rounded-lg flex items-center justify-between">
+                                            <span className="truncate max-w-[130px]">{f.vehicle}</span>
+                                            <span className="font-bold text-orange-700">{f.count}x em {f.date}</span>
+                                        </div>
+                                    ))}
+                                    {stats.frequentRefuels.length > 2 && (
+                                        <p className="text-[10px] font-bold text-orange-500 text-center pt-1">+ {stats.frequentRefuels.length - 2} outros casos</p>
+                                    )}
+                                </div>
+                            </div>
+                        ) : null}
+
+                        {/* 4. Preço Fora da Média */}
+                        {stats.unusualPriceRecords.length > 0 ? (
+                            <div 
+                                onClick={() => setDrillDownModal({
+                                    isOpen: true,
+                                    title: 'Alerta: Preço por Litro com Desvio > 15%',
+                                    subtitle: `${stats.unusualPriceRecords.length} registros com valor unitário divergente da média`,
+                                    records: stats.unusualPriceRecords,
+                                    metricType: 'alert_price'
+                                })}
+                                className="p-4 bg-purple-50/70 border border-purple-200/80 rounded-2xl hover:bg-purple-100/70 transition-all cursor-pointer group"
+                            >
+                                <div className="flex items-start justify-between">
+                                    <div className="flex items-center gap-2.5">
+                                        <div className="p-2 bg-purple-500 text-white rounded-xl shadow-xs">
+                                            <CreditCard className="w-4 h-4" />
+                                        </div>
+                                        <div>
+                                            <h4 className="text-xs font-black text-purple-950 uppercase tracking-tight">Preço Unitário Atípico</h4>
+                                            <p className="text-[11px] font-bold text-purple-600">{stats.unusualPriceRecords.length} registro{stats.unusualPriceRecords.length > 1 ? 's' : ''} com desvio</p>
+                                        </div>
+                                    </div>
+                                    <ChevronRight className="w-4 h-4 text-purple-400 group-hover:translate-x-0.5 transition-transform" />
+                                </div>
+                                <div className="mt-3 space-y-1.5">
+                                    {stats.unusualPriceRecords.slice(0, 2).map((r, i) => (
+                                        <div key={i} className="text-[11px] font-semibold text-purple-900 bg-white/80 px-2.5 py-1.5 rounded-lg flex items-center justify-between">
+                                            <span className="truncate max-w-[130px]">{r.vehicle}</span>
+                                            <span className="font-bold text-purple-700">{formatCurrency(r.unit_price || (r.liters > 0 ? r.cost / r.liters : 0))} / L</span>
+                                        </div>
+                                    ))}
+                                    {stats.unusualPriceRecords.length > 2 && (
+                                        <p className="text-[10px] font-bold text-purple-500 text-center pt-1">+ {stats.unusualPriceRecords.length - 2} outros registros</p>
+                                    )}
+                                </div>
+                            </div>
+                        ) : null}
+
+                        {/* 5. Alerta de Manutenção Preventiva (Troca de Óleo) */}
+                        {stats.maintenanceAlerts.length > 0 ? (
+                            <div 
+                                onClick={() => setActiveTab('vehicle')}
+                                className="p-4 bg-blue-50/70 border border-blue-200/80 rounded-2xl hover:bg-blue-100/70 transition-all cursor-pointer group"
+                            >
+                                <div className="flex items-start justify-between">
+                                    <div className="flex items-center gap-2.5">
+                                        <div className="p-2 bg-blue-500 text-white rounded-xl shadow-xs">
+                                            <Wrench className="w-4 h-4" />
+                                        </div>
+                                        <div>
+                                            <h4 className="text-xs font-black text-blue-950 uppercase tracking-tight">Manutenção Preventiva</h4>
+                                            <p className="text-[11px] font-bold text-blue-600">{stats.maintenanceAlerts.length} veículo{stats.maintenanceAlerts.length > 1 ? 's' : ''} próximo{stats.maintenanceAlerts.length > 1 ? 's' : ''}/vencido{stats.maintenanceAlerts.length > 1 ? 's' : ''}</p>
+                                        </div>
+                                    </div>
+                                    <ChevronRight className="w-4 h-4 text-blue-400 group-hover:translate-x-0.5 transition-transform" />
+                                </div>
+                                <div className="mt-3 space-y-1.5">
+                                    {stats.maintenanceAlerts.slice(0, 2).map((m, i) => (
+                                        <div key={i} className="text-[11px] font-semibold text-blue-900 bg-white/80 px-2.5 py-1.5 rounded-lg flex items-center justify-between">
+                                            <span className="truncate max-w-[130px]">{m.name}</span>
+                                            <span className={`font-black ${m.isOilOverdue ? 'text-rose-600' : 'text-blue-600'}`}>
+                                                {m.isOilOverdue ? 'Óleo Vencido' : 'Óleo Próximo'}
+                                            </span>
+                                        </div>
+                                    ))}
+                                    {stats.maintenanceAlerts.length > 2 && (
+                                        <p className="text-[10px] font-bold text-blue-500 text-center pt-1">+ {stats.maintenanceAlerts.length - 2} outros veículos</p>
+                                    )}
+                                </div>
+                            </div>
+                        ) : null}
+
+                        {/* 6. Veículos Inativos da Frota Operacional */}
+                        {stats.idleVehicles.length > 0 ? (
+                            <div 
+                                onClick={() => setActiveTab('vehicle')}
+                                className="p-4 bg-slate-50 border border-slate-200 rounded-2xl hover:bg-slate-100 transition-all cursor-pointer group"
+                            >
+                                <div className="flex items-start justify-between">
+                                    <div className="flex items-center gap-2.5">
+                                        <div className="p-2 bg-slate-600 text-white rounded-xl shadow-xs">
+                                            <Clock className="w-4 h-4" />
+                                        </div>
+                                        <div>
+                                            <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight">Veículos sem Abastecer</h4>
+                                            <p className="text-[11px] font-bold text-slate-500">{stats.idleVehicles.length} veículo{stats.idleVehicles.length > 1 ? 's' : ''} +30 dias sem registro</p>
+                                        </div>
+                                    </div>
+                                    <ChevronRight className="w-4 h-4 text-slate-400 group-hover:translate-x-0.5 transition-transform" />
+                                </div>
+                                <div className="mt-3 space-y-1.5">
+                                    {stats.idleVehicles.slice(0, 2).map((v, i) => (
+                                        <div key={i} className="text-[11px] font-semibold text-slate-700 bg-white px-2.5 py-1.5 rounded-lg flex items-center justify-between border border-slate-100">
+                                            <span className="truncate max-w-[150px]">{v.model} ({v.plate})</span>
+                                            <span className="font-bold text-slate-400">Inativo</span>
+                                        </div>
+                                    ))}
+                                    {stats.idleVehicles.length > 2 && (
+                                        <p className="text-[10px] font-bold text-slate-400 text-center pt-1">+ {stats.idleVehicles.length - 2} outros veículos</p>
+                                    )}
+                                </div>
+                            </div>
+                        ) : null}
+                    </div>
+
+                    {/* Caso não haja nenhuma anomalia */}
+                    {stats.costAlerts.length === 0 && 
+                     stats.odometerAnomalies.length === 0 && 
+                     stats.frequentRefuels.length === 0 && 
+                     stats.unusualPriceRecords.length === 0 && 
+                     stats.maintenanceAlerts.length === 0 && (
+                        <div className="p-4 bg-emerald-50 border border-emerald-200/80 rounded-2xl flex items-center gap-3 text-emerald-800">
+                            <ShieldCheck className="w-6 h-6 text-emerald-600 shrink-0" />
+                            <div>
+                                <h4 className="text-xs font-black uppercase">Frota em Plena Conformidade</h4>
+                                <p className="text-xs font-medium text-emerald-700">Nenhuma anomalia de consumo, hodômetro, preço ou duplicidade foi detectada para os filtros selecionados.</p>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* 5. Evolução Temporal e Gráficos de Distribuição */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Evolução Temporal Dinâmica (2 Colunas) */}
+                    <div className="lg:col-span-2 bg-white p-5 sm:p-6 rounded-[2rem] border border-slate-200/90 shadow-xs">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                            <div>
+                                <h3 className="text-lg font-black text-slate-900 tracking-tight">Evolução Temporal</h3>
+                                <p className="text-xs text-slate-400 font-medium">Histórico dinâmico de consumo e valores da frota</p>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-2">
+                                {/* Seletor Diário vs Mensal */}
+                                <div className="flex p-1 bg-slate-100 rounded-xl">
+                                    <button
+                                        onClick={() => setOverviewEvolutionType('daily')}
+                                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${overviewEvolutionType === 'daily' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
+                                    >
+                                        Diário
+                                    </button>
+                                    <button
+                                        onClick={() => setOverviewEvolutionType('monthly')}
+                                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${overviewEvolutionType === 'monthly' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
+                                    >
+                                        Mensal
+                                    </button>
+                                </div>
+
+                                {/* Métrica Ativa */}
+                                <div className="flex p-1 bg-slate-100 rounded-xl">
+                                    <button
+                                        onClick={() => setOverviewChartMetric('cost')}
+                                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${overviewChartMetric === 'cost' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
+                                    >
+                                        Custo (R$)
+                                    </button>
+                                    <button
+                                        onClick={() => setOverviewChartMetric('liters')}
+                                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${overviewChartMetric === 'liters' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
+                                    >
+                                        Litros (L)
+                                    </button>
+                                    <button
+                                        onClick={() => setOverviewChartMetric('price')}
+                                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${overviewChartMetric === 'price' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
+                                    >
+                                        Preço / L
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="h-[280px] sm:h-[320px] w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <AreaChart
+                                    data={overviewEvolutionType === 'daily' ? stats.dailyEvolutionData : stats.monthlyEvolutionData}
+                                    margin={{ top: 10, right: 10, left: -10, bottom: 0 }}
+                                >
+                                    <defs>
+                                        <linearGradient id="colorOverview" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#6366f1" stopOpacity={0.4}/>
+                                            <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                                        </linearGradient>
+                                    </defs>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                    <XAxis
+                                        dataKey={overviewEvolutionType === 'daily' ? 'displayDate' : 'month'}
+                                        axisLine={false}
+                                        tickLine={false}
+                                        tick={{ fill: '#94a3b8', fontSize: 11, fontWeight: 700 }}
+                                    />
+                                    <YAxis
+                                        axisLine={false}
+                                        tickLine={false}
+                                        tick={{ fill: '#94a3b8', fontSize: 11, fontWeight: 700 }}
+                                        tickFormatter={(val) => {
+                                            if (overviewChartMetric === 'cost') return `R$ ${val >= 1000 ? (val/1000).toFixed(0) + 'k' : val}`;
+                                            if (overviewChartMetric === 'liters') return `${val >= 1000 ? (val/1000).toFixed(0) + 'k' : val} L`;
+                                            return `R$ ${val.toFixed(1)}`;
+                                        }}
+                                    />
+                                    <Tooltip
+                                        contentStyle={{ backgroundColor: '#0f172a', border: 'none', borderRadius: '14px', color: '#fff', fontSize: '12px', fontWeight: 'bold' }}
+                                        formatter={(val: any) => {
+                                            if (overviewChartMetric === 'cost') return [formatCurrency(Number(val)), 'Custo Total'];
+                                            if (overviewChartMetric === 'liters') return [`${formatNumber(Number(val))} L`, 'Volume'];
+                                            return [`${formatCurrency(Number(val))} / L`, 'Preço Médio'];
+                                        }}
+                                    />
+                                    <Area
+                                        type="monotone"
+                                        dataKey={overviewChartMetric === 'cost' ? 'cost' : overviewChartMetric === 'liters' ? 'liters' : 'avgPrice'}
+                                        stroke="#6366f1"
+                                        strokeWidth={3}
+                                        fillOpacity={1}
+                                        fill="url(#colorOverview)"
+                                    />
+                                </AreaChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
+
+                    {/* Distribuição por Combustível (1 Coluna) */}
+                    <div className="bg-white p-5 sm:p-6 rounded-[2rem] border border-slate-200/90 shadow-xs flex flex-col justify-between">
+                        <div>
+                            <div className="flex items-center justify-between mb-4">
+                                <div>
+                                    <h3 className="text-lg font-black text-slate-900 tracking-tight">Combustíveis</h3>
+                                    <p className="text-xs text-slate-400 font-medium">Participação por tipo de combustível</p>
+                                </div>
+                                <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
+                                    <Droplet className="w-5 h-5" />
+                                </div>
+                            </div>
+
+                            <div className="h-[180px] w-full relative">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <PieChart>
+                                        <Pie
+                                            data={stats.fuelBreakdown}
+                                            dataKey="liters"
+                                            nameKey="name"
+                                            cx="50%"
+                                            cy="50%"
+                                            innerRadius={50}
+                                            outerRadius={75}
+                                            paddingAngle={3}
+                                        >
+                                            {stats.fuelBreakdown.map((_, index) => (
+                                                <Cell key={`cell-${index}`} fill={stats.COLORS[index % stats.COLORS.length]} />
+                                            ))}
+                                        </Pie>
+                                        <Tooltip
+                                            contentStyle={{ backgroundColor: '#0f172a', border: 'none', borderRadius: '12px', color: '#fff', fontSize: '11px', fontWeight: 'bold' }}
+                                            formatter={(val: any, name: any) => [`${formatNumber(Number(val))} L`, name]}
+                                        />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+
+                        {/* Tabela Resumida de Combustíveis */}
+                        <div className="space-y-2 mt-4 pt-4 border-t border-slate-100">
+                            {stats.fuelBreakdown.map((f, i) => (
+                                <div 
+                                    key={i} 
+                                    onClick={() => setDrillDownModal({
+                                        isOpen: true,
+                                        title: `Detalhamento: ${f.name}`,
+                                        subtitle: `${formatNumber(f.liters)} L abastecidos (${formatCurrency(f.cost)})`,
+                                        records: stats.records.filter(r => (r.fuelType || '').toLowerCase().includes(f.name.toLowerCase())),
+                                        metricType: 'fuel'
+                                    })}
+                                    className="flex items-center justify-between text-xs p-2 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer group"
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: stats.COLORS[i % stats.COLORS.length] }}></div>
+                                        <span className="font-bold text-slate-700 group-hover:text-indigo-600 transition-colors">{f.name}</span>
+                                    </div>
+                                    <div className="text-right">
+                                        <span className="font-black text-slate-900">{formatNumber(f.liters, 0)} L</span>
+                                        <span className="text-[10px] text-slate-400 font-semibold ml-1.5">({f.percentLiters.toFixed(1)}%)</span>
                                     </div>
                                 </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
+                {/* 6. Postos / Fornecedores e Gastos por Secretaria */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Postos e Fornecedores */}
+                    <div className="bg-white p-5 sm:p-6 rounded-[2rem] border border-slate-200/90 shadow-xs">
+                        <div className="flex items-center justify-between mb-4">
+                            <div>
+                                <h3 className="text-lg font-black text-slate-900 tracking-tight">Postos & Fornecedores</h3>
+                                <p className="text-xs text-slate-400 font-medium">Distribuição de abastecimentos por credenciado</p>
+                            </div>
+                            <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
+                                <Building2 className="w-5 h-5" />
+                            </div>
+                        </div>
+
+                        <div className="space-y-3">
+                            {stats.stationBreakdown.map((st, i) => (
+                                <div 
+                                    key={i}
+                                    onClick={() => setDrillDownModal({
+                                        isOpen: true,
+                                        title: `Detalhamento: ${st.name}`,
+                                        subtitle: `${st.count} abastecimentos realizados neste posto`,
+                                        records: stats.records.filter(r => (r.station || '').toLowerCase() === st.name.toLowerCase()),
+                                        metricType: 'station'
+                                    })}
+                                    className="p-3.5 bg-slate-50 hover:bg-indigo-50/50 border border-slate-100 hover:border-indigo-200 rounded-2xl transition-all cursor-pointer group"
+                                >
+                                    <div className="flex items-center justify-between mb-1.5">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-7 h-7 bg-white rounded-lg flex items-center justify-center font-black text-xs text-slate-700 shadow-xs border border-slate-100">
+                                                {i + 1}
+                                            </div>
+                                            <div>
+                                                <h4 className="text-xs font-black text-slate-800 group-hover:text-indigo-600 transition-colors truncate max-w-[200px] sm:max-w-xs">{st.name}</h4>
+                                                <p className="text-[10px] text-slate-400 font-bold">{st.count} abastecimento{st.count > 1 ? 's' : ''}</p>
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-sm font-black text-slate-900">{formatCurrency(st.cost)}</p>
+                                            <p className="text-[10px] text-slate-400 font-bold">{formatNumber(st.liters)} L ({st.percentCost.toFixed(1)}%)</p>
+                                        </div>
+                                    </div>
+                                    {/* Barra de progresso */}
+                                    <div className="w-full bg-slate-200/70 h-1.5 rounded-full overflow-hidden">
+                                        <div className="bg-emerald-500 h-full rounded-full" style={{ width: `${Math.min(100, st.percentCost)}%` }}></div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Gastos por Secretaria / Setor */}
+                    <div className="bg-white p-5 sm:p-6 rounded-[2rem] border border-slate-200/90 shadow-xs">
+                        <div className="flex items-center justify-between mb-4">
+                            <div>
+                                <h3 className="text-lg font-black text-slate-900 tracking-tight">Gastos por Secretaria</h3>
+                                <p className="text-xs text-slate-400 font-medium">Consumo e custo operacional por departamento</p>
+                            </div>
+                            <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
+                                <Factory className="w-5 h-5" />
+                            </div>
+                        </div>
+
+                        <div className="space-y-3">
+                            {stats.sectorBreakdown.slice(0, 5).map((sec, i) => (
+                                <div 
+                                    key={i}
+                                    onClick={() => setDrillDownModal({
+                                        isOpen: true,
+                                        title: `Detalhamento: ${sec.name}`,
+                                        subtitle: `${sec.vehicleCount} veículos ativos nesta secretaria`,
+                                        records: stats.records.filter(r => {
+                                            const v = vehicles.find(veh => veh.plate === r.vehicle || `${veh.model} - ${veh.brand}` === r.vehicle);
+                                            return (v?.sectorId === sec.id) || (r.sectorId === sec.id);
+                                        }),
+                                        metricType: 'sector'
+                                    })}
+                                    className="p-3.5 bg-slate-50 hover:bg-indigo-50/50 border border-slate-100 hover:border-indigo-200 rounded-2xl transition-all cursor-pointer group"
+                                >
+                                    <div className="flex items-center justify-between mb-1.5">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-7 h-7 bg-white rounded-lg flex items-center justify-center font-black text-xs text-slate-700 shadow-xs border border-slate-100">
+                                                {i + 1}
+                                            </div>
+                                            <div>
+                                                <h4 className="text-xs font-black text-slate-800 group-hover:text-indigo-600 transition-colors truncate max-w-[180px] sm:max-w-xs">{sec.name}</h4>
+                                                <p className="text-[10px] text-slate-400 font-bold">{sec.vehicleCount} veículo{sec.vehicleCount > 1 ? 's' : ''} ativo{sec.vehicleCount > 1 ? 's' : ''}</p>
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-sm font-black text-slate-900">{formatCurrency(sec.cost)}</p>
+                                            <p className="text-[10px] text-slate-400 font-bold">{formatNumber(sec.liters)} L</p>
+                                        </div>
+                                    </div>
+                                    <div className="w-full bg-slate-200/70 h-1.5 rounded-full overflow-hidden">
+                                        <div className="bg-indigo-500 h-full rounded-full" style={{ width: `${Math.min(100, stats.totalCost > 0 ? (sec.cost / stats.totalCost) * 100 : 0)}%` }}></div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
+                {/* 7. Top 10 & Rankings Interativos da Frota */}
+                <div className="bg-white p-6 sm:p-7 rounded-[2rem] border border-slate-200/90 shadow-xs">
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2.5 bg-amber-50 text-amber-600 rounded-2xl">
+                                <Award className="w-5 h-5" />
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-black text-slate-900 tracking-tight">Rankings Top 10 da Frota</h3>
+                                <p className="text-xs text-slate-400 font-medium">Métricas de consumo, custos e eficiência por veículo</p>
+                            </div>
+                        </div>
+
+                        {/* Abas de Navegação do Ranking */}
+                        <div className="flex p-1 bg-slate-100 rounded-2xl overflow-x-auto custom-scrollbar">
+                            <button
+                                onClick={() => setOverviewTopTab('cost')}
+                                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${overviewTopTab === 'cost' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
+                            >
+                                Maior Gasto (R$)
+                            </button>
+                            <button
+                                onClick={() => setOverviewTopTab('liters')}
+                                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${overviewTopTab === 'liters' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
+                            >
+                                Maior Volume (L)
+                            </button>
+                            <button
+                                onClick={() => setOverviewTopTab('km')}
+                                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${overviewTopTab === 'km' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
+                            >
+                                Maior KM
+                            </button>
+                            <button
+                                onClick={() => setOverviewTopTab('costPerKm')}
+                                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${overviewTopTab === 'costPerKm' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
+                            >
+                                Custo / KM
+                            </button>
+                            <button
+                                onClick={() => setOverviewTopTab('efficiency')}
+                                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${overviewTopTab === 'efficiency' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
+                            >
+                                Mais Eficientes
+                            </button>
+                            <button
+                                onClick={() => setOverviewTopTab('inefficient')}
+                                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${overviewTopTab === 'inefficient' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
+                            >
+                                Menos Eficientes
+                            </button>
+                            <button
+                                onClick={() => setOverviewTopTab('count')}
+                                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${overviewTopTab === 'count' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
+                            >
+                                Mais Abastecidos
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Lista do Ranking */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {(overviewTopTab === 'cost' ? stats.topByCost :
+                          overviewTopTab === 'liters' ? stats.topByLiters :
+                          overviewTopTab === 'km' ? stats.topByKm :
+                          overviewTopTab === 'costPerKm' ? stats.topByCostPerKm :
+                          overviewTopTab === 'efficiency' ? stats.topEfficient :
+                          overviewTopTab === 'inefficient' ? stats.topInefficient :
+                          stats.topByCount).map((v, i) => (
+                            <div 
+                                key={i}
+                                onClick={() => {
+                                    setSelectedVehicle(v.id);
+                                    setActiveTab('vehicle');
+                                }}
+                                className="flex items-center justify-between p-3.5 bg-slate-50 hover:bg-indigo-50/60 border border-slate-100 hover:border-indigo-200 rounded-2xl transition-all cursor-pointer group"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-black text-xs shadow-xs ${
+                                        i === 0 ? 'bg-amber-400 text-amber-950 font-black' :
+                                        i === 1 ? 'bg-slate-300 text-slate-800 font-black' :
+                                        i === 2 ? 'bg-amber-600 text-white font-black' :
+                                        'bg-white text-slate-700 border border-slate-200'
+                                    }`}>
+                                        {i + 1}º
+                                    </div>
+                                    <div>
+                                        <h4 className="text-xs font-black text-slate-900 group-hover:text-indigo-600 transition-colors uppercase truncate max-w-[180px] sm:max-w-xs">{v.name}</h4>
+                                        <p className="text-[10px] text-slate-400 font-bold">{v.sectorName} • {v.count} abastecimento{v.count > 1 ? 's' : ''}</p>
+                                    </div>
+                                </div>
+
                                 <div className="text-right">
-                                    <p className="text-sm font-black text-slate-700">{formatCurrency(v.totalCost)}</p>
-                                    <p className="text-[10px] text-slate-400 font-medium">{formatNumber(v.totalLiters)} L</p>
+                                    {overviewTopTab === 'cost' && (
+                                        <>
+                                            <p className="text-sm font-black text-slate-900">{formatCurrency(v.totalCost)}</p>
+                                            <p className="text-[10px] text-slate-400 font-bold">{formatNumber(v.totalLiters)} L</p>
+                                        </>
+                                    )}
+                                    {overviewTopTab === 'liters' && (
+                                        <>
+                                            <p className="text-sm font-black text-slate-900">{formatNumber(v.totalLiters)} L</p>
+                                            <p className="text-[10px] text-slate-400 font-bold">{formatCurrency(v.totalCost)}</p>
+                                        </>
+                                    )}
+                                    {overviewTopTab === 'km' && (
+                                        <>
+                                            <p className="text-sm font-black text-slate-900">{formatNumber(v.totalKm)} KM</p>
+                                            <p className="text-[10px] text-slate-400 font-bold">{formatCurrency(v.totalCost)}</p>
+                                        </>
+                                    )}
+                                    {overviewTopTab === 'costPerKm' && (
+                                        <>
+                                            <p className="text-sm font-black text-slate-900">{formatCurrency(v.costPerKm)} / km</p>
+                                            <p className="text-[10px] text-slate-400 font-bold">{formatNumber(v.totalKm)} KM rodados</p>
+                                        </>
+                                    )}
+                                    {(overviewTopTab === 'efficiency' || overviewTopTab === 'inefficient') && (
+                                        <>
+                                            <p className="text-sm font-black text-slate-900">{formatNumber(v.avgKmL, 1)} Km/L</p>
+                                            <p className="text-[10px] text-slate-400 font-bold">{formatNumber(v.totalLiters)} L consumidos</p>
+                                        </>
+                                    )}
+                                    {overviewTopTab === 'count' && (
+                                        <>
+                                            <p className="text-sm font-black text-slate-900">{v.count} abastecimentos</p>
+                                            <p className="text-[10px] text-slate-400 font-bold">{formatCurrency(v.totalCost)}</p>
+                                        </>
+                                    )}
                                 </div>
                             </div>
                         ))}
                     </div>
                 </div>
             </div>
-
-            {/* 4. Alerts Section (if any) */}
-            {stats.costAlerts.length > 0 && (
-                <div className="bg-rose-50 p-6 rounded-[2rem] border border-rose-100">
-                    <div className="flex items-center gap-3 mb-4">
-                        <div className="p-2 bg-white text-rose-500 rounded-xl shadow-sm">
-                            <TrendingUp className="w-5 h-5" />
-                        </div>
-                        <div>
-                            <h3 className="text-lg font-black text-rose-700">Alertas de Consumo</h3>
-                            <p className="text-sm text-rose-400 font-medium">
-                                {stats.costAlerts.length} veículos fora da faixa de consumo esperada
-                            </p>
-                        </div>
-                    </div>
-                    <div className="grid grid-cols-1 wide:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {stats.costAlerts.map((v, idx) => {
-                            const isLow = v.alertType === 'low';
-                            // Calculate deviation %
-                            // Low: (Target - Actual) / Target
-                            // High: (Actual - Target) / Target
-                            const diff = v.target ? Math.abs((v.avgKmL - v.target) / v.target) * 100 : 0;
-
-                            return (
-                                <div key={idx} className={`p-3 rounded-2xl shadow-sm border flex justify-between items-center ${isLow ? 'bg-white border-rose-100' : 'bg-amber-50 border-amber-100'}`}>
-                                    <div className="flex items-center gap-3">
-                                        <div className={`p-2 rounded-xl text-white shadow-sm ${isLow ? 'bg-rose-500' : 'bg-amber-500'}`}>
-                                            <AlertTriangle className="w-4 h-4" />
-                                        </div>
-                                        <div>
-                                            <h4 className="text-xs font-black text-slate-700 uppercase">{v.name}</h4>
-                                            <p className={`text-[10px] font-bold mt-0.5 ${isLow ? 'text-rose-500' : 'text-amber-600'}`}>
-                                                {isLow ? 'Abaixo do Mínimo' : 'Acima do Teto'}
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <div className="text-right">
-                                        <p className="text-sm font-black text-slate-900">{formatNumber(v.avgKmL, 1)} <span className="text-[9px] text-slate-400 font-bold">KM/L</span></p>
-                                        <p className="text-[9px] font-bold text-slate-400">
-                                            Meta: {isLow ? '>' : '<'} {formatNumber(v.target, 1)} <span className={`ml-1 ${isLow ? 'text-rose-500' : 'text-amber-500'}`}>({Math.round(diff)}%)</span>
-                                        </p>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
-            )}
-        </div>
-    );
+        );
+    };
 
     const renderVehicleDetail = () => {
         if (!selectedVehicle) return null;
@@ -4203,6 +5676,204 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
                 </div>
             </div>
 
+            {/* Modal de Detalhamento Interativo (Drill-Down) de Métricas e Anomalias */}
+            {drillDownModal && drillDownModal.isOpen && (
+                <div className="fixed inset-0 z-[120] flex items-center justify-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-white rounded-[2rem] w-full max-w-6xl max-h-[92vh] flex flex-col shadow-2xl border border-slate-100 overflow-hidden animate-slide-up">
+                        {/* Header do Modal */}
+                        <div className="p-6 sm:p-7 border-b border-slate-100 flex items-start justify-between bg-gradient-to-r from-slate-50 to-white">
+                            <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 bg-cyan-100 rounded-2xl flex items-center justify-center text-cyan-600 shadow-sm shrink-0">
+                                    <Layers className="w-6 h-6" />
+                                </div>
+                                <div>
+                                    <div className="flex items-center gap-2">
+                                        <h3 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">{drillDownModal.title}</h3>
+                                        <span className="bg-cyan-100 text-cyan-800 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                                            {drillDownModal.records.length} registros
+                                        </span>
+                                    </div>
+                                    <p className="text-xs text-slate-500 font-medium mt-0.5">
+                                        {drillDownModal.subtitle || 'Registros individuais que compõem este indicador no período'}
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => {
+                                    setDrillDownModal(null);
+                                    setDrillDownSearch('');
+                                }}
+                                className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-all"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        {/* Barra de KPIs do Subconjunto e Barra de Pesquisa */}
+                        {(() => {
+                            const term = drillDownSearch.toLowerCase().trim();
+                            const filteredList = drillDownModal.records.filter(r => {
+                                if (!term) return true;
+                                const vehicleName = (r.vehicle || '').toLowerCase();
+                                const driver = (r.driver || '').toLowerCase();
+                                const station = (r.station || '').toLowerCase();
+                                const fuel = (r.fuelType || '').toLowerCase();
+                                const invoice = (r.invoiceNumber || '').toLowerCase();
+                                const protocol = (r.protocol || '').toLowerCase();
+                                return vehicleName.includes(term) || driver.includes(term) || station.includes(term) || fuel.includes(term) || invoice.includes(term) || protocol.includes(term);
+                            });
+
+                            const totalCost = filteredList.reduce((acc, r) => acc + (r.cost || 0), 0);
+                            const totalLiters = filteredList.reduce((acc, r) => acc + (r.liters || 0), 0);
+                            const avgPrice = totalLiters > 0 ? totalCost / totalLiters : 0;
+
+                            return (
+                                <>
+                                    <div className="p-4 sm:p-6 bg-slate-50/70 border-b border-slate-100 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+                                        {/* Cards Rápidos de Somatório */}
+                                        <div className="grid grid-cols-3 gap-3 flex-1">
+                                            <div className="bg-white p-3 rounded-xl border border-slate-200/80 shadow-sm">
+                                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">Gasto Total</span>
+                                                <span className="text-sm sm:text-base font-black text-emerald-600">{formatCurrency(totalCost)}</span>
+                                            </div>
+                                            <div className="bg-white p-3 rounded-xl border border-slate-200/80 shadow-sm">
+                                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">Volume Total</span>
+                                                <span className="text-sm sm:text-base font-black text-blue-600">{formatNumber(totalLiters, 1)} L</span>
+                                            </div>
+                                            <div className="bg-white p-3 rounded-xl border border-slate-200/80 shadow-sm">
+                                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">Preço Médio</span>
+                                                <span className="text-sm sm:text-base font-black text-slate-700">{formatCurrency(avgPrice)}/L</span>
+                                            </div>
+                                        </div>
+
+                                        {/* Busca Rápida no Modal */}
+                                        <div className="relative w-full md:w-80">
+                                            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                                            <input
+                                                type="text"
+                                                value={drillDownSearch}
+                                                onChange={(e) => setDrillDownSearch(e.target.value)}
+                                                placeholder="Filtrar por veículo, motorista, NF..."
+                                                className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 transition-all shadow-sm"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Tabela de Registros com Rolagem */}
+                                    <div className="flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-6">
+                                        {filteredList.length === 0 ? (
+                                            <div className="py-16 text-center text-slate-400">
+                                                <FileText className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                                                <p className="font-bold text-sm">Nenhum registro encontrado</p>
+                                                <p className="text-xs text-slate-400 mt-1">Verifique o termo digitado no filtro de busca.</p>
+                                            </div>
+                                        ) : (
+                                            <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                                                <table className="w-full text-left text-xs border-collapse">
+                                                    <thead className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider border-b border-slate-200 text-[10px]">
+                                                        <tr>
+                                                            <th className="px-4 py-3">Data / Hora</th>
+                                                            <th className="px-4 py-3">Protocolo / NF</th>
+                                                            <th className="px-4 py-3">Veículo</th>
+                                                            <th className="px-4 py-3">Condutor</th>
+                                                            <th className="px-4 py-3">Setor</th>
+                                                            <th className="px-4 py-3">Posto</th>
+                                                            <th className="px-4 py-3">Combustível</th>
+                                                            <th className="px-4 py-3 text-right">Litros</th>
+                                                            <th className="px-4 py-3 text-right">Hodômetro</th>
+                                                            <th className="px-4 py-3 text-right">Preço Unit.</th>
+                                                            <th className="px-4 py-3 text-right">Valor Total</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-slate-100 font-medium">
+                                                        {filteredList.map((r) => {
+                                                            const unitPrice = (r as any).pricePerLiter || ((r as any).price !== undefined ? (r as any).price : (r.liters > 0 ? r.cost / r.liters : 0));
+                                                            const sector = (r as any).derivedSector || (r.vehicle ? vehicleSectorLookup.get(r.vehicle.toUpperCase().trim()) : undefined) || (r as any).sector || '-';
+                                                            return (
+                                                                <tr key={r.id} className="hover:bg-slate-50/80 transition-colors">
+                                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                                        <div className="font-bold text-slate-800">
+                                                                            {new Date(r.date).toLocaleDateString('pt-BR')}
+                                                                        </div>
+                                                                        <div className="text-[10px] text-slate-400">
+                                                                            {new Date(r.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                                                        </div>
+                                                                    </td>
+                                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                                        {r.protocol && (
+                                                                            <span className="font-mono text-[11px] font-bold text-slate-700 block">
+                                                                                #{r.protocol}
+                                                                            </span>
+                                                                        )}
+                                                                        <span className="text-[10px] text-slate-400 font-medium">
+                                                                            NF: {getDisplayInvoiceNumber(r.invoiceNumber) || 'S/N'}
+                                                                        </span>
+                                                                    </td>
+                                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                                        <span className="font-bold text-slate-800 uppercase flex items-center gap-1.5">
+                                                                            <Car className="w-3.5 h-3.5 text-cyan-600" />
+                                                                            {r.vehicle}
+                                                                        </span>
+                                                                    </td>
+                                                                    <td className="px-4 py-3 whitespace-nowrap text-slate-600">
+                                                                        {r.driver || <span className="text-slate-300 italic">Não informado</span>}
+                                                                    </td>
+                                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                                        <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md uppercase">
+                                                                            {sector}
+                                                                        </span>
+                                                                    </td>
+                                                                    <td className="px-4 py-3 whitespace-nowrap text-slate-600">
+                                                                        {r.station || '-'}
+                                                                    </td>
+                                                                    <td className="px-4 py-3 whitespace-nowrap">
+                                                                        <span className="font-bold text-cyan-700 bg-cyan-50 px-2 py-0.5 rounded-md text-[10px] uppercase">
+                                                                            {r.fuelType}
+                                                                        </span>
+                                                                    </td>
+                                                                    <td className="px-4 py-3 text-right whitespace-nowrap font-bold text-blue-600">
+                                                                        {formatNumber(r.liters, 1)} L
+                                                                    </td>
+                                                                    <td className="px-4 py-3 text-right whitespace-nowrap font-bold text-slate-700">
+                                                                        {formatNumber(r.odometer, 0)} km
+                                                                    </td>
+                                                                    <td className="px-4 py-3 text-right whitespace-nowrap text-slate-600">
+                                                                        {formatCurrency(unitPrice)}
+                                                                    </td>
+                                                                    <td className="px-4 py-3 text-right whitespace-nowrap font-black text-emerald-600">
+                                                                        {formatCurrency(r.cost)}
+                                                                    </td>
+                                                                </tr>
+                                                            );
+                                                        })}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Rodapé do Modal */}
+                                    <div className="p-4 sm:p-5 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xs">
+                                        <span className="text-slate-500 font-medium">
+                                            Exibindo <span className="font-bold text-slate-800">{filteredList.length}</span> de <span className="font-bold text-slate-800">{drillDownModal.records.length}</span> registros
+                                        </span>
+                                        <button
+                                            onClick={() => {
+                                                setDrillDownModal(null);
+                                                setDrillDownSearch('');
+                                            }}
+                                            className="px-6 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md active:scale-95"
+                                        >
+                                            Fechar
+                                        </button>
+                                    </div>
+                                </>
+                            );
+                        })()}
+                    </div>
+                </div>
+            )}
+
             {showPrintPreview && (
                 <AbastecimentoReportPDF
                     data={reportData}
@@ -4239,3 +5910,4 @@ export const AbastecimentoDashboard: React.FC<AbastecimentoDashboardProps> = ({ 
         </div>
     );
 };
+
