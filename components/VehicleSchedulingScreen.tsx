@@ -35,6 +35,7 @@ interface VehicleSchedulingScreenProps {
   currentUserRole: UserRole;
   currentUserPermissions?: AppPermission[];
   currentUserSector?: string;
+  currentUserSectorId?: string;
   requestedView?: 'menu' | 'calendar' | 'history' | 'approvals' | 'dashboard' | 'day';
   onNavigate?: (path: string) => void;
   state: AppState;
@@ -140,6 +141,7 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
   currentUserRole,
   currentUserPermissions = [],
   currentUserSector,
+  currentUserSectorId,
   requestedView,
   onNavigate,
   state
@@ -439,7 +441,21 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
     setModalActiveTab('dados_gerais');
     if (s) {
       setEditingSchedule(s);
-      setFormData({ ...s });
+      let validSectorId = s.serviceSectorId;
+      if (validSectorId && !sectors.some(sec => sec.id === validSectorId)) {
+        const p = persons.find(per => per.id === s.requesterPersonId);
+        if (p?.sectorId && sectors.some(sec => sec.id === p.sectorId)) {
+          validSectorId = p.sectorId;
+        } else {
+          const v = vehicles.find(veh => veh.id === s.vehicleId);
+          if (v?.sectorId && sectors.some(sec => sec.id === v.sectorId)) {
+            validSectorId = v.sectorId;
+          } else {
+            validSectorId = '';
+          }
+        }
+      }
+      setFormData({ ...s, serviceSectorId: validSectorId });
     } else {
       setEditingSchedule(null);
       const now = new Date();
@@ -447,16 +463,42 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
       if (departure < now) departure = now;
       if (!initialDate) departure.setMinutes(0, 0, 0);
       const returnDate = new Date(departure.getTime() + (4 * 60 * 60 * 1000));
-      // Resolve pre-filled sector ID
-      let defaultSectorId = currentUserPerson?.sectorId || '';
+      
+      // Resolve setor inicial com validação
+      let defaultSectorId = '';
+      
+      // 1. Tenta pelo sectorId da pessoa logada
+      if (currentUserPerson?.sectorId && sectors.some(s => s.id === currentUserPerson.sectorId)) {
+        defaultSectorId = currentUserPerson.sectorId;
+      }
+      
+      // 2. Tenta pelo currentUserSectorId explicitamente recebido
+      if (!defaultSectorId && currentUserSectorId && sectors.some(s => s.id === currentUserSectorId)) {
+        defaultSectorId = currentUserSectorId;
+      }
+
+      // 3. Tenta pelo currentUserSector (que pode ser ID ou nome do setor)
       if (!defaultSectorId && currentUserSector) {
-        const searchSector = normalizeString(currentUserSector);
-        const matchedSector = sectors.find(s =>
-          normalizeString(s.name) === searchSector ||
-          normalizeString(s.name).includes(searchSector) ||
-          searchSector.includes(normalizeString(s.name))
-        );
-        if (matchedSector) defaultSectorId = matchedSector.id;
+        const byId = sectors.find(s => s.id === currentUserSector);
+        if (byId) {
+          defaultSectorId = byId.id;
+        } else {
+          const searchSector = normalizeString(currentUserSector);
+          const matchedSector = sectors.find(s =>
+            normalizeString(s.name) === searchSector ||
+            normalizeString(s.name).includes(searchSector) ||
+            searchSector.includes(normalizeString(s.name))
+          );
+          if (matchedSector) defaultSectorId = matchedSector.id;
+        }
+      }
+
+      // 4. Se ainda sem setor e um veículo inicial foi selecionado, usa o setor do veículo
+      if (!defaultSectorId && initialVehicleId) {
+        const v = vehicles.find(veh => veh.id === initialVehicleId);
+        if (v?.sectorId && sectors.some(s => s.id === v.sectorId)) {
+          defaultSectorId = v.sectorId;
+        }
       }
 
       setFormData({
@@ -480,8 +522,9 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
   };
 
   const handleSave = async () => {
-    if (!formData.vehicleId || !formData.driverId || !formData.departureDateTime || !formData.returnDateTime || !formData.destination || !formData.requesterPersonId || !formData.serviceSectorId) {
-      showToast("Preencha todos os campos obrigatórios.", "warning");
+    const validSector = sectors.find(s => s.id === formData.serviceSectorId);
+    if (!formData.vehicleId || !formData.driverId || !formData.departureDateTime || !formData.returnDateTime || !formData.destination || !formData.requesterPersonId || !formData.serviceSectorId || !validSector) {
+      showToast("Preencha todos os campos obrigatórios, incluindo um Setor Solicitante válido.", "warning");
       return;
     }
     const totalPassengers = (formData.passengers?.length || 0) + 1; // 1 Motorista + passageiros inseridos
@@ -1411,12 +1454,11 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
                     <div>
                       <label className={labelClass}><Landmark className="w-3 h-3 inline mr-2 text-indigo-500" /> Setor de Atendimento</label>
                       <button
-                        onClick={() => {
-                          setActiveSelectionField('sector');
-                        }}
+                        type="button"
+                        onClick={() => setActiveSelectionField('sector')}
                         className={`${inputClass} flex items-center justify-between transition-all text-left hover:bg-white`}
                       >
-                        <span className={formData.serviceSectorId ? 'text-slate-900 font-bold' : 'text-slate-400'}>
+                        <span className={sectors.some(s => s.id === formData.serviceSectorId) ? 'text-slate-900 font-bold' : 'text-slate-400'}>
                           {sectors.find(s => s.id === formData.serviceSectorId)?.name || 'Qual setor será atendido?'}
                         </span>
                         <ChevronDown className="w-4 h-4 text-slate-400" />
@@ -1670,7 +1712,16 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
           const lowerQuery = query.toLowerCase();
           return v.model.toLowerCase().includes(lowerQuery) || v.plate.toLowerCase().includes(lowerQuery) || v.brand.toLowerCase().includes(lowerQuery);
         }}
-        onSelect={(v) => setFormData({ ...formData, vehicleId: v.id })}
+        onSelect={(v) => {
+          setFormData(prev => {
+            const updates: Partial<VehicleSchedule> = { ...prev, vehicleId: v.id };
+            const currentSectorValid = prev.serviceSectorId && sectors.some(s => s.id === prev.serviceSectorId);
+            if (!currentSectorValid && v.sectorId && sectors.some(s => s.id === v.sectorId)) {
+              updates.serviceSectorId = v.sectorId;
+            }
+            return updates;
+          });
+        }}
         selectedItem={vehicles.find(v => v.id === formData.vehicleId)}
         renderItem={(v, isSelected) => {
           const vehicleSector = sectors.find(s => s.id === v.sectorId)?.name || 'Sem Setor';
@@ -1728,17 +1779,31 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
         getInternalId={(p) => p.id}
         searchPlaceholder="Buscar por nome..."
         filterFunction={(p, query) => p.name.toLowerCase().includes(query.toLowerCase())}
-        onSelect={(p) => setFormData({ ...formData, requesterPersonId: p.id })}
+        onSelect={(p) => {
+          const personSector = p.sectorId && sectors.find(s => s.id === p.sectorId);
+          setFormData(prev => ({
+            ...prev,
+            requesterPersonId: p.id,
+            // Preenche automaticamente o setor do solicitante quando selecionado
+            serviceSectorId: personSector ? personSector.id : prev.serviceSectorId
+          }));
+        }}
         selectedItem={persons.find(p => p.id === formData.requesterPersonId)}
-        renderItem={(p, isSelected) => (
-          <div className="p-4 flex items-center gap-4">
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isSelected ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-400'}`}>
-              <UserCircle className="w-5 h-5" />
+        renderItem={(p, isSelected) => {
+          const pSector = sectors.find(s => s.id === p.sectorId);
+          return (
+            <div className="p-4 flex items-center gap-4">
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isSelected ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-400'}`}>
+                <UserCircle className="w-5 h-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className={`text-sm font-bold truncate ${isSelected ? 'text-indigo-900' : 'text-slate-700'}`}>{p.name}</p>
+                <p className="text-[11px] text-slate-400 truncate uppercase font-semibold">{pSector?.name || 'Sem setor vinculado'}</p>
+              </div>
+              {isSelected && <Check className="w-5 h-5 text-indigo-600 shrink-0" />}
             </div>
-            <span className={`text-sm font-bold flex-1 ${isSelected ? 'text-indigo-900' : 'text-slate-700'}`}>{p.name}</span>
-            {isSelected && <Check className="w-5 h-5 text-indigo-600 shrink-0" />}
-          </div>
-        )}
+          );
+        }}
       />
 
       <SelectionModal

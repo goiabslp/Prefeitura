@@ -101,7 +101,9 @@ export const VehicleScheduleApprovals: React.FC<VehicleScheduleApprovalsProps> =
               const v = vehicles.find(veh => veh.id === s.vehicleId);
               const d = persons.find(p => p.id === s.driverId);
               const requesterPerson = persons.find(p => p.id === s.requesterPersonId);
-              const sector = sectors.find(sec => sec.id === s.serviceSectorId);
+              const sector = sectors.find(sec => sec.id === s.serviceSectorId)
+                || (requesterPerson?.sectorId ? sectors.find(sec => sec.id === requesterPerson.sectorId) : undefined)
+                || (v?.sectorId ? sectors.find(sec => sec.id === v.sectorId) : undefined);
               const canApprove = (currentUserRole === 'admin' || (currentUserPersonId && (v?.requestManagerIds?.includes(currentUserPersonId) || v?.responsiblePersonId === currentUserPersonId)));
 
               return (
@@ -310,7 +312,15 @@ export const VehicleScheduleApprovals: React.FC<VehicleScheduleApprovalsProps> =
           vehicle={vehicles.find(v => v.id === previewingOS.vehicleId)!}
           driver={persons.find(p => p.id === previewingOS.driverId)!}
           requester={persons.find(p => p.id === previewingOS.requesterPersonId)}
-          sector={sectors.find(s => s.id === previewingOS.serviceSectorId)}
+          sector={
+            sectors.find(s => s.id === previewingOS.serviceSectorId)
+            || (persons.find(p => p.id === previewingOS.requesterPersonId)?.sectorId
+                ? sectors.find(s => s.id === persons.find(p => p.id === previewingOS.requesterPersonId)?.sectorId)
+                : undefined)
+            || (vehicles.find(v => v.id === previewingOS.vehicleId)?.sectorId
+                ? sectors.find(s => s.id === vehicles.find(v => v.id === previewingOS.vehicleId)?.sectorId)
+                : undefined)
+          }
           state={state}
           onClose={() => setPreviewingOS(null)}
         />

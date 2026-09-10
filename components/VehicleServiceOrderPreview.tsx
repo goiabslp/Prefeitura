@@ -31,6 +31,11 @@ export const VehicleServiceOrderPreview: React.FC<VehicleServiceOrderPreviewProp
     state,
     onClose
 }) => {
+    const effectiveSector = sector 
+        || (schedule.serviceSectorId ? state.sectors?.find(s => s.id === schedule.serviceSectorId) : undefined)
+        || (requester?.sectorId ? state.sectors?.find(s => s.id === requester.sectorId) : undefined)
+        || (vehicle?.sectorId ? state.sectors?.find(s => s.id === vehicle.sectorId) : undefined);
+
     // Construct a synthetic state for the PageWrapper to use standard headers/footers
     // We override specific content fields to match the context of a Service Order
     const previewState: AppState = {
@@ -50,7 +55,7 @@ export const VehicleServiceOrderPreview: React.FC<VehicleServiceOrderPreviewProp
             ...state.content,
             title: "ORDEM DE TRÁFEGO / SERVIÇO",
             protocol: schedule.protocol,
-            signatureSector: sector?.name || 'Setor de Transportes',
+            signatureSector: effectiveSector?.name || 'Setor de Transportes',
             // We don't necessarily use the standard body text, we render custom children
         }
     };
@@ -194,8 +199,8 @@ export const VehicleServiceOrderPreview: React.FC<VehicleServiceOrderPreviewProp
 
                                     {/* Summary Cards - Compact */}
                                     <div className="grid grid-cols-2 gap-3">
-                                        {/* Vehicle Card - Conditionally Visible */}
-                                        {vehicle.sectorId === sector?.id ? (
+                                        {/* Vehicle Card */}
+                                        {vehicle ? (
                                             <div className="p-3 border border-slate-200 rounded-lg bg-slate-50 relative overflow-hidden">
                                                 <div className="absolute right-0 top-0 p-2 opacity-5">
                                                     <Car className="w-16 h-16" />
@@ -216,7 +221,7 @@ export const VehicleServiceOrderPreview: React.FC<VehicleServiceOrderPreviewProp
                                         ) : (
                                             <div className="p-3 border border-slate-100 rounded-lg bg-slate-50/50 flex items-center justify-center">
                                                 <p className="text-[9pt] font-bold text-slate-400 uppercase tracking-widest italic text-center">
-                                                    Dados do veículo restritos
+                                                    Nenhum veículo vinculado
                                                 </p>
                                             </div>
                                         )}
@@ -244,7 +249,7 @@ export const VehicleServiceOrderPreview: React.FC<VehicleServiceOrderPreviewProp
                                             <p className="text-[7pt] font-black uppercase text-slate-400 tracking-widest mb-0.5 flex items-center gap-1">
                                                 <Building2 className="w-2.5 h-2.5" /> Solicitante (Setor)
                                             </p>
-                                            <p className="text-[9pt] font-bold text-slate-700 truncate">{sector?.name || '---'}</p>
+                                            <p className="text-[9pt] font-bold text-slate-700 truncate">{effectiveSector?.name || '---'}</p>
                                         </div>
                                         <div className="border border-slate-200 rounded-lg p-2.5 bg-white flex flex-col justify-center">
                                             <p className="text-[7pt] font-black uppercase text-slate-400 tracking-widest mb-0.5 flex items-center gap-1">

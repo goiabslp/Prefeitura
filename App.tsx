@@ -4970,6 +4970,7 @@ const App: React.FC = () => {
                 currentUserId={currentUser?.id || ''}
                 currentUserName={currentUser?.name}
                 currentUserSector={currentUser?.sector}
+                currentUserSectorId={currentUser?.sectorId}
                 currentUserRole={currentUser?.role || 'collaborator'}
                 currentUserPermissions={currentUser?.permissions || []}
                 requestedView={(() => {

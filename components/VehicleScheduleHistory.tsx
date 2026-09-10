@@ -125,7 +125,13 @@ export const VehicleScheduleHistory: React.FC<VehicleScheduleHistoryProps> = ({
       .filter(s => {
         const v = vehicles.find(veh => veh.id === s.vehicleId);
         const d = persons.find(p => p.id === s.driverId);
-        const sec = sectors.find(sec => sec.id === s.serviceSectorId);
+        const sec = sectors.find(sec => sec.id === s.serviceSectorId)
+          || (persons.find(p => p.id === s.requesterPersonId)?.sectorId
+              ? sectors.find(sec => sec.id === persons.find(p => p.id === s.requesterPersonId)?.sectorId)
+              : undefined)
+          || (vehicles.find(veh => veh.id === s.vehicleId)?.sectorId
+              ? sectors.find(sec => sec.id === vehicles.find(veh => veh.id === s.vehicleId)?.sectorId)
+              : undefined);
         const term = searchTerm.toLowerCase();
         const matchesTerm = (
           v?.model.toLowerCase().includes(term) ||
@@ -135,7 +141,7 @@ export const VehicleScheduleHistory: React.FC<VehicleScheduleHistoryProps> = ({
           sec?.name.toLowerCase().includes(term)
         );
         const matchesTab = activeTab === 'all' || s.status === activeTab;
-        const matchesSector = selectedSectorId === 'all' || s.serviceSectorId === selectedSectorId;
+        const matchesSector = selectedSectorId === 'all' || s.serviceSectorId === selectedSectorId || sec?.id === selectedSectorId;
 
         return matchesTerm && matchesTab && matchesSector;
       })
@@ -372,7 +378,9 @@ export const VehicleScheduleHistory: React.FC<VehicleScheduleHistoryProps> = ({
                         const v = vehicles.find(veh => veh.id === s.vehicleId);
                         const d = persons.find(p => p.id === s.driverId);
                         const requesterPerson = persons.find(p => p.id === s.requesterPersonId);
-                        const sector = sectors.find(sec => sec.id === s.serviceSectorId);
+                        const sector = sectors.find(sec => sec.id === s.serviceSectorId)
+                          || (requesterPerson?.sectorId ? sectors.find(sec => sec.id === requesterPerson.sectorId) : undefined)
+                          || (v?.sectorId ? sectors.find(sec => sec.id === v.sectorId) : undefined);
                         const cfg = STATUS_MAP[s.status];
 
                         return (
@@ -538,7 +546,9 @@ export const VehicleScheduleHistory: React.FC<VehicleScheduleHistoryProps> = ({
                 const v = vehicles.find(veh => veh.id === s.vehicleId);
                 const d = persons.find(p => p.id === s.driverId);
                 const requesterPerson = persons.find(p => p.id === s.requesterPersonId);
-                const sector = sectors.find(sec => sec.id === s.serviceSectorId);
+                const sector = sectors.find(sec => sec.id === s.serviceSectorId)
+                  || (requesterPerson?.sectorId ? sectors.find(sec => sec.id === requesterPerson.sectorId) : undefined)
+                  || (v?.sectorId ? sectors.find(sec => sec.id === v.sectorId) : undefined);
                 const cfg = STATUS_MAP[s.status];
 
                 return (
@@ -793,7 +803,15 @@ export const VehicleScheduleHistory: React.FC<VehicleScheduleHistoryProps> = ({
           vehicle={vehicles.find(v => v.id === previewingOS.vehicleId)!}
           driver={persons.find(p => p.id === previewingOS.driverId)!}
           requester={persons.find(p => p.id === previewingOS.requesterPersonId)}
-          sector={sectors.find(s => s.id === previewingOS.serviceSectorId)}
+          sector={
+            sectors.find(s => s.id === previewingOS.serviceSectorId)
+            || (persons.find(p => p.id === previewingOS.requesterPersonId)?.sectorId
+                ? sectors.find(s => s.id === persons.find(p => p.id === previewingOS.requesterPersonId)?.sectorId)
+                : undefined)
+            || (vehicles.find(v => v.id === previewingOS.vehicleId)?.sectorId
+                ? sectors.find(s => s.id === vehicles.find(v => v.id === previewingOS.vehicleId)?.sectorId)
+                : undefined)
+          }
           state={state}
           onClose={() => setPreviewingOS(null)}
         />
