@@ -27,7 +27,7 @@ const mapSchedule = (s: any): VehicleSchedule => ({
     cancelledBy: s.cancelled_by
 });
 
-const SCHEDULE_COLUMNS = 'id, protocol, vehicle_id, driver_id, destination, departure_date, return_date, status, reason, created_at, vehicle_location, authorized_by_name, passengers, patient_count, companion_count, cancellation_reason, cancelled_at, cancelled_by';
+const SCHEDULE_COLUMNS = 'id, protocol, vehicle_id, driver_id, requester_person_id, requester_id, destination, service_sector_id, purpose, departure_date_time, return_date_time, vehicle_location, status, created_at, authorized_by_name, passengers, patient_count, companion_count, cancellation_reason, cancelled_at, cancelled_by';
 
 export const getSchedules = async (): Promise<VehicleSchedule[]> => {
     const { data, error } = await supabase
@@ -38,10 +38,10 @@ export const getSchedules = async (): Promise<VehicleSchedule[]> => {
 
     if (error) {
         console.error('Error fetching schedules:', error);
-        return [];
+        throw error;
     }
 
-    return data.map(mapSchedule);
+    return (data || []).map(mapSchedule);
 };
 
 export const getScheduleById = async (id: string): Promise<VehicleSchedule | null> => {
@@ -53,54 +53,24 @@ export const getScheduleById = async (id: string): Promise<VehicleSchedule | nul
 
     if (error) {
         console.error('Error fetching schedule:', error);
-        return null;
+        throw error;
     }
 
-    return mapSchedule(data);
+    return data ? mapSchedule(data) : null;
 };
 
 const generateProtocol = async (): Promise<string> => {
     const year = new Date().getFullYear();
-    // Use a generic ID for vehicle scheduling counter
-    const counterId = 'vehicle_scheduling_protocol';
-
-    try {
-        // Try to get next count from counterService (if it existed) or manual logic
-        // For simplicity and since counterService is available, let's try to use RPC if possible or simple timestamp/random as fallback
-        // For now, simpler: Notify users with 'parent_frotas' permission.
-
-        // 1. Get users with 'parent_frotas' permission
-        // In a real app we might query a "permissions" table or "users" table with permission column.
-        // Assuming 'users' table has a text[] permissions column or similar.
-        // However, our User Interface has permissions in JSONB or array.
-        // Let's assume we can query users. Since we may not have easy 'contains' on JSON if not set up,
-        // we will fetch all admin/frotas users.
-
-        // Fallback if RPC fails: Date based unique ID
-        const timestamp = Date.now().toString().slice(-6);
-        const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
-        // @ts-ignore
-        const { data, error } = await supabase.rpc('increment_sector_counter', {
-            p_sector_id: counterId,
-            p_year: year
-        });
-
-        if (!error && data !== null) {
-            return `OS-${year}${String(data).padStart(5, '0')}`;
-        }
-        // Fallback
-        return `OS-${year}${timestamp}${random}`;
-    } catch (e) {
-        console.error('Error generating protocol:', e);
-        return `OS-${year}${Date.now()}`;
-    }
+    const timestamp = Date.now().toString().slice(-6);
+    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    return `OS-${year}${timestamp}${random}`;
 };
 
 const notifyApprovers = async (schedule: any) => {
     const { data: managers } = await supabase
         .from('profiles')
         .select('id')
-        .ilike('permissions', '%parent_frotas%');
+        .contains('permissions', ['parent_frotas']);
 
     if (managers) {
         for (const manager of managers) {
@@ -175,7 +145,7 @@ export const createSchedule = async (schedule: Omit<VehicleSchedule, 'id' | 'cre
 
     if (error) {
         console.error('Error creating schedule:', error);
-        return null;
+        throw error;
     }
 
     const result = {
@@ -236,7 +206,7 @@ export const updateSchedule = async (schedule: VehicleSchedule): Promise<Vehicle
 
     if (error) {
         console.error('Error updating schedule:', error);
-        return null;
+        throw error;
     }
 
     if (!data) {
@@ -299,7 +269,7 @@ export const updateScheduleStatus = async (
 
     if (error) {
         console.error('Error updating schedule status:', error);
-        return false;
+        throw error;
     }
 
     await notifyRequester(id, status);
@@ -315,7 +285,7 @@ export const deleteSchedule = async (id: string): Promise<boolean> => {
 
     if (error) {
         console.error('Error deleting schedule:', error);
-        return false;
+        throw error;
     }
     return true;
 };
@@ -341,10 +311,10 @@ export const checkAvailability = async (vehicleId: string, start: string, end: s
 
     if (error) {
         console.error('Error checking availability:', error);
-        return false; // Assume available on error? Or unavailable? Let's say available but log error.
+        throw error;
     }
 
-    return data.length === 0;
+    return (data || []).length === 0;
 };
 
 // ... existing code
