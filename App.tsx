@@ -72,6 +72,7 @@ import { SystemAccessControl } from './components/admin/SystemAccessControl';
 import { SystemLogs } from './components/admin/SystemLogs';
 import { RemoteAccessScreen } from './components/admin/RemoteAccessScreen';
 import { GlobalLoading } from './components/common/GlobalLoading';
+import { DynamicGlobalFooter } from './components/common/DynamicGlobalFooter';
 
 import { ToastNotification, ToastType } from './components/common/ToastNotification';
 import { AbastecimentoForm } from './components/abastecimento/AbastecimentoForm';
@@ -5819,54 +5820,26 @@ const App: React.FC = () => {
 
           </div>
 
-          {/* Footer Global com Links das Políticas de Privacidade e Monitor de Egress */}
-          {currentUser && (
-            <footer className="w-full shrink-0 bg-slate-900/95 text-slate-400 py-2.5 px-6 border-t border-slate-800 text-[11px] flex flex-col sm:flex-row items-center justify-between gap-2 z-30 shadow-lg print:hidden">
-              <p>© 2026 Prefeitura Municipal de São José do Goiabal - MG. Todos os direitos reservados.</p>
-              <div className="flex items-center gap-3">
-                <a
-                  href="/PoliticaPrivacidade"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    window.history.pushState({}, '', '/PoliticaPrivacidade');
-                    setCurrentView('politica-privacidade');
-                  }}
-                  className="text-slate-400 hover:text-white transition-colors underline cursor-pointer"
-                >
-                  Política de Privacidade
-                </a>
-                <span className="text-slate-700">•</span>
-                <a
-                  href="/PoliticaPrivacidadeApp"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    window.history.pushState({}, '', '/PoliticaPrivacidadeApp');
-                    setCurrentView('politica-privacidade-app');
-                  }}
-                  className="text-slate-400 hover:text-white transition-colors underline cursor-pointer"
-                >
-                  Política do Aplicativo
-                </a>
-                {(currentUser.role === 'admin' || (currentUser as any).role === 'master') && (
-                  <>
-                    <span className="text-slate-700">•</span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsEgressModalOpen(true);
-                        window.history.pushState({}, '', '/Admin/Egress');
-                      }}
-                      className="text-emerald-400 hover:text-emerald-300 transition-colors flex items-center gap-1.5 font-bold cursor-pointer hover:bg-emerald-950/40 px-2.5 py-1 rounded-lg border border-emerald-500/30"
-                    >
-                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                      Monitor de Egress
-                    </button>
-                  </>
-                )}
-              </div>
-            </footer>
-          )}
-        </div >
+          {/* Footer Global Dinâmico - Não é fixo e só aparece após rolar até o fim da página */}
+          <DynamicGlobalFooter
+            currentUser={currentUser}
+            currentView={currentView}
+            activeBlock={activeBlock}
+            onNavigatePolicy={(type) => {
+              if (type === 'web') {
+                window.history.pushState({}, '', '/PoliticaPrivacidade');
+                setCurrentView('politica-privacidade');
+              } else {
+                window.history.pushState({}, '', '/PoliticaPrivacidadeApp');
+                setCurrentView('politica-privacidade-app');
+              }
+            }}
+            onOpenEgressModal={() => {
+              setIsEgressModalOpen(true);
+              window.history.pushState({}, '', '/Admin/Egress');
+            }}
+          />
+        </div>
       </ChatProvider>
 
       {/* HIDDEN PREVIEW SCALER FOR PDF GENERATION */}
