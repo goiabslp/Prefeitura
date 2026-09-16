@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Users, User as UserIcon, PenTool, Home, Palette, Briefcase, Network, Truck, ShieldCheck, Shield, RefreshCw, FileText, Tv } from 'lucide-react';
+import { Users, User as UserIcon, PenTool, Home, Palette, Briefcase, Network, Truck, ShieldCheck, Shield, RefreshCw, FileText, Tv, Activity } from 'lucide-react';
 import { User } from '../../types';
 
 interface AdminMenuProps {
@@ -33,6 +33,14 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({ currentUser, onTabChange }
       description: 'Veículos leves, pesados e acessórios',
       icon: <Truck className="w-6 h-6 text-blue-600" />,
       colorClass: 'bg-blue-50 border-blue-100 hover:border-blue-300 shadow-sm',
+      adminOnly: true
+    },
+    {
+      id: 'egress',
+      title: 'Monitor de Egress',
+      description: 'Telemetria de dados e requisições Supabase',
+      icon: <Activity className="w-6 h-6 text-emerald-600" />,
+      colorClass: 'bg-emerald-50 border-emerald-100 hover:border-emerald-300 shadow-sm',
       adminOnly: true
     },
     {

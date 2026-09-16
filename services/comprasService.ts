@@ -8,7 +8,7 @@ export const getAllPurchaseOrders = async (lightweight = true, page = 0, limit =
     // ... select specific columns
     const columns = lightweight
         ? `id, protocol, title, status, purchase_status, status_history, created_at, user_id, user_name, completion_forecast, budget_file_url, attachments, profiles:user_id(sector)`
-        : '*';
+        : `id, protocol, title, status, purchase_status, status_history, created_at, user_id, user_name, document_snapshot, completion_forecast, budget_file_url, attachments, profiles:user_id(sector)`;
 
     let query = supabase
         .from('purchase_orders')
@@ -127,9 +127,10 @@ export const getAllPurchaseOrders = async (lightweight = true, page = 0, limit =
 };
 
 export const getPurchaseOrderById = async (id: string): Promise<Order> => {
+    const orderColumns = 'id, protocol, title, status, purchase_status, status_history, created_at, document_snapshot, completion_forecast, user_id, user_name, budget_file_url, attachments';
     const { data, error } = await supabase
         .from('purchase_orders')
-        .select('*')
+        .select(orderColumns)
         .eq('id', id)
         .single();
 
@@ -404,9 +405,10 @@ export const updatePurchaseStatus = async (id: string, status: string, historyEn
 };
 
 export const getInventoryItems = async (isTendered?: boolean, category?: string): Promise<InventoryItem[]> => {
+    const inventoryColumns = 'id, code, description, unit, quantity, reserved_quantity, min_quantity, unit_price, total_price, category, is_tendered, original_order_protocol, original_item_id, created_at, updated_at';
     let query = supabase
         .from('procurement_inventory')
-        .select('*')
+        .select(inventoryColumns)
         .order('created_at', { ascending: false });
 
     if (isTendered !== undefined) {
@@ -421,7 +423,7 @@ export const getInventoryItems = async (isTendered?: boolean, category?: string)
     if (error) {
         throw error;
     }
-    return data as InventoryItem[];
+    return (data || []) as unknown as InventoryItem[];
 };
 
 export const addToInventory = async (item: Omit<InventoryItem, 'id' | 'created_at' | 'updated_at'>): Promise<InventoryItem> => {
@@ -476,10 +478,10 @@ export const updateInventoryImport = async (id: string, updates: Partial<Invento
 export const getInventoryImports = async (): Promise<InventoryImport[]> => {
     const { data, error } = await supabase
         .from('procurement_inventory_imports')
-        .select('*')
+        .select('id, file_name, imported_at, imported_by, total_items, successful_items, failed_items, status')
         .order('imported_at', { ascending: false });
     if (error) throw error;
-    return data as InventoryImport[];
+    return (data || []) as unknown as InventoryImport[];
 };
 
 export const deleteInventoryImport = async (id: string): Promise<void> => {
@@ -494,7 +496,7 @@ export const restoreItemToTendered = async (inventoryItemId: string): Promise<vo
     // 1. Get Inventory Item
     const { data: inventoryItem, error: invError } = await supabase
         .from('procurement_inventory')
-        .select('*')
+        .select('id, original_order_protocol, original_item_id')
         .eq('id', inventoryItemId)
         .single();
 
@@ -513,7 +515,7 @@ export const restoreItemToTendered = async (inventoryItemId: string): Promise<vo
         // Fetch order
         const { data: order, error: orderError } = await supabase
             .from('purchase_orders')
-            .select('*')
+            .select('id, document_snapshot')
             .eq('protocol', inventoryItem.original_order_protocol)
             .single();
 
@@ -553,9 +555,10 @@ export const restoreItemToTendered = async (inventoryItemId: string): Promise<vo
 };
 
 export const getPurchaseAccounts = async (): Promise<PurchaseAccount[]> => {
+    const accountColumns = 'id, agency, account_number, description, sector, status, ficha, resolucao, created_at, created_by';
     const { data, error } = await supabase
         .from('purchase_accounts')
-        .select('*')
+        .select(accountColumns)
         .order('description', { ascending: true });
     if (error) throw error;
     return data as PurchaseAccount[];

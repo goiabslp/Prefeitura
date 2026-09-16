@@ -1,15 +1,15 @@
 import { QueryClient } from '@tanstack/react-query';
 
-// Optimized for minimal requests and offline-first experience
+// Configuração otimizada para redução agressiva de Egress e mínimo tráfego de rede
 export const queryClient = new QueryClient({
     defaultOptions: {
         queries: {
-            staleTime: 1000 * 60 * 5, // 5 minutos (dados mantidos válidos)
-            gcTime: 1000 * 60 * 15, // 15 minutos (Garbage Collection libera memória RAM de dados não usados)
+            staleTime: 1000 * 60 * 10, // 10 minutos de dados mantidos válidos em cache
+            gcTime: 1000 * 60 * 30, // 30 minutos em memória
             retry: 1,
-            refetchOnWindowFocus: false, // Previne requisições agressivas ao trocar de aba
-            refetchOnMount: true, // Garante dados atualizados ao navegar
-            refetchOnReconnect: true, // Sincroniza ao reconectar
+            refetchOnWindowFocus: false, // Previne requisições repetitivas ao alternar abas
+            refetchOnMount: false, // Reutiliza cache ao navegar entre telas sem nova requisição
+            refetchOnReconnect: false, // Não sobrecarrega com refetches em massa na reconexão
         },
     },
 });

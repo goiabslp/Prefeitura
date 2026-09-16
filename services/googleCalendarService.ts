@@ -398,7 +398,7 @@ export const googleCalendarService = {
 
       const { data: events, error } = await supabase
         .from('calendar_events')
-        .select('*')
+        .select('id, title, description, start_date, start_time, end_date, end_time, location, all_day, created_by')
         .or(`created_by.eq.${user.id}`);
 
       if (error) throw error;

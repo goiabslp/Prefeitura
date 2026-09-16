@@ -114,7 +114,7 @@ export const auditLogService = {
     try {
       let query = supabase
         .from('audit_logs')
-        .select('*')
+        .select('id, user_id, user_name, user_email, action_type, module, description, details, created_at')
         .order('created_at', { ascending: false });
 
       if (filters?.date) {

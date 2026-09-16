@@ -68,7 +68,10 @@ export const ModuleGestorScreen: React.FC<ModuleGestorScreenProps> = ({
   const loadUsers = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.from('profiles').select('*').order('name');
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, username, email, name, role, sector, job_title, permissions, status')
+        .order('name');
       if (error) throw error;
 
       if (data) {

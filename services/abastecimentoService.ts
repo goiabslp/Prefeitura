@@ -132,9 +132,10 @@ export const AbastecimentoService = {
         }
     ): Promise<{ data: AbastecimentoRecord[], count: number }> => {
         try {
+            const ABASTECIMENTO_COLUMNS = 'id, date, vehicle, vehicle_model, vehicle_brand, vehicle_type, sector, driver, fuel_type, liters, unit_price, total_price, odometer, gas_station, gas_station_id, fiscal, invoice_number, payment_status, created_at';
             let query = supabase
                 .from('abastecimentos')
-                .select('*', { count: 'exact' });
+                .select(ABASTECIMENTO_COLUMNS, { count: 'exact' });
 
             if (filters) {
                 if (filters.search) {
@@ -232,11 +233,11 @@ export const AbastecimentoService = {
         try {
             const { data, error } = await supabase
                 .from('abastecimento_reports_history')
-                .select('*')
+                .select('id, name, generated_at, generated_by, file_url, total_records, total_value, total_liters, filters, created_at, report_type, payment_status')
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
-            return data || [];
+            return (data || []) as unknown as AbastecimentoReportHistory[];
         } catch (error) {
             console.error('[AbastecimentoService] getReportHistory Error:', error);
             return [];
@@ -468,7 +469,7 @@ export const AbastecimentoService = {
         try {
             const { data, error } = await supabase
                 .from('abastecimento_gas_stations')
-                .select('*')
+                .select('id, name, cnpj, city, supplier_code, fuel_prices')
                 .order('name', { ascending: true });
 
             if (error) throw error;
@@ -583,7 +584,7 @@ export const AbastecimentoService = {
         try {
             let query = supabase
                 .from('abastecimento_scheduled_prices')
-                .select('*')
+                .select('id, station_id, scheduled_date, fuel_prices, status, created_at')
                 .order('scheduled_date', { ascending: true });
 
             if (stationId) {
@@ -592,7 +593,7 @@ export const AbastecimentoService = {
 
             const { data, error } = await query;
             if (error) throw error;
-            return data || [];
+            return (data || []) as unknown as ScheduledPriceUpdate[];
         } catch (error) {
             console.error('Error loading scheduled prices:', error);
             return [];

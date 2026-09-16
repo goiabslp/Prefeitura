@@ -188,9 +188,9 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, u
     useEffect(() => {
         const fetchUsers = async () => {
             try {
-                const { data } = await supabase.from('users').select('*');
+                const { data } = await supabase.from('users').select('id, name, username, email, role, sector, active');
                 if (data && data.length > 0) {
-                    setAllUsers(data as User[]);
+                    setAllUsers(data as unknown as User[]);
                 }
             } catch (e) {
                 console.warn('Erro ao carregar usuários:', e);
@@ -553,8 +553,6 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, u
             setObjetoResumidoMap(prev => JSON.stringify(prev) === JSON.stringify(map) ? prev : map);
         };
         loadMap();
-        const mapInterval = setInterval(loadMap, 3000);
-        return () => clearInterval(mapInterval);
     }, []);
 
     const syncConvenioGlobally = async (updatedMap: Record<string, { tem_convenio: boolean; numero_convenio?: string }>) => {

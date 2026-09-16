@@ -16,7 +16,7 @@ export const useLicitacaoProcesses = (options?: { refetchInterval?: number | fal
         queryKey: licitacaoKeys.lists(),
         queryFn: licitacaoService.getLicitacaoProcesses,
         refetchInterval: options?.refetchInterval !== undefined ? options.refetchInterval : false,
-        refetchOnWindowFocus: true
+        refetchOnWindowFocus: false
     });
 };
 

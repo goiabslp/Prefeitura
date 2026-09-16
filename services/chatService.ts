@@ -70,9 +70,10 @@ export const chatService = {
             .eq('target_type', 'user')
             .single();
 
+        const CHAT_COLUMNS = 'id, sender_id, receiver_id, sector_id, message, read, created_at, file_url, file_name, file_type, sender:profiles(name, username)';
         let query = supabase
             .from('chat_messages')
-            .select('*, sender:profiles(name, username)');
+            .select(CHAT_COLUMNS);
 
         if (otherUserId === 'global-users') {
             // Global users Mural: both receiver and sector are null
@@ -97,7 +98,7 @@ export const chatService = {
         }
 
         console.log(`[ChatService] Fetched ${data?.length} messages between ${currentUserId} and ${otherUserId}`);
-        return data as ChatMessage[];
+        return (data || []) as unknown as ChatMessage[];
     },
 
     async fetchSectorMessages(sectorId: string, currentUserId?: string) {
@@ -114,9 +115,10 @@ export const chatService = {
             clearedAtStr = clearance?.cleared_at;
         }
 
+        const CHAT_COLUMNS = 'id, sender_id, receiver_id, sector_id, message, read, created_at, file_url, file_name, file_type, sender:profiles(name, username)';
         let query = supabase
             .from('chat_messages')
-            .select('*, sender:profiles(name, username)')
+            .select(CHAT_COLUMNS)
             .eq('sector_id', sectorId);
 
         if (clearedAtStr) {
@@ -126,7 +128,7 @@ export const chatService = {
         const { data, error } = await query.order('created_at', { ascending: true });
 
         if (error) throw error;
-        return data as ChatMessage[];
+        return (data || []) as unknown as ChatMessage[];
     },
 
     async markAsRead(targetIds: string[], type: 'user' | 'sector' = 'user', currentUserId?: string, targetId?: string) {
@@ -161,7 +163,7 @@ export const chatService = {
         // Count messages sent to ME where read is false.
         const { count: dmCount, error: dmError } = await supabase
             .from('chat_messages')
-            .select('*', { count: 'exact', head: true })
+            .select('id', { count: 'exact', head: true })
             .eq('read', false)
             .eq('receiver_id', userId);
 
@@ -187,7 +189,7 @@ export const chatService = {
             // Count messages in my sector NEWER than lastReadAt AND NOT sent by me
             const { count, error } = await supabase
                 .from('chat_messages')
-                .select('*', { count: 'exact', head: true })
+                .select('id', { count: 'exact', head: true })
                 .eq('sector_id', userSectorId)
                 .neq('sender_id', userId)
                 .gt('created_at', lastReadAt);
@@ -245,13 +247,13 @@ export const chatService = {
         });
 
 
-        // Fetch last 500 messages to get a good history of recent interactions
+        // Buscar mensagens recentes otimizadas para montar histórico inicial
         const { data, error } = await supabase
             .from('chat_messages')
-            .select('*')
+            .select('id, sender_id, receiver_id, sector_id, message, file_url, file_type, read, created_at')
             .or(`sender_id.eq.${userId},receiver_id.eq.${userId},sector_id.neq.null`)
             .order('created_at', { ascending: false })
-            .limit(500);
+            .limit(200);
 
         if (error) throw error;
 

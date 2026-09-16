@@ -1,5 +1,5 @@
-
 import { supabase } from './supabaseClient';
+import { VehicleDocument } from '../types';
 
 export interface OilChangeRecord {
     id: string;
@@ -63,7 +63,7 @@ export const fleetService = {
     async getOilChangeHistory(vehicleId: string): Promise<OilChangeRecord[]> {
         const { data, error } = await supabase
             .from('vehicle_oil_changes')
-            .select('*')
+            .select('id, vehicle_id, current_km, service_date, created_at')
             .eq('vehicle_id', vehicleId)
             .order('service_date', { ascending: false });
 
@@ -117,7 +117,7 @@ export const fleetService = {
     async getTimingBeltHistory(vehicleId: string): Promise<OilChangeRecord[]> {
         const { data, error } = await supabase
             .from('vehicle_timing_belt_changes')
-            .select('*')
+            .select('id, vehicle_id, current_km, service_date, created_at')
             .eq('vehicle_id', vehicleId)
             .order('service_date', { ascending: false });
 
@@ -170,10 +170,10 @@ export const fleetService = {
         return data;
     },
 
-    async getVehicleDocuments(vehicleId: string) {
+    async getVehicleDocuments(vehicleId: string): Promise<VehicleDocument[]> {
         const { data, error } = await supabase
             .from('vehicle_documents')
-            .select('*')
+            .select('id, vehicle_id, name, file_url, description, created_at')
             .eq('vehicle_id', vehicleId)
             .order('created_at', { ascending: false });
 
@@ -182,7 +182,7 @@ export const fleetService = {
             throw error;
         }
 
-        return data || [];
+        return (data || []) as unknown as VehicleDocument[];
     },
 
     async deleteVehicleDocument(documentId: string, fileUrl: string) {

@@ -38,9 +38,10 @@ export const SystemSettingsProvider: React.FC<{ children: React.ReactNode }> = (
     // Initial Fetch
     const fetchSettings = async () => {
         try {
+            const SETTING_COLUMNS = 'id, module_key, label, is_enabled, is_enabled_mobile, parent_key, order_index, description';
             const { data, error } = await supabase
                 .from('global_module_settings')
-                .select('*')
+                .select(SETTING_COLUMNS)
                 .order('order_index');
 
             if (error) {

@@ -29,9 +29,10 @@ export const useCachedVehicles = (initialVehicles: Vehicle[] = []) => {
     return useQuery({
         queryKey: vehicleKeys.all,
         queryFn: async () => {
+            const VEHICLE_CACHE_COLUMNS = 'id, type, model, plate, brand, year, color, renavam, chassis, sector_id, responsible_person_id, document_url, document_name, vehicle_image_url, status, maintenance_status, fuel_types, request_manager_ids, max_kml, min_kml, current_km, oil_last_change, oil_next_change, oil_calculation_base, vehicle_category, available_for_scheduling';
             const { data, error } = await supabase
                 .from('vehicles')
-                .select('*')
+                .select(VEHICLE_CACHE_COLUMNS)
                 .order('plate', { ascending: true });
 
             if (error) throw error;

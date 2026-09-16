@@ -180,10 +180,12 @@ export const getAllServiceRequests = async (lightweight = true, page = 0, pageSi
 
     // 2. Buscar também da tabela diarias_eventos para garantir exibição completa no Histórico
     try {
+        const DIARIAS_EVENTOS_COLUMNS = 'id, pessoas, destino, data_saida, data_retorno, motivo, setor_id, user_id, user_name, created_at, status, valor_diaria, veiculo';
         let eventosQuery = supabase
             .from('diarias_eventos')
-            .select('*')
-            .order('created_at', { ascending: false });
+            .select(DIARIAS_EVENTOS_COLUMNS)
+            .order('created_at', { ascending: false })
+            .limit(300);
 
         if (searchTerm) {
             eventosQuery = eventosQuery.or(`destino.ilike.%${searchTerm}%,motivo.ilike.%${searchTerm}%,user_name.ilike.%${searchTerm}%`);
@@ -272,9 +274,10 @@ export const getAllServiceRequests = async (lightweight = true, page = 0, pageSi
 };
 
 export const getServiceRequestById = async (id: string): Promise<Order> => {
+    const SERVICE_REQUEST_COLUMNS = 'id, protocol, title, status, payment_status, payment_date, status_history, created_at, user_id, user_name, document_snapshot';
     const { data, error } = await supabase
         .from('service_requests')
-        .select('*')
+        .select(SERVICE_REQUEST_COLUMNS)
         .eq('id', id)
         .maybeSingle();
 
@@ -296,9 +299,10 @@ export const getServiceRequestById = async (id: string): Promise<Order> => {
     }
 
     // Fallback: consultar tabela diarias_eventos
+    const DIARIA_DETAIL_COLUMNS = 'id, pessoas, destino, data_saida, data_retorno, motivo, setor_id, user_id, user_name, created_at, status, valor, valor_diaria, veiculo, distancia, hospedagem_dias, justificativa_gestor, relatorio_viagem, comprovantes_gestor, digital_signature';
     const { data: evtData, error: evtError } = await supabase
         .from('diarias_eventos')
-        .select('*')
+        .select(DIARIA_DETAIL_COLUMNS)
         .eq('id', id)
         .single();
 

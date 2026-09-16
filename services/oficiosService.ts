@@ -88,7 +88,7 @@ export const getAllOficios = async (lightweight = true, page = 0, limit = 50, se
 export const getOficioById = async (id: string): Promise<Order | null> => {
     const { data, error } = await supabase
         .from('oficios')
-        .select('*')
+        .select('id, protocol, title, status, status_history, created_at, document_snapshot, description, user_id, user_name')
         .eq('id', id)
         .single();
 

@@ -4,12 +4,26 @@ import { handleSupabaseError } from '../utils/errorUtils';
 
 // --- PACIENTES ---
 
-export const getPacientes = async (): Promise<ConsultaPaciente[]> => {
+const PACIENTE_COLUMNS = 'id, name, cpf, birth_date, nickname, phone, neighborhood, street, city, sus_number, agente_saude, created_at, updated_at';
+
+export const getPacientes = async (searchTerm?: string): Promise<ConsultaPaciente[]> => {
     try {
-        const { data, error } = await supabase
+        let query = supabase
             .from('consultas_pacientes')
-            .select('*')
+            .select(PACIENTE_COLUMNS)
             .order('name', { ascending: true });
+
+        if (searchTerm && searchTerm.trim()) {
+            const term = searchTerm.trim();
+            const cleanDigits = term.replace(/\D/g, '');
+            if (cleanDigits.length >= 3) {
+                query = query.or(`name.ilike.%${term}%,cpf.ilike.%${cleanDigits}%,sus_number.ilike.%${cleanDigits}%`);
+            } else {
+                query = query.ilike('name', `%${term}%`);
+            }
+        }
+
+        const { data, error } = await query.limit(500);
 
         if (error) throw error;
         return data || [];
@@ -24,7 +38,7 @@ export const getPacienteById = async (id: string): Promise<ConsultaPaciente | nu
     try {
         const { data, error } = await supabase
             .from('consultas_pacientes')
-            .select('*')
+            .select(PACIENTE_COLUMNS)
             .eq('id', id)
             .single();
 
@@ -49,7 +63,7 @@ export const getPacienteByCpf = async (cpf: string): Promise<ConsultaPaciente | 
         // Busca tanto por CPF limpo quanto por CPF formatado com máscara
         const { data, error } = await supabase
             .from('consultas_pacientes')
-            .select('*')
+            .select(PACIENTE_COLUMNS)
             .or(`cpf.eq.${clean},cpf.eq.${formatted}`)
             .limit(1)
             .maybeSingle();
@@ -261,9 +275,11 @@ export const getPacienteHistory = async (pacienteId: string): Promise<ConsultaAg
 
 // --- PROCEDIMENTOS ---
 
+const PROCEDIMENTO_COLUMNS = 'id, name, code, type, available_quantity, total_quantity, status, recurso, created_at, updated_at';
+
 export const getProcedimentos = async (onlyActive: boolean = false): Promise<ConsultaProcedimento[]> => {
     try {
-        let query = supabase.from('consultas_procedimentos').select('*').order('name', { ascending: true });
+        let query = supabase.from('consultas_procedimentos').select(PROCEDIMENTO_COLUMNS).order('name', { ascending: true });
         
         if (onlyActive) {
             query = query.eq('status', 'Ativo');
@@ -440,12 +456,23 @@ export const orderConsultasQueue = (bookings: ConsultaAgendamento[]): ConsultaAg
  */
 export const recalculateAndPersistQueuePositions = async (): Promise<void> => {
     try {
-        const { data: queueItems, error } = await supabase
+        let queueItems: any[] | null = null;
+        const res = await supabase
             .from('consultas_agendamentos')
             .select('id, procedimento_id, priority, status, created_at, solicitation_date, is_retorno, retorno_tipo, retorno_grau')
             .in('status', ['Fila de espera', 'Aguardando Data', 'Solicitado', 'Retorno']);
 
-        if (error || !queueItems || queueItems.length === 0) return;
+        if (res.error && (res.error.code === '42703' || res.error.code === 'PGRST204' || res.error.message?.includes('column') || res.error.message?.includes('does not exist'))) {
+            const fallbackRes = await supabase
+                .from('consultas_agendamentos')
+                .select('id, procedimento_id, priority, status, created_at, solicitation_date, is_retorno')
+                .in('status', ['Fila de espera', 'Aguardando Data', 'Solicitado', 'Retorno']);
+            queueItems = fallbackRes.data;
+        } else {
+            queueItems = res.data;
+        }
+
+        if (!queueItems || queueItems.length === 0) return;
 
         // Agrupa por procedimento para garantir que cada fila médica tenha suas posições
         // 1º lugar, 2º lugar... com Agendamento Especial sempre no topo daquele procedimento
@@ -490,22 +517,56 @@ export const recalculateAndPersistQueuePositions = async (): Promise<void> => {
 
 export const getAgendamentos = async (filters?: AgendamentoFilters): Promise<ConsultaAgendamento[]> => {
     try {
-        // We select *, paciente:consultas_pacientes(*), procedimento:consultas_procedimentos(*), responsavel:profiles(name)
-        let query = supabase
-            .from('consultas_agendamentos')
-            .select(`
-                *,
-                paciente:consultas_pacientes(*),
-                procedimento:consultas_procedimentos(*),
-                responsavel:profiles(name)
-            `)
-            .order('appointment_date', { ascending: false })
-            .order('created_at', { ascending: false });
+        const fullColumns = `
+            id, patient_id, procedimento_id, appointment_date, appointment_time, solicitation_date,
+            quantity, priority, queue_position, special_sequence, status, created_by, created_at,
+            is_retorno, retorno_tipo, retorno_grau, cancellation_reason, canceled_by, canceled_by_name, canceled_at,
+            paciente:consultas_pacientes(id, name, cpf, birth_date, phone, neighborhood, sus_number, agente_saude),
+            procedimento:consultas_procedimentos(id, name, code, type, available_quantity, total_quantity, status, recurso),
+            responsavel:profiles(id, name)
+        `;
 
-        const { data, error } = await query;
+        const fallbackColumns = `
+            id, patient_id, procedimento_id, appointment_date, appointment_time, solicitation_date,
+            quantity, priority, queue_position, special_sequence, status, created_by, created_at,
+            is_retorno,
+            paciente:consultas_pacientes(id, name, cpf, birth_date, phone, neighborhood, sus_number, agente_saude),
+            procedimento:consultas_procedimentos(id, name, code, type, available_quantity, total_quantity, status, recurso),
+            responsavel:profiles(id, name)
+        `;
+
+        const applyQueryFilters = (selectCols: string) => {
+            let q = supabase
+                .from('consultas_agendamentos')
+                .select(selectCols)
+                .order('appointment_date', { ascending: false })
+                .order('created_at', { ascending: false });
+
+            if (filters?.procedimentoId) {
+                q = q.eq('procedimento_id', filters.procedimentoId);
+            }
+            if (filters?.date) {
+                q = q.eq('appointment_date', filters.date);
+            }
+            if (filters?.status) {
+                q = q.eq('status', filters.status);
+            }
+            return q;
+        };
+
+        // Aplicação de filtros diretamente no Supabase (redução drástica de Egress)
+        let { data, error } = await applyQueryFilters(fullColumns).limit(1000);
+
+        if (error && (error.code === '42703' || error.code === 'PGRST204' || error.message?.includes('column') || error.message?.includes('does not exist'))) {
+            console.warn('[consultasService] Colunas estendidas ausentes em consultas_agendamentos, executando fallback de colunas básicas...', error.message);
+            const fallbackRes = await applyQueryFilters(fallbackColumns).limit(1000);
+            data = fallbackRes.data;
+            error = fallbackRes.error;
+        }
+
         if (error) throw error;
 
-        let filtered = data || [];
+        let filtered = (data || []) as unknown as ConsultaAgendamento[];
 
         // Garante que a ordem da fila de espera respeite a prioridade Especial e posições calculadas
         const waitlistItems = filtered.filter(a => a.status === 'Fila de espera');
@@ -541,6 +602,7 @@ export const getAgendamentos = async (filters?: AgendamentoFilters): Promise<Con
             });
         }
 
+        // Filtros textuais em memória caso o backend relacional não tenha índice específico
         if (filters) {
             if (filters.patientName) {
                 const search = filters.patientName.toLowerCase();
@@ -548,16 +610,7 @@ export const getAgendamentos = async (filters?: AgendamentoFilters): Promise<Con
             }
             if (filters.patientCpf) {
                 const search = filters.patientCpf.replace(/\D/g, '');
-                filtered = filtered.filter(a => a.paciente?.cpf.includes(search));
-            }
-            if (filters.procedimentoId) {
-                filtered = filtered.filter(a => a.procedimento_id === filters.procedimentoId);
-            }
-            if (filters.date) {
-                filtered = filtered.filter(a => a.appointment_date === filters.date);
-            }
-            if (filters.status) {
-                filtered = filtered.filter(a => a.status === filters.status);
+                filtered = filtered.filter(a => a.paciente?.cpf?.replace(/\D/g, '').includes(search));
             }
         }
 
@@ -601,14 +654,14 @@ export const createAgendamento = async (agendamento: Omit<ConsultaAgendamento, '
             `)
             .single();
 
-        if (error && (error.code === 'PGRST204' || error.message?.includes('column') || error.message?.includes('schema cache'))) {
+        if (error && (error.code === '42703' || error.code === 'PGRST204' || error.message?.includes('column') || error.message?.includes('does not exist') || error.message?.includes('schema cache'))) {
             console.warn('[consultasService] Colunas opcionais ausentes na tabela consultas_agendamentos (createAgendamento). Tentando fallback...', error.message);
-            const optionalCols = ['retorno_tipo', 'retorno_grau', 'solicitation_date', 'appointment_time', 'is_retorno'];
+            const optionalCols = ['retorno_tipo', 'retorno_grau', 'cancellation_reason', 'canceled_by', 'canceled_by_name', 'canceled_at', 'solicitation_date', 'appointment_time', 'is_retorno'];
             let fallbackPayload = { ...insertPayload };
             let lastError = error;
 
             for (const col of optionalCols) {
-                if (lastError && (lastError.code === 'PGRST204' || lastError.message?.includes('column') || lastError.message?.includes('schema cache'))) {
+                if (lastError && (lastError.code === '42703' || lastError.code === 'PGRST204' || lastError.message?.includes('column') || lastError.message?.includes('does not exist') || lastError.message?.includes('schema cache'))) {
                     delete fallbackPayload[col];
                     const retryRes = await supabase
                         .from('consultas_agendamentos')
@@ -784,7 +837,7 @@ export const updateAgendamento = async (
             .single();
 
         // Fallback progressivo: se alguma coluna não existir ou houver mismatch de schema
-        if (error && (error.code === 'PGRST204' || error.message?.includes('column') || error.message?.includes('schema cache'))) {
+        if (error && (error.code === '42703' || error.code === 'PGRST204' || error.message?.includes('column') || error.message?.includes('does not exist') || error.message?.includes('schema cache'))) {
             console.warn('[consultasService] Coluna(s) ausente(s) no Supabase (updateAgendamento). Tentando fallback progressivo...', error.message);
 
             const optionalCols = ['retorno_tipo', 'retorno_grau', 'solicitation_date', 'appointment_time', 'is_retorno', 'cancellation_reason', 'canceled_by', 'canceled_by_name', 'canceled_at'];
@@ -792,7 +845,7 @@ export const updateAgendamento = async (
             let lastError = error;
 
             for (const col of optionalCols) {
-                if (lastError && (lastError.code === 'PGRST204' || lastError.message?.includes('column') || lastError.message?.includes('schema cache'))) {
+                if (lastError && (lastError.code === '42703' || lastError.code === 'PGRST204' || lastError.message?.includes('column') || lastError.message?.includes('does not exist') || lastError.message?.includes('schema cache'))) {
                     console.warn(`[consultasService] Removendo coluna '${col}' do payload de updateAgendamento e tentando novamente...`);
                     delete fallbackUpdates[col];
 
@@ -873,13 +926,13 @@ export const getDashboardStats = async (): Promise<ConsultasDashboardStats> => {
         // 1. Total Patients
         const { count: totalPatients, error: pError } = await supabase
             .from('consultas_pacientes')
-            .select('*', { count: 'exact', head: true });
+            .select('id', { count: 'exact', head: true });
         if (pError) throw pError;
 
         // 2. Total Bookings
         const { count: totalBookings, error: bError } = await supabase
             .from('consultas_agendamentos')
-            .select('*', { count: 'exact', head: true });
+            .select('id', { count: 'exact', head: true });
         if (bError) throw bError;
 
         // 3. Available Quantities (Procedures that are active)
@@ -989,7 +1042,7 @@ export const getVagas = async (procedimentoId?: string): Promise<ConsultaVaga[]>
     try {
         let query = supabase
             .from('consultas_vagas')
-            .select('*')
+            .select('id, procedimento_id, data, hora, quantidade, status, created_at')
             .order('data', { ascending: true })
             .order('hora', { ascending: true });
 
@@ -1273,7 +1326,7 @@ export const getSystemUsers = async (): Promise<any[]> => {
     try {
         const { data, error } = await supabase
             .from('profiles')
-            .select('*')
+            .select('id, name, username, email, role, status')
             .order('name', { ascending: true });
 
         if (error) throw error;

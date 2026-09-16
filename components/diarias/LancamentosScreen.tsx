@@ -384,16 +384,16 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
           setLogoUrl(settings.branding.logoUrl);
         }
 
-        const { data: sData } = await supabase.from('sectors').select('*');
+        const { data: sData } = await supabase.from('sectors').select('id, name, acronym, secretary, active');
         if (sData) setSectors(sData);
 
-        const { data: pData } = await supabase.from('profiles').select('*');
+        const { data: pData } = await supabase.from('profiles').select('id, name, username, email, sector, role, active');
         if (pData) setProfiles(pData);
 
-        const { data: jData } = await supabase.from('jobs').select('*');
+        const { data: jData } = await supabase.from('jobs').select('id, name, description, active');
         if (jData) setJobs(jData);
 
-        const { data: peData } = await supabase.from('persons').select('*');
+        const { data: peData } = await supabase.from('persons').select('id, name, sector_id, job_id, birth_date, driver_code, active');
         if (peData) {
           setPersons(peData.map((p: any) => ({
             id: p.id,
@@ -451,14 +451,8 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
       )
       .subscribe();
 
-    // Sincronização leve de fallback (2 minutos) para caso a conexão WebSocket sofra oscilação
-    const pollInterval = setInterval(() => {
-      fetchEventos(false);
-    }, 120000);
-
     return () => {
       supabase.removeChannel(channel);
-      clearInterval(pollInterval);
     };
   }, []);
 

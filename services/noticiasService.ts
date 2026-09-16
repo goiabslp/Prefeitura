@@ -633,7 +633,7 @@ export const noticiasService = {
       if (materia.eventoId || materia.id.startsWith('materia_evt_')) {
         const eventId = materia.eventoId || materia.id.replace('materia_evt_', '');
         try {
-          const { data: evt } = await supabase.from('calendar_events').select('*').eq('id', eventId).single();
+          const { data: evt } = await supabase.from('calendar_events').select('id, title, description, start_date, start_time, location, event_type').eq('id', eventId).single();
           if (evt) {
             const meta = deserializeEventMetadata(evt.description);
             const newDesc = serializeEventMetadata(meta.cleanDescription, {
@@ -660,7 +660,7 @@ export const noticiasService = {
             const { error: updErr } = await supabase.from('calendar_events').update({
               publish_to_news: true,
               description: newDesc,
-              image_url: materia.imagemUrl || evt.image_url
+              image_url: materia.imagemUrl || (evt as any)?.image_url
             }).eq('id', eventId);
 
             // Fallback caso colunas customizadas não existam
@@ -758,7 +758,7 @@ export const noticiasService = {
       const targetEventId = eventId || (id.startsWith('materia_evt_') ? id.replace('materia_evt_', '') : '');
       if (targetEventId) {
         try {
-          const { data: evt } = await supabase.from('calendar_events').select('*').eq('id', targetEventId).single();
+          const { data: evt } = await supabase.from('calendar_events').select('id, title, description, start_date, start_time, location, event_type').eq('id', targetEventId).single();
           if (evt) {
             const meta = deserializeEventMetadata(evt.description);
             const currentMateriaData = meta.materia_data || {};
@@ -804,7 +804,7 @@ export const noticiasService = {
       if (id.startsWith('materia_evt_')) {
         const eventId = id.replace('materia_evt_', '');
         try {
-          const { data: evt } = await supabase.from('calendar_events').select('*').eq('id', eventId).single();
+          const { data: evt } = await supabase.from('calendar_events').select('id, title, description, start_date, start_time, location, event_type').eq('id', eventId).single();
           if (evt) {
             const meta = deserializeEventMetadata(evt.description);
             const newDesc = serializeEventMetadata(meta.cleanDescription, {
@@ -850,7 +850,7 @@ export const noticiasService = {
       if (id.startsWith('materia_evt_')) {
         const eventId = id.replace('materia_evt_', '');
         try {
-          const { data: evt } = await supabase.from('calendar_events').select('*').eq('id', eventId).single();
+          const { data: evt } = await supabase.from('calendar_events').select('id, title, description, start_date, start_time, location, event_type').eq('id', eventId).single();
           if (evt) {
             const meta = deserializeEventMetadata(evt.description);
             const currentDestaque = !!(meta.materia_data as any)?.destaque;
@@ -907,7 +907,7 @@ export const noticiasService = {
       if (id.startsWith('materia_evt_')) {
         const eventId = id.replace('materia_evt_', '');
         try {
-          const { data: evt } = await supabase.from('calendar_events').select('*').eq('id', eventId).single();
+          const { data: evt } = await supabase.from('calendar_events').select('id, title, description, start_date, start_time, location, event_type').eq('id', eventId).single();
           if (evt) {
             const meta = deserializeEventMetadata(evt.description);
             const currentOculta = !!(meta.materia_data as any)?.oculta;
@@ -1016,8 +1016,9 @@ export const noticiasService = {
       try {
         const { data: calData, error: calErr } = await supabase
           .from('calendar_events')
-          .select('*')
-          .order('start_date', { ascending: false });
+          .select('id, title, description, start_date, start_time, location, event_type, created_at, created_by')
+          .order('start_date', { ascending: false })
+          .limit(300);
 
         if (!calErr && calData && calData.length > 0) {
           calData.forEach((evt: any) => {
@@ -1172,7 +1173,7 @@ export const noticiasService = {
       // 3. Se for vinculada a um evento do calendário (ou tiver ID de evento correspondente)
       const targetEventId = eventId || id;
       try {
-        const { data: evt } = await supabase.from('calendar_events').select('*').eq('id', targetEventId).single();
+        const { data: evt } = await supabase.from('calendar_events').select('id, title, description, start_date, start_time, location, event_type').eq('id', targetEventId).single();
         if (evt) {
           const meta = deserializeEventMetadata(evt.description);
           const newDesc = serializeEventMetadata(meta.cleanDescription, {

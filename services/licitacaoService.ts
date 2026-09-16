@@ -275,9 +275,10 @@ export const updateLicitacaoProcess = async (id: string, updates: Partial<Licita
                 delete (sanitizedUpdates as any).oculto_kanban_view;
 
                 if (Object.keys(sanitizedUpdates).length === 0) {
+                    const LICITACAO_COLUMNS = 'id, protocolo, solicitante_id, solicitante_nome, solicitante_cargo, solicitante_setor, finalidade, justificativa, tipo_contratacao, status, fase_atual, valor_estimado, valor_homologado, criado_em, criado_por, atualizado_em, historico_fases, responsavel_atual_id, responsavel_atual_nome, documentos, tem_convenio, numero_convenio, objeto_resumido, oculto_kanban_view, prioridade, data_limite, numero_processo_adm, tags';
                     const { data: currentData, error: currentErr } = await supabase
                         .from('licitacao_processos')
-                        .select('*')
+                        .select(LICITACAO_COLUMNS)
                         .eq('id', id)
                         .maybeSingle();
 
@@ -285,7 +286,7 @@ export const updateLicitacaoProcess = async (id: string, updates: Partial<Licita
                     const conv = getLocalConveniosMap()[id];
                     const localOculto = getLocalOcultoMap()[id];
                     return {
-                        ...currentData,
+                        ...(currentData as any),
                         tem_convenio: conv ? conv.tem_convenio : updates.tem_convenio,
                         numero_convenio: conv ? conv.numero_convenio : updates.numero_convenio,
                         oculto_kanban_view: localOculto !== undefined ? localOculto : updates.oculto_kanban_view
@@ -341,9 +342,10 @@ export const updateLicitacaoProcess = async (id: string, updates: Partial<Licita
 
 export const getLicitacaoProcesses = async (): Promise<LicitacaoProcesso[]> => {
     try {
+        const LICITACAO_COLUMNS = 'id, protocolo, solicitante_id, solicitante_nome, solicitante_setor, finalidade, justificativa, tipo_contratacao, status, fase_atual, valor_estimado, valor_homologado, criado_em, atualizado_em, historico_fases, responsavel_atual_id, responsavel_atual_nome, documentos, tem_convenio, numero_convenio, objeto_resumido, oculto_kanban_view, prioridade, data_limite, numero_processo_adm, tags';
         const { data, error } = await supabase
             .from('licitacao_processos')
-            .select('*')
+            .select(LICITACAO_COLUMNS)
             .order('criado_em', { ascending: false });
 
         if (error) throw error;
@@ -490,12 +492,12 @@ export const getUserLicitacaoPermission = async (userId: string): Promise<Licita
     try {
         const { data, error } = await supabase
             .from('licitacao_permissoes')
-            .select('*')
+            .select('id, usuario_id, perfil, tipo_permissao, permissoes_especiais, criado_em')
             .eq('usuario_id', userId)
             .maybeSingle();
 
         if (error) throw error;
-        return data as LicitacaoPermissao;
+        return (data || null) as unknown as LicitacaoPermissao;
     } catch (error) {
         console.error("Error fetching licitacao permission:", error);
         return null;
@@ -583,7 +585,7 @@ export const generateLicitacaoProtocol = async (): Promise<string> => {
         if (maxNumber === 0) {
             const { count, error: countError } = await supabase
                 .from('licitacao_processos')
-                .select('*', { count: 'exact', head: true })
+                .select('id', { count: 'exact', head: true })
                 .gte('criado_em', `${year}-01-01T00:00:00Z`);
 
             if (!countError && count !== null) {

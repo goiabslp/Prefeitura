@@ -30,8 +30,23 @@ const isPgrst204ColumnError = (error: any, columnName: string) => {
     return error.code === 'PGRST204' || str.includes(`'${columnName}'`) || str.includes(columnName);
 };
 
-export const getMedicamentos = async (): Promise<FarmaciaMedicamento[]> => {
+const MEDICAMENTO_COLUMNS = 'id, nome, categoria, quantidade, unidade, validade, lote, limite_minimo, tipo, dosagem, fornecedor, principio_ativo, alto_custo, criado_em, atualizado_em';
+
+let cachedMedicamentos: FarmaciaMedicamento[] | null = null;
+let cachedMedicamentosExpiry = 0;
+
+export const invalidateMedicamentosCache = () => {
+    cachedMedicamentos = null;
+    cachedMedicamentosExpiry = 0;
+};
+
+export const getMedicamentos = async (forceRefresh = false): Promise<FarmaciaMedicamento[]> => {
     try {
+        const now = Date.now();
+        if (!forceRefresh && cachedMedicamentos && now < cachedMedicamentosExpiry) {
+            return cachedMedicamentos;
+        }
+
         let allData: FarmaciaMedicamento[] = [];
         let from = 0;
         const step = 1000;
@@ -40,14 +55,14 @@ export const getMedicamentos = async (): Promise<FarmaciaMedicamento[]> => {
         while (hasMore) {
             const { data, error } = await supabase
                 .from('farmacia_medicamentos')
-                .select('*')
+                .select(MEDICAMENTO_COLUMNS)
                 .order('nome', { ascending: true })
                 .range(from, from + step - 1);
 
             if (error) throw error;
             
             if (data && data.length > 0) {
-                allData = [...allData, ...data];
+                allData = [...allData, ...(data as unknown as FarmaciaMedicamento[])];
                 from += step;
                 if (data.length < step) {
                     hasMore = false;
@@ -55,17 +70,25 @@ export const getMedicamentos = async (): Promise<FarmaciaMedicamento[]> => {
             } else {
                 hasMore = false;
             }
+
+            // Trava de segurança para evitar loop infinito
+            if (from > 10000) break;
         }
 
         const localIds = getLocalAltoCustoIds();
-        return allData.map(med => ({
+        const result = allData.map(med => ({
             ...med,
             alto_custo: med.alto_custo ?? localIds.has(med.id)
         }));
+
+        cachedMedicamentos = result;
+        cachedMedicamentosExpiry = now + 1000 * 60 * 10; // 10 minutos de cache
+
+        return result;
     } catch (error) {
         const appError = handleSupabaseError(error);
         console.error('[farmaciaService] getMedicamentos Error:', appError.message);
-        return [];
+        return cachedMedicamentos || [];
     }
 };
 
@@ -155,15 +178,15 @@ export const updateMedicamento = async (
                 if (Object.keys(sanitizedUpdates).length === 0) {
                     const { data: currentData, error: currentErr } = await supabase
                         .from('farmacia_medicamentos')
-                        .select('*')
+                        .select(MEDICAMENTO_COLUMNS)
                         .eq('id', id)
                         .single();
 
                     if (currentErr) throw currentErr;
                     return {
-                        ...currentData,
+                        ...(currentData as any),
                         alto_custo: altoCustoValue
-                    };
+                    } as FarmaciaMedicamento;
                 }
 
                 const retry = await supabase
@@ -255,15 +278,24 @@ export const getMovimentacoes = async (filters?: MovimentacaoFilters): Promise<F
         // Tenta remover em background quaisquer operações de teste do Guilherme se existirem no banco
         removeGuilhermeOperations().catch(() => {});
 
+        const MOVIMENTACAO_COLUMNS = 'id, medicamento_id, medicamento_nome, medicamento_categoria, quantidade, tipo, data, responsavel_id, responsavel_nome, paciente_id, paciente_nome, paciente_cpf, observacao, receita_numero, validade, lote, motivo_descarte';
+
         let query = supabase
             .from('farmacia_movimentacoes')
-            .select('*')
+            .select(MOVIMENTACAO_COLUMNS)
             .order('data', { ascending: false });
 
-        const { data, error } = await query;
+        if (filters?.medicamentoNome) {
+            query = query.ilike('medicamento_nome', `%${filters.medicamentoNome}%`);
+        }
+        if (filters?.categoria) {
+            query = query.eq('medicamento_categoria', filters.categoria);
+        }
+
+        const { data, error } = await query.limit(500);
         if (error) throw error;
 
-        let filtered = (data || []).filter(m => 
+        let filtered = ((data || []) as FarmaciaMovimentacao[]).filter(m => 
             !m.responsavel_nome?.toLowerCase().includes('guilherme') &&
             !m.paciente_nome?.toLowerCase().includes('guilherme')
         );

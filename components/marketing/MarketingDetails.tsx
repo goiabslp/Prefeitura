@@ -341,7 +341,7 @@ export const MarketingDetails: React.FC<MarketingDetailsProps> = ({ requestId, u
                 // Fetch contents
                 const { data: contentData, error: contentError } = await supabase
                     .from('marketing_contents')
-                    .select('*')
+                    .select('id, request_id, content_type, content_sector, event_location, created_at')
                     .eq('request_id', requestId);
 
                 if (contentError) throw contentError;

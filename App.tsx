@@ -118,6 +118,7 @@ import { PoliticaPrivacidadeScreen } from './components/PoliticaPrivacidadeScree
 import { PoliticaPrivacidadeAppScreen } from './components/PoliticaPrivacidadeAppScreen';
 import { canUserAccessRoute, cleanPermissionsArray } from './services/permissionService';
 import { SystemAIAssistantScreen } from './components/ai/SystemAIAssistantScreen';
+import { EgressMonitorModal } from './components/admin/EgressMonitorModal';
 
 const VIEW_TO_PATH: Record<string, string> = {
   'login': '/Login',
@@ -137,6 +138,7 @@ const VIEW_TO_PATH: Record<string, string> = {
   'admin:access_control': '/Admin/ControleAcesso',
   'admin:logs': '/Admin/logs',
   'admin:remote_access': '/Admin/AcessoRemoto',
+  'admin:egress': '/Admin/Egress',
   'tracking:oficio': '/Historico/Oficio',
   'tracking:compras': '/Historico/Compras',
   'tracking:diarias': '/Historico/Diarias',
@@ -337,6 +339,7 @@ const App: React.FC = () => {
     return 'login';
   });
   const [remoteAccessState, setRemoteAccessState] = useState<any>(null);
+  const [isEgressModalOpen, setIsEgressModalOpen] = useState(false);
 
   useEffect(() => {
     const handleStateChange = (state: any) => {
@@ -1102,44 +1105,8 @@ const App: React.FC = () => {
   }, []);
 
   // Realtime Listeners for Abastecimento Entities
+  // 1. Canais Globais Permanentes (Não são recriados a cada troca de tela para economizar Egress)
   useEffect(() => {
-    const activeChannels: any[] = [];
-
-    // Vehicles & Schedules Channel (Frotas)
-    if (isModuleActive('parent_frotas') && (currentView === 'vehicle-scheduling' || activeBlock === 'agendamento')) {
-      const vehicleChannel = supabase.channel('public:vehicles')
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'vehicles' },
-          async () => {
-            const updated = await entityService.getVehicles();
-            setVehicles(updated);
-            try { sessionStorage.setItem('cachedVehicles', JSON.stringify(updated)); } catch (e) { }
-          }
-        )
-        .subscribe();
-      activeChannels.push(vehicleChannel);
-
-      const schedulesChannel = supabase.channel('public:vehicle_schedules')
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'vehicle_schedules' },
-          async (payload) => {
-            if (payload.eventType === 'DELETE') {
-              setSchedules(prev => prev.filter(s => s.id !== payload.old.id));
-              return;
-            }
-            const updatedSchedule = await vehicleSchedulingService.getScheduleById(payload.new.id);
-            if (updatedSchedule) {
-              if (payload.eventType === 'INSERT') setSchedules(prev => [updatedSchedule, ...prev]);
-              else setSchedules(prev => prev.map(s => s.id === updatedSchedule.id ? updatedSchedule : s));
-            }
-          }
-        )
-        .subscribe();
-      activeChannels.push(schedulesChannel);
-    }
-
     // Profiles (Drivers/Users/Persons) Channel (Always Active for Auth)
     const profileChannel = supabase.channel('public:profiles')
       .on(
@@ -1151,7 +1118,7 @@ const App: React.FC = () => {
             return;
           }
           const ru = payload.new;
-           const mappedUser: User = {
+          const mappedUser: User = {
             id: ru.id,
             username: ru.username,
             name: ru.name,
@@ -1180,7 +1147,56 @@ const App: React.FC = () => {
         }
       )
       .subscribe();
-    activeChannels.push(profileChannel);
+
+    // System Update Channel (Always Active)
+    const settingsChannel = supabase.channel('global-updates')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'organization_settings', filter: 'id=eq.global_config' },
+        (payload) => {
+          if (payload.new && 'system_update_target' in payload.new) {
+            setSystemUpdateTarget(payload.new.system_update_target as number);
+            setIsUpdateModalDismissed(false);
+          }
+        }
+      )
+      .on(
+        'broadcast',
+        { event: 'system_update' },
+        (payload) => {
+          if (payload.payload?.target) {
+            setSystemUpdateTarget(payload.payload.target);
+            setIsUpdateModalDismissed(false);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(profileChannel);
+      supabase.removeChannel(settingsChannel);
+    };
+  }, []);
+
+  // 2. Canais Contextuais por Módulo (Ativos somente quando a tela específica está em uso)
+  useEffect(() => {
+    const activeChannels: any[] = [];
+
+    // Vehicles Channel (Frotas)
+    if (isModuleActive('parent_frotas') && (currentView === 'vehicle-scheduling' || activeBlock === 'agendamento')) {
+      const vehicleChannel = supabase.channel('public:vehicles')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'vehicles' },
+          async () => {
+            const updated = await entityService.getVehicles();
+            setVehicles(updated);
+            try { sessionStorage.setItem('cachedVehicles', JSON.stringify(updated)); } catch (e) { }
+          }
+        )
+        .subscribe();
+      activeChannels.push(vehicleChannel);
+    }
 
     // Abastecimento
     if (isModuleActive('parent_abastecimento') && (currentView === 'abastecimento' || activeBlock === 'abastecimento')) {
@@ -1209,36 +1225,6 @@ const App: React.FC = () => {
         .subscribe();
         
       activeChannels.push(stationChannel, configChannel);
-    }
-
-    // Purchase Orders Channel (Compras)
-    if (isModuleActive('parent_compras') && activeBlock === 'compras') {
-      const purchaseChannel = supabase.channel('public:purchase_orders')
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'purchase_orders' },
-          async (payload) => {
-            queryClient.invalidateQueries({ queryKey: purchaseOrderKeys.all });
-          }
-        )
-        .subscribe();
-      activeChannels.push(purchaseChannel);
-    }
-
-
-
-    // Licitacao Channel (subscrição também para telas de TV e links públicos)
-    if ((isModuleActive('parent_licitacao') && activeBlock === 'licitacao') || (currentView && String(currentView).startsWith('licitacao:'))) {
-      const licitacaoChannel = supabase.channel('public:licitacao_processos')
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'licitacao_processos' },
-          () => {
-            queryClient.invalidateQueries({ queryKey: licitacaoKeys.all });
-          }
-        )
-        .subscribe();
-      activeChannels.push(licitacaoChannel);
     }
 
     // Consultas Channel
@@ -1297,39 +1283,10 @@ const App: React.FC = () => {
       activeChannels.push(farmaciaChannel);
     }
 
-    // System Update Channel (Always Active)
-    const settingsChannel = supabase.channel('global-updates')
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'organization_settings', filter: 'id=eq.global_config' },
-        (payload) => {
-          console.log("Realtime: DB Update received", payload);
-          if (payload.new && 'system_update_target' in payload.new) {
-            setSystemUpdateTarget(payload.new.system_update_target as number);
-            setIsUpdateModalDismissed(false);
-          }
-        }
-      )
-      .on(
-        'broadcast',
-        { event: 'system_update' },
-        (payload) => {
-          console.log("Realtime: Broadcast received", payload);
-          if (payload.payload?.target) {
-            setSystemUpdateTarget(payload.payload.target);
-            setIsUpdateModalDismissed(false);
-          }
-        }
-      )
-      .subscribe((status) => {
-        console.log("Channel global-updates status:", status);
-      });
-    activeChannels.push(settingsChannel);
-
     return () => {
       activeChannels.forEach(ch => supabase.removeChannel(ch));
     };
-  }, [queryClient, moduleStatus, currentView, activeBlock]);
+  }, [moduleStatus, currentView, activeBlock]);
 
   // --- PERSISTENT ROUTING LOGIC ---
   useEffect(() => {
@@ -1446,6 +1403,9 @@ const App: React.FC = () => {
           if (state.sub) {
             setAdminTab(state.sub);
             setIsAdminSidebarOpen(state.sub === 'design' || state.sub === 'ui');
+            if (state.sub === 'egress') {
+              setIsEgressModalOpen(true);
+            }
           } else {
             setAdminTab(null);
             setIsAdminSidebarOpen(false);
@@ -2096,7 +2056,7 @@ const App: React.FC = () => {
     };
 
     const initialCheck = setTimeout(checkSystemRoutine, 1500); // verifica após o mount
-    const interval = setInterval(checkSystemRoutine, 15000); // check mais frequente (15s) para pegar troca de tela rápida
+    const interval = setInterval(checkSystemRoutine, 300000); // checagem periódica a cada 5 minutos (atualizações são disparadas via Realtime)
 
     return () => {
       clearTimeout(initialCheck);
@@ -2700,24 +2660,7 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Realtime Listener for Purchase Orders (Single Store Sync)
-  useEffect(() => {
-    const channel = supabase
-      .channel('purchase-updates')
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'purchase_orders' },
-        (payload) => {
-          console.log('Realtime UPDATE detected for purchase_orders:', payload);
-          syncOrders('compras');
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [syncOrders]);
+  // Sincronização de Purchase Orders unificada no canal central de compras para evitar conexões duplicadas
 
   // OPTIMISTIC DELETE HANDLER
   const handleDeleteOrder = async (id: string) => {
@@ -3676,6 +3619,11 @@ const App: React.FC = () => {
       alert(routeCheck.reason || 'Acesso negado: seu perfil não possui permissão para o Painel Administrativo.');
       return;
     }
+    if (tab === 'egress') {
+      setIsEgressModalOpen(true);
+      window.history.pushState({}, '', '/Admin/Egress');
+      return;
+    }
     setCurrentView('admin');
     const targetTab = tab || null;
     setAdminTab(targetTab);
@@ -4492,7 +4440,17 @@ const App: React.FC = () => {
                       <div className="flex-1 overflow-y-auto custom-scrollbar p-8">
                         <AdminDashboard
                           currentUser={currentUser}
-                          onTabChange={(tab) => setAdminTab(tab)}
+                          onTabChange={(tab) => {
+                            if (tab === 'egress') {
+                              setIsEgressModalOpen(true);
+                              window.history.pushState({}, '', '/Admin/Egress');
+                              return;
+                            }
+                            setAdminTab(tab);
+                            if (VIEW_TO_PATH[`admin:${tab}`]) {
+                              window.history.pushState({}, '', VIEW_TO_PATH[`admin:${tab}`]);
+                            }
+                          }}
                           onBack={handleGoHome}
                         />
                       </div>
@@ -4530,7 +4488,7 @@ const App: React.FC = () => {
                             }
                           } else {
                             // Refresh users
-                            const { data: refreshed } = await supabase.from('profiles').select('*');
+                            const { data: refreshed } = await supabase.from('profiles').select('id, username, name, role, sector, sector_id, job_title, job_id, email, whatsapp, allowed_signature_ids, permissions, temp_password, temp_password_expires_at, two_factor_enabled, two_factor_secret, status, avatar');
                             if (refreshed) {
                               const mapped = refreshed.map((ru: any) => ({
                                 id: ru.id,
@@ -5860,6 +5818,54 @@ const App: React.FC = () => {
             }
 
           </div>
+
+          {/* Footer Global com Links das Políticas de Privacidade e Monitor de Egress */}
+          {currentUser && (
+            <footer className="w-full shrink-0 bg-slate-900/95 text-slate-400 py-2.5 px-6 border-t border-slate-800 text-[11px] flex flex-col sm:flex-row items-center justify-between gap-2 z-30 shadow-lg print:hidden">
+              <p>© 2026 Prefeitura Municipal de São José do Goiabal - MG. Todos os direitos reservados.</p>
+              <div className="flex items-center gap-3">
+                <a
+                  href="/PoliticaPrivacidade"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    window.history.pushState({}, '', '/PoliticaPrivacidade');
+                    setCurrentView('politica-privacidade');
+                  }}
+                  className="text-slate-400 hover:text-white transition-colors underline cursor-pointer"
+                >
+                  Política de Privacidade
+                </a>
+                <span className="text-slate-700">•</span>
+                <a
+                  href="/PoliticaPrivacidadeApp"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    window.history.pushState({}, '', '/PoliticaPrivacidadeApp');
+                    setCurrentView('politica-privacidade-app');
+                  }}
+                  className="text-slate-400 hover:text-white transition-colors underline cursor-pointer"
+                >
+                  Política do Aplicativo
+                </a>
+                {(currentUser.role === 'admin' || (currentUser as any).role === 'master') && (
+                  <>
+                    <span className="text-slate-700">•</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsEgressModalOpen(true);
+                        window.history.pushState({}, '', '/Admin/Egress');
+                      }}
+                      className="text-emerald-400 hover:text-emerald-300 transition-colors flex items-center gap-1.5 font-bold cursor-pointer hover:bg-emerald-950/40 px-2.5 py-1 rounded-lg border border-emerald-500/30"
+                    >
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                      Monitor de Egress
+                    </button>
+                  </>
+                )}
+              </div>
+            </footer>
+          )}
         </div >
       </ChatProvider>
 
@@ -6041,37 +6047,18 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Footer Global com Links das Políticas de Privacidade */}
-      {currentUser && (
-        <footer className="w-full bg-slate-900/90 text-slate-400 py-3 px-4 border-t border-slate-800 text-[11px] flex flex-col sm:flex-row items-center justify-between gap-2 z-10 print:hidden">
-          <p>© 2026 Prefeitura Municipal de São José do Goiabal - MG. Todos os direitos reservados.</p>
-          <div className="flex items-center gap-3">
-            <a
-              href="/PoliticaPrivacidade"
-              onClick={(e) => {
-                e.preventDefault();
-                window.history.pushState({}, '', '/PoliticaPrivacidade');
-                setCurrentView('politica-privacidade');
-              }}
-              className="text-slate-400 hover:text-white transition-colors underline cursor-pointer"
-            >
-              Política de Privacidade
-            </a>
-            <span className="text-slate-700">•</span>
-            <a
-              href="/PoliticaPrivacidadeApp"
-              onClick={(e) => {
-                e.preventDefault();
-                window.history.pushState({}, '', '/PoliticaPrivacidadeApp');
-                setCurrentView('politica-privacidade-app');
-              }}
-              className="text-slate-400 hover:text-white transition-colors underline cursor-pointer"
-            >
-              Política do Aplicativo
-            </a>
-          </div>
-        </footer>
-      )}
+
+
+      {/* Modal de Telemetria e Monitoramento de Egress (Supabase) */}
+      <EgressMonitorModal
+        isOpen={isEgressModalOpen}
+        onClose={() => {
+          setIsEgressModalOpen(false);
+          if (window.location.pathname.toLowerCase().includes('/admin/egress')) {
+            window.history.pushState({}, '', '/PaginaInicial');
+          }
+        }}
+      />
     </NotificationProvider >
   );
 };

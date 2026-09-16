@@ -98,7 +98,7 @@ export const getRecordByOperationCode = async (code: string): Promise<OperationC
         // Busca flexível tolerante a erros de digitação comuns
         const { data, error } = await supabase
             .from('operation_codes')
-            .select('*')
+            .select('id, code, module, record_id, metadata, created_at')
             .in('code', variations);
 
         if (error) throw error;

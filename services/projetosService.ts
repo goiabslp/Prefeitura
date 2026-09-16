@@ -4,9 +4,10 @@ import { handleSupabaseError } from '../utils/errorUtils';
 
 export const getProjetos = async (): Promise<Projeto[]> => {
     try {
+        const PROJETO_COLUMNS = 'id, name, description, responsible_id, status, start_date, end_date, current_owner_id, current_sector_id, objectives, created_by, created_at, updated_at';
         const { data, error } = await supabase
             .from('projetos')
-            .select('*')
+            .select(PROJETO_COLUMNS)
             .order('created_at', { ascending: false });
 
         if (error) {
@@ -23,9 +24,10 @@ export const getProjetos = async (): Promise<Projeto[]> => {
 
 export const getProjetoById = async (id: string): Promise<Projeto | null> => {
     try {
+        const PROJETO_COLUMNS = 'id, name, description, responsible_id, status, start_date, end_date, current_owner_id, current_sector_id, objectives, created_by, created_at, updated_at';
         const { data, error } = await supabase
             .from('projetos')
-            .select('*')
+            .select(PROJETO_COLUMNS)
             .eq('id', id)
             .single();
 
@@ -43,9 +45,10 @@ export const getProjetoById = async (id: string): Promise<Projeto | null> => {
 
 export const getProjetoHistory = async (projectId: string): Promise<ProjetoHistory[]> => {
     try {
+        const HISTORY_COLUMNS = 'id, project_id, user_id, sector_id, action, message, attachments, created_at';
         const { data, error } = await supabase
             .from('projeto_history')
-            .select('*')
+            .select(HISTORY_COLUMNS)
             .eq('project_id', projectId)
             .order('created_at', { ascending: true });
 

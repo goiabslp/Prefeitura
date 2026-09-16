@@ -91,9 +91,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const fetchProfile = async (userId: string, email: string) => {
         try {
+            const profileColumns = 'id, username, name, role, test_role, sector, sector_id, job_title, job_id, allowed_signature_ids, permissions, temp_password, temp_password_expires_at, email, whatsapp, two_factor_enabled, two_factor_secret, two_factor_enabled_2, two_factor_secret_2, must_change_password, status';
             const { data, error } = await supabase
                 .from('profiles')
-                .select('*')
+                .select(profileColumns)
                 .eq('id', userId)
                 .single();
 

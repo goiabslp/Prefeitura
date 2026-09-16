@@ -16,10 +16,10 @@ export const notificationService = {
     async fetchNotifications(userId: string): Promise<Notification[]> {
         const { data, error } = await supabase
             .from('notifications')
-            .select('*')
+            .select('id, user_id, title, message, type, read, created_at, link')
             .eq('user_id', userId)
             .order('created_at', { ascending: false })
-            .limit(50); // increased limit
+            .limit(50);
 
         if (error) {
             console.error('Error fetching notifications:', error);

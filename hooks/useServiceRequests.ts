@@ -57,8 +57,8 @@ export const useInfiniteServiceRequests = (pageSize = 20, searchTerm = '') => {
             return lastPage.length === pageSize ? allPages.length : undefined;
         },
         initialPageParam: 0,
-        staleTime: 0, // Garante atualizacao imediata ao acessar o Historico
-        refetchOnWindowFocus: true,
+        staleTime: 1000 * 60 * 5, // 5 minutos de cache inteligente
+        refetchOnWindowFocus: false,
     });
 };
 

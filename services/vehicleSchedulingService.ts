@@ -27,11 +27,14 @@ const mapSchedule = (s: any): VehicleSchedule => ({
     cancelledBy: s.cancelled_by
 });
 
+const SCHEDULE_COLUMNS = 'id, protocol, vehicle_id, driver_id, destination, departure_date, return_date, status, reason, created_at, vehicle_location, authorized_by_name, passengers, patient_count, companion_count, cancellation_reason, cancelled_at, cancelled_by';
+
 export const getSchedules = async (): Promise<VehicleSchedule[]> => {
     const { data, error } = await supabase
         .from('vehicle_schedules')
-        .select('*')
-        .order('created_at', { ascending: false });
+        .select(SCHEDULE_COLUMNS)
+        .order('created_at', { ascending: false })
+        .limit(300);
 
     if (error) {
         console.error('Error fetching schedules:', error);
@@ -44,7 +47,7 @@ export const getSchedules = async (): Promise<VehicleSchedule[]> => {
 export const getScheduleById = async (id: string): Promise<VehicleSchedule | null> => {
     const { data, error } = await supabase
         .from('vehicle_schedules')
-        .select('*')
+        .select(SCHEDULE_COLUMNS)
         .eq('id', id)
         .single();
 

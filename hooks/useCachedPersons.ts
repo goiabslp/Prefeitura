@@ -31,7 +31,7 @@ export const useCachedPersons = (initialPersons: Person[] = []) => {
         queryFn: async () => {
             const { data, error } = await supabase
                 .from('persons')
-                .select('*')
+                .select('id, name, sector_id, job_id, role')
                 .order('name');
 
             if (error) throw error;

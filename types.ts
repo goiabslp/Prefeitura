@@ -191,6 +191,7 @@ export interface AppState {
   view?: string; // Add optional view property for compatibility
   sub?: string;
   selectedId?: string;
+  sectors?: Sector[];
 }
 
 export type UserRole = 'admin' | 'collaborator' | 'compras' | 'marketing' | 'licitacao';

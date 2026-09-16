@@ -5,7 +5,7 @@ export const getGlobalSettings = async (): Promise<AppState | null> => {
     try {
         const { data, error } = await supabase
             .from('organization_settings')
-            .select('*')
+            .select('branding, document_config, ui_config')
             .eq('id', 'global_config')
             .single();
 

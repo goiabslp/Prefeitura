@@ -5,7 +5,7 @@ export const purchaseAccountService = {
     async getAccounts(): Promise<PurchaseAccount[]> {
         const { data, error } = await supabase
             .from('purchase_accounts')
-            .select('*')
+            .select('id, agency, account_number, description, sector, status, ficha, resolucao, created_at, created_by')
             .order('account_number', { ascending: true });
 
         if (error) {

@@ -1,0 +1,694 @@
+{
+  "selectStar": [
+    {
+      "file": "App.tsx",
+      "lineNum": 4472,
+      "line": "const { data: refreshed } = await supabase.from('profiles').select('*');"
+    },
+    {
+      "file": "components\\abastecimento\\AbastecimentoList.tsx",
+      "lineNum": 270,
+      "line": "Object.keys(vehicleSectorMap).length === 0 ? supabase.from('vehicles').select('*') : Promise.resolve({ data: null }),"
+    },
+    {
+      "file": "components\\abastecimento\\AbastecimentoList.tsx",
+      "lineNum": 271,
+      "line": "Object.keys(vehicleSectorMap).length === 0 ? supabase.from('sectors').select('*') : Promise.resolve({ data: null }),"
+    },
+    {
+      "file": "components\\admin\\EgressMonitorModal.tsx",
+      "lineNum": 104,
+      "line": "<li>✓ Proibição de <code className=\"bg-emerald-100 dark:bg-emerald-900/50 px-1 rounded\">select('*')</code> em consultas ativas.</li>"
+    },
+    {
+      "file": "components\\common\\ModuleGestorScreen.tsx",
+      "lineNum": 71,
+      "line": "const { data, error } = await supabase.from('profiles').select('*').order('name');"
+    },
+    {
+      "file": "components\\diarias\\LancamentosScreen.tsx",
+      "lineNum": 387,
+      "line": "const { data: sData } = await supabase.from('sectors').select('*');"
+    },
+    {
+      "file": "components\\diarias\\LancamentosScreen.tsx",
+      "lineNum": 390,
+      "line": "const { data: pData } = await supabase.from('profiles').select('*');"
+    },
+    {
+      "file": "components\\diarias\\LancamentosScreen.tsx",
+      "lineNum": 393,
+      "line": "const { data: jData } = await supabase.from('jobs').select('*');"
+    },
+    {
+      "file": "components\\diarias\\LancamentosScreen.tsx",
+      "lineNum": 396,
+      "line": "const { data: peData } = await supabase.from('persons').select('*');"
+    },
+    {
+      "file": "components\\diarias\\NovoEventoScreen.tsx",
+      "lineNum": 754,
+      "line": ".select('*')"
+    },
+    {
+      "file": "components\\licitacao\\LicitacaoKanban.tsx",
+      "lineNum": 191,
+      "line": "const { data } = await supabase.from('users').select('*');"
+    },
+    {
+      "file": "components\\marketing\\MarketingDetails.tsx",
+      "lineNum": 344,
+      "line": ".select('*')"
+    },
+    {
+      "file": "components\\upload\\UploadHub.tsx",
+      "lineNum": 135,
+      "line": ".select('*')"
+    },
+    {
+      "file": "components\\upload\\UploadHub.tsx",
+      "lineNum": 172,
+      "line": ".select('*')"
+    },
+    {
+      "file": "components\\upload\\UploadHub.tsx",
+      "lineNum": 346,
+      "line": ".select('*')"
+    },
+    {
+      "file": "components\\upload\\UploadHub.tsx",
+      "lineNum": 391,
+      "line": ".select('*')"
+    },
+    {
+      "file": "debug_data_check.ts",
+      "lineNum": 15,
+      "line": ".select('*')"
+    },
+    {
+      "file": "debug_data_check.ts",
+      "lineNum": 37,
+      "line": ".select('*')"
+    },
+    {
+      "file": "reset-fase.ts",
+      "lineNum": 22,
+      "line": ".select('*')"
+    },
+    {
+      "file": "reset-fase.ts",
+      "lineNum": 47,
+      "line": "const { data: allOrders } = await supabase.from('orders').select('*').eq('protocol', protocoloToFind);"
+    },
+    {
+      "file": "services\\chatService.ts",
+      "lineNum": 251,
+      "line": ".select('*')"
+    },
+    {
+      "file": "services\\farmaciaService.ts",
+      "lineNum": 181,
+      "line": ".select('*')"
+    },
+    {
+      "file": "services\\googleCalendarService.ts",
+      "lineNum": 401,
+      "line": ".select('*')"
+    },
+    {
+      "file": "services\\locationTrackingService.ts",
+      "lineNum": 83,
+      "line": ".select('*')"
+    },
+    {
+      "file": "services\\notificationService.ts",
+      "lineNum": 19,
+      "line": ".select('*')"
+    },
+    {
+      "file": "services\\oficiosService.ts",
+      "lineNum": 91,
+      "line": ".select('*')"
+    },
+    {
+      "file": "services\\operationCodeService.ts",
+      "lineNum": 101,
+      "line": ".select('*')"
+    },
+    {
+      "file": "services\\ordersService.ts",
+      "lineNum": 8,
+      "line": ".select('*')"
+    },
+    {
+      "file": "services\\projetosService.ts",
+      "lineNum": 9,
+      "line": ".select('*')"
+    },
+    {
+      "file": "services\\projetosService.ts",
+      "lineNum": 28,
+      "line": ".select('*')"
+    },
+    {
+      "file": "services\\projetosService.ts",
+      "lineNum": 48,
+      "line": ".select('*')"
+    },
+    {
+      "file": "services\\purchaseAccountService.ts",
+      "lineNum": 8,
+      "line": ".select('*')"
+    },
+    {
+      "file": "services\\rhService.ts",
+      "lineNum": 52,
+      "line": ".select('*')"
+    },
+    {
+      "file": "services\\settingsService.ts",
+      "lineNum": 8,
+      "line": ".select('*')"
+    },
+    {
+      "file": "test_diaria.ts",
+      "lineNum": 13,
+      "line": ".select('*')"
+    },
+    {
+      "file": "verify_fix.ts",
+      "lineNum": 16,
+      "line": ".select('*')"
+    },
+    {
+      "file": "verify_fix.ts",
+      "lineNum": 58,
+      "line": ".select('*')"
+    }
+  ],
+  "realtimeChannels": [
+    {
+      "file": "App.tsx",
+      "lineNum": 496,
+      "line": "const channel = supabase.channel('impersonation_presence', {"
+    },
+    {
+      "file": "App.tsx",
+      "lineNum": 562,
+      "line": "const presenceChannel = supabase.channel('impersonation_presence');"
+    },
+    {
+      "file": "App.tsx",
+      "lineNum": 613,
+      "line": "const globalEventsCh = supabase.channel('global_events')"
+    },
+    {
+      "file": "App.tsx",
+      "lineNum": 618,
+      "line": "const alertsCh = supabase.channel('user_impersonation_alerts')"
+    },
+    {
+      "file": "App.tsx",
+      "lineNum": 1110,
+      "line": "const profileChannel = supabase.channel('public:profiles')"
+    },
+    {
+      "file": "App.tsx",
+      "lineNum": 1151,
+      "line": "const settingsChannel = supabase.channel('global-updates')"
+    },
+    {
+      "file": "App.tsx",
+      "lineNum": 1186,
+      "line": "const vehicleChannel = supabase.channel('public:vehicles')"
+    },
+    {
+      "file": "App.tsx",
+      "lineNum": 1202,
+      "line": "const stationChannel = supabase.channel('public:abastecimento_gas_stations')"
+    },
+    {
+      "file": "App.tsx",
+      "lineNum": 1214,
+      "line": "const configChannel = supabase.channel('public:abastecimento_config')"
+    },
+    {
+      "file": "App.tsx",
+      "lineNum": 1231,
+      "line": "const consultasChannel = supabase.channel('public:consultas_changes')"
+    },
+    {
+      "file": "App.tsx",
+      "lineNum": 1259,
+      "line": "const farmaciaChannel = supabase.channel('public:farmacia_changes')"
+    },
+    {
+      "file": "App.tsx",
+      "lineNum": 3820,
+      "line": ".channel('vehicle_schedules_changes')"
+    },
+    {
+      "file": "App.tsx",
+      "lineNum": 4202,
+      "line": "await supabase.channel('global_events').send({"
+    },
+    {
+      "file": "components\\abastecimento\\AbastecimentoDashboard.tsx",
+      "lineNum": 926,
+      "line": ".channel('dashboard-records-changes')"
+    },
+    {
+      "file": "components\\abastecimento\\AbastecimentoList.tsx",
+      "lineNum": 350,
+      "line": ".channel('abastecimentos-list-changes')"
+    },
+    {
+      "file": "components\\diarias\\LancamentosScreen.tsx",
+      "lineNum": 417,
+      "line": ".channel('realtime_diarias_lancamentos_sync')"
+    },
+    {
+      "file": "components\\licitacao\\LicitacaoKanban.tsx",
+      "lineNum": 799,
+      "line": "const channel = supabase.channel('licitacao_kanban_priority', { config: { broadcast: { self: true } } })"
+    },
+    {
+      "file": "components\\marketing\\MarketingDetails.tsx",
+      "lineNum": 405,
+      "line": "const channel = supabase.channel(`mkt_presence_${requestId}`, {"
+    },
+    {
+      "file": "components\\OnlineUsers.tsx",
+      "lineNum": 27,
+      "line": "const room = supabase.channel('online-users');"
+    },
+    {
+      "file": "components\\projetos\\ProjetoDetails.tsx",
+      "lineNum": 61,
+      "line": "const histChannel = supabase.channel(`public:projeto_history:${projetoId}`)"
+    },
+    {
+      "file": "components\\projetos\\ProjetoDetails.tsx",
+      "lineNum": 70,
+      "line": "const projChannel = supabase.channel(`public:projetos:${projetoId}`)"
+    },
+    {
+      "file": "components\\SystemUpdateScreen.tsx",
+      "lineNum": 65,
+      "line": "const channel = supabase.channel('global-updates');"
+    },
+    {
+      "file": "components\\upload\\UploadHub.tsx",
+      "lineNum": 145,
+      "line": ".channel(`transfer_files_${transferArea.id}`)"
+    },
+    {
+      "file": "contexts\\AuthContext.tsx",
+      "lineNum": 71,
+      "line": "const channel = supabase.channel('global_events')"
+    },
+    {
+      "file": "contexts\\AuthContext.tsx",
+      "lineNum": 151,
+      "line": "await supabase.channel('global_events').send({"
+    },
+    {
+      "file": "contexts\\ChatContext.tsx",
+      "lineNum": 39,
+      "line": "const presenceChannel = supabase.channel('online_users_presence', {"
+    },
+    {
+      "file": "contexts\\NotificationContext.tsx",
+      "lineNum": 71,
+      "line": "const channel = supabase.channel(`notifications:${user.id}`)"
+    },
+    {
+      "file": "contexts\\NotificationContext.tsx",
+      "lineNum": 129,
+      "line": "const channel = supabase.channel('global_events')"
+    },
+    {
+      "file": "contexts\\SystemSettingsContext.tsx",
+      "lineNum": 209,
+      "line": ".channel('global_settings_changes')"
+    },
+    {
+      "file": "hooks\\useCachedFuelTypes.ts",
+      "lineNum": 24,
+      "line": ".channel('fuel_types_cache_sync')"
+    },
+    {
+      "file": "hooks\\useCachedPersons.ts",
+      "lineNum": 18,
+      "line": ".channel('persons_cache_sync')"
+    },
+    {
+      "file": "hooks\\useCachedVehicles.ts",
+      "lineNum": 18,
+      "line": ".channel('vehicles_cache_sync')"
+    },
+    {
+      "file": "hooks\\useOficios.ts",
+      "lineNum": 31,
+      "line": ".channel('realtime:oficios')"
+    },
+    {
+      "file": "hooks\\usePurchaseOrders.ts",
+      "lineNum": 22,
+      "line": ".channel('realtime:purchase_orders')"
+    },
+    {
+      "file": "hooks\\useServiceRequests.ts",
+      "lineNum": 22,
+      "line": ".channel('realtime:service_requests')"
+    },
+    {
+      "file": "services\\impersonationService.ts",
+      "lineNum": 152,
+      "line": "const ch1 = supabase.channel('global_events');"
+    },
+    {
+      "file": "services\\impersonationService.ts",
+      "lineNum": 163,
+      "line": "const ch2 = supabase.channel('user_impersonation_alerts');"
+    },
+    {
+      "file": "services\\impersonationService.ts",
+      "lineNum": 226,
+      "line": "const ch1 = supabase.channel('global_events');"
+    },
+    {
+      "file": "services\\impersonationService.ts",
+      "lineNum": 237,
+      "line": "const ch2 = supabase.channel('user_impersonation_alerts');"
+    },
+    {
+      "file": "services\\remoteAccessService.ts",
+      "lineNum": 135,
+      "line": "const channel = supabase.channel(channelName, {"
+    },
+    {
+      "file": "services\\remoteAccessService.ts",
+      "lineNum": 240,
+      "line": "const channel = supabase.channel(channelName, {"
+    }
+  ],
+  "intervals": [
+    {
+      "file": "App.tsx",
+      "lineNum": 1705,
+      "line": "const interval = setInterval(() => {"
+    },
+    {
+      "file": "App.tsx",
+      "lineNum": 2055,
+      "line": "const interval = setInterval(checkSystemRoutine, 300000); // checagem periódica a cada 5 minutos (atualizações são disparadas via Realtime)"
+    },
+    {
+      "file": "components\\diarias\\LancamentosScreen.tsx",
+      "lineNum": 168,
+      "line": "const timer = setInterval(() => setNow(new Date()), 1000);"
+    },
+    {
+      "file": "components\\diarias\\ViajarScreen.tsx",
+      "lineNum": 172,
+      "line": "const interval = setInterval(() => {"
+    },
+    {
+      "file": "components\\diarias\\ViajarScreen.tsx",
+      "lineNum": 309,
+      "line": "const tick = setInterval(() => setNow(new Date()), 30000);"
+    },
+    {
+      "file": "components\\diarias\\ViajarScreen.tsx",
+      "lineNum": 528,
+      "line": "timerRef.current = setInterval(updateTimer, 1000);"
+    },
+    {
+      "file": "components\\farmacia\\RetirarScreen.tsx",
+      "lineNum": 155,
+      "line": "const interval = setInterval(() => {"
+    },
+    {
+      "file": "components\\licitacao\\LicitacaoKanban.tsx",
+      "lineNum": 126,
+      "line": "const { data: processes = [], isLoading } = useLicitacaoProcesses({ refetchInterval: isViewOnly ? 10 * 60 * 1000 : false });"
+    },
+    {
+      "file": "components\\licitacao\\LicitacaoKanban.tsx",
+      "lineNum": 784,
+      "line": "const tenMinutesInterval = setInterval(() => {"
+    },
+    {
+      "file": "components\\LoginScreen.tsx",
+      "lineNum": 69,
+      "line": "const interval = setInterval(() => {"
+    },
+    {
+      "file": "components\\TrackingScreen.tsx",
+      "lineNum": 113,
+      "line": "const interval = setInterval(loadMap, 30000);"
+    },
+    {
+      "file": "components\\TwoFactorAuthScreen.tsx",
+      "lineNum": 39,
+      "line": "const timer = setInterval(() => {"
+    },
+    {
+      "file": "components\\upload\\UploadHub.tsx",
+      "lineNum": 97,
+      "line": "const interval = setInterval(() => {"
+    },
+    {
+      "file": "components\\upload\\UploadHub.tsx",
+      "lineNum": 114,
+      "line": "const interval = setInterval(() => {"
+    },
+    {
+      "file": "components\\upload\\UploadHub.tsx",
+      "lineNum": 436,
+      "line": "const interval = setInterval(() => {"
+    },
+    {
+      "file": "components\\UserManagementScreen.tsx",
+      "lineNum": 74,
+      "line": "const timer = setInterval(calculateTime, 1000);"
+    },
+    {
+      "file": "components\\VehicleScheduleHistory.tsx",
+      "lineNum": 115,
+      "line": "const interval = setInterval(checkStatus, 30000);"
+    },
+    {
+      "file": "hooks\\useLicitacaoModule.ts",
+      "lineNum": 14,
+      "line": "export const useLicitacaoProcesses = (options?: { refetchInterval?: number | false }) => {"
+    },
+    {
+      "file": "hooks\\useLicitacaoModule.ts",
+      "lineNum": 18,
+      "line": "refetchInterval: options?.refetchInterval !== undefined ? options.refetchInterval : false,"
+    },
+    {
+      "file": "services\\artStudioService.ts",
+      "lineNum": 1110,
+      "line": "const progressTimer = setInterval(() => {"
+    },
+    {
+      "file": "services\\locationTrackingService.ts",
+      "lineNum": 210,
+      "line": "trackingIntervalId = setInterval(() => {"
+    },
+    {
+      "file": "services\\locationTrackingService.ts",
+      "lineNum": 233,
+      "line": "timer = setInterval(function() {"
+    }
+  ],
+  "useQueries": [
+    {
+      "file": "components\\admin\\EgressMonitorModal.tsx",
+      "lineNum": 106,
+      "line": "<li>✓ React Query com <code className=\"bg-emerald-100 dark:bg-emerald-900/50 px-1 rounded\">refetchOnMount: false</code> e 10 min de stale time.</li>"
+    },
+    {
+      "file": "hooks\\useCachedFuelTypes.ts",
+      "lineNum": 40,
+      "line": "return useQuery({"
+    },
+    {
+      "file": "hooks\\useCachedPersons.ts",
+      "lineNum": 29,
+      "line": "return useQuery({"
+    },
+    {
+      "file": "hooks\\useCachedVehicles.ts",
+      "lineNum": 29,
+      "line": "return useQuery({"
+    },
+    {
+      "file": "hooks\\useLicitacaoModule.ts",
+      "lineNum": 15,
+      "line": "return useQuery({"
+    },
+    {
+      "file": "hooks\\useLicitacaoModule.ts",
+      "lineNum": 19,
+      "line": "refetchOnWindowFocus: false"
+    },
+    {
+      "file": "hooks\\useLicitacaoModule.ts",
+      "lineNum": 24,
+      "line": "return useQuery({"
+    },
+    {
+      "file": "hooks\\useLicitacaoModule.ts",
+      "lineNum": 32,
+      "line": "return useQuery({"
+    },
+    {
+      "file": "hooks\\useOficios.ts",
+      "lineNum": 16,
+      "line": "return useQuery({"
+    },
+    {
+      "file": "hooks\\useOficios.ts",
+      "lineNum": 21,
+      "line": "refetchOnWindowFocus: false,"
+    },
+    {
+      "file": "hooks\\useOficios.ts",
+      "lineNum": 50,
+      "line": "return useQuery({"
+    },
+    {
+      "file": "hooks\\useOficios.ts",
+      "lineNum": 54,
+      "line": "refetchOnWindowFocus: false,"
+    },
+    {
+      "file": "hooks\\useOficios.ts",
+      "lineNum": 69,
+      "line": "refetchOnWindowFocus: false,"
+    },
+    {
+      "file": "hooks\\usePurchaseOrders.ts",
+      "lineNum": 37,
+      "line": "return useQuery({"
+    },
+    {
+      "file": "hooks\\usePurchaseOrders.ts",
+      "lineNum": 44,
+      "line": "refetchOnWindowFocus: false,"
+    },
+    {
+      "file": "hooks\\usePurchaseOrders.ts",
+      "lineNum": 62,
+      "line": "refetchOnWindowFocus: false,"
+    },
+    {
+      "file": "hooks\\usePurchaseOrders.ts",
+      "lineNum": 68,
+      "line": "return useQuery({"
+    },
+    {
+      "file": "hooks\\usePurchaseOrders.ts",
+      "lineNum": 73,
+      "line": "refetchOnWindowFocus: false,"
+    },
+    {
+      "file": "hooks\\useServiceRequests.ts",
+      "lineNum": 37,
+      "line": "return useQuery({"
+    },
+    {
+      "file": "hooks\\useServiceRequests.ts",
+      "lineNum": 44,
+      "line": "refetchOnWindowFocus: false,"
+    },
+    {
+      "file": "hooks\\useServiceRequests.ts",
+      "lineNum": 61,
+      "line": "refetchOnWindowFocus: false,"
+    },
+    {
+      "file": "hooks\\useServiceRequests.ts",
+      "lineNum": 67,
+      "line": "return useQuery({"
+    },
+    {
+      "file": "hooks\\useServiceRequests.ts",
+      "lineNum": 72,
+      "line": "refetchOnWindowFocus: false,"
+    },
+    {
+      "file": "services\\queryClient.ts",
+      "lineNum": 10,
+      "line": "refetchOnWindowFocus: false, // Previne requisições repetitivas ao alternar abas"
+    },
+    {
+      "file": "services\\queryClient.ts",
+      "lineNum": 11,
+      "line": "refetchOnMount: false, // Reutiliza cache ao navegar entre telas sem nova requisição"
+    }
+  ],
+  "storageCalls": [
+    {
+      "file": "components\\abastecimento\\AbastecimentoDashboard.tsx",
+      "lineNum": 2473,
+      "line": "const { data } = await supabase.storage.from('attachments').list('empenho_reports', { limit: 100 });"
+    },
+    {
+      "file": "components\\abastecimento\\AbastecimentoDashboard.tsx",
+      "lineNum": 5477,
+      "line": "href={`${supabase.storage.from('attachments').getPublicUrl(`empenho_reports/${file.name}`).data.publicUrl}`}"
+    },
+    {
+      "file": "components\\abastecimento\\AbastecimentoDashboard.tsx",
+      "lineNum": 5535,
+      "line": "const { data, error } = await supabase.storage.from('attachments').remove([`empenho_reports/${fileToDel.name}`]);"
+    },
+    {
+      "file": "components\\calendario\\EventModal.tsx",
+      "lineNum": 478,
+      "line": "const { data: publicUrlData } = supabase.storage.from('attachments').getPublicUrl(storagePath);"
+    },
+    {
+      "file": "components\\marketing\\MarketingDetails.tsx",
+      "lineNum": 316,
+      "line": "const { data: newFiles } = await supabase.storage.from('marketing_attachments').list(requestId);"
+    },
+    {
+      "file": "components\\marketing\\MarketingDetails.tsx",
+      "lineNum": 891,
+      "line": "const { error } = await supabase.storage.from('marketing_attachments').remove([`${requestId}/${file.name}`]);"
+    },
+    {
+      "file": "components\\marketing\\NovoConteudoStepper.tsx",
+      "lineNum": 242,
+      "line": "await supabase.storage.from('marketing_attachments').upload(path, file);"
+    },
+    {
+      "file": "services\\fleetService.ts",
+      "lineNum": 194,
+      "line": "await supabase.storage.from('vehicle-documents').remove([path]);"
+    },
+    {
+      "file": "services\\licitacaoService.ts",
+      "lineNum": 544,
+      "line": "await supabase.storage.from('attachments').remove([filePath]);"
+    },
+    {
+      "file": "services\\storageService.ts",
+      "lineNum": 22,
+      "line": "const { data: bucketData, error: bucketError } = await supabase.storage.createBucket(bucket, {"
+    },
+    {
+      "file": "services\\storageService.ts",
+      "lineNum": 45,
+      "line": "const { data: publicUrlData } = supabase.storage.from(bucket).getPublicUrl(finalPath);"
+    }
+  ],
+  "unpaginatedSelects": [],
+  "aggregationsInJs": []
+}

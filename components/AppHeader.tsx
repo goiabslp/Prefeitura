@@ -14,7 +14,8 @@ import {
   ShieldOff,
   ShieldAlert,
   Eye,
-  Tv
+  Tv,
+  Activity
 } from 'lucide-react';
 import { User, UIConfig, BlockType } from '../types';
 import { ImpersonationSession } from '../services/impersonationService';
@@ -539,6 +540,15 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                     <ShieldCheck className="w-4 h-4" />
                     Autenticador 2FA
                   </button>
+                  {(currentUser.role === 'admin' || (currentUser as any).role === 'master') && (
+                    <button
+                      onClick={() => onOpenAdmin('egress')}
+                      className="w-full flex items-center gap-3 px-4 py-2 text-sm text-emerald-600 hover:bg-emerald-50 transition-colors font-medium"
+                    >
+                      <Activity className="w-4 h-4 text-emerald-500" />
+                      Monitor de Egress
+                    </button>
+                  )}
                   <button
                     onClick={onLogout}
                     className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-500 hover:bg-red-50 transition-colors"

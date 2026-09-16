@@ -266,9 +266,8 @@ export const AbastecimentoList: React.FC<AbastecimentoListProps> = ({ onBack, on
             const [dataRes, vehiclesRes, sectorsRes, stationsRes] = await Promise.all([
                 AbastecimentoService.getAbastecimentos(currentPage, 50, filters),
                 // Optimization: Load metadata only if maps are empty or forced refresh
-                // But for now keeping simple to ensure consistency
-                Object.keys(vehicleSectorMap).length === 0 ? supabase.from('vehicles').select('*') : Promise.resolve({ data: null }),
-                Object.keys(vehicleSectorMap).length === 0 ? supabase.from('sectors').select('*') : Promise.resolve({ data: null }),
+                Object.keys(vehicleSectorMap).length === 0 ? supabase.from('vehicles').select('plate, sector_id') : Promise.resolve({ data: null }),
+                Object.keys(vehicleSectorMap).length === 0 ? supabase.from('sectors').select('id, name') : Promise.resolve({ data: null }),
                 gasStations.length === 0 ? AbastecimentoService.getGasStations() : Promise.resolve(null)
             ]);
 

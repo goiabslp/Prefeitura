@@ -29,7 +29,7 @@ export const getRhHorasExtrasHistory = async (page: number = 1, limit: number = 
 
         const { data, error, count } = await supabase
             .from('rh_horas_extras')
-            .select('*', { count: 'exact' })
+            .select('id, created_at, month, sector, entries, user_id, user_name, signature_name, signature_role, signature_sector, updated_at', { count: 'exact' })
             .order('created_at', { ascending: false })
             .range(from, to);
 
@@ -49,7 +49,7 @@ export const getRhHorasExtrasById = async (id: string): Promise<RhHorasExtras | 
     try {
         const { data, error } = await supabase
             .from('rh_horas_extras')
-            .select('*')
+            .select('id, created_at, month, sector, entries, user_id, user_name, signature_name, signature_role, signature_sector, updated_at')
             .eq('id', id)
             .single();
 

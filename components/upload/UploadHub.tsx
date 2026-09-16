@@ -132,7 +132,7 @@ export const UploadHub: React.FC<UploadHubProps> = ({ currentUser, onBack }) => 
         const fetchFiles = async () => {
             const { data } = await supabase
                 .from('transfer_files')
-                .select('*')
+                .select('id, transfer_area_id, file_name, file_url, file_size, file_type, created_at')
                 .eq('transfer_area_id', transferArea.id)
                 .order('created_at', { ascending: false });
             if (data) {
@@ -169,7 +169,7 @@ export const UploadHub: React.FC<UploadHubProps> = ({ currentUser, onBack }) => 
 
             const { data } = await supabase
                 .from('transfer_areas')
-                .select('*')
+                .select('id, code, expires_at, created_by, created_at')
                 .eq('created_by', currentUser?.id)
                 .gt('expires_at', new Date().toISOString())
                 .maybeSingle();
@@ -343,7 +343,7 @@ export const UploadHub: React.FC<UploadHubProps> = ({ currentUser, onBack }) => 
             // 1. Tenta buscar primeiro na tabela de Área de Transferência temporária
             const { data: trData } = await supabase
                 .from('transfer_areas')
-                .select('*')
+                .select('id, code, expires_at, created_by, created_at')
                 .eq('code', cleanCode)
                 .gt('expires_at', new Date().toISOString())
                 .maybeSingle();
@@ -386,9 +386,15 @@ export const UploadHub: React.FC<UploadHubProps> = ({ currentUser, onBack }) => 
                 return;
             }
 
+            let selectCols = 'id';
+            if (record.module === 'diarias') selectCols = 'id, comprovantes_gestor';
+            else if (record.module === 'compras') selectCols = 'id, attachments';
+            else if (record.module === 'oficios') selectCols = 'id, document_snapshot';
+            else if (record.module === 'abastecimento') selectCols = 'id, photo_url, document_url, observacoes';
+
             const { data: recordData, error: recordError } = await supabase
                 .from(tableName)
-                .select('*')
+                .select(selectCols)
                 .eq('id', record.record_id)
                 .maybeSingle();
 

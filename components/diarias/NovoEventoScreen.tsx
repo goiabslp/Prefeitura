@@ -747,21 +747,22 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
   const vehicles = directVehicles.length > 0 ? directVehicles : cachedVehicles;
 
   useEffect(() => {
+    if (cachedVehicles && cachedVehicles.length > 0) return;
     const loadVehiclesDirectly = async () => {
       try {
         const { data, error } = await supabase
           .from('vehicles')
-          .select('*')
+          .select('id, plate, model, brand, year, type, sector_id, active')
           .order('plate', { ascending: true });
         if (data && !error) {
-          setDirectVehicles(data);
+          setDirectVehicles(data as unknown as Vehicle[]);
         }
       } catch (e) {
         console.warn("Direct vehicle loading failed:", e);
       }
     };
     loadVehiclesDirectly();
-  }, []);
+  }, [cachedVehicles]);
 
   const [hospedagem, setHospedagem] = useState(false);
   const [hospedagemDias, setHospedagemDias] = useState<number>(1);

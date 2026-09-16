@@ -126,17 +126,19 @@ export const createDiariaEvento = async (evento: Omit<DiariaEvento, 'id' | 'crea
   return createdData;
 };
 
+const DIARIA_EVENTO_COLUMNS = 'id, pessoas, destino, data_saida, data_retorno, motivo, setor_id, user_id, user_name, created_at, status, justificativa_gestor, comprovantes_gestor, valor_diaria, relatorio_viagem, hospedagem, hospedagem_dias, veiculo, veiculo_outro, distancia, gestor_transferido_cargo, digital_signature, checklist, modo_inicio, saida_validada, ultimo_checkpoint';
+
 export const getDiariaEventosBySector = async (sectorId?: string): Promise<DiariaEvento[]> => {
   let query = supabase
     .from('diarias_eventos')
-    .select('*')
+    .select(DIARIA_EVENTO_COLUMNS)
     .order('created_at', { ascending: false });
 
   if (sectorId) {
     query = query.eq('setor_id', sectorId);
   }
 
-  const { data, error } = await query;
+  const { data, error } = await query.limit(500);
 
   if (error) {
     console.error('Erro ao buscar eventos de diárias:', error);
@@ -149,8 +151,9 @@ export const getDiariaEventosBySector = async (sectorId?: string): Promise<Diari
 export const getAllDiariaEventos = async (): Promise<DiariaEvento[]> => {
   const { data, error } = await supabase
     .from('diarias_eventos')
-    .select('*')
-    .order('created_at', { ascending: false });
+    .select(DIARIA_EVENTO_COLUMNS)
+    .order('created_at', { ascending: false })
+    .limit(500);
 
   if (error) {
     console.error('Erro ao buscar todos eventos de diárias:', error);
@@ -171,7 +174,7 @@ export const updateDiariaEvento = async (id: string, updates: Partial<DiariaEven
   delete cleanUpdates.permitir_despesas_pos_finalizacao;
 
   if (Object.keys(cleanUpdates).length === 0) {
-    const { data } = await supabase.from('diarias_eventos').select('*').eq('id', id).single();
+    const { data } = await supabase.from('diarias_eventos').select(DIARIA_EVENTO_COLUMNS).eq('id', id).single();
     const map = await getEnabledDespesasEventsMap();
     if (data) {
       return {

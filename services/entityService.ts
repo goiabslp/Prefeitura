@@ -4,7 +4,7 @@ import { birthdaySyncService } from './birthdaySyncService';
 
 // Sectors
 export const getSectors = async (): Promise<Sector[]> => {
-    const { data, error } = await supabase.from('sectors').select('*').order('name');
+    const { data, error } = await supabase.from('sectors').select('id, name').order('name');
     if (error) {
         console.error('Error fetching sectors:', error);
         return [];
@@ -52,7 +52,7 @@ export const deleteSector = async (id: string): Promise<boolean> => {
 
 // Jobs
 export const getJobs = async (): Promise<Job[]> => {
-    const { data, error } = await supabase.from('jobs').select('*').order('name');
+    const { data, error } = await supabase.from('jobs').select('id, name').order('name');
     if (error) {
         console.error('Error fetching jobs:', error);
         return [];
@@ -100,7 +100,10 @@ export const deleteJob = async (id: string): Promise<boolean> => {
 
 // Persons
 export const getPersons = async (): Promise<Person[]> => {
-    const { data, error } = await supabase.from('persons').select('*').order('name');
+    const { data, error } = await supabase
+        .from('persons')
+        .select('id, name, sector_id, job_id, birth_date, driver_code')
+        .order('name');
     if (error) {
         console.error('Error fetching persons:', error);
         return [];
@@ -205,10 +208,11 @@ export const getVehicles = async (): Promise<Vehicle[]> => {
         let keepFetching = true;
 
         // Fetch in chunks to avoid single massive JSON response failure
+        const vehicleColumns = 'id, type, model, plate, brand, year, color, renavam, chassis, sector_id, responsible_person_id, document_url, document_name, vehicle_image_url, status, maintenance_status, fuel_types, request_manager_ids, max_kml, min_kml, current_km, oil_last_change, oil_next_change, oil_calculation_base, vehicle_category, available_for_scheduling';
         while (keepFetching) {
             const { data, error } = await supabase
                 .from('vehicles')
-                .select('*')
+                .select(vehicleColumns)
                 .range(from, to);
 
             if (error) {
@@ -270,9 +274,10 @@ export const getVehicles = async (): Promise<Vehicle[]> => {
 };
 
 export const getVehicleById = async (id: string): Promise<Vehicle | null> => {
+    const vehicleColumns = 'id, type, model, plate, brand, year, color, renavam, chassis, sector_id, responsible_person_id, document_url, document_name, vehicle_image_url, status, maintenance_status, fuel_types, request_manager_ids, max_kml, min_kml, current_km, oil_last_change, oil_next_change, oil_calculation_base, vehicle_category, available_for_scheduling';
     const { data, error } = await supabase
         .from('vehicles')
-        .select('*')
+        .select(vehicleColumns)
         .eq('id', id)
         .single();
 
@@ -463,7 +468,7 @@ export const deleteVehicle = async (id: string): Promise<boolean> => {
 
 // Brands
 export const getBrands = async (): Promise<VehicleBrand[]> => {
-    const { data, error } = await supabase.from('vehicle_brands').select('*').order('name');
+    const { data, error } = await supabase.from('vehicle_brands').select('id, name, category').order('name');
     if (error) {
         console.error('Error fetching brands:', error);
         return [];
@@ -496,7 +501,7 @@ export const deleteBrand = async (id: string): Promise<boolean> => {
 
 // Signatures
 export const getSignatures = async (): Promise<Signature[]> => {
-    const { data, error } = await supabase.from('signatures').select('*').order('name');
+    const { data, error } = await supabase.from('signatures').select('id, name, role, sector').order('name');
     if (error) {
         console.error('Error fetching signatures:', error);
         return [];
@@ -552,7 +557,8 @@ export const deleteSignature = async (id: string): Promise<boolean> => {
 
 // Users
 export const getUsers = async (): Promise<any[]> => {
-    const { data, error } = await supabase.from('profiles').select('*').order('name');
+    const profileColumns = 'id, name, username, email, role, sector, sector_id, job_title, job_id, status, permissions, allowed_signature_ids, two_factor_enabled, two_factor_enabled_2, must_change_password';
+    const { data, error } = await supabase.from('profiles').select(profileColumns).order('name');
     if (error) {
         console.error('Error fetching users:', error);
         return [];
