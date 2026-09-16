@@ -4,6 +4,9 @@
  * Não armazena dados confidenciais.
  */
 
+export const EGRESS_MONTHLY_LIMIT_GB = 250;
+export const EGRESS_RESET_DAY = 15;
+
 export interface EgressEvent {
     id: string;
     timestamp: number;

@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { egressMonitor, EgressStats } from '../../services/egressMonitorService';
-import { Activity, ShieldCheck, RefreshCw, X, AlertTriangle, Database, ArrowDownCircle, Zap, Clock } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { egressMonitor, EgressStats, EGRESS_MONTHLY_LIMIT_GB, EGRESS_RESET_DAY } from '../../services/egressMonitorService';
+import { Activity, ShieldCheck, RefreshCw, X, AlertTriangle, Database, ArrowDownCircle, Zap, Clock, Calendar, ExternalLink } from 'lucide-react';
 import { supabase } from '../../services/supabaseClient';
 
 interface EgressMonitorModalProps {
@@ -11,6 +11,31 @@ interface EgressMonitorModalProps {
 export const EgressMonitorModal: React.FC<EgressMonitorModalProps> = ({ isOpen, onClose }) => {
     const [stats, setStats] = useState<EgressStats>(() => egressMonitor.getStats());
     const [isTesting, setIsTesting] = useState(false);
+
+    // Informações dinâmicas sobre a recarga mensal no dia 15
+    const resetInfo = useMemo(() => {
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth();
+        const currentDay = now.getDate();
+
+        let nextReset: Date;
+        if (currentDay < EGRESS_RESET_DAY) {
+            nextReset = new Date(currentYear, currentMonth, EGRESS_RESET_DAY);
+        } else {
+            nextReset = new Date(currentYear, currentMonth + 1, EGRESS_RESET_DAY);
+        }
+
+        const diffMs = nextReset.getTime() - now.getTime();
+        const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+        const formattedNextDate = `${String(EGRESS_RESET_DAY).padStart(2, '0')}/${String(nextReset.getMonth() + 1).padStart(2, '0')}`;
+
+        return {
+            diffDays,
+            formattedNextDate,
+            isToday: currentDay === EGRESS_RESET_DAY
+        };
+    }, []);
 
     useEffect(() => {
         if (!isOpen) return;
@@ -42,6 +67,9 @@ export const EgressMonitorModal: React.FC<EgressMonitorModalProps> = ({ isOpen, 
     const topTables = Object.entries(stats.tableCounts)
         .sort((a, b) => b[1] - a[1])
         .slice(0, 8);
+
+    const quotaPercent = Math.min(100, Math.max(0, (stats.estimatedTotalGb / EGRESS_MONTHLY_LIMIT_GB) * 100));
+    const availableGb = Math.max(0, EGRESS_MONTHLY_LIMIT_GB - stats.estimatedTotalGb);
 
     const getOperationBadge = (op: string) => {
         switch (op) {
@@ -114,7 +142,7 @@ export const EgressMonitorModal: React.FC<EgressMonitorModalProps> = ({ isOpen, 
                             </div>
                             <div className="text-[10px] text-emerald-600/80 dark:text-emerald-400/80 mt-1 flex items-center justify-between">
                                 <span>{stats.estimatedTotalMb} MB ({stats.estimatedTotalKb} KB)</span>
-                                <span className="text-slate-400">Cota: 5 GB</span>
+                                <span className="text-slate-400">Cota: {EGRESS_MONTHLY_LIMIT_GB} GB/mês</span>
                             </div>
                         </div>
 
@@ -132,26 +160,69 @@ export const EgressMonitorModal: React.FC<EgressMonitorModalProps> = ({ isOpen, 
                         </div>
                     </div>
 
-                    {/* Barra de Progresso da Cota de Egress (5.00 GB) */}
-                    <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 space-y-2">
+                    {/* Barra de Progresso da Cota de Egress (250.00 GB / mês) */}
+                    <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 space-y-2.5">
                         <div className="flex items-center justify-between text-xs">
                             <span className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                                Limite de Egress (Plano Supabase): 5.00 GB
+                                Limite de Egress (Plano Supabase): {EGRESS_MONTHLY_LIMIT_GB}.00 GB / mês
                             </span>
                             <span className="font-mono text-emerald-600 dark:text-emerald-400 font-bold text-xs">
-                                {((stats.estimatedTotalGb / 5) * 100).toFixed(3)}% da cota
+                                {quotaPercent.toFixed(4)}% da cota
                             </span>
                         </div>
                         <div className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
                             <div 
                                 className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-500 rounded-full"
-                                style={{ width: `${Math.min(100, Math.max(0.5, (stats.estimatedTotalGb / 5) * 100))}%` }}
+                                style={{ width: `${Math.min(100, Math.max(0.5, quotaPercent))}%` }}
                             ></div>
                         </div>
                         <div className="flex items-center justify-between text-[10px] text-slate-400">
                             <span>{stats.formattedGb} GB consumidos nesta sessão</span>
-                            <span>{Math.max(0, 5 - stats.estimatedTotalGb).toFixed(4)} GB disponíveis</span>
+                            <span>{availableGb.toFixed(3)} GB disponíveis</span>
+                        </div>
+
+                        {/* Ciclo de Renovação no dia 15 */}
+                        <div className="pt-2 border-t border-slate-200 dark:border-slate-700/60 flex items-center justify-between text-[11px]">
+                            <span className="text-slate-600 dark:text-slate-300 flex items-center gap-1.5 font-medium">
+                                <Calendar className="w-3.5 h-3.5 text-blue-500" />
+                                Recarrega dia {EGRESS_RESET_DAY} de todo mês
+                            </span>
+                            <span className="text-blue-600 dark:text-blue-400 font-semibold">
+                                {resetInfo.isToday 
+                                    ? '🎉 Cota recarregada hoje!' 
+                                    : `Próxima recarga em ${resetInfo.diffDays} ${resetInfo.diffDays === 1 ? 'dia' : 'dias'} (${resetInfo.formattedNextDate})`}
+                            </span>
+                        </div>
+                    </div>
+
+                    {/* Card Informativo: Onde ver o consumo GERAL Oficial de toda a Prefeitura */}
+                    <div className="p-4 rounded-xl bg-gradient-to-br from-indigo-50/80 to-blue-50/80 dark:from-indigo-950/30 dark:to-blue-950/30 border border-indigo-200/80 dark:border-indigo-900/50 space-y-2.5">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 text-indigo-900 dark:text-indigo-200 font-bold text-sm">
+                                <Database className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                                Consumo Geral do Mês (Todos os Usuários)
+                            </div>
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 font-medium">
+                                Medição de Servidor
+                            </span>
+                        </div>
+                        <p className="text-xs text-indigo-900/80 dark:text-indigo-300/80 leading-relaxed">
+                            O consumo <strong>geral acumulado</strong> de todos os usuários da prefeitura, uploads, downloads de arquivos e consultas ao banco durante o ciclo mensal (250 GB) é registrado diretamente na infraestrutura do Supabase.
+                        </p>
+                        <div className="pt-1 flex items-center gap-3">
+                            <a 
+                                href="https://supabase.com/dashboard/project/lntphzphyqnscdxyauzj/settings/billing/usage" 
+                                target="_blank" 
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs transition shadow-sm"
+                            >
+                                <span>Ver Consumo Geral Oficial no Supabase</span>
+                                <ExternalLink className="w-3.5 h-3.5" />
+                            </a>
+                            <span className="text-[11px] text-slate-500 dark:text-slate-400 italic">
+                                Gráfico dia a dia de Egress e Storage
+                            </span>
                         </div>
                     </div>
 

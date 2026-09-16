@@ -1,4 +1,5 @@
 import { PostgrestError } from '@supabase/supabase-js';
+import { errorMonitor } from '../services/errorMonitorService';
 
 export interface AppError {
     message: string;
@@ -10,14 +11,23 @@ export interface AppError {
 export const handleSupabaseError = (error: PostgrestError | any): AppError => {
     // Enhanced logging for debugging
     console.error('[Supabase Error]', {
-        message: error.message,
-        code: error.code,
-        details: error.details,
-        hint: error.hint
+        message: error?.message,
+        code: error?.code,
+        details: error?.details,
+        hint: error?.hint
     });
 
-    // Map common Postgres/Supabase error codes to user-friendly messages
-    const code = error.code || 'UNKNOWN';
+    const code = error?.code || 'UNKNOWN';
+
+    // Notifica o monitor global de erros para exibição no modal
+    try {
+        errorMonitor.captureError(error?.message || 'Erro na operação do banco de dados', {
+            type: `Erro do Supabase (${code})`,
+            details: error?.details ? `${error.details} ${error?.hint || ''}`.trim() : error?.hint
+        });
+    } catch {
+        // Não quebra caso o monitor falhe
+    }
 
     switch (code) {
         case '23505': // unique_violation
