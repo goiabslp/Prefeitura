@@ -275,7 +275,7 @@ export const updateLicitacaoProcess = async (id: string, updates: Partial<Licita
                 delete (sanitizedUpdates as any).oculto_kanban_view;
 
                 if (Object.keys(sanitizedUpdates).length === 0) {
-                    const LICITACAO_COLUMNS = 'id, protocolo, solicitante_id, solicitante_nome, solicitante_cargo, solicitante_setor, finalidade, justificativa, tipo_contratacao, status, fase_atual, valor_estimado, valor_homologado, criado_em, criado_por, atualizado_em, historico_fases, responsavel_atual_id, responsavel_atual_nome, documentos, tem_convenio, numero_convenio, objeto_resumido, oculto_kanban_view, prioridade, data_limite, numero_processo_adm, tags';
+                    const LICITACAO_COLUMNS = 'id, protocolo, finalidade, prioridade, solicitante_nome, solicitante_cargo, solicitante_setor, status, criado_por, criado_em, atualizado_em, fase, ficha_orcamentaria, resolucao_descricao, resolucao_numero, checkin_finalizado, aprovado_em, enviado_kanban_em, apresentado_animacao, oculto_kanban_view';
                     const { data: currentData, error: currentErr } = await supabase
                         .from('licitacao_processos')
                         .select(LICITACAO_COLUMNS)
@@ -342,7 +342,7 @@ export const updateLicitacaoProcess = async (id: string, updates: Partial<Licita
 
 export const getLicitacaoProcesses = async (): Promise<LicitacaoProcesso[]> => {
     try {
-        const LICITACAO_COLUMNS = 'id, protocolo, solicitante_id, solicitante_nome, solicitante_setor, finalidade, justificativa, tipo_contratacao, status, fase_atual, valor_estimado, valor_homologado, criado_em, atualizado_em, historico_fases, responsavel_atual_id, responsavel_atual_nome, documentos, tem_convenio, numero_convenio, objeto_resumido, oculto_kanban_view, prioridade, data_limite, numero_processo_adm, tags';
+        const LICITACAO_COLUMNS = 'id, protocolo, finalidade, prioridade, solicitante_nome, solicitante_cargo, solicitante_setor, status, criado_por, criado_em, atualizado_em, fase, ficha_orcamentaria, resolucao_descricao, resolucao_numero, checkin_finalizado, aprovado_em, enviado_kanban_em, apresentado_animacao, oculto_kanban_view';
         const { data, error } = await supabase
             .from('licitacao_processos')
             .select(LICITACAO_COLUMNS)
@@ -373,7 +373,7 @@ export const getLicitacaoProcesses = async (): Promise<LicitacaoProcesso[]> => {
         }) as unknown as LicitacaoProcesso[];
     } catch (error) {
         console.error("Error fetching licitacao processes:", error);
-        return [];
+        throw error;
     }
 };
 
