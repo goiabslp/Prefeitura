@@ -724,6 +724,11 @@ export default defineConfig({
   server: {
     port: 3000,
     host: true,
+    headers: {
+      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    },
     hmr: {
       overlay: false,
     },

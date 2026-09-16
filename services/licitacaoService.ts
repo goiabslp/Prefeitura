@@ -371,8 +371,9 @@ export const getLicitacaoProcesses = async (): Promise<LicitacaoProcesso[]> => {
                 oculto_kanban_view: isOculto
             };
         }) as unknown as LicitacaoProcesso[];
-    } catch (error) {
-        console.error("Error fetching licitacao processes:", error);
+    } catch (error: any) {
+        const msg = error?.message || error?.error_description || (typeof error === 'object' ? JSON.stringify(error) : String(error));
+        console.error(`[Supabase Error] Falha ao buscar processos de licitação: ${msg}`, error);
         throw error;
     }
 };

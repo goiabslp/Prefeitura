@@ -143,8 +143,9 @@ export const getDiariaEventosBySector = async (sectorId?: string): Promise<Diari
   const { data, error } = await query.limit(500);
 
   if (error) {
-    console.error('Erro ao buscar eventos de diárias:', error);
-    throw new Error('Falha ao carregar a lista de lançamentos.');
+    const msg = error.message || error.details || JSON.stringify(error);
+    console.error(`[Supabase Error] Erro ao buscar eventos de diárias por setor: ${msg}`, error);
+    throw new Error(`Falha ao carregar a lista de lançamentos: ${msg}`);
   }
 
   return await mergeDespesasFlag(data as DiariaEvento[]);
@@ -158,8 +159,9 @@ export const getAllDiariaEventos = async (): Promise<DiariaEvento[]> => {
     .limit(500);
 
   if (error) {
-    console.error('Erro ao buscar todos eventos de diárias:', error);
-    throw new Error('Falha ao carregar a lista de lançamentos.');
+    const msg = error.message || error.details || JSON.stringify(error);
+    console.error(`[Supabase Error] Erro ao buscar todos eventos de diárias: ${msg}`, error);
+    throw new Error(`Falha ao carregar a lista de lançamentos: ${msg}`);
   }
 
   return await mergeDespesasFlag(data as DiariaEvento[]);

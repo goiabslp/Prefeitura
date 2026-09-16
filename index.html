@@ -211,17 +211,43 @@
 
   <script type="module" src="/index.tsx"></script>
   <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })
-          .then(reg => {
-            reg.update();
-            console.log('PWA Service Worker ativo e atualizado:', reg.scope);
-          })
-          .catch(err => {
-            console.error('Erro ao registrar Service Worker:', err);
-          });
-      });
+    // Em ambiente de desenvolvimento local (localhost / 127.0.0.1), desativa totalmente o Service Worker
+    // e limpa todo o CacheStorage para garantir que nenhum bundle antigo fique preso em cache.
+    const isLocalhost = window.location.hostname === 'localhost' || 
+                        window.location.hostname === '127.0.0.1' || 
+                        window.location.hostname === '::1';
+
+    if (isLocalhost) {
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(registrations => {
+          for (const registration of registrations) {
+            registration.unregister().then(unreg => {
+              if (unreg) console.log('[DevClean] Service Worker desregistrado para desenvolvimento local:', registration.scope);
+            });
+          }
+        });
+      }
+      if ('caches' in window) {
+        caches.keys().then(keys => {
+          for (const key of keys) {
+            caches.delete(key).then(() => console.log('[DevClean] Cache local deletado:', key));
+          }
+        });
+      }
+    } else {
+      // Registrar Service Worker apenas em produção real
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })
+            .then(reg => {
+              reg.update();
+              console.log('PWA Service Worker ativo e atualizado:', reg.scope);
+            })
+            .catch(err => {
+              console.error('Erro ao registrar Service Worker:', err);
+            });
+        });
+      }
     }
 
     let deferredPrompt;

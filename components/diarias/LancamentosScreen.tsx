@@ -477,8 +477,9 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
         sessionStorage.setItem('cached_diarias_eventos', JSON.stringify(data));
         localStorage.setItem('cached_diarias_eventos', JSON.stringify(data));
       } catch (e) {}
-    } catch (error) {
-      console.error('Erro ao buscar lançamentos:', error);
+    } catch (error: any) {
+      const msg = error?.message || (typeof error === 'object' ? JSON.stringify(error) : String(error));
+      console.error(`[LancamentosScreen] Erro ao buscar lançamentos: ${msg}`, error);
     } finally {
       setIsLoading(false);
     }

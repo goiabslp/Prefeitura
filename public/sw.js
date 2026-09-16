@@ -1,4 +1,4 @@
-const CACHE_NAME = 'prefeitura-pwa-v2';
+const CACHE_NAME = 'prefeitura-pwa-v3';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -8,8 +8,25 @@ const ASSETS_TO_CACHE = [
   '/apple-touch-icon.png'
 ];
 
+// Se estiver rodando em localhost, auto-desregistrar imediatamente e não armazenar cache
+const isLocalEnv = self.location.hostname === 'localhost' || 
+                   self.location.hostname === '127.0.0.1' || 
+                   self.location.hostname === '::1';
+
+if (isLocalEnv) {
+  self.addEventListener('install', () => self.skipWaiting());
+  self.addEventListener('activate', (event) => {
+    event.waitUntil(
+      caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k))))
+        .then(() => self.registration.unregister())
+        .then(() => self.clients.claim())
+    );
+  });
+}
+
 // Instalação do Service Worker
 self.addEventListener('install', (event) => {
+  if (isLocalEnv) return;
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(ASSETS_TO_CACHE);
@@ -34,6 +51,7 @@ self.addEventListener('activate', (event) => {
 
 // Interceptador de requisições de rede
 self.addEventListener('fetch', (event) => {
+  if (isLocalEnv) return; // NUNCA interceptar em desenvolvimento local
   if (event.request.method !== 'GET') return;
 
   const requestUrl = new URL(event.request.url);

@@ -42,12 +42,12 @@ export const DynamicGlobalFooter: React.FC<DynamicGlobalFooterProps> = ({
     enforceScrollPadding();
     const interval = setInterval(enforceScrollPadding, 2000);
 
-    const checkScrollPosition = (target: HTMLElement | Window) => {
+    const checkScrollPosition = (target: HTMLElement | Window | Document) => {
       let scrollHeight = 0;
       let scrollTop = 0;
       let clientHeight = 0;
 
-      if (target === window || target === document || target === document.documentElement || target === document.body) {
+      if (target === window || target === document || (target as any) === document.documentElement || (target as any) === document.body) {
         scrollHeight = Math.max(
           document.body.scrollHeight,
           document.documentElement.scrollHeight
