@@ -409,6 +409,13 @@ export const MODULE_ACCESS_TREE: ModuleItemDefinition[] = [
         label: 'Dashboard Analítico',
         description: 'Métricas de utilização e custos de quilometragem',
         routes: ['/AgendamentoVeiculos/Dashboard']
+      },
+      {
+        key: 'sub_agendamento_consultar',
+        legacyKeys: ['parent_agendamento_veiculo_consultar'],
+        label: 'Consultar Veículo',
+        description: 'Consulta rápida de veículos livres e disponíveis por data e horário',
+        routes: ['/AgendamentoVeiculos/Consultar']
       }
     ]
   },

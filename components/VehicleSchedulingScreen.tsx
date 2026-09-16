@@ -17,6 +17,7 @@ import { VehicleScheduleHistory } from './VehicleScheduleHistory';
 import { VehicleScheduleApprovals } from './VehicleScheduleApprovals';
 import { SelectionModal } from './SelectionModal';
 import { VehicleScheduleDashboard } from './VehicleScheduleDashboard';
+import { ConsultarVeiculoScreen } from './vehicle/ConsultarVeiculoScreen';
 import { useSystemSettings } from '../contexts/SystemSettingsContext';
 import { userCanAccessSubmodule } from '../services/permissionService';
 import { User } from '../types';
@@ -36,7 +37,7 @@ interface VehicleSchedulingScreenProps {
   currentUserPermissions?: AppPermission[];
   currentUserSector?: string;
   currentUserSectorId?: string;
-  requestedView?: 'menu' | 'calendar' | 'history' | 'approvals' | 'dashboard' | 'day';
+  requestedView?: 'menu' | 'calendar' | 'history' | 'approvals' | 'dashboard' | 'day' | 'consultar';
   onNavigate?: (path: string) => void;
   state: AppState;
 }
@@ -146,7 +147,7 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
   onNavigate,
   state
 }) => {
-  const [activeSubView, setActiveSubView] = useState<'menu' | 'calendar' | 'history' | 'approvals' | 'dashboard' | 'day'>('menu');
+  const [activeSubView, setActiveSubView] = useState<'menu' | 'calendar' | 'history' | 'approvals' | 'dashboard' | 'day' | 'consultar'>('menu');
 
   const normalizeString = (str: string) =>
     str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
@@ -222,6 +223,7 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
   const canAccessMeus = userCanAccessSubmodule(userObj, 'parent_agendamento_veiculo', 'sub_agendamento_historico', activeGlobalStatus);
   const canAccessAprovacoes = userCanAccessSubmodule(userObj, 'parent_agendamento_veiculo', 'sub_agendamento_aprovacoes', activeGlobalStatus);
   const canAccessDashboard = userCanAccessSubmodule(userObj, 'parent_agendamento_veiculo', 'sub_agendamento_dashboard', activeGlobalStatus);
+  const canAccessConsultar = userCanAccessSubmodule(userObj, 'parent_agendamento_veiculo', 'sub_agendamento_consultar', activeGlobalStatus);
 
 
   useEffect(() => {
@@ -245,7 +247,7 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
     }
   }, [activeSubView]);
 
-  const handleSubViewChange = (view: 'menu' | 'calendar' | 'history' | 'approvals' | 'dashboard' | 'day') => {
+  const handleSubViewChange = (view: 'menu' | 'calendar' | 'history' | 'approvals' | 'dashboard' | 'day' | 'consultar') => {
     setActiveSubView(view);
     if (onNavigate) {
       const paths = {
@@ -254,7 +256,8 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
         'day': '/AgendamentoVeiculos/Agendar/Dia',
         'history': '/AgendamentoVeiculos/Historico',
         'approvals': '/AgendamentoVeiculos/Aprovacoes',
-        'dashboard': '/AgendamentoVeiculos/Dashboard'
+        'dashboard': '/AgendamentoVeiculos/Dashboard',
+        'consultar': '/AgendamentoVeiculos/Consultar'
       };
       if (view === 'day') {
         const dateStr = selectedDay 
@@ -437,7 +440,7 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
     return days;
   }, [currentDate]);
 
-  const handleOpenModal = (s?: VehicleSchedule, initialDate?: Date, initialVehicleId?: string) => {
+  const handleOpenModal = (s?: VehicleSchedule, initialDate?: Date, initialVehicleId?: string, initialReturnDate?: Date) => {
     setModalActiveTab('dados_gerais');
     if (s) {
       setEditingSchedule(s);
@@ -462,7 +465,7 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
       let departure = initialDate ? new Date(initialDate) : now;
       if (departure < now) departure = now;
       if (!initialDate) departure.setMinutes(0, 0, 0);
-      const returnDate = new Date(departure.getTime() + (4 * 60 * 60 * 1000));
+      const returnDate = initialReturnDate ? new Date(initialReturnDate) : new Date(departure.getTime() + (4 * 60 * 60 * 1000));
       
       // Resolve setor inicial com validação
       let defaultSectorId = '';
@@ -636,125 +639,163 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
       </button>
 
       <div className="flex-1 bg-slate-50 font-sans flex flex-col overflow-hidden relative z-0">
-        <div className="flex-1 flex flex-col items-center justify-center w-full h-full p-4 md:p-8 pt-24 md:pt-28 min-h-0 container mx-auto">
-          <div className="w-full flex-1 flex flex-col items-center justify-center max-h-full">
+        <div className="flex-1 w-full p-4 md:p-6 overflow-y-auto lg:overflow-hidden flex flex-col justify-center items-center">
+          <div className="w-full max-h-full flex flex-col items-center justify-center container mx-auto">
 
             {/* Header */}
-            <div className="flex flex-col items-center mb-6 md:mb-10 shrink-0 animation-delay-100 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <div className="p-5 rounded-[2rem] bg-gradient-to-br from-indigo-50 to-indigo-100/50 mb-5 shadow-sm ring-8 ring-white/50">
-                <Car className="w-12 h-12 text-indigo-600 drop-shadow-sm" />
+            <div className="flex flex-col items-center mb-5 md:mb-7 shrink-0 animation-delay-100 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="p-3 md:p-3.5 rounded-2xl bg-gradient-to-br from-indigo-50 to-indigo-100/50 mb-2.5 shadow-xs ring-4 ring-white/60">
+                <Car className="w-8 h-8 md:w-9 md:h-9 text-indigo-600 drop-shadow-sm" />
               </div>
-              <h2 className="text-3xl md:text-5xl font-black text-slate-800 tracking-tight text-center drop-shadow-sm">Gestão de Veículos</h2>
-              <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mt-2">Sistema Unificado de Agendamentos</p>
+              <h2 className="text-2xl md:text-3xl lg:text-4xl font-black text-slate-800 tracking-tight text-center drop-shadow-sm">Gestão de Veículos</h2>
+              <p className="text-slate-500 text-[10px] md:text-[11px] font-bold uppercase tracking-widest mt-1 text-center">Sistema Unificado de Agendamentos e Escalas</p>
             </div>
 
             {/* Actions Grid - Responsive & Auto-adjusting */}
-            <div className="w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 md:gap-6 max-w-7xl animate-in zoom-in duration-500 fill-mode-backwards p-2">
+            {(() => {
+              const visibleCount = [
+                canAccessConsultar,
+                canAccessDia,
+                canAccessAgendar,
+                canAccessMeus,
+                canAccessAprovacoes,
+                canAccessDashboard
+              ].filter(Boolean).length;
 
-              {/* Card: Agendar por Dia */}
-              {canAccessDia && (
-                <button
-                  onClick={() => handleSubViewChange('day')}
-                  className="group relative w-full min-h-[140px] md:min-h-[180px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-sky-500/30 hover:border-sky-200 hover:from-white hover:to-sky-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden"
-                  style={{ animationDelay: '0ms' }}
-                >
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-sky-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
-                  <div className="absolute bottom-0 left-0 w-24 h-24 bg-sky-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
+              const gridClass = visibleCount >= 6
+                ? "w-full grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 desktop:gap-4 max-w-7xl"
+                : visibleCount === 5
+                ? "w-full grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 desktop:gap-4 max-w-6xl"
+                : "w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 desktop:gap-4 max-w-5xl";
 
-                  <div className="w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-gradient-to-br from-sky-500 to-sky-600 flex items-center justify-center mb-3 text-white group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300 shadow-lg shadow-sky-500/30 ring-4 ring-white">
-                    <CalendarDays className="w-6 h-6 md:w-7 md:h-7 drop-shadow-md" />
-                  </div>
+              return (
+                <div className={`${gridClass} animate-in zoom-in duration-500 fill-mode-backwards p-1`}>
 
-                  <h3 className="text-lg md:text-2xl font-bold text-slate-800 mb-1 group-hover:text-slate-900 tracking-tight">Agendar por Dia</h3>
-                  <p className="text-[10px] md:text-xs font-bold text-slate-400 group-hover:text-sky-600 transition-colors uppercase tracking-widest">Escala diária de saídas</p>
-                </button>
-              )}
+                  {/* Card: Consultar Veículo (Submódulo de Consulta Rápida) */}
+                  {canAccessConsultar && (
+                    <button
+                      onClick={() => handleSubViewChange('consultar')}
+                      className="group relative w-full min-h-[110px] md:min-h-[135px] py-4 md:py-5 px-3 md:px-4 rounded-[2rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-violet-500/30 hover:border-violet-200 hover:from-white hover:to-violet-50/30 transition-all duration-300 ease-spring hover:-translate-y-1.5 active:scale-95 flex flex-col items-center justify-center overflow-hidden shrink-0"
+                      style={{ animationDelay: '0ms' }}
+                    >
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-violet-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
+                      <div className="absolute bottom-0 left-0 w-24 h-24 bg-violet-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
 
-              {/* Card: Agendar Veículo */}
-              {canAccessAgendar && (
-                <button
-                  onClick={() => handleSubViewChange('calendar')}
-                  className="group relative w-full min-h-[140px] md:min-h-[180px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-indigo-500/30 hover:border-indigo-200 hover:from-white hover:to-indigo-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden"
-                  style={{ animationDelay: '50ms' }}
-                >
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
-                  <div className="absolute bottom-0 left-0 w-24 h-24 bg-indigo-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
+                      <div className="relative w-11 h-11 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center mb-2.5 text-white group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300 shadow-md shadow-violet-500/30 ring-4 ring-white">
+                        <Search className="w-5 h-5 md:w-6 md:h-6 drop-shadow-md" />
+                      </div>
 
-                  <div className="w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center mb-3 text-white group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300 shadow-lg shadow-indigo-500/30 ring-4 ring-white">
-                    <Calendar className="w-6 h-6 md:w-7 md:h-7 drop-shadow-md" />
-                  </div>
+                      <h3 className="text-sm md:text-base lg:text-lg font-bold text-slate-800 mb-0.5 group-hover:text-slate-900 tracking-tight text-center">Consultar Veículo</h3>
+                      <p className="text-[9px] md:text-[10px] font-bold text-slate-400 group-hover:text-violet-600 transition-colors uppercase tracking-wider text-center">Disponibilidade</p>
+                    </button>
+                  )}
 
-                  <h3 className="text-lg md:text-2xl font-bold text-slate-800 mb-1 group-hover:text-slate-900 tracking-tight">Agendar Veículo</h3>
-                  <p className="text-[10px] md:text-xs font-bold text-slate-400 group-hover:text-indigo-600 transition-colors uppercase tracking-widest">Solicitar nova viagem</p>
-                </button>
-              )}
+                  {/* Card: Agendar por Dia */}
+                  {canAccessDia && (
+                    <button
+                      onClick={() => handleSubViewChange('day')}
+                      className="group relative w-full min-h-[110px] md:min-h-[135px] py-4 md:py-5 px-3 md:px-4 rounded-[2rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-sky-500/30 hover:border-sky-200 hover:from-white hover:to-sky-50/30 transition-all duration-300 ease-spring hover:-translate-y-1.5 active:scale-95 flex flex-col items-center justify-center overflow-hidden shrink-0"
+                      style={{ animationDelay: '50ms' }}
+                    >
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-sky-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
+                      <div className="absolute bottom-0 left-0 w-24 h-24 bg-sky-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
 
-              {/* Card: Meus Agendamentos */}
-              {canAccessMeus && (
-                <button
-                  onClick={() => handleSubViewChange('history')}
-                  className="group relative w-full min-h-[140px] md:min-h-[180px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-emerald-500/30 hover:border-emerald-200 hover:from-white hover:to-emerald-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden"
-                  style={{ animationDelay: '100ms' }}
-                >
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
-                  <div className="absolute bottom-0 left-0 w-24 h-24 bg-emerald-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
+                      <div className="relative w-11 h-11 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-sky-500 to-sky-600 flex items-center justify-center mb-2.5 text-white group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300 shadow-md shadow-sky-500/30 ring-4 ring-white">
+                        <CalendarDays className="w-5 h-5 md:w-6 md:h-6 drop-shadow-md" />
+                      </div>
 
-                  <div className="w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center mb-3 text-white group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300 shadow-lg shadow-emerald-500/30 ring-4 ring-white">
-                    <History className="w-6 h-6 md:w-7 md:h-7 drop-shadow-md" />
-                  </div>
+                      <h3 className="text-sm md:text-base lg:text-lg font-bold text-slate-800 mb-0.5 group-hover:text-slate-900 tracking-tight text-center">Agendar por Dia</h3>
+                      <p className="text-[9px] md:text-[10px] font-bold text-slate-400 group-hover:text-sky-600 transition-colors uppercase tracking-wider text-center">Escala Diária</p>
+                    </button>
+                  )}
 
-                  <h3 className="text-lg md:text-2xl font-bold text-slate-800 mb-1 group-hover:text-slate-900 tracking-tight">Meus Agendamentos</h3>
-                  <p className="text-[10px] md:text-xs font-bold text-slate-400 group-hover:text-emerald-600 transition-colors uppercase tracking-widest">Histórico e Status</p>
-                </button>
-              )}
+                  {/* Card: Agendar Veículo */}
+                  {canAccessAgendar && (
+                    <button
+                      onClick={() => handleSubViewChange('calendar')}
+                      className="group relative w-full min-h-[110px] md:min-h-[135px] py-4 md:py-5 px-3 md:px-4 rounded-[2rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-indigo-500/30 hover:border-indigo-200 hover:from-white hover:to-indigo-50/30 transition-all duration-300 ease-spring hover:-translate-y-1.5 active:scale-95 flex flex-col items-center justify-center overflow-hidden shrink-0"
+                      style={{ animationDelay: '100ms' }}
+                    >
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
+                      <div className="absolute bottom-0 left-0 w-24 h-24 bg-indigo-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
 
-              {/* Card: Aprovações (Conditional) */}
-              {canAccessAprovacoes && (
-                <button
-                  onClick={() => handleSubViewChange('approvals')}
-                  className="group relative w-full min-h-[140px] md:min-h-[180px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-amber-500/30 hover:border-amber-200 hover:from-white hover:to-amber-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden"
-                  style={{ animationDelay: '200ms' }}
-                >
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
-                  <div className="absolute bottom-0 left-0 w-24 h-24 bg-amber-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
+                      <div className="relative w-11 h-11 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center mb-2.5 text-white group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300 shadow-md shadow-indigo-500/30 ring-4 ring-white">
+                        <Calendar className="w-5 h-5 md:w-6 md:h-6 drop-shadow-md" />
+                      </div>
 
-                  <div className="w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center mb-3 text-white group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300 shadow-lg shadow-amber-500/30 ring-4 ring-white">
-                    <ShieldCheck className="w-6 h-6 md:w-7 md:h-7 drop-shadow-md" />
-                  </div>
+                      <h3 className="text-sm md:text-base lg:text-lg font-bold text-slate-800 mb-0.5 group-hover:text-slate-900 tracking-tight text-center">Agendar Veículo</h3>
+                      <p className="text-[9px] md:text-[10px] font-bold text-slate-400 group-hover:text-indigo-600 transition-colors uppercase tracking-wider text-center">Nova Viagem</p>
+                    </button>
+                  )}
 
-                  <h3 className="text-lg md:text-2xl font-bold text-slate-800 mb-1 group-hover:text-slate-900 tracking-tight">Aprovações</h3>
-                  <p className="text-[10px] md:text-xs font-bold text-slate-400 group-hover:text-amber-600 transition-colors uppercase tracking-widest">Gestão de Solicitações</p>
-                </button>
-              )}
+                  {/* Card: Meus Agendamentos */}
+                  {canAccessMeus && (
+                    <button
+                      onClick={() => handleSubViewChange('history')}
+                      className="group relative w-full min-h-[110px] md:min-h-[135px] py-4 md:py-5 px-3 md:px-4 rounded-[2rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-emerald-500/30 hover:border-emerald-200 hover:from-white hover:to-emerald-50/30 transition-all duration-300 ease-spring hover:-translate-y-1.5 active:scale-95 flex flex-col items-center justify-center overflow-hidden shrink-0"
+                      style={{ animationDelay: '150ms' }}
+                    >
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
+                      <div className="absolute bottom-0 left-0 w-24 h-24 bg-emerald-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
 
-              {/* Card: Dashboard Analítico */}
-              {canAccessDashboard && (
-                <button
-                  onClick={() => handleSubViewChange('dashboard')}
-                  className="group relative w-full min-h-[140px] md:min-h-[180px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-cyan-500/30 hover:border-cyan-200 hover:from-white hover:to-cyan-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden"
-                  style={{ animationDelay: '300ms' }}
-                >
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
-                  <div className="absolute bottom-0 left-0 w-24 h-24 bg-cyan-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
+                      <div className="relative w-11 h-11 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center mb-2.5 text-white group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300 shadow-md shadow-emerald-500/30 ring-4 ring-white">
+                        <History className="w-5 h-5 md:w-6 md:h-6 drop-shadow-md" />
+                      </div>
 
-                  <div className="w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-gradient-to-br from-cyan-500 to-cyan-600 flex items-center justify-center mb-3 text-white group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300 shadow-lg shadow-cyan-500/30 ring-4 ring-white">
-                    <Activity className="w-6 h-6 md:w-7 md:h-7 drop-shadow-md" />
-                  </div>
+                      <h3 className="text-sm md:text-base lg:text-lg font-bold text-slate-800 mb-0.5 group-hover:text-slate-900 tracking-tight text-center">Meus Agendamentos</h3>
+                      <p className="text-[9px] md:text-[10px] font-bold text-slate-400 group-hover:text-emerald-600 transition-colors uppercase tracking-wider text-center">Histórico e Status</p>
+                    </button>
+                  )}
 
-                  <h3 className="text-lg md:text-2xl font-bold text-slate-800 mb-1 group-hover:text-slate-900 tracking-tight">Dashboard Analítico</h3>
-                  <p className="text-[10px] md:text-xs font-bold text-slate-400 group-hover:text-cyan-600 transition-colors uppercase tracking-widest">Indicadores de Frota</p>
-                </button>
-              )}
+                  {/* Card: Aprovações (Conditional) */}
+                  {canAccessAprovacoes && (
+                    <button
+                      onClick={() => handleSubViewChange('approvals')}
+                      className="group relative w-full min-h-[110px] md:min-h-[135px] py-4 md:py-5 px-3 md:px-4 rounded-[2rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-amber-500/30 hover:border-amber-200 hover:from-white hover:to-amber-50/30 transition-all duration-300 ease-spring hover:-translate-y-1.5 active:scale-95 flex flex-col items-center justify-center overflow-hidden shrink-0"
+                      style={{ animationDelay: '200ms' }}
+                    >
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
+                      <div className="absolute bottom-0 left-0 w-24 h-24 bg-amber-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
 
-              {!canAccessAgendar && !canAccessMeus && !canAccessAprovacoes && !canAccessDashboard && (
-                <div className="col-span-full text-center p-8 bg-white border border-slate-200 rounded-[2rem] shadow-sm max-w-md mx-auto">
-                  <Car className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                  <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Gestão de Veículos</h3>
-                  <p className="text-xs text-slate-500 mt-2">Nenhuma funcionalidade deste módulo está disponível para o seu perfil ou dispositivo.</p>
+                      <div className="relative w-11 h-11 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center mb-2.5 text-white group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300 shadow-md shadow-amber-500/30 ring-4 ring-white">
+                        <ShieldCheck className="w-5 h-5 md:w-6 md:h-6 drop-shadow-md" />
+                      </div>
+
+                      <h3 className="text-sm md:text-base lg:text-lg font-bold text-slate-800 mb-0.5 group-hover:text-slate-900 tracking-tight text-center">Aprovações</h3>
+                      <p className="text-[9px] md:text-[10px] font-bold text-slate-400 group-hover:text-amber-600 transition-colors uppercase tracking-wider text-center">Gestão de Pedidos</p>
+                    </button>
+                  )}
+
+                  {/* Card: Dashboard Analítico */}
+                  {canAccessDashboard && (
+                    <button
+                      onClick={() => handleSubViewChange('dashboard')}
+                      className="group relative w-full min-h-[110px] md:min-h-[135px] py-4 md:py-5 px-3 md:px-4 rounded-[2rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-cyan-500/30 hover:border-cyan-200 hover:from-white hover:to-cyan-50/30 transition-all duration-300 ease-spring hover:-translate-y-1.5 active:scale-95 flex flex-col items-center justify-center overflow-hidden shrink-0"
+                      style={{ animationDelay: '250ms' }}
+                    >
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
+                      <div className="absolute bottom-0 left-0 w-24 h-24 bg-cyan-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
+
+                      <div className="relative w-11 h-11 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-cyan-500 to-cyan-600 flex items-center justify-center mb-2.5 text-white group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300 shadow-md shadow-cyan-500/30 ring-4 ring-white">
+                        <Activity className="w-5 h-5 md:w-6 md:h-6 drop-shadow-md" />
+                      </div>
+
+                      <h3 className="text-sm md:text-base lg:text-lg font-bold text-slate-800 mb-0.5 group-hover:text-slate-900 tracking-tight text-center">Dashboard Analítico</h3>
+                      <p className="text-[9px] md:text-[10px] font-bold text-slate-400 group-hover:text-cyan-600 transition-colors uppercase tracking-wider text-center">Indicadores de Frota</p>
+                    </button>
+                  )}
+
+                  {!canAccessAgendar && !canAccessMeus && !canAccessAprovacoes && !canAccessDashboard && !canAccessConsultar && (
+                    <div className="col-span-full text-center p-8 bg-white border border-slate-200 rounded-[2rem] shadow-sm max-w-md mx-auto">
+                      <Car className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+                      <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Gestão de Veículos</h3>
+                      <p className="text-xs text-slate-500 mt-2">Nenhuma funcionalidade deste módulo está disponível para o seu perfil ou dispositivo.</p>
+                    </div>
+                  )}
+
                 </div>
-              )}
-
-            </div>
+              );
+            })()}
           </div>
         </div>
       </div>
@@ -1357,6 +1398,24 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
           <Lock className="w-12 h-12 text-slate-300 mb-4" />
           <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Acesso Indisponível</h3>
           <p className="text-xs text-slate-500 mt-2 mb-4">Você não possui permissão para visualizar o Dashboard Analítico ou este recurso está desabilitado.</p>
+          <button onClick={() => handleSubViewChange('menu')} className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold uppercase">Voltar ao Menu</button>
+        </div>
+      ))}
+      {activeSubView === 'consultar' && (canAccessConsultar ? (
+        <ConsultarVeiculoScreen
+          onBack={() => handleSubViewChange('menu')}
+          onSelectVehicleToSchedule={(vehicleId, dateStr, startTime, endTime) => {
+            const [d, m, y] = dateStr.split('/');
+            const departureDate = new Date(`${y}-${m}-${d}T${startTime}:00`);
+            const returnDate = new Date(`${y}-${m}-${d}T${endTime}:00`);
+            handleOpenModal(undefined, departureDate, vehicleId, returnDate);
+          }}
+        />
+      ) : (
+        <div className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-50 text-center">
+          <Lock className="w-12 h-12 text-slate-300 mb-4" />
+          <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Acesso Indisponível</h3>
+          <p className="text-xs text-slate-500 mt-2 mb-4">Você não possui permissão para consultar veículos ou este recurso está desabilitado.</p>
           <button onClick={() => handleSubViewChange('menu')} className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold uppercase">Voltar ao Menu</button>
         </div>
       ))}

@@ -83,223 +83,204 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
         ].filter(Boolean).length;
 
         const gridClass = visibleCardsCount >= 6
-            ? "w-full grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7 gap-6 max-w-7xl mb-8"
+            ? "w-full grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-7 gap-2.5 md:gap-3.5 max-w-7xl mb-4"
             : visibleCardsCount === 5
-            ? "w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 max-w-7xl mb-8"
-            : "w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mb-8";
+            ? "w-full grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 max-w-6xl mb-4"
+            : "w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 max-w-5xl mb-4";
 
         return (
-            <div className="flex-1 flex flex-col justify-center items-center w-full max-w-7xl mx-auto px-4 py-8 animate-in fade-in slide-in-from-bottom-6 duration-500">
-                {/* Botão Voltar */}
-                <button
-                    onClick={() => onNavigate('home')}
-                    className="fixed top-24 left-4 md:top-28 md:left-8 z-[999] group flex items-center gap-2 text-slate-500 hover:text-sky-600 font-bold transition-all p-2 pr-4 rounded-full bg-white/90 backdrop-blur-md border border-slate-200/60 shadow-lg hover:shadow-xl hover:bg-white hover:-translate-y-0.5 hover:border-sky-100 cursor-pointer"
-                    title="Voltar ao Menu"
-                >
-                    <div className="w-8 h-8 rounded-full bg-white border border-slate-100 flex items-center justify-center group-hover:bg-sky-50 group-hover:border-sky-100 transition-colors">
-                        <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform text-slate-400 group-hover:text-sky-600" />
-                    </div>
-                    <span className="text-[10px] uppercase tracking-widest font-extrabold group-hover:text-sky-700">Voltar</span>
-                </button>
-
-                {/* Header intro */}
-                <div className="text-center mb-10 max-w-xl shrink-0">
-                    <div className="inline-flex p-3.5 rounded-2xl bg-gradient-to-br from-sky-50 to-sky-100/50 mb-3 shadow-xs ring-4 ring-white/60">
-                        <Activity className="w-8 h-8 text-sky-600 drop-shadow-xs animate-pulse" />
-                    </div>
-                    <h1 className="text-3xl md:text-4xl font-extrabold text-slate-900 tracking-tight mb-2 uppercase">
-                        Regulação & Consultas
-                    </h1>
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest leading-relaxed">
-                        Agendamento de exames e consultas municipais
-                    </p>
-                </div>
-
-                {/* Grid of Main Cards */}
-                <div className={gridClass}>
-                    {/* Card 1: Novo Agendamento */}
-                    {canAccessNovoAgendamento && (
-                        <button
-                            onClick={() => onNavigate('consultas:novo-agendamento')}
-                            className="group relative w-full min-h-[200px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50 border border-slate-100 shadow-[0_10px_35px_rgba(0,0,0,0.03)] hover:shadow-[0_30px_70px_rgba(14,165,233,0.15)] hover:border-sky-200 hover:from-white hover:to-sky-50/20 hover:-translate-y-2 active:scale-98 transition-all duration-300 ease-out flex flex-col items-center justify-center text-center overflow-hidden p-6 cursor-pointer"
-                        >
-                            <div className="absolute top-0 right-0 w-36 h-36 bg-sky-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
-                            <div className="absolute bottom-0 left-0 w-24 h-24 bg-sky-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
-
-                            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-sky-500 to-sky-600 flex items-center justify-center mb-4 text-white group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-sky-500/30 ring-4 ring-white">
-                                <PlusCircle className="w-6.5 h-6.5" />
-                            </div>
-
-                            <h3 className="text-xl font-extrabold text-slate-800 mb-1.5 group-hover:text-slate-900 tracking-tight uppercase">
-                                Novo Agendamento
-                            </h3>
-                            <p className="text-xs font-bold text-slate-400 group-hover:text-sky-600 transition-colors uppercase tracking-widest leading-relaxed">
-                                Cadastrar ou Vincular
-                            </p>
-                            <p className="text-[10px] text-slate-400 mt-2 max-w-[180px] font-medium leading-normal">
-                                Agendamento rápido de consultas e exames especializados para munícipes.
-                            </p>
-                        </button>
-                    )}
-
-                    {/* Card 2: Liberar Vagas */}
-                    {canAccessLiberarVagas && (
-                        <button
-                            onClick={() => onNavigate('consultas:liberar-vagas')}
-                            className="group relative w-full min-h-[200px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50 border border-slate-100 shadow-[0_10px_35px_rgba(0,0,0,0.03)] hover:shadow-[0_30px_70px_rgba(20,184,166,0.15)] hover:border-teal-200 hover:from-white hover:to-teal-50/20 hover:-translate-y-2 active:scale-98 transition-all duration-300 ease-out flex flex-col items-center justify-center text-center overflow-hidden p-6 cursor-pointer"
-                        >
-                            <div className="absolute top-0 right-0 w-36 h-36 bg-teal-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
-                            <div className="absolute bottom-0 left-0 w-24 h-24 bg-teal-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
-
-                            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-teal-500 to-emerald-600 flex items-center justify-center mb-4 text-white group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-teal-500/30 ring-4 ring-white">
-                                <CalendarClock className="w-6.5 h-6.5" />
-                            </div>
-
-                            <h3 className="text-xl font-extrabold text-slate-800 mb-1.5 group-hover:text-slate-900 tracking-tight uppercase">
-                                Liberar Vagas
-                            </h3>
-                            <p className="text-xs font-bold text-slate-400 group-hover:text-teal-600 transition-colors uppercase tracking-widest leading-relaxed">
-                                Gestão de Horários
-                            </p>
-                            <p className="text-[10px] text-slate-400 mt-2 max-w-[180px] font-medium leading-normal">
-                                Liberação de cotas, definição de datas e controle de vagas por procedimento.
-                            </p>
-                        </button>
-                    )}
-
-                    {/* Card 3: Agendar */}
-                    {canAccessAgendar && (
-                        <button
-                            onClick={() => onNavigate('consultas:agendar')}
-                            className="group relative w-full min-h-[200px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50 border border-slate-100 shadow-[0_10px_35px_rgba(0,0,0,0.03)] hover:shadow-[0_30px_70px_rgba(16,185,129,0.15)] hover:border-emerald-200 hover:from-white hover:to-emerald-50/20 hover:-translate-y-2 active:scale-98 transition-all duration-300 ease-out flex flex-col items-center justify-center text-center overflow-hidden p-6 cursor-pointer"
-                        >
-                            <div className="absolute top-0 right-0 w-36 h-36 bg-emerald-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
-                            <div className="absolute bottom-0 left-0 w-24 h-24 bg-emerald-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
-
-                            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center mb-4 text-white group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-emerald-500/30 ring-4 ring-white">
-                                <CalendarCheck className="w-6.5 h-6.5" />
-                            </div>
-
-                            <h3 className="text-xl font-extrabold text-slate-800 mb-1.5 group-hover:text-slate-900 tracking-tight uppercase">
-                                Agendar
-                            </h3>
-                            <p className="text-xs font-bold text-slate-400 group-hover:text-emerald-600 transition-colors uppercase tracking-widest leading-relaxed">
-                                Vagas Disponíveis
-                            </p>
-                            <p className="text-[10px] text-slate-400 mt-2 max-w-[180px] font-medium leading-normal">
-                                Marcação efetiva de consultas e exames com vagas disponíveis para solicitações promovidas.
-                            </p>
-                        </button>
-                    )}
-
-                    {/* Card 3: Acompanhar */}
-                    {canAccessAcompanhar && (
-                        <button
-                            onClick={() => onNavigate('consultas:acompanhar')}
-                            className="group relative w-full min-h-[200px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50 border border-slate-100 shadow-[0_10px_35px_rgba(0,0,0,0.03)] hover:shadow-[0_30px_70px_rgba(99,102,241,0.15)] hover:border-indigo-200 hover:from-white hover:to-indigo-50/20 hover:-translate-y-2 active:scale-98 transition-all duration-300 ease-out flex flex-col items-center justify-center text-center overflow-hidden p-6 cursor-pointer"
-                        >
-                            <div className="absolute top-0 right-0 w-36 h-36 bg-indigo-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
-                            <div className="absolute bottom-0 left-0 w-24 h-24 bg-indigo-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
-
-                            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center mb-4 text-white group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-indigo-500/30 ring-4 ring-white">
-                                <History className="w-6.5 h-6.5" />
-                            </div>
-
-                            <h3 className="text-xl font-extrabold text-slate-800 mb-1.5 group-hover:text-slate-900 tracking-tight uppercase">
-                                Acompanhar
-                            </h3>
-                            <p className="text-xs font-bold text-slate-400 group-hover:text-indigo-600 transition-colors uppercase tracking-widest leading-relaxed">
-                                Fila de Espera
-                            </p>
-                            <p className="text-[10px] text-slate-400 mt-2 max-w-[180px] font-medium leading-normal">
-                                Controle em tempo real de agendamentos, confirmações e atendimentos.
-                            </p>
-                        </button>
-                    )}
-
-                    {/* Card 4: Pacientes */}
-                    {canAccessPacientes && (
-                        <button
-                            onClick={() => onNavigate('consultas:pacientes')}
-                            className="group relative w-full min-h-[200px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50 border border-slate-100 shadow-[0_10px_35px_rgba(0,0,0,0.03)] hover:shadow-[0_30px_70px_rgba(6,182,212,0.15)] hover:border-cyan-200 hover:from-white hover:to-cyan-50/20 hover:-translate-y-2 active:scale-98 transition-all duration-300 ease-out flex flex-col items-center justify-center text-center overflow-hidden p-6 cursor-pointer"
-                        >
-                            <div className="absolute top-0 right-0 w-36 h-36 bg-cyan-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
-                            <div className="absolute bottom-0 left-0 w-24 h-24 bg-cyan-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
-
-                            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-cyan-500 to-cyan-600 flex items-center justify-center mb-4 text-white group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-cyan-500/30 ring-4 ring-white">
-                                <Users className="w-6.5 h-6.5" />
-                            </div>
-
-                            <h3 className="text-xl font-extrabold text-slate-800 mb-1.5 group-hover:text-slate-900 tracking-tight uppercase">
-                                Pacientes
-                            </h3>
-                            <p className="text-xs font-bold text-slate-400 group-hover:text-cyan-600 transition-colors uppercase tracking-widest leading-relaxed">
-                                Base Unificada
-                            </p>
-                            <p className="text-[10px] text-slate-400 mt-2 max-w-[180px] font-medium leading-normal">
-                                Cadastro central de munícipes compartilhado entre Farmácia e Consultas.
-                            </p>
-                        </button>
-                    )}
-
-                    {/* Card 5: Dados & Dashboard */}
-                    {canAccessDados && (
-                        <button
-                            onClick={() => onNavigate('consultas:dados-dashboard')}
-                            className="group relative w-full min-h-[200px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50 border border-slate-100 shadow-[0_10px_35px_rgba(0,0,0,0.03)] hover:shadow-[0_30px_70px_rgba(16,185,129,0.15)] hover:border-emerald-200 hover:from-white hover:to-emerald-50/20 hover:-translate-y-2 active:scale-98 transition-all duration-300 ease-out flex flex-col items-center justify-center text-center overflow-hidden p-6 cursor-pointer"
-                        >
-                            <div className="absolute top-0 right-0 w-36 h-36 bg-emerald-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
-                            <div className="absolute bottom-0 left-0 w-24 h-24 bg-emerald-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
-
-                            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-700 flex items-center justify-center mb-4 text-white group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-emerald-500/30 ring-4 ring-white">
-                                <Database className="w-6.5 h-6.5" />
-                            </div>
-
-                            <h3 className="text-xl font-extrabold text-slate-800 mb-1.5 group-hover:text-slate-900 tracking-tight uppercase">
-                                Dados & Métricas
-                            </h3>
-                            <p className="text-xs font-bold text-slate-400 group-hover:text-emerald-600 transition-colors uppercase tracking-widest leading-relaxed">
-                                Painel de Gestão
-                            </p>
-                            <p className="text-[10px] text-slate-400 mt-2 max-w-[180px] font-medium leading-normal">
-                                Indicadores de atendimento, relatórios de procedimentos e administração.
-                            </p>
-                        </button>
-                    )}
-
-                    {/* Card 6: Gestor */}
-                    {canAccessGestor && (
-                        <button
-                            onClick={() => onNavigate('consultas:gestor')}
-                            className="group relative w-full min-h-[200px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50 border border-slate-100 shadow-[0_10px_35px_rgba(0,0,0,0.03)] hover:shadow-[0_30px_70px_rgba(168,85,247,0.15)] hover:border-purple-200 hover:from-white hover:to-purple-50/20 hover:-translate-y-2 active:scale-98 transition-all duration-300 ease-out flex flex-col items-center justify-center text-center overflow-hidden p-6 cursor-pointer"
-                        >
-                            <div className="absolute top-3 right-4 px-2.5 py-0.5 rounded-full bg-purple-50 border border-purple-200 text-purple-700 text-[9px] font-black uppercase tracking-wider">
-                                GESTOR
-                            </div>
-
-                            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center mb-4 text-white group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-purple-500/30 ring-4 ring-white">
-                                <ShieldCheck className="w-6.5 h-6.5" />
-                            </div>
-
-                            <h3 className="text-xl font-extrabold text-slate-800 mb-1.5 group-hover:text-slate-900 tracking-tight uppercase">
-                                Gestor
-                            </h3>
-                            <p className="text-xs font-bold text-slate-400 group-hover:text-purple-600 transition-colors uppercase tracking-widest leading-relaxed">
-                                Controle de Acessos
-                            </p>
-                            <p className="text-[10px] text-slate-400 mt-2 max-w-[180px] font-medium leading-normal">
-                                Configuração avançada de permissões e auditoria do módulo.
-                            </p>
-                        </button>
-                    )}
-
-                    {!canAccessNovoAgendamento && !canAccessLiberarVagas && !canAccessAgendar && !canAccessAcompanhar && !canAccessPacientes && !canAccessDados && !canAccessGestor && (
-                        <div className="col-span-full text-center p-8 bg-white border border-slate-200 rounded-[2rem] shadow-sm max-w-md mx-auto">
-                            <Activity className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                            <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Regulação & Consultas</h3>
-                            <p className="text-xs text-slate-500 mt-2">Nenhuma funcionalidade deste módulo está disponível no momento.</p>
+            <div className="flex-1 w-full p-4 md:p-6 overflow-y-auto lg:overflow-hidden flex flex-col justify-center items-center">
+                <div className="w-full max-h-full flex flex-col items-center justify-center container mx-auto">
+                    {/* Botão Voltar */}
+                    <button
+                        onClick={() => onNavigate('home')}
+                        className="fixed top-20 left-4 desktop:top-24 desktop:left-8 z-[999] group flex items-center gap-2 text-slate-500 hover:text-sky-600 font-bold transition-all p-2 pr-4 rounded-full bg-white/90 backdrop-blur-md border border-slate-200/60 shadow-lg hover:shadow-xl hover:bg-white hover:-translate-y-0.5 hover:border-sky-100 cursor-pointer"
+                        title="Voltar ao Menu"
+                    >
+                        <div className="w-8 h-8 rounded-full bg-white border border-slate-100 flex items-center justify-center group-hover:bg-sky-50 group-hover:border-sky-100 transition-colors">
+                            <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform text-slate-400 group-hover:text-sky-600" />
                         </div>
-                    )}
+                        <span className="text-[10px] uppercase tracking-widest font-extrabold group-hover:text-sky-700">Voltar</span>
+                    </button>
+
+                    {/* Header intro */}
+                    <div className="text-center mb-5 md:mb-7 shrink-0 animation-delay-100 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                        <div className="inline-flex p-3 rounded-2xl bg-gradient-to-br from-sky-50 to-sky-100/50 mb-2.5 shadow-xs ring-4 ring-white/60">
+                            <Activity className="w-8 h-8 md:w-9 md:h-9 text-sky-600 drop-shadow-xs animate-pulse" />
+                        </div>
+                        <h1 className="text-2xl md:text-3xl lg:text-4xl font-extrabold text-slate-900 tracking-tight mb-1 uppercase">
+                            Regulação & Consultas
+                        </h1>
+                        <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-widest leading-relaxed">
+                            Agendamento de exames e consultas municipais
+                        </p>
+                    </div>
+
+                    {/* Grid of Main Cards */}
+                    <div className={`${gridClass} animate-in zoom-in duration-500 fill-mode-backwards p-1`}>
+                        {/* Card 1: Novo Agendamento */}
+                        {canAccessNovoAgendamento && (
+                            <button
+                                onClick={() => onNavigate('consultas:novo-agendamento')}
+                                className="group relative w-full min-h-[115px] md:min-h-[135px] rounded-[2rem] bg-gradient-to-br from-white to-slate-50 border border-slate-100 shadow-[0_10px_35px_rgba(0,0,0,0.03)] hover:shadow-[0_25px_60px_rgba(14,165,233,0.15)] hover:border-sky-200 hover:from-white hover:to-sky-50/20 hover:-translate-y-1.5 active:scale-95 transition-all duration-300 ease-out flex flex-col items-center justify-center text-center overflow-hidden p-3.5 md:p-4 cursor-pointer shrink-0"
+                            >
+                                <div className="absolute top-0 right-0 w-32 h-32 bg-sky-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
+                                <div className="absolute bottom-0 left-0 w-20 h-20 bg-sky-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
+
+                                <div className="w-11 h-11 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-sky-500 to-sky-600 flex items-center justify-center mb-2 text-white group-hover:scale-110 group-hover:rotate-6 transition-all duration-300 shadow-md shadow-sky-500/30 ring-4 ring-white">
+                                    <PlusCircle className="w-5.5 h-5.5" />
+                                </div>
+
+                                <h3 className="text-sm md:text-base font-extrabold text-slate-800 mb-0.5 group-hover:text-slate-900 tracking-tight uppercase text-center">
+                                    Novo Agendamento
+                                </h3>
+                                <p className="text-[9px] md:text-[10px] font-bold text-slate-400 group-hover:text-sky-600 transition-colors uppercase tracking-wider text-center">
+                                    Cadastrar ou Vincular
+                                </p>
+                            </button>
+                        )}
+
+                        {/* Card 2: Liberar Vagas */}
+                        {canAccessLiberarVagas && (
+                            <button
+                                onClick={() => onNavigate('consultas:liberar-vagas')}
+                                className="group relative w-full min-h-[115px] md:min-h-[135px] rounded-[2rem] bg-gradient-to-br from-white to-slate-50 border border-slate-100 shadow-[0_10px_35px_rgba(0,0,0,0.03)] hover:shadow-[0_25px_60px_rgba(20,184,166,0.15)] hover:border-teal-200 hover:from-white hover:to-teal-50/20 hover:-translate-y-1.5 active:scale-95 transition-all duration-300 ease-out flex flex-col items-center justify-center text-center overflow-hidden p-3.5 md:p-4 cursor-pointer shrink-0"
+                            >
+                                <div className="absolute top-0 right-0 w-32 h-32 bg-teal-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
+                                <div className="absolute bottom-0 left-0 w-20 h-20 bg-teal-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
+
+                                <div className="w-11 h-11 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-teal-500 to-emerald-600 flex items-center justify-center mb-2 text-white group-hover:scale-110 group-hover:rotate-6 transition-all duration-300 shadow-md shadow-teal-500/30 ring-4 ring-white">
+                                    <CalendarClock className="w-5.5 h-5.5" />
+                                </div>
+
+                                <h3 className="text-sm md:text-base font-extrabold text-slate-800 mb-0.5 group-hover:text-slate-900 tracking-tight uppercase text-center">
+                                    Liberar Vagas
+                                </h3>
+                                <p className="text-[9px] md:text-[10px] font-bold text-slate-400 group-hover:text-teal-600 transition-colors uppercase tracking-wider text-center">
+                                    Gestão de Horários
+                                </p>
+                            </button>
+                        )}
+
+                        {/* Card 3: Agendar */}
+                        {canAccessAgendar && (
+                            <button
+                                onClick={() => onNavigate('consultas:agendar')}
+                                className="group relative w-full min-h-[115px] md:min-h-[135px] rounded-[2rem] bg-gradient-to-br from-white to-slate-50 border border-slate-100 shadow-[0_10px_35px_rgba(0,0,0,0.03)] hover:shadow-[0_25px_60px_rgba(16,185,129,0.15)] hover:border-emerald-200 hover:from-white hover:to-emerald-50/20 hover:-translate-y-1.5 active:scale-95 transition-all duration-300 ease-out flex flex-col items-center justify-center text-center overflow-hidden p-3.5 md:p-4 cursor-pointer shrink-0"
+                            >
+                                <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
+                                <div className="absolute bottom-0 left-0 w-20 h-20 bg-emerald-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
+
+                                <div className="w-11 h-11 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center mb-2 text-white group-hover:scale-110 group-hover:rotate-6 transition-all duration-300 shadow-md shadow-emerald-500/30 ring-4 ring-white">
+                                    <CalendarCheck className="w-5.5 h-5.5" />
+                                </div>
+
+                                <h3 className="text-sm md:text-base font-extrabold text-slate-800 mb-0.5 group-hover:text-slate-900 tracking-tight uppercase text-center">
+                                    Agendar
+                                </h3>
+                                <p className="text-[9px] md:text-[10px] font-bold text-slate-400 group-hover:text-emerald-600 transition-colors uppercase tracking-wider text-center">
+                                    Vagas Disponíveis
+                                </p>
+                            </button>
+                        )}
+
+                        {/* Card 4: Acompanhar */}
+                        {canAccessAcompanhar && (
+                            <button
+                                onClick={() => onNavigate('consultas:acompanhar')}
+                                className="group relative w-full min-h-[115px] md:min-h-[135px] rounded-[2rem] bg-gradient-to-br from-white to-slate-50 border border-slate-100 shadow-[0_10px_35px_rgba(0,0,0,0.03)] hover:shadow-[0_25px_60px_rgba(99,102,241,0.15)] hover:border-indigo-200 hover:from-white hover:to-indigo-50/20 hover:-translate-y-1.5 active:scale-95 transition-all duration-300 ease-out flex flex-col items-center justify-center text-center overflow-hidden p-3.5 md:p-4 cursor-pointer shrink-0"
+                            >
+                                <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
+                                <div className="absolute bottom-0 left-0 w-20 h-20 bg-indigo-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
+
+                                <div className="w-11 h-11 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center mb-2 text-white group-hover:scale-110 group-hover:rotate-6 transition-all duration-300 shadow-md shadow-indigo-500/30 ring-4 ring-white">
+                                    <History className="w-5.5 h-5.5" />
+                                </div>
+
+                                <h3 className="text-sm md:text-base font-extrabold text-slate-800 mb-0.5 group-hover:text-slate-900 tracking-tight uppercase text-center">
+                                    Acompanhar
+                                </h3>
+                                <p className="text-[9px] md:text-[10px] font-bold text-slate-400 group-hover:text-indigo-600 transition-colors uppercase tracking-wider text-center">
+                                    Fila de Espera
+                                </p>
+                            </button>
+                        )}
+
+                        {/* Card 5: Pacientes */}
+                        {canAccessPacientes && (
+                            <button
+                                onClick={() => onNavigate('consultas:pacientes')}
+                                className="group relative w-full min-h-[115px] md:min-h-[135px] rounded-[2rem] bg-gradient-to-br from-white to-slate-50 border border-slate-100 shadow-[0_10px_35px_rgba(0,0,0,0.03)] hover:shadow-[0_25px_60px_rgba(6,182,212,0.15)] hover:border-cyan-200 hover:from-white hover:to-cyan-50/20 hover:-translate-y-1.5 active:scale-95 transition-all duration-300 ease-out flex flex-col items-center justify-center text-center overflow-hidden p-3.5 md:p-4 cursor-pointer shrink-0"
+                            >
+                                <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
+                                <div className="absolute bottom-0 left-0 w-20 h-20 bg-cyan-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
+
+                                <div className="w-11 h-11 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-cyan-500 to-cyan-600 flex items-center justify-center mb-2 text-white group-hover:scale-110 group-hover:rotate-6 transition-all duration-300 shadow-md shadow-cyan-500/30 ring-4 ring-white">
+                                    <Users className="w-5.5 h-5.5" />
+                                </div>
+
+                                <h3 className="text-sm md:text-base font-extrabold text-slate-800 mb-0.5 group-hover:text-slate-900 tracking-tight uppercase text-center">
+                                    Pacientes
+                                </h3>
+                                <p className="text-[9px] md:text-[10px] font-bold text-slate-400 group-hover:text-cyan-600 transition-colors uppercase tracking-wider text-center">
+                                    Base Unificada
+                                </p>
+                            </button>
+                        )}
+
+                        {/* Card 6: Dados & Dashboard */}
+                        {canAccessDados && (
+                            <button
+                                onClick={() => onNavigate('consultas:dados-dashboard')}
+                                className="group relative w-full min-h-[115px] md:min-h-[135px] rounded-[2rem] bg-gradient-to-br from-white to-slate-50 border border-slate-100 shadow-[0_10px_35px_rgba(0,0,0,0.03)] hover:shadow-[0_25px_60px_rgba(16,185,129,0.15)] hover:border-emerald-200 hover:from-white hover:to-emerald-50/20 hover:-translate-y-1.5 active:scale-95 transition-all duration-300 ease-out flex flex-col items-center justify-center text-center overflow-hidden p-3.5 md:p-4 cursor-pointer shrink-0"
+                            >
+                                <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
+                                <div className="absolute bottom-0 left-0 w-20 h-20 bg-emerald-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
+
+                                <div className="w-11 h-11 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-700 flex items-center justify-center mb-2 text-white group-hover:scale-110 group-hover:rotate-6 transition-all duration-300 shadow-md shadow-emerald-500/30 ring-4 ring-white">
+                                    <Database className="w-5.5 h-5.5" />
+                                </div>
+
+                                <h3 className="text-sm md:text-base font-extrabold text-slate-800 mb-0.5 group-hover:text-slate-900 tracking-tight uppercase text-center">
+                                    Dados & Métricas
+                                </h3>
+                                <p className="text-[9px] md:text-[10px] font-bold text-slate-400 group-hover:text-emerald-600 transition-colors uppercase tracking-wider text-center">
+                                    Painel de Gestão
+                                </p>
+                            </button>
+                        )}
+
+                        {/* Card 7: Gestor */}
+                        {canAccessGestor && (
+                            <button
+                                onClick={() => onNavigate('consultas:gestor')}
+                                className="group relative w-full min-h-[115px] md:min-h-[135px] rounded-[2rem] bg-gradient-to-br from-white to-slate-50 border border-slate-100 shadow-[0_10px_35px_rgba(0,0,0,0.03)] hover:shadow-[0_25px_60px_rgba(168,85,247,0.15)] hover:border-purple-200 hover:from-white hover:to-purple-50/20 hover:-translate-y-1.5 active:scale-95 transition-all duration-300 ease-out flex flex-col items-center justify-center text-center overflow-hidden p-3.5 md:p-4 cursor-pointer shrink-0"
+                            >
+                                <div className="absolute top-2.5 right-3 px-2 py-0.5 rounded-full bg-purple-50 border border-purple-200 text-purple-700 text-[8px] font-black uppercase tracking-wider">
+                                    GESTOR
+                                </div>
+
+                                <div className="w-11 h-11 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center mb-2 text-white group-hover:scale-110 group-hover:rotate-6 transition-all duration-300 shadow-md shadow-purple-500/30 ring-4 ring-white">
+                                    <ShieldCheck className="w-5.5 h-5.5" />
+                                </div>
+
+                                <h3 className="text-sm md:text-base font-extrabold text-slate-800 mb-0.5 group-hover:text-slate-900 tracking-tight uppercase text-center">
+                                    Gestor
+                                </h3>
+                                <p className="text-[9px] md:text-[10px] font-bold text-slate-400 group-hover:text-purple-600 transition-colors uppercase tracking-wider text-center">
+                                    Controle de Acessos
+                                </p>
+                            </button>
+                        )}
+
+                        {!canAccessNovoAgendamento && !canAccessLiberarVagas && !canAccessAgendar && !canAccessAcompanhar && !canAccessPacientes && !canAccessDados && !canAccessGestor && (
+                            <div className="col-span-full text-center p-8 bg-white border border-slate-200 rounded-[2rem] shadow-sm max-w-md mx-auto">
+                                <Activity className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+                                <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Regulação & Consultas</h3>
+                                <p className="text-xs text-slate-500 mt-2">Nenhuma funcionalidade deste módulo está disponível no momento.</p>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
         );

@@ -132,14 +132,14 @@ export const RHModule: React.FC<RHModuleProps> = ({
                     onClose={() => setGeneratingPdfRecord(null)}
                 />
             )}
-            <div className="flex-1 flex flex-col h-full bg-[#f8fafc] w-full max-w-[100vw] overflow-x-hidden relative">
-                <main ref={mainRef} className="flex-1 overflow-y-auto p-4 desktop:p-8 custom-scrollbar">
+            <div className="flex-1 flex flex-col h-full bg-[#f8fafc] w-full max-w-[100vw] overflow-hidden relative">
+                <main ref={mainRef} className="flex-1 p-4 md:p-6 overflow-y-auto lg:overflow-hidden flex flex-col justify-center items-center">
                     {!isFormView ? (
-                        <div className="flex-1 flex flex-col items-center justify-center w-full h-full min-h-0 container mx-auto">
+                        <div className="w-full max-h-full flex flex-col items-center justify-center container mx-auto">
                             {/* Fixed Back Button - Standardized Position */}
                             <button
                                 onClick={() => onNavigate('home')}
-                                className="fixed top-24 left-4 md:top-28 md:left-8 z-[999] group flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-bold transition-all p-2 pr-4 rounded-full bg-white/90 backdrop-blur-md border border-slate-200/60 shadow-lg hover:shadow-xl hover:bg-white hover:-translate-y-0.5 hover:border-indigo-100"
+                                className="fixed top-20 left-4 desktop:top-24 desktop:left-8 z-[999] group flex items-center gap-2 text-slate-500 hover:text-indigo-600 font-bold transition-all p-2 pr-4 rounded-full bg-white/90 backdrop-blur-md border border-slate-200/60 shadow-lg hover:shadow-xl hover:bg-white hover:-translate-y-0.5 hover:border-indigo-100"
                                 title="Voltar ao Menu"
                             >
                                 <div className="w-8 h-8 rounded-full bg-white border border-slate-100 flex items-center justify-center group-hover:bg-indigo-50 group-hover:border-indigo-100 transition-colors">
@@ -148,34 +148,34 @@ export const RHModule: React.FC<RHModuleProps> = ({
                                 <span className="text-[10px] uppercase tracking-widest font-extrabold group-hover:text-indigo-700">Voltar</span>
                             </button>
 
-                            <div className="w-full flex-1 flex flex-col items-center justify-center max-h-full mt-16 md:mt-0">
+                            <div className="w-full flex flex-col items-center justify-center max-h-full">
                                 {/* Header */}
-                                <div className="flex flex-col items-center mb-6 md:mb-12 shrink-0 animation-delay-100 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                                    <div className="p-4 rounded-[1.8rem] bg-gradient-to-br from-fuchsia-50 to-fuchsia-100/50 mb-4 shadow-sm ring-6 ring-white/50">
-                                        <Users className="w-10 h-10 text-fuchsia-600 drop-shadow-sm" />
+                                <div className="flex flex-col items-center mb-5 md:mb-7 shrink-0 animation-delay-100 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                                    <div className="p-3 md:p-3.5 rounded-2xl bg-gradient-to-br from-fuchsia-50 to-fuchsia-100/50 mb-2.5 shadow-xs ring-4 ring-white/60">
+                                        <Users className="w-8 h-8 md:w-9 md:h-9 text-fuchsia-600 drop-shadow-sm" />
                                     </div>
-                                    <h2 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight text-center drop-shadow-sm uppercase">Recursos Humanos</h2>
-                                    <p className="text-slate-500 text-[10px] font-bold uppercase tracking-[0.2em] mt-1 text-center">Gerencie lançamentos e horas extras da equipe</p>
+                                    <h2 className="text-2xl md:text-3xl lg:text-4xl font-black text-slate-800 tracking-tight text-center drop-shadow-sm uppercase">Recursos Humanos</h2>
+                                    <p className="text-slate-500 text-[10px] md:text-[11px] font-bold uppercase tracking-[0.2em] mt-1 text-center">Gerencie lançamentos e horas extras da equipe</p>
                                 </div>
 
                                 {/* Quick Actions / Cards */}
-                                <div className={`w-full grid ${isHorasExtrasActive && isHistoricoActive ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 max-w-md'} gap-4 md:gap-6 max-w-4xl animate-in zoom-in duration-500 fill-mode-backwards p-2`}>
+                                <div className={`w-full grid ${isHorasExtrasActive && isHistoricoActive ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 max-w-md'} gap-3 md:gap-4 max-w-2xl animate-in zoom-in duration-500 fill-mode-backwards p-2`}>
                                     {/* Card Horas Extras */}
                                     {isHorasExtrasActive && (
                                         <button
                                             onClick={() => onNavigate('rh:horas-extras')}
-                                            className={`group relative w-full min-h-[140px] md:min-h-[180px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-fuchsia-500/30 hover:border-fuchsia-200 hover:from-white hover:to-fuchsia-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden text-center`}
+                                            className={`group relative w-full min-h-[110px] md:min-h-[135px] py-4 md:py-5 px-4 rounded-[2rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-fuchsia-500/30 hover:border-fuchsia-200 hover:from-white hover:to-fuchsia-50/30 transition-all duration-300 ease-spring hover:-translate-y-1.5 active:scale-95 flex flex-col items-center justify-center overflow-hidden text-center shrink-0`}
                                             style={{ animationDelay: `0ms` }}
                                         >
                                             <div className={`absolute top-0 right-0 w-32 h-32 bg-fuchsia-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150`}></div>
                                             <div className={`absolute bottom-0 left-0 w-24 h-24 bg-fuchsia-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100`}></div>
 
-                                            <div className={`w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-gradient-to-br from-fuchsia-500 to-fuchsia-600 flex items-center justify-center mb-3 text-white group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300 shadow-lg shadow-fuchsia-500/30 ring-4 ring-white`}>
-                                                <PlusCircle className="w-6 h-6 md:w-7 md:h-7 drop-shadow-md" />
+                                            <div className={`relative w-11 h-11 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-fuchsia-500 to-fuchsia-600 flex items-center justify-center mb-2.5 text-white group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300 shadow-md shadow-fuchsia-500/30 ring-4 ring-white`}>
+                                                <PlusCircle className="w-5 h-5 md:w-6 md:h-6 drop-shadow-md" />
                                             </div>
 
-                                            <h3 className="text-lg md:text-2xl font-bold text-slate-800 mb-1 group-hover:text-slate-900 tracking-tight uppercase">Novo Lançamento</h3>
-                                            <p className="text-[10px] md:text-xs font-bold text-slate-400 group-hover:text-fuchsia-600 transition-colors uppercase tracking-widest text-center px-4">Horas Extras</p>
+                                            <h3 className="text-base md:text-lg lg:text-xl font-bold text-slate-800 mb-0.5 group-hover:text-slate-900 tracking-tight uppercase text-center">Novo Lançamento</h3>
+                                            <p className="text-[9px] md:text-[10px] font-bold text-slate-400 group-hover:text-fuchsia-600 transition-colors uppercase tracking-wider text-center px-4">Horas Extras</p>
                                         </button>
                                     )}
 
@@ -183,18 +183,18 @@ export const RHModule: React.FC<RHModuleProps> = ({
                                     {isHistoricoActive && (
                                         <button
                                             onClick={() => onNavigate('rh:historico')}
-                                            className={`group relative w-full min-h-[140px] md:min-h-[180px] rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-indigo-500/30 hover:border-indigo-200 hover:from-white hover:to-indigo-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden text-center`}
+                                            className={`group relative w-full min-h-[110px] md:min-h-[135px] py-4 md:py-5 px-4 rounded-[2rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-indigo-500/30 hover:border-indigo-200 hover:from-white hover:to-indigo-50/30 transition-all duration-300 ease-spring hover:-translate-y-1.5 active:scale-95 flex flex-col items-center justify-center overflow-hidden text-center shrink-0`}
                                             style={{ animationDelay: `100ms` }}
                                         >
                                             <div className={`absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150`}></div>
                                             <div className={`absolute bottom-0 left-0 w-24 h-24 bg-indigo-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100`}></div>
 
-                                            <div className={`w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center mb-3 text-white group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300 shadow-lg shadow-indigo-500/30 ring-4 ring-white`}>
-                                                <History className="w-6 h-6 md:w-7 md:h-7 drop-shadow-md" />
+                                            <div className={`relative w-11 h-11 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center mb-2.5 text-white group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300 shadow-md shadow-indigo-500/30 ring-4 ring-white`}>
+                                                <History className="w-5 h-5 md:w-6 md:h-6 drop-shadow-md" />
                                             </div>
 
-                                            <h3 className="text-lg md:text-2xl font-bold text-slate-800 mb-1 group-hover:text-slate-900 tracking-tight uppercase">Histórico</h3>
-                                            <p className="text-[10px] md:text-xs font-bold text-slate-400 group-hover:text-indigo-600 transition-colors uppercase tracking-widest text-center px-4">Planilhas Fechadas</p>
+                                            <h3 className="text-base md:text-lg lg:text-xl font-bold text-slate-800 mb-0.5 group-hover:text-slate-900 tracking-tight uppercase text-center">Histórico</h3>
+                                            <p className="text-[9px] md:text-[10px] font-bold text-slate-400 group-hover:text-indigo-600 transition-colors uppercase tracking-wider text-center px-4">Planilhas Fechadas</p>
                                         </button>
                                     )}
 

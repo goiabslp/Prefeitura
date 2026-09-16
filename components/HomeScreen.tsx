@@ -463,6 +463,22 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             }
         }
 
+        const getGridContainerClass = (count: number) => {
+            if (count === 5) {
+                return "w-full grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 desktop:gap-4 max-w-6xl";
+            }
+            if (count === 4) {
+                return "w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 desktop:gap-4 max-w-5xl";
+            }
+            if (count === 3) {
+                return "w-full grid grid-cols-1 sm:grid-cols-3 gap-3 desktop:gap-4 max-w-4xl";
+            }
+            if (count === 2) {
+                return "w-full grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl";
+            }
+            return "w-full flex flex-wrap justify-center items-stretch gap-3 desktop:gap-4 max-w-6xl";
+        };
+
         return (
             <>
                 {/* Fixed Back Button */}
@@ -478,18 +494,19 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 </button>
 
                 <div className="w-full h-full flex flex-col relative animate-fade-in z-0 overflow-hidden">
-                    <div className="flex-1 w-full p-4 desktop:p-8 pt-20 desktop:pt-24 overflow-y-auto custom-scrollbar">
-                        <div className="w-full min-h-full flex flex-col items-center justify-center container mx-auto">
-                            <div className="flex flex-col items-center mb-8 shrink-0 animation-delay-100 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                                <div className={`p-5 rounded-[2rem] bg-gradient-to-br from-${config.color}-50 to-${config.color}-100/50 mb-5 shadow-sm ring-8 ring-white/50`}>
-                                    <config.icon className={`w-12 h-12 text-${config.color}-600 drop-shadow-sm`} />
+                    <div className="flex-1 w-full p-4 md:p-6 overflow-y-auto lg:overflow-hidden flex flex-col justify-center items-center">
+                        <div className="w-full max-h-full flex flex-col items-center justify-center container mx-auto">
+                            <div className="flex flex-col items-center mb-5 md:mb-7 shrink-0 animation-delay-100 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                                <div className={`p-3 md:p-3.5 rounded-2xl bg-gradient-to-br from-${config.color}-50 to-${config.color}-100/50 mb-2.5 shadow-xs ring-4 ring-white/60`}>
+                                    <config.icon className={`w-8 h-8 md:w-9 md:h-9 text-${config.color}-600 drop-shadow-sm`} />
                                 </div>
-                                <h2 className="text-3xl desktop:text-5xl font-black text-slate-800 tracking-tight text-center drop-shadow-sm">{config.name}</h2>
+                                <h2 className="text-2xl md:text-3xl lg:text-4xl font-black text-slate-800 tracking-tight text-center drop-shadow-sm">{config.name}</h2>
+                                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-1">Selecione uma ação para continuar</p>
                             </div>
 
-                            <div className="w-full flex flex-wrap justify-center items-stretch gap-3 desktop:gap-4 max-w-7xl animate-in zoom-in duration-500 fill-mode-backwards p-2">
+                            <div className={`${getGridContainerClass(actionButtons.length)} animate-in zoom-in duration-500 fill-mode-backwards p-2`}>
                                 {actionButtons.length === 0 ? (
-                                    <div className="text-center p-8 bg-white/90 backdrop-blur-md rounded-3xl border border-slate-200 max-w-md shadow-sm animate-fade-in">
+                                    <div className="col-span-full text-center p-8 bg-white/90 backdrop-blur-md rounded-3xl border border-slate-200 max-w-md shadow-sm animate-fade-in mx-auto">
                                         <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center mx-auto mb-3 text-amber-600">
                                             <AlertTriangle className="w-6 h-6" />
                                         </div>
@@ -508,18 +525,18 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                                     <button
                                         key={idx}
                                         onClick={btn.onClick}
-                                        className={`group relative w-full sm:w-[240px] desktop:w-[260px] max-w-[280px] min-h-[120px] desktop:min-h-[130px] h-auto py-6 rounded-[2.5rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-${btn.color}-500/30 hover:border-${btn.color}-200 hover:from-white hover:to-${btn.color}-50/30 transition-all duration-300 ease-spring hover:-translate-y-2 active:scale-95 flex flex-col items-center justify-center overflow-hidden shrink-0 ${btn.hideOnMobile ? 'hidden desktop:flex' : 'flex'}`}
+                                        className={`group relative w-full min-h-[110px] md:min-h-[135px] py-4 md:py-5 px-3 md:px-4 rounded-[2rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-${btn.color}-500/30 hover:border-${btn.color}-200 hover:from-white hover:to-${btn.color}-50/30 transition-all duration-300 ease-spring hover:-translate-y-1.5 active:scale-95 flex flex-col items-center justify-center overflow-hidden shrink-0 ${btn.hideOnMobile ? 'hidden desktop:flex' : 'flex'}`}
                                         style={{ animationDelay: `${idx * 100}ms` }}
                                     >
                                         <div className={`absolute top-0 right-0 w-32 h-32 bg-${btn.color}-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150`}></div>
                                         <div className={`absolute bottom-0 left-0 w-24 h-24 bg-${btn.color}-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100`}></div>
  
-                                        <div className={`relative w-12 h-12 desktop:w-14 desktop:h-14 rounded-2xl bg-gradient-to-br from-${btn.color}-500 to-${btn.color}-600 flex items-center justify-center mb-3 text-white group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300 shadow-lg shadow-${btn.color}-500/30 ring-4 ring-white`}>
-                                            <btn.icon className="w-6 h-6 desktop:w-7 desktop:h-7 drop-shadow-md" />
+                                        <div className={`relative w-11 h-11 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-${btn.color}-500 to-${btn.color}-600 flex items-center justify-center mb-2.5 text-white group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300 shadow-md shadow-${btn.color}-500/30 ring-4 ring-white`}>
+                                            <btn.icon className="w-5 h-5 md:w-6 md:h-6 drop-shadow-md" />
                                         </div>
  
-                                        <h3 className="text-lg desktop:text-2xl font-bold text-slate-800 mb-1 group-hover:text-slate-900 tracking-tight">{btn.label}</h3>
-                                        <p className="text-[10px] desktop:text-xs font-bold text-slate-400 group-hover:text-${btn.color}-600 transition-colors uppercase tracking-widest">{btn.desc}</p>
+                                        <h3 className="text-base md:text-lg lg:text-xl font-bold text-slate-800 mb-0.5 group-hover:text-slate-900 tracking-tight text-center">{btn.label}</h3>
+                                        <p className="text-[9px] md:text-[10px] font-bold text-slate-400 group-hover:text-${btn.color}-600 transition-colors uppercase tracking-wider text-center">{btn.desc}</p>
                                     </button>
                                 ))
                                 )}
