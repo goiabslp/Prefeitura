@@ -478,7 +478,7 @@ export const updateInventoryImport = async (id: string, updates: Partial<Invento
 export const getInventoryImports = async (): Promise<InventoryImport[]> => {
     const { data, error } = await supabase
         .from('procurement_inventory_imports')
-        .select('id, file_name, imported_at, imported_by, total_items, successful_items, failed_items, status')
+        .select('id, filename, imported_by, imported_at, items_added, items_updated, items_ignored')
         .order('imported_at', { ascending: false });
     if (error) throw error;
     return (data || []) as unknown as InventoryImport[];

@@ -633,7 +633,7 @@ export const noticiasService = {
       if (materia.eventoId || materia.id.startsWith('materia_evt_')) {
         const eventId = materia.eventoId || materia.id.replace('materia_evt_', '');
         try {
-          const { data: evt } = await supabase.from('calendar_events').select('id, title, description, start_date, start_time, location, event_type').eq('id', eventId).single();
+          const { data: evt } = await supabase.from('calendar_events').select('id, title, description, start_date, start_time, type').eq('id', eventId).single();
           if (evt) {
             const meta = deserializeEventMetadata(evt.description);
             const newDesc = serializeEventMetadata(meta.cleanDescription, {
@@ -683,36 +683,35 @@ export const noticiasService = {
         }
       }
 
-      // 2. Persiste no banco de dados central (jornal_materias) se a tabela existir
-      try {
-        const { error } = await (supabase as any).from('jornal_materias').upsert({
-          id: materia.id,
-          titulo: materia.titulo,
-          subtitulo: materia.subtitulo,
-          conteudo: materia.conteudo,
-          categoria: materia.categoria,
-          data_publicacao: materia.dataPublicacao || new Date().toISOString(),
-          data_evento: materia.dataEvento,
-          hora_evento: materia.horaEvento,
-          imagem_url: materia.imagemUrl,
-          imagem_posicao: materia.imagemPosicao,
-          autor: materia.autor || 'Assessoria de Comunicação Oficial',
-          destaque_frase: materia.destaqueFrase,
-          evento_id: materia.eventoId,
-          tipo_evento: materia.tipoEvento,
-          setor: materia.setor,
-          oculta: !!materia.oculta,
-          destaque: !!materia.destaque,
-          aprovada: materia.aprovada !== undefined ? !!materia.aprovada : false,
-          status: materia.status || (materia.aprovada ? 'publicada' : 'pendente'),
-          curtidas: materia.curtidas || 1
-        });
-
-        if (error && error.code !== 'PGRST205') {
-          console.warn('Persistência em jornal_materias:', error);
+      // 2. Persiste no banco de dados central (jornal_materias) se a tabela existir fisicamente
+      const isJornalMateriasEnabled = false;
+      if (isJornalMateriasEnabled) {
+        try {
+          await (supabase as any).from('jornal_materias').upsert({
+            id: materia.id,
+            titulo: materia.titulo,
+            subtitulo: materia.subtitulo,
+            conteudo: materia.conteudo,
+            categoria: materia.categoria,
+            data_publicacao: materia.dataPublicacao || new Date().toISOString(),
+            data_evento: materia.dataEvento,
+            hora_evento: materia.horaEvento,
+            imagem_url: materia.imagemUrl,
+            imagem_posicao: materia.imagemPosicao,
+            autor: materia.autor || 'Assessoria de Comunicação Oficial',
+            destaque_frase: materia.destaqueFrase,
+            evento_id: materia.eventoId,
+            tipo_evento: materia.tipoEvento,
+            setor: materia.setor,
+            oculta: !!materia.oculta,
+            destaque: !!materia.destaque,
+            aprovada: materia.aprovada !== undefined ? !!materia.aprovada : false,
+            status: materia.status || (materia.aprovada ? 'publicada' : 'pendente'),
+            curtidas: materia.curtidas || 1
+          });
+        } catch (tableErr) {
+          // Tabela jornal_materias é opcional
         }
-      } catch (tableErr) {
-        // Tabela jornal_materias é opcional
       }
 
       invalidateMateriasCache();
@@ -758,7 +757,7 @@ export const noticiasService = {
       const targetEventId = eventId || (id.startsWith('materia_evt_') ? id.replace('materia_evt_', '') : '');
       if (targetEventId) {
         try {
-          const { data: evt } = await supabase.from('calendar_events').select('id, title, description, start_date, start_time, location, event_type').eq('id', targetEventId).single();
+          const { data: evt } = await supabase.from('calendar_events').select('id, title, description, start_date, start_time, type').eq('id', targetEventId).single();
           if (evt) {
             const meta = deserializeEventMetadata(evt.description);
             const currentMateriaData = meta.materia_data || {};
@@ -804,7 +803,7 @@ export const noticiasService = {
       if (id.startsWith('materia_evt_')) {
         const eventId = id.replace('materia_evt_', '');
         try {
-          const { data: evt } = await supabase.from('calendar_events').select('id, title, description, start_date, start_time, location, event_type').eq('id', eventId).single();
+          const { data: evt } = await supabase.from('calendar_events').select('id, title, description, start_date, start_time, type').eq('id', eventId).single();
           if (evt) {
             const meta = deserializeEventMetadata(evt.description);
             const newDesc = serializeEventMetadata(meta.cleanDescription, {
@@ -850,7 +849,7 @@ export const noticiasService = {
       if (id.startsWith('materia_evt_')) {
         const eventId = id.replace('materia_evt_', '');
         try {
-          const { data: evt } = await supabase.from('calendar_events').select('id, title, description, start_date, start_time, location, event_type').eq('id', eventId).single();
+          const { data: evt } = await supabase.from('calendar_events').select('id, title, description, start_date, start_time, type').eq('id', eventId).single();
           if (evt) {
             const meta = deserializeEventMetadata(evt.description);
             const currentDestaque = !!(meta.materia_data as any)?.destaque;
@@ -871,22 +870,25 @@ export const noticiasService = {
       }
 
       // 2. Atualiza na tabela jornal_materias se existir
-      try {
-        const { data } = await (supabase as any)
-          .from('jornal_materias')
-          .select('destaque')
-          .eq('id', id)
-          .single();
+      const isJornalMateriasEnabled = false;
+      if (isJornalMateriasEnabled) {
+        try {
+          const { data } = await (supabase as any)
+            .from('jornal_materias')
+            .select('destaque')
+            .eq('id', id)
+            .single();
 
-        if (data && !id.startsWith('materia_evt_')) {
-          novoEstado = !data.destaque;
-        }
+          if (data && !id.startsWith('materia_evt_')) {
+            novoEstado = !data.destaque;
+          }
 
-        await (supabase as any)
-          .from('jornal_materias')
-          .update({ destaque: novoEstado })
-          .eq('id', id);
-      } catch (dbErr) {}
+          await (supabase as any)
+            .from('jornal_materias')
+            .update({ destaque: novoEstado })
+            .eq('id', id);
+        } catch (dbErr) {}
+      }
 
       invalidateMateriasCache();
       return { success: true, destaque: novoEstado };
@@ -907,7 +909,7 @@ export const noticiasService = {
       if (id.startsWith('materia_evt_')) {
         const eventId = id.replace('materia_evt_', '');
         try {
-          const { data: evt } = await supabase.from('calendar_events').select('id, title, description, start_date, start_time, location, event_type').eq('id', eventId).single();
+          const { data: evt } = await supabase.from('calendar_events').select('id, title, description, start_date, start_time, type').eq('id', eventId).single();
           if (evt) {
             const meta = deserializeEventMetadata(evt.description);
             const currentOculta = !!(meta.materia_data as any)?.oculta;
@@ -928,22 +930,25 @@ export const noticiasService = {
       }
 
       // 2. Atualiza na tabela jornal_materias se existir
-      try {
-        const { data } = await (supabase as any)
-          .from('jornal_materias')
-          .select('oculta')
-          .eq('id', id)
-          .single();
+      const isJornalMateriasEnabled = false;
+      if (isJornalMateriasEnabled) {
+        try {
+          const { data } = await (supabase as any)
+            .from('jornal_materias')
+            .select('oculta')
+            .eq('id', id)
+            .single();
 
-        if (data && !id.startsWith('materia_evt_')) {
-          novoEstado = !data.oculta;
-        }
+          if (data && !id.startsWith('materia_evt_')) {
+            novoEstado = !data.oculta;
+          }
 
-        await (supabase as any)
-          .from('jornal_materias')
-          .update({ oculta: novoEstado })
-          .eq('id', id);
-      } catch (dbErr) {}
+          await (supabase as any)
+            .from('jornal_materias')
+            .update({ oculta: novoEstado })
+            .eq('id', id);
+        } catch (dbErr) {}
+      }
 
       invalidateMateriasCache();
       return { success: true, oculta: novoEstado };
@@ -968,55 +973,56 @@ export const noticiasService = {
       const excludedIds = getExcludedMateriaIds();
 
       // 1. Busca todas as matérias cadastradas na tabela jornal_materias do Supabase (se existir)
-      try {
-        const { data, error } = await (supabase as any)
-          .from('jornal_materias')
-          .select('id, titulo, subtitulo, conteudo, categoria, data_publicacao, data_evento, hora_evento, imagem_url, imagem_posicao, autor, destaque_frase, evento_id, tipo_evento, setor, oculta, destaque, aprovada, status, curtidas, created_at')
-          .order('data_publicacao', { ascending: false });
+      const isJornalMateriasEnabled = false;
+      if (isJornalMateriasEnabled) {
+        try {
+          const { data, error } = await (supabase as any)
+            .from('jornal_materias')
+            .select('id, titulo, subtitulo, conteudo, categoria, data_publicacao, data_evento, hora_evento, imagem_url, imagem_posicao, autor, destaque_frase, evento_id, tipo_evento, setor, oculta, destaque, aprovada, status, curtidas, created_at')
+            .order('data_publicacao', { ascending: false });
 
-        if (!error && data && data.length > 0) {
-          data.forEach((d: any) => {
-            if (excludedIds.has(d.id) || (d.evento_id && (excludedIds.has(d.evento_id) || excludedIds.has(`materia_evt_${d.evento_id}`)))) {
-              return;
-            }
+          if (!error && data && data.length > 0) {
+            data.forEach((d: any) => {
+              if (excludedIds.has(d.id) || (d.evento_id && (excludedIds.has(d.evento_id) || excludedIds.has(`materia_evt_${d.evento_id}`)))) {
+                return;
+              }
 
-            const localPos = typeof localStorage !== 'undefined'
-              ? (localStorage.getItem(`noticias_img_pos_${d.id}`) || (d.evento_id ? localStorage.getItem(`noticias_img_pos_${d.evento_id}`) : null))
-              : null;
+              const localPos = typeof localStorage !== 'undefined'
+                ? (localStorage.getItem(`noticias_img_pos_${d.id}`) || (d.evento_id ? localStorage.getItem(`noticias_img_pos_${d.evento_id}`) : null))
+                : null;
 
-            map.set(d.id, {
-              id: d.id,
-              titulo: d.titulo,
-              subtitulo: d.subtitulo,
-              conteudo: d.conteudo,
-              categoria: d.categoria,
-              dataPublicacao: d.data_publicacao || d.created_at,
-              dataEvento: d.data_evento,
-              horaEvento: d.hora_evento,
-              imagemUrl: d.imagem_url,
-              imagemPosicao: d.imagem_posicao || localPos || undefined,
-              autor: d.autor || 'Assessoria de Comunicação & Imprensa',
-              destaqueFrase: d.destaque_frase,
-              eventoId: d.evento_id,
-              tipoEvento: d.tipo_evento,
-              setor: d.setor,
-              oculta: !!d.oculta,
-              destaque: !!d.destaque,
-              aprovada: d.aprovada !== undefined ? !!d.aprovada : true,
-              status: d.status || (d.aprovada === false ? 'pendente' : 'publicada'),
-              curtidas: d.curtidas || 0
+              map.set(d.id, {
+                id: d.id,
+                titulo: d.titulo,
+                subtitulo: d.subtitulo,
+                conteudo: d.conteudo,
+                categoria: d.categoria,
+                dataPublicacao: d.data_publicacao || d.created_at,
+                dataEvento: d.data_evento,
+                horaEvento: d.hora_evento,
+                imagemUrl: d.imagem_url,
+                imagemPosicao: d.imagem_posicao || localPos || undefined,
+                autor: d.autor || 'Assessoria de Comunicação & Imprensa',
+                destaqueFrase: d.destaque_frase,
+                eventoId: d.evento_id,
+                tipoEvento: d.tipo_evento,
+                setor: d.setor,
+                oculta: !!d.oculta,
+                destaque: !!d.destaque,
+                aprovada: d.aprovada !== undefined ? !!d.aprovada : true,
+                status: d.status || (d.aprovada === false ? 'pendente' : 'publicada'),
+                curtidas: d.curtidas || 0
+              });
             });
-          });
-        }
-      } catch (dbErr) {
-        // Tabela opcional
+          }
+        } catch (dbErr) {}
       }
 
       // 2. Busca eventos do calendário no Supabase marcados para publicar no jornal
       try {
         const { data: calData, error: calErr } = await supabase
           .from('calendar_events')
-          .select('id, title, description, start_date, start_time, location, event_type, created_at, created_by')
+          .select('id, title, description, start_date, start_time, type, created_at, created_by')
           .order('start_date', { ascending: false })
           .limit(300);
 
@@ -1163,17 +1169,20 @@ export const noticiasService = {
       addExcludedMateriaId(id, eventId);
 
       // 2. Tenta excluir da tabela jornal_materias se ela existir
-      try {
-        await (supabase as any)
-          .from('jornal_materias')
-          .delete()
-          .eq('id', id);
-      } catch (tableErr) {}
+      const isJornalMateriasEnabled = false;
+      if (isJornalMateriasEnabled) {
+        try {
+          await (supabase as any)
+            .from('jornal_materias')
+            .delete()
+            .eq('id', id);
+        } catch (tableErr) {}
+      }
 
       // 3. Se for vinculada a um evento do calendário (ou tiver ID de evento correspondente)
       const targetEventId = eventId || id;
       try {
-        const { data: evt } = await supabase.from('calendar_events').select('id, title, description, start_date, start_time, location, event_type').eq('id', targetEventId).single();
+        const { data: evt } = await supabase.from('calendar_events').select('id, title, description, start_date, start_time, type').eq('id', targetEventId).single();
         if (evt) {
           const meta = deserializeEventMetadata(evt.description);
           const newDesc = serializeEventMetadata(meta.cleanDescription, {

@@ -31,7 +31,7 @@ export const useCachedPersons = (initialPersons: Person[] = []) => {
         queryFn: async () => {
             const { data, error } = await supabase
                 .from('persons')
-                .select('id, name, sector_id, job_id, role')
+                .select('id, name, sector_id, job_id, birth_date, driver_code')
                 .order('name');
 
             if (error) throw error;
@@ -42,7 +42,8 @@ export const useCachedPersons = (initialPersons: Person[] = []) => {
                 name: p.name,
                 sectorId: p.sector_id,
                 jobId: p.job_id,
-                role: p.role // Including role if available
+                birth_date: p.birth_date,
+                driver_code: p.driver_code
             }));
 
             if (mappedData) {

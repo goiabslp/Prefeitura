@@ -89,34 +89,43 @@ class ErrorMonitorService {
                 const firstArg = args[0];
 
                 // Filtros de ruídos comuns de desenvolvimento que não devem disparar modal
-                const stringified = args.map(a => typeof a === 'string' ? a : safeString(a)).join(' ');
+                const stringified = args.map(a => typeof a === 'string' ? a : formatConsoleArg(a)).join(' ');
                 
                 if (
                     stringified.includes('[vite]') ||
                     stringified.includes('Warning:') ||
                     stringified.includes('Download the React DevTools') ||
-                    stringified.includes('ResizeObserver')
+                    stringified.includes('ResizeObserver') ||
+                    stringified.includes('HMR')
                 ) {
                     return;
                 }
 
                 // Identifica erros do Supabase reportados via [Supabase Error] ou [consultasService] Error
                 let errorType = 'Console Error';
-                let message = '';
                 let stack: string | undefined;
 
                 if (stringified.includes('[Supabase Error]')) {
                     errorType = 'Erro de API / Supabase';
                 }
 
-                if (firstArg instanceof Error) {
-                    message = firstArg.message;
-                    stack = firstArg.stack;
-                } else if (typeof firstArg === 'string') {
-                    message = args.join(' ');
-                } else {
-                    message = safeString(firstArg);
+                // Desdobra todos os argumentos (objetos, erros, strings) sem gerar [object Object]
+                const parts: string[] = [];
+                for (const arg of args) {
+                    if (arg instanceof Error) {
+                        if (!stack) stack = arg.stack;
+                    } else if (arg && typeof arg === 'object') {
+                        if (!stack && 'stack' in arg && typeof (arg as any).stack === 'string') {
+                            stack = (arg as any).stack;
+                        }
+                        if ('code' in arg && typeof (arg as any).code === 'string') {
+                            errorType = `Erro de API / Supabase (${(arg as any).code})`;
+                        }
+                    }
+                    parts.push(formatConsoleArg(arg));
                 }
+
+                const message = parts.join(parts.some(p => p.includes('\n')) ? '\n\n' : ' ');
 
                 // Só abre modal se houver uma mensagem de erro clara
                 if (message && message.trim().length > 0) {
@@ -146,12 +155,12 @@ class ErrorMonitorService {
             let rawStack = context?.stack;
 
             if (error instanceof Error) {
-                rawMessage = error.message;
+                rawMessage = `${error.name}: ${error.message}`;
                 rawStack = rawStack || error.stack;
             } else if (typeof error === 'string') {
                 rawMessage = error;
             } else if (error && typeof error === 'object') {
-                rawMessage = (error as any).message || (error as any).error_description || safeString(error);
+                rawMessage = formatConsoleArg(error);
                 rawStack = rawStack || (error as any).stack;
             } else {
                 rawMessage = String(error);
@@ -168,23 +177,16 @@ class ErrorMonitorService {
             const errorType = context?.type || 'Erro Inesperado';
 
             // Gerar fingerprint para agrupar erros repetitivos
-            const fingerprint = `${errorType}:${rawMessage.trim().substring(0, 120)}:${currentRoute}`;
-            const lastOccurrence = this.recentFingerprints.get(fingerprint);
-
-            // Se for o mesmo erro ocorrendo em menos de DEDUP_WINDOW_MS
-            if (this.currentError && this.currentError.message === sanitizeErrorText(rawMessage)) {
-                this.currentError.occurrences += 1;
-                this.currentError.timestamp = this.formatTimestamp(new Date());
-                this.notify();
-                return;
+            // Se o modal já estiver aberto com este mesmo erro, apenas incrementa as ocorrências
+            if (this.currentError) {
+                const sanitizedMsg = sanitizeErrorText(rawMessage);
+                if (this.currentError.message === sanitizedMsg || this.currentError.message.includes(sanitizedMsg.substring(0, 60))) {
+                    this.currentError.occurrences += 1;
+                    this.currentError.timestamp = this.formatTimestamp(new Date());
+                    this.notify();
+                    return;
+                }
             }
-
-            if (lastOccurrence && (now - lastOccurrence) < this.DEDUP_WINDOW_MS) {
-                // Erro muito recente, já exibido
-                return;
-            }
-
-            this.recentFingerprints.set(fingerprint, now);
 
             // Sanitização de segurança de dados confidenciais
             const sanitizedMessage = sanitizeErrorText(rawMessage);
@@ -215,6 +217,7 @@ class ErrorMonitorService {
      */
     public dismiss(): void {
         this.currentError = null;
+        this.recentFingerprints.clear();
         this.notify();
     }
 
@@ -257,15 +260,61 @@ class ErrorMonitorService {
     }
 }
 
-const safeString = (val: any): string => {
-    try {
-        if (typeof val === 'object' && val !== null) {
-            return JSON.stringify(val);
+/**
+ * Converte qualquer valor recebido no console para string detalhada e legível,
+ * desdobrando objetos e erros sem gerar "[object Object]".
+ */
+export const formatConsoleArg = (arg: unknown): string => {
+    if (arg === null) return 'null';
+    if (arg === undefined) return 'undefined';
+    if (typeof arg === 'string') return arg;
+    if (typeof arg === 'number' || typeof arg === 'boolean') return String(arg);
+
+    // Se for uma instância de Error ou tiver estrutura de erro
+    if (arg instanceof Error) {
+        const errorRecord: Record<string, any> = {
+            name: arg.name,
+            message: arg.message
+        };
+        for (const key of Object.getOwnPropertyNames(arg)) {
+            if (key !== 'stack') {
+                errorRecord[key] = (arg as any)[key];
+            }
         }
-        return String(val);
-    } catch {
-        return String(val);
+        try {
+            return JSON.stringify(errorRecord, null, 2);
+        } catch {
+            return `${arg.name}: ${arg.message}`;
+        }
     }
+
+    // Se for objeto genérico (como erro do Supabase { message, code, details, hint })
+    if (typeof arg === 'object') {
+        try {
+            const seen = new WeakSet();
+            return JSON.stringify(arg, (key, value) => {
+                if (typeof value === 'object' && value !== null) {
+                    if (seen.has(value)) return '[Circular]';
+                    seen.add(value);
+                }
+                return value;
+            }, 2);
+        } catch {
+            try {
+                // Tenta extrair chaves caso JSON.stringify direto falhe
+                const objCopy: Record<string, any> = {};
+                for (const k in arg) {
+                    objCopy[k] = (arg as any)[k];
+                }
+                return JSON.stringify(objCopy, null, 2);
+            } catch {
+                return String(arg);
+            }
+        }
+    }
+
+    return String(arg);
 };
 
 export const errorMonitor = new ErrorMonitorService();
+

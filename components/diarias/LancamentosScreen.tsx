@@ -384,16 +384,16 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
           setLogoUrl(settings.branding.logoUrl);
         }
 
-        const { data: sData } = await supabase.from('sectors').select('id, name, acronym, secretary, active');
+        const { data: sData } = await supabase.from('sectors').select('id, name');
         if (sData) setSectors(sData);
 
-        const { data: pData } = await supabase.from('profiles').select('id, name, username, email, sector, role, active');
+        const { data: pData } = await supabase.from('profiles').select('id, name, username, email, sector, role, status');
         if (pData) setProfiles(pData);
 
-        const { data: jData } = await supabase.from('jobs').select('id, name, description, active');
+        const { data: jData } = await supabase.from('jobs').select('id, name');
         if (jData) setJobs(jData);
 
-        const { data: peData } = await supabase.from('persons').select('id, name, sector_id, job_id, birth_date, driver_code, active');
+        const { data: peData } = await supabase.from('persons').select('id, name, sector_id, job_id, birth_date, driver_code');
         if (peData) {
           setPersons(peData.map((p: any) => ({
             id: p.id,

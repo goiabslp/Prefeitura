@@ -132,7 +132,7 @@ export const UploadHub: React.FC<UploadHubProps> = ({ currentUser, onBack }) => 
         const fetchFiles = async () => {
             const { data } = await supabase
                 .from('transfer_files')
-                .select('id, transfer_area_id, file_name, file_url, file_size, file_type, created_at')
+                .select('id, transfer_area_id, file_name, file_url, file_size, created_at')
                 .eq('transfer_area_id', transferArea.id)
                 .order('created_at', { ascending: false });
             if (data) {

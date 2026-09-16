@@ -80,7 +80,7 @@ export const performLocationCheckpointSync = async (userId?: string, targetTripI
     // 1. Buscar se existe viagem em andamento no Supabase
     const { data: rawEventos, error } = await supabase
       .from('diarias_eventos')
-      .select('id, user_id, status, pessoas, ultimo_checkpoint, checklist, destino')
+      .select('id, user_id, status, pessoas, checklist, destino')
       .eq('status', 'em_viagem');
 
     if (error || !rawEventos || rawEventos.length === 0) {

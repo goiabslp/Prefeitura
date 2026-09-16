@@ -1042,7 +1042,7 @@ export const getVagas = async (procedimentoId?: string): Promise<ConsultaVaga[]>
     try {
         let query = supabase
             .from('consultas_vagas')
-            .select('id, procedimento_id, data, hora, quantidade, status, created_at')
+            .select('id, procedimento_id, data, hora, status, created_at')
             .order('data', { ascending: true })
             .order('hora', { ascending: true });
 
@@ -1340,18 +1340,23 @@ export const getSystemUsers = async (): Promise<any[]> => {
 export const getConsultasGestores = async (): Promise<string[]> => {
     try {
         const { data, error } = await supabase
-            .from('consultas_gestores')
-            .select('user_id');
+            .from('organization_settings')
+            .select('ui_config')
+            .eq('id', 'global_config')
+            .maybeSingle();
 
-        if (error) {
-            const local = localStorage.getItem('consultas_gestores_user_ids');
-            return local ? JSON.parse(local) : [];
+        if (!error && data?.ui_config?.consultas_gestores && Array.isArray(data.ui_config.consultas_gestores)) {
+            const list = data.ui_config.consultas_gestores;
+            if (typeof localStorage !== 'undefined') {
+                localStorage.setItem('consultas_gestores_user_ids', JSON.stringify(list));
+            }
+            return list;
         }
-        return (data || []).map((g: any) => g.user_id);
     } catch (error) {
-        const local = localStorage.getItem('consultas_gestores_user_ids');
-        return local ? JSON.parse(local) : [];
+        console.warn('[consultasService] Aviso ao buscar gestores em organization_settings:', error);
     }
+    const local = typeof localStorage !== 'undefined' ? localStorage.getItem('consultas_gestores_user_ids') : null;
+    return local ? JSON.parse(local) : [];
 };
 
 export const isUserGestoresOrAdmin = async (user: { id: string; role?: string }): Promise<boolean> => {
@@ -1362,45 +1367,78 @@ export const isUserGestoresOrAdmin = async (user: { id: string; role?: string })
 
 export const addConsultasGestor = async (userId: string, currentUserId?: string): Promise<boolean> => {
     try {
-        await supabase
-            .from('consultas_gestores')
-            .insert([{ user_id: userId, created_by: currentUserId }]);
-
         const local = await getConsultasGestores();
         if (!local.includes(userId)) {
             local.push(userId);
+        }
+        if (typeof localStorage !== 'undefined') {
             localStorage.setItem('consultas_gestores_user_ids', JSON.stringify(local));
         }
-        window.dispatchEvent(new CustomEvent('consultas-gestores-changed'));
+
+        const { data: orgData } = await supabase
+            .from('organization_settings')
+            .select('ui_config')
+            .eq('id', 'global_config')
+            .maybeSingle();
+
+        const currentUiConfig = orgData?.ui_config || {};
+        await supabase
+            .from('organization_settings')
+            .update({
+                ui_config: {
+                    ...currentUiConfig,
+                    consultas_gestores: local
+                }
+            })
+            .eq('id', 'global_config');
+
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('consultas-gestores-changed'));
+        }
         return true;
     } catch (error) {
-        const local = await getConsultasGestores();
-        if (!local.includes(userId)) {
-            local.push(userId);
-            localStorage.setItem('consultas_gestores_user_ids', JSON.stringify(local));
+        console.warn('[consultasService] Erro ao salvar gestor em organization_settings:', error);
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('consultas-gestores-changed'));
         }
-        window.dispatchEvent(new CustomEvent('consultas-gestores-changed'));
         return true;
     }
 };
 
 export const removeConsultasGestor = async (userId: string): Promise<boolean> => {
     try {
-        await supabase
-            .from('consultas_gestores')
-            .delete()
-            .eq('user_id', userId);
-
         let local = await getConsultasGestores();
         local = local.filter(id => id !== userId);
-        localStorage.setItem('consultas_gestores_user_ids', JSON.stringify(local));
-        window.dispatchEvent(new CustomEvent('consultas-gestores-changed'));
+        if (typeof localStorage !== 'undefined') {
+            localStorage.setItem('consultas_gestores_user_ids', JSON.stringify(local));
+        }
+
+        const { data: orgData } = await supabase
+            .from('organization_settings')
+            .select('ui_config')
+            .eq('id', 'global_config')
+            .maybeSingle();
+
+        const currentUiConfig = orgData?.ui_config || {};
+        await supabase
+            .from('organization_settings')
+            .update({
+                ui_config: {
+                    ...currentUiConfig,
+                    consultas_gestores: local
+                }
+            })
+            .eq('id', 'global_config');
+
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('consultas-gestores-changed'));
+        }
         return true;
     } catch (error) {
-        let local = await getConsultasGestores();
-        local = local.filter(id => id !== userId);
-        localStorage.setItem('consultas_gestores_user_ids', JSON.stringify(local));
-        window.dispatchEvent(new CustomEvent('consultas-gestores-changed'));
+        console.warn('[consultasService] Erro ao remover gestor em organization_settings:', error);
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('consultas-gestores-changed'));
+        }
         return true;
     }
 };

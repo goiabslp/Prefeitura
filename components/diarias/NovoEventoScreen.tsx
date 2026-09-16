@@ -752,7 +752,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
       try {
         const { data, error } = await supabase
           .from('vehicles')
-          .select('id, plate, model, brand, year, type, sector_id, active')
+          .select('id, plate, model, brand, year, type, sector_id, status')
           .order('plate', { ascending: true });
         if (data && !error) {
           setDirectVehicles(data as unknown as Vehicle[]);

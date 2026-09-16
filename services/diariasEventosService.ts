@@ -45,7 +45,7 @@ const filterValidUserIds = async (userIds: Set<string>): Promise<string[]> => {
   const ids = Array.from(userIds).filter(Boolean);
   if (ids.length === 0) return [];
   try {
-    const { data } = await supabase.from('users').select('id').in('id', ids);
+    const { data } = await supabase.from('profiles').select('id').in('id', ids);
     return (data || []).map((u: any) => u.id);
   } catch {
     return [];
@@ -62,9 +62,11 @@ const mergeDespesasFlag = async (events: DiariaEvento[]): Promise<DiariaEvento[]
   return processedEvents.map(evt => {
     const sId = String(evt.id);
     const isEnabled = map[sId] !== undefined ? !!map[sId] : !!(evt as any).permitir_despesas_pos_finalizacao;
+    const ultimo_checkpoint = evt.ultimo_checkpoint || (evt.checklist as any)?.ultimo_checkpoint;
     return {
       ...evt,
-      permitir_despesas_pos_finalizacao: isEnabled
+      permitir_despesas_pos_finalizacao: isEnabled,
+      ultimo_checkpoint
     };
   });
 };
@@ -126,7 +128,7 @@ export const createDiariaEvento = async (evento: Omit<DiariaEvento, 'id' | 'crea
   return createdData;
 };
 
-const DIARIA_EVENTO_COLUMNS = 'id, pessoas, destino, data_saida, data_retorno, motivo, setor_id, user_id, user_name, created_at, status, justificativa_gestor, comprovantes_gestor, valor_diaria, relatorio_viagem, hospedagem, hospedagem_dias, veiculo, veiculo_outro, distancia, gestor_transferido_cargo, digital_signature, checklist, modo_inicio, saida_validada, ultimo_checkpoint';
+const DIARIA_EVENTO_COLUMNS = 'id, pessoas, destino, data_saida, data_retorno, motivo, setor_id, user_id, user_name, created_at, status, justificativa_gestor, comprovantes_gestor, valor_diaria, relatorio_viagem, hospedagem, hospedagem_dias, veiculo, veiculo_outro, distancia, gestor_transferido_cargo, digital_signature, checklist, modo_inicio, saida_validada';
 
 export const getDiariaEventosBySector = async (sectorId?: string): Promise<DiariaEvento[]> => {
   let query = supabase

@@ -77,7 +77,7 @@ export const GlobalErrorModal: React.FC = () => {
             aria-labelledby="error-modal-title"
         >
             <div 
-                className="bg-white dark:bg-slate-900 border border-rose-200 dark:border-rose-900/60 rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-150"
+                className="bg-white dark:bg-slate-900 border border-rose-200 dark:border-rose-900/60 rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-150"
                 onClick={e => e.stopPropagation()}
             >
                 {/* Cabeçalho */}
@@ -147,7 +147,7 @@ export const GlobalErrorModal: React.FC = () => {
                         <label className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                             Mensagem:
                         </label>
-                        <div className="p-3.5 rounded-xl bg-slate-900 text-rose-300 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap selection:bg-rose-500 selection:text-white border border-slate-800">
+                        <div className="p-3.5 rounded-xl bg-slate-900 text-rose-300 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap selection:bg-rose-500 selection:text-white border border-slate-800 max-h-80 overflow-y-auto shadow-inner">
                             {currentError.message}
                         </div>
                     </div>

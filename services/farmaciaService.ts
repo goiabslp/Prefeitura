@@ -278,7 +278,7 @@ export const getMovimentacoes = async (filters?: MovimentacaoFilters): Promise<F
         // Tenta remover em background quaisquer operações de teste do Guilherme se existirem no banco
         removeGuilhermeOperations().catch(() => {});
 
-        const MOVIMENTACAO_COLUMNS = 'id, medicamento_id, medicamento_nome, medicamento_categoria, quantidade, tipo, data, responsavel_id, responsavel_nome, paciente_id, paciente_nome, paciente_cpf, observacao, receita_numero, validade, lote, motivo_descarte';
+        const MOVIMENTACAO_COLUMNS = 'id, medicamento_id, medicamento_nome, medicamento_categoria, quantidade, tipo, data, responsavel_id, responsavel_nome, paciente_nome, paciente_cpf, lote, validade, observacoes, criado_em';
 
         let query = supabase
             .from('farmacia_movimentacoes')
@@ -371,10 +371,26 @@ export const registrarMovimentacao = async (
             if (updateErr) throw updateErr;
         }
 
-        // Insert movement history log
+        // Insert movement history log garantindo colunas válidas no Supabase
+        const payloadToInsert: any = {
+            medicamento_id: mov.medicamento_id,
+            medicamento_nome: mov.medicamento_nome,
+            medicamento_categoria: mov.medicamento_categoria,
+            quantidade: mov.quantidade,
+            tipo: mov.tipo,
+            data: mov.data || new Date().toISOString(),
+            responsavel_id: mov.responsavel_id,
+            responsavel_nome: mov.responsavel_nome,
+            paciente_nome: mov.paciente_nome,
+            paciente_cpf: mov.paciente_cpf,
+            lote: mov.lote,
+            validade: mov.validade,
+            observacoes: mov.observacoes || (mov as any).observacao
+        };
+
         let { data, error } = await supabase
             .from('farmacia_movimentacoes')
-            .insert([mov])
+            .insert([payloadToInsert])
             .select()
             .single();
 

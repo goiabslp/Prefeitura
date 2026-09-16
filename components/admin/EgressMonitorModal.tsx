@@ -54,7 +54,7 @@ export const EgressMonitorModal: React.FC<EgressMonitorModalProps> = ({ isOpen, 
         setIsTesting(true);
         try {
             // Executa uma consulta leve para registrar no monitor
-            await supabase.from('users').select('id, name').limit(1);
+            await supabase.from('profiles').select('id, name').limit(1);
         } catch {
             // Ignora erro eventual de permissão
         } finally {

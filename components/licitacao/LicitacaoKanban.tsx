@@ -188,7 +188,7 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, u
     useEffect(() => {
         const fetchUsers = async () => {
             try {
-                const { data } = await supabase.from('users').select('id, name, username, email, role, sector, active');
+                const { data } = await supabase.from('profiles').select('id, name, username, email, role, sector, status');
                 if (data && data.length > 0) {
                     setAllUsers(data as unknown as User[]);
                 }

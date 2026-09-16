@@ -492,7 +492,7 @@ export const getUserLicitacaoPermission = async (userId: string): Promise<Licita
     try {
         const { data, error } = await supabase
             .from('licitacao_permissoes')
-            .select('id, usuario_id, perfil, tipo_permissao, permissoes_especiais, criado_em')
+            .select('id, usuario_id, tipo_permissao, criado_em')
             .eq('usuario_id', userId)
             .maybeSingle();
 

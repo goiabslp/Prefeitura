@@ -54,15 +54,37 @@ export const sanitizeErrorText = (input: unknown): string => {
 };
 
 /**
- * Stringify seguro que lida com referências circulares
+ * Stringify seguro que lida com referências circulares e propriedades completas de erros
  */
 const safeStringify = (obj: any): string => {
     try {
         const seen = new WeakSet();
-        return JSON.stringify(obj, (key, value) => {
+
+        // Se for instância de Error ou tiver protótipo de erro, extrai propriedades próprias
+        let target = obj;
+        if (obj instanceof Error) {
+            target = {
+                name: obj.name,
+                message: obj.message,
+                stack: obj.stack
+            };
+            for (const key of Object.getOwnPropertyNames(obj)) {
+                (target as any)[key] = (obj as any)[key];
+            }
+        } else if (typeof obj === 'object' && obj !== null) {
+            const ownProps = Object.getOwnPropertyNames(obj);
+            if (ownProps.length > 0 && Object.keys(obj).length === 0) {
+                target = {};
+                for (const key of ownProps) {
+                    target[key] = (obj as any)[key];
+                }
+            }
+        }
+
+        return JSON.stringify(target, (key, value) => {
             // Se for uma chave sensível conhecida no objeto
             const lowerKey = key.toLowerCase();
-            if (['password', 'senha', 'token', 'secret', 'client_secret', 'apikey', 'cookie'].includes(lowerKey)) {
+            if (['password', 'senha', 'token', 'secret', 'client_secret', 'apikey', 'cookie', 'anon_key'].includes(lowerKey)) {
                 return '[PROTEGIDO]';
             }
             if (typeof value === 'object' && value !== null) {

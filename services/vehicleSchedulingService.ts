@@ -98,7 +98,7 @@ const generateProtocol = async (): Promise<string> => {
 
 const notifyApprovers = async (schedule: any) => {
     const { data: managers } = await supabase
-        .from('users')
+        .from('profiles')
         .select('id')
         .ilike('permissions', '%parent_frotas%');
 

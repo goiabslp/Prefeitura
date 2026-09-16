@@ -132,7 +132,7 @@ export const AbastecimentoService = {
         }
     ): Promise<{ data: AbastecimentoRecord[], count: number }> => {
         try {
-            const ABASTECIMENTO_COLUMNS = 'id, date, vehicle, vehicle_model, vehicle_brand, vehicle_type, sector, driver, fuel_type, liters, unit_price, total_price, odometer, gas_station, gas_station_id, fiscal, invoice_number, payment_status, created_at';
+            const ABASTECIMENTO_COLUMNS = 'id, protocol, fiscal, date, vehicle, driver, fuel_type, liters, odometer, cost, station, invoice_number, user_id, user_name, sector_id, payment_status, unit_price, projeto_atividade, numero_empenho, created_at';
             let query = supabase
                 .from('abastecimentos')
                 .select(ABASTECIMENTO_COLUMNS, { count: 'exact' });
@@ -233,7 +233,7 @@ export const AbastecimentoService = {
         try {
             const { data, error } = await supabase
                 .from('abastecimento_reports_history')
-                .select('id, name, generated_at, generated_by, file_url, total_records, total_value, total_liters, filters, created_at, report_type, payment_status')
+                .select('id, created_at, report_type, start_date, end_date, station, sector, vehicle, fuel_type, payment_status, user_id, user_name, record_ids')
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
@@ -584,7 +584,7 @@ export const AbastecimentoService = {
         try {
             let query = supabase
                 .from('abastecimento_scheduled_prices')
-                .select('id, station_id, scheduled_date, fuel_prices, status, created_at')
+                .select('id, station_id, scheduled_date, prices, applied, created_at')
                 .order('scheduled_date', { ascending: true });
 
             if (stationId) {
