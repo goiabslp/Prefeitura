@@ -8,25 +8,44 @@ const PACIENTE_COLUMNS = 'id, name, cpf, birth_date, nickname, phone, neighborho
 
 export const getPacientes = async (searchTerm?: string): Promise<ConsultaPaciente[]> => {
     try {
-        let query = supabase
-            .from('consultas_pacientes')
-            .select(PACIENTE_COLUMNS)
-            .order('name', { ascending: true });
+        let allData: ConsultaPaciente[] = [];
+        let from = 0;
+        const CHUNK_SIZE = 1000;
+        let hasMore = true;
 
-        if (searchTerm && searchTerm.trim()) {
-            const term = searchTerm.trim();
-            const cleanDigits = term.replace(/\D/g, '');
-            if (cleanDigits.length >= 3) {
-                query = query.or(`name.ilike.%${term}%,cpf.ilike.%${cleanDigits}%,sus_number.ilike.%${cleanDigits}%`);
+        while (hasMore) {
+            let query = supabase
+                .from('consultas_pacientes')
+                .select(PACIENTE_COLUMNS)
+                .order('name', { ascending: true })
+                .range(from, from + CHUNK_SIZE - 1);
+
+            if (searchTerm && searchTerm.trim()) {
+                const term = searchTerm.trim();
+                const cleanDigits = term.replace(/\D/g, '');
+                if (cleanDigits.length >= 3) {
+                    query = query.or(`name.ilike.%${term}%,cpf.ilike.%${cleanDigits}%,sus_number.ilike.%${cleanDigits}%`);
+                } else {
+                    query = query.ilike('name', `%${term}%`);
+                }
+            }
+
+            const { data, error } = await query;
+
+            if (error) throw error;
+            if (data && data.length > 0) {
+                allData = [...allData, ...(data as ConsultaPaciente[])];
+                if (data.length < CHUNK_SIZE) {
+                    hasMore = false;
+                } else {
+                    from += CHUNK_SIZE;
+                }
             } else {
-                query = query.ilike('name', `%${term}%`);
+                hasMore = false;
             }
         }
 
-        const { data, error } = await query.limit(500);
-
-        if (error) throw error;
-        return data || [];
+        return allData;
     } catch (error) {
         const appError = handleSupabaseError(error);
         console.error('[consultasService] getPacientes Error:', appError.message);
@@ -456,20 +475,55 @@ export const orderConsultasQueue = (bookings: ConsultaAgendamento[]): ConsultaAg
  */
 export const recalculateAndPersistQueuePositions = async (): Promise<void> => {
     try {
-        let queueItems: any[] | null = null;
-        const res = await supabase
-            .from('consultas_agendamentos')
-            .select('id, procedimento_id, priority, status, created_at, solicitation_date, is_retorno, retorno_tipo, retorno_grau')
-            .in('status', ['Fila de espera', 'Aguardando Data', 'Solicitado', 'Retorno']);
+        let queueItems: any[] = [];
+        let from = 0;
+        const CHUNK_SIZE = 1000;
+        let hasMore = true;
+        let useFallback = false;
 
-        if (res.error && (res.error.code === '42703' || res.error.code === 'PGRST204' || res.error.message?.includes('column') || res.error.message?.includes('does not exist'))) {
-            const fallbackRes = await supabase
+        while (hasMore) {
+            const selectCols = useFallback 
+                ? 'id, procedimento_id, priority, status, created_at, solicitation_date, is_retorno'
+                : 'id, procedimento_id, priority, status, created_at, solicitation_date, is_retorno, retorno_tipo, retorno_grau';
+
+            let data: any[] | null = null;
+            let error: any = null;
+
+            const res: any = await supabase
                 .from('consultas_agendamentos')
-                .select('id, procedimento_id, priority, status, created_at, solicitation_date, is_retorno')
-                .in('status', ['Fila de espera', 'Aguardando Data', 'Solicitado', 'Retorno']);
-            queueItems = fallbackRes.data;
-        } else {
-            queueItems = res.data;
+                .select(selectCols as any)
+                .in('status', ['Fila de espera', 'Aguardando Data', 'Solicitado', 'Retorno'])
+                .range(from, from + CHUNK_SIZE - 1);
+
+            data = res.data;
+            error = res.error;
+
+            if (error && !useFallback && (error.code === '42703' || error.code === 'PGRST204' || error.message?.includes('column') || error.message?.includes('does not exist'))) {
+                useFallback = true;
+                const fallbackRes: any = await supabase
+                    .from('consultas_agendamentos')
+                    .select('id, procedimento_id, priority, status, created_at, solicitation_date, is_retorno' as any)
+                    .in('status', ['Fila de espera', 'Aguardando Data', 'Solicitado', 'Retorno'])
+                    .range(from, from + CHUNK_SIZE - 1);
+                data = fallbackRes.data;
+                error = fallbackRes.error;
+            }
+
+            if (error) {
+                console.warn('[consultasService] recalculateAndPersistQueuePositions query error:', error);
+                break;
+            }
+
+            if (data && data.length > 0) {
+                queueItems.push(...data);
+                if (data.length < CHUNK_SIZE) {
+                    hasMore = false;
+                } else {
+                    from += CHUNK_SIZE;
+                }
+            } else {
+                hasMore = false;
+            }
         }
 
         if (!queueItems || queueItems.length === 0) return;
@@ -535,12 +589,13 @@ export const getAgendamentos = async (filters?: AgendamentoFilters): Promise<Con
             responsavel:profiles(id, name)
         `;
 
-        const applyQueryFilters = (selectCols: string) => {
+        const buildQuery = (selectCols: string, from: number, to: number) => {
             let q = supabase
                 .from('consultas_agendamentos')
                 .select(selectCols)
                 .order('appointment_date', { ascending: false })
-                .order('created_at', { ascending: false });
+                .order('created_at', { ascending: false })
+                .range(from, to);
 
             if (filters?.procedimentoId) {
                 q = q.eq('procedimento_id', filters.procedimentoId);
@@ -554,19 +609,40 @@ export const getAgendamentos = async (filters?: AgendamentoFilters): Promise<Con
             return q;
         };
 
-        // Aplicação de filtros diretamente no Supabase (redução drástica de Egress)
-        let { data, error } = await applyQueryFilters(fullColumns).limit(1000);
+        const CHUNK_SIZE = 1000;
+        let allData: any[] = [];
+        let from = 0;
+        let hasMore = true;
+        let useFallback = false;
 
-        if (error && (error.code === '42703' || error.code === 'PGRST204' || error.message?.includes('column') || error.message?.includes('does not exist'))) {
-            console.warn('[consultasService] Colunas estendidas ausentes em consultas_agendamentos, executando fallback de colunas básicas...', error.message);
-            const fallbackRes = await applyQueryFilters(fallbackColumns).limit(1000);
-            data = fallbackRes.data;
-            error = fallbackRes.error;
+        // Ilimitado: busca contínua em lotes pelo Supabase sem qualquer teto de 1000
+        while (hasMore) {
+            const cols = useFallback ? fallbackColumns : fullColumns;
+            let { data, error } = await buildQuery(cols, from, from + CHUNK_SIZE - 1);
+
+            if (error && !useFallback && (error.code === '42703' || error.code === 'PGRST204' || error.message?.includes('column') || error.message?.includes('does not exist'))) {
+                console.warn('[consultasService] Colunas estendidas ausentes em consultas_agendamentos, executando fallback de colunas básicas...', error.message);
+                useFallback = true;
+                const fallbackRes = await buildQuery(fallbackColumns, from, from + CHUNK_SIZE - 1);
+                data = fallbackRes.data;
+                error = fallbackRes.error;
+            }
+
+            if (error) throw error;
+
+            if (data && data.length > 0) {
+                allData.push(...data);
+                if (data.length < CHUNK_SIZE) {
+                    hasMore = false;
+                } else {
+                    from += CHUNK_SIZE;
+                }
+            } else {
+                hasMore = false;
+            }
         }
 
-        if (error) throw error;
-
-        let filtered = (data || []) as unknown as ConsultaAgendamento[];
+        let filtered = (allData || []) as unknown as ConsultaAgendamento[];
 
         // Garante que a ordem da fila de espera respeite a prioridade Especial e posições calculadas
         const waitlistItems = filtered.filter(a => a.status === 'Fila de espera');
@@ -606,7 +682,7 @@ export const getAgendamentos = async (filters?: AgendamentoFilters): Promise<Con
         if (filters) {
             if (filters.patientName) {
                 const search = filters.patientName.toLowerCase();
-                filtered = filtered.filter(a => a.paciente?.name.toLowerCase().includes(search));
+                filtered = filtered.filter(a => a.paciente?.name?.toLowerCase().includes(search));
             }
             if (filters.patientCpf) {
                 const search = filters.patientCpf.replace(/\D/g, '');
@@ -773,8 +849,157 @@ export const updateAgendamentoDateAndStatus = async (
     }
 };
 
+/**
+ * Normaliza e compara horários no formato HH:MM
+ */
+export const matchTimeSlot = (timeA?: string | null, timeB?: string | null): boolean => {
+    if (!timeA || !timeB) return false;
+    return timeA.substring(0, 5) === timeB.substring(0, 5);
+};
+
+/**
+ * Retorna as vagas físicas de um procedimento que estão efetivamente livres (não ocupadas por agendamento confirmado)
+ */
+export const getFreeSlotsForProcedure = (vagas: ConsultaVaga[], bookings: ConsultaAgendamento[]): ConsultaVaga[] => {
+    const confirmedBookings = bookings.filter(b => 
+        b.status === 'Agendado' && b.appointment_date && b.appointment_time
+    );
+
+    const matchedBookingIds = new Set<string>();
+    const occupiedSlotIds = new Set<string>();
+
+    vagas.forEach(slot => {
+        if (slot.status === 'Pausada') {
+            occupiedSlotIds.add(slot.id);
+            return;
+        }
+
+        const match = confirmedBookings.find(b => 
+            !matchedBookingIds.has(b.id) &&
+            b.appointment_date === slot.data && 
+            matchTimeSlot(b.appointment_time, slot.hora)
+        );
+
+        if (match) {
+            occupiedSlotIds.add(slot.id);
+            matchedBookingIds.add(match.id);
+        }
+    });
+
+    return vagas.filter(v => (!v.status || v.status === 'Disponível') && !occupiedSlotIds.has(v.id));
+};
+
+/**
+ * Calcula a elegibilidade estrita de fila e vagas para cada agendamento:
+ * Regra: Se houver N vagas livres para o procedimento X, apenas os primeiros N pacientes da fila de espera de X
+ * ganham status 'Definir Data' e a possibilidade de serem agendados.
+ */
+export const getQueueEligibilityMap = (
+    allBookings: ConsultaAgendamento[],
+    allVagas: ConsultaVaga[]
+): Map<string, { isEligible: boolean; freeSlotsCount: number; queuePosition: number; procName: string }> => {
+    const map = new Map<string, { isEligible: boolean; freeSlotsCount: number; queuePosition: number; procName: string }>();
+
+    // 1. Agrupar vagas e agendamentos por procedimento
+    const vagasByProc: Record<string, ConsultaVaga[]> = {};
+    allVagas.forEach(v => {
+        if (!vagasByProc[v.procedimento_id]) vagasByProc[v.procedimento_id] = [];
+        vagasByProc[v.procedimento_id].push(v);
+    });
+
+    const bookingsByProc: Record<string, ConsultaAgendamento[]> = {};
+    allBookings.forEach(b => {
+        const pId = b.procedimento_id || (b.procedimento ? b.procedimento.id : null) || 'geral';
+        if (!bookingsByProc[pId]) bookingsByProc[pId] = [];
+        bookingsByProc[pId].push(b);
+    });
+
+    // 2. Para cada procedimento, calcular slots livres e ordenar fila de espera
+    const allProcIds = new Set([...Object.keys(vagasByProc), ...Object.keys(bookingsByProc)]);
+
+    allProcIds.forEach(procId => {
+        const procVagas = vagasByProc[procId] || [];
+        const procBookings = bookingsByProc[procId] || [];
+        const freeSlots = getFreeSlotsForProcedure(procVagas, procBookings);
+        const freeSlotsCount = freeSlots.length;
+
+        // Fila de espera deste procedimento
+        const waitlist = procBookings.filter(b => b.status === 'Fila de espera' || b.status === 'Aguardando Data');
+        const orderedWaitlist = orderConsultasQueue(waitlist);
+
+        orderedWaitlist.forEach((booking, index) => {
+            const queuePosition = index + 1;
+            const isEligible = queuePosition <= freeSlotsCount;
+
+            map.set(booking.id, {
+                isEligible,
+                freeSlotsCount,
+                queuePosition,
+                procName: booking.procedimento?.name || 'Procedimento'
+            });
+        });
+    });
+
+    return map;
+};
+
 export const confirmarDataAgendamento = async (id: string, date: string, time?: string): Promise<ConsultaAgendamento | null> => {
     try {
+        // 1. Buscar o agendamento atual para validar procedimento e integridade
+        const { data: targetBooking, error: fetchErr } = await supabase
+            .from('consultas_agendamentos')
+            .select('id, procedimento_id, patient_id, status, priority, created_at, solicitation_date')
+            .eq('id', id)
+            .single();
+
+        if (fetchErr || !targetBooking) {
+            throw new Error('Solicitação de agendamento não encontrada.');
+        }
+
+        const procId = targetBooking.procedimento_id;
+
+        // 2. Se houver horário definido, verificar se a vaga específica está livre
+        if (date && time) {
+            const cleanTime = time.substring(0, 5);
+            const { data: conflictingBookings, error: conflictErr } = await supabase
+                .from('consultas_agendamentos')
+                .select('id, appointment_time, status')
+                .eq('procedimento_id', procId)
+                .eq('appointment_date', date)
+                .eq('status', 'Agendado')
+                .neq('id', id);
+
+            if (!conflictErr && conflictingBookings && conflictingBookings.length > 0) {
+                const matchConflict = conflictingBookings.find((b: any) => 
+                    b.appointment_time && b.appointment_time.substring(0, 5) === cleanTime
+                );
+                if (matchConflict) {
+                    throw new Error(`Este horário (${cleanTime}) do dia ${new Date(date + 'T12:00:00').toLocaleDateString('pt-BR')} já foi reservado por outro paciente.`);
+                }
+            }
+        }
+
+        // 3. Validação estrita da ordem da fila: verificar se o paciente é um dos elegíveis
+        if (targetBooking.status === 'Fila de espera' || targetBooking.status === 'Aguardando Data') {
+            const [allProcVagas, allProcBookings] = await Promise.all([
+                getVagas(procId),
+                getAgendamentos({ procedimentoId: procId })
+            ]);
+
+            const freeSlots = getFreeSlotsForProcedure(allProcVagas, allProcBookings);
+            const freeSlotsCount = freeSlots.length;
+
+            const waitlist = allProcBookings.filter(b => b.status === 'Fila de espera' || b.status === 'Aguardando Data');
+            const orderedWaitlist = orderConsultasQueue(waitlist);
+
+            const bookingIndex = orderedWaitlist.findIndex(b => b.id === id);
+            if (bookingIndex === -1 || bookingIndex >= freeSlotsCount) {
+                const pos = bookingIndex !== -1 ? bookingIndex + 1 : 'não classificada';
+                throw new Error(`Não é possível agendar este paciente no momento. O paciente está na ${pos}ª posição da fila e há apenas ${freeSlotsCount} vaga(s) disponível(is) para este procedimento.`);
+            }
+        }
+
+        // 4. Gravar a confirmação do agendamento
         const updatePayload: any = { 
             appointment_date: date,
             status: 'Agendado'
@@ -782,6 +1007,7 @@ export const confirmarDataAgendamento = async (id: string, date: string, time?: 
         if (time) {
             updatePayload.appointment_time = time;
         }
+
         const { data, error } = await supabase
             .from('consultas_agendamentos')
             .update(updatePayload)
@@ -796,9 +1022,13 @@ export const confirmarDataAgendamento = async (id: string, date: string, time?: 
 
         if (error) throw error;
 
+        // 5. Recalcular e persistir posições atualizadas da fila
         await recalculateAndPersistQueuePositions();
+
         if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('consultas-agendamentos-changed'));
+            window.dispatchEvent(new CustomEvent('consultas-vagas-changed'));
+            window.dispatchEvent(new CustomEvent('consultas-procedimentos-changed'));
         }
 
         return data;
@@ -948,16 +1178,36 @@ export const getDashboardStats = async (): Promise<ConsultasDashboardStats> => {
             available: Math.max(0, p.available_quantity)
         })).sort((a, b) => a.available - b.available); // Sort by fewer available first
 
-        // 4. Bookings raw details to compute popularity and period trends
-        const { data: bookings, error: bkError } = await supabase
-            .from('consultas_agendamentos')
-            .select(`
-                appointment_date,
-                procedimento:consultas_procedimentos(name, type)
-            `);
-        if (bkError) throw bkError;
+        // 4. Bookings raw details to compute popularity and period trends (sem limite de 1000)
+        let allBookingsData: any[] = [];
+        let from = 0;
+        const CHUNK_SIZE = 1000;
+        let hasMore = true;
 
-        const rawBookings = bookings || [];
+        while (hasMore) {
+            const { data: bookingsChunk, error: bkError } = await supabase
+                .from('consultas_agendamentos')
+                .select(`
+                    appointment_date,
+                    procedimento:consultas_procedimentos(name, type)
+                `)
+                .range(from, from + CHUNK_SIZE - 1);
+
+            if (bkError) throw bkError;
+
+            if (bookingsChunk && bookingsChunk.length > 0) {
+                allBookingsData.push(...bookingsChunk);
+                if (bookingsChunk.length < CHUNK_SIZE) {
+                    hasMore = false;
+                } else {
+                    from += CHUNK_SIZE;
+                }
+            } else {
+                hasMore = false;
+            }
+        }
+
+        const rawBookings = allBookingsData;
 
         // Popularity ranking
         const popularMap: Record<string, { type: string; count: number }> = {};
@@ -1040,20 +1290,40 @@ export const getDashboardStats = async (): Promise<ConsultasDashboardStats> => {
 
 export const getVagas = async (procedimentoId?: string): Promise<ConsultaVaga[]> => {
     try {
-        let query = supabase
-            .from('consultas_vagas')
-            .select('id, procedimento_id, data, hora, status, created_at')
-            .order('data', { ascending: true })
-            .order('hora', { ascending: true });
+        let allVagas: ConsultaVaga[] = [];
+        let from = 0;
+        const CHUNK_SIZE = 1000;
+        let hasMore = true;
 
-        if (procedimentoId) {
-            query = query.eq('procedimento_id', procedimentoId);
+        while (hasMore) {
+            let query = supabase
+                .from('consultas_vagas')
+                .select('id, procedimento_id, data, hora, status, created_at')
+                .order('data', { ascending: true })
+                .order('hora', { ascending: true })
+                .range(from, from + CHUNK_SIZE - 1);
+
+            if (procedimentoId) {
+                query = query.eq('procedimento_id', procedimentoId);
+            }
+
+            const { data, error } = await query;
+
+            if (error) throw error;
+
+            if (data && data.length > 0) {
+                allVagas.push(...(data as ConsultaVaga[]));
+                if (data.length < CHUNK_SIZE) {
+                    hasMore = false;
+                } else {
+                    from += CHUNK_SIZE;
+                }
+            } else {
+                hasMore = false;
+            }
         }
 
-        const { data, error } = await query;
-
-        if (error) throw error;
-        return data || [];
+        return allVagas;
     } catch (error) {
         const appError = handleSupabaseError(error);
         console.error('[consultasService] getVagas Error:', appError.message);

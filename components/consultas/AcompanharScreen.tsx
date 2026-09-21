@@ -8,6 +8,7 @@ import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import { ConsultaPdfGenerator } from './ConsultaPdfGenerator';
 import { ConsultasReportPdfGenerator } from './ConsultasReportPdfGenerator';
+import { DefinirDataModal } from './DefinirDataModal';
 
 const formatPatientName = (patient?: ConsultaPaciente | null) => {
     if (!patient) return '';
@@ -429,6 +430,8 @@ interface AgendamentoCardProps {
     booking: ConsultaAgendamento;
     queuePosition?: number;
     specialSequence?: number;
+    isEligibleForVaga?: boolean;
+    freeSlotsCount?: number;
     isOperating: boolean;
     canEdit: boolean;
     canComplete: boolean;
@@ -442,6 +445,7 @@ interface AgendamentoCardProps {
     onDelete: (id: string) => void;
     onReagendar: (id: string) => void;
     onOpenRetornoModal: (b: ConsultaAgendamento) => void;
+    onOpenDefinirData?: (b: ConsultaAgendamento) => void;
     isGenerating: boolean;
     formatPatientName: (patient?: ConsultaPaciente | null) => string;
     agentPsf?: string;
@@ -451,6 +455,8 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
     booking,
     queuePosition,
     specialSequence,
+    isEligibleForVaga = false,
+    freeSlotsCount,
     isOperating,
     canEdit,
     canComplete,
@@ -464,6 +470,7 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
     onDelete,
     onReagendar,
     onOpenRetornoModal,
+    onOpenDefinirData,
     isGenerating,
     formatPatientName,
     agentPsf
@@ -488,22 +495,34 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
         <div className="rounded-2xl shadow-xs mb-3">
             <div
                 onClick={() => setIsExpanded(!isExpanded)}
-                className={`group bg-white rounded-2xl border transition-all duration-300 relative overflow-hidden cursor-pointer ${
-                    isExpanded 
-                    ? 'border-cyan-200 ring-1 ring-cyan-100 shadow-lg shadow-cyan-500/5' 
-                    : 'border-slate-200/60 hover:shadow-md hover:border-cyan-200/50'
+                className={`group rounded-2xl border transition-all duration-300 relative overflow-hidden cursor-pointer ${
+                    isEligibleForVaga
+                    ? 'bg-gradient-to-r from-emerald-50/85 via-emerald-50/40 to-white border-emerald-400 ring-2 ring-emerald-400/30 shadow-md shadow-emerald-500/10'
+                    : isExpanded 
+                    ? 'bg-white border-cyan-200 ring-1 ring-cyan-100 shadow-lg shadow-cyan-500/5' 
+                    : 'bg-white border-slate-200/60 hover:shadow-md hover:border-cyan-200/50'
                 }`}
             >
-                {/* Faixa lateral cyan com gradiente (estilo Abastecimento) */}
-                <div className={`absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-transparent via-cyan-400 to-transparent group-hover:via-cyan-500 transition-all ${isExpanded ? 'bg-cyan-500' : ''}`} />
+                {/* Faixa lateral indicadora */}
+                <div className={`absolute top-0 left-0 w-1.5 h-full transition-all ${
+                    isEligibleForVaga 
+                    ? 'bg-emerald-500 shadow-sm shadow-emerald-500/50'
+                    : isExpanded ? 'bg-cyan-500' : 'bg-gradient-to-b from-transparent via-cyan-400 to-transparent group-hover:via-cyan-500'
+                }`} />
 
                 <div className="flex flex-col wide:flex-row items-stretch min-h-[84px]">
                     {/* CARD DE PRIMEIRA INFORMAÇÃO - POSIÇÃO GRANDE E DADOS DO PACIENTE */}
-                    <div className="bg-slate-50/90 border-b wide:border-b-0 wide:border-r border-slate-100 p-2.5 sm:p-3 px-3 sm:px-4 flex items-center gap-3 shrink-0 self-stretch wide:w-[380px] group-hover:bg-cyan-50/40 group-hover:border-cyan-100/60 transition-all relative">
+                    <div className={`border-b wide:border-b-0 wide:border-r p-2.5 sm:p-3 px-3 sm:px-4 flex items-center gap-3 shrink-0 self-stretch wide:w-[380px] transition-all relative ${
+                        isEligibleForVaga 
+                        ? 'bg-emerald-100/50 border-emerald-200/90' 
+                        : 'bg-slate-50/90 border-slate-100 group-hover:bg-cyan-50/40 group-hover:border-cyan-100/60'
+                    }`}>
                         {/* Bloco de Destaque: POSIÇÃO Grande e Visível */}
                         <div 
                             className={`w-16 h-16 sm:w-[74px] sm:h-[74px] rounded-2xl flex flex-col items-center justify-center shrink-0 border transition-all duration-300 shadow-xs relative overflow-hidden ${
-                                booking.status === 'Fila de espera'
+                                isEligibleForVaga
+                                    ? 'bg-gradient-to-br from-emerald-100 via-emerald-200/90 to-teal-200 border-emerald-400 text-emerald-950 shadow-emerald-500/20 ring-2 ring-emerald-400/40'
+                                    : booking.status === 'Fila de espera'
                                     ? booking.priority === 'Especial'
                                         ? 'bg-gradient-to-br from-amber-100 via-amber-200 to-yellow-200 border-amber-400 text-amber-950 shadow-amber-500/20 ring-2 ring-amber-400/40'
                                         : 'bg-gradient-to-br from-amber-50 via-amber-100/90 to-amber-200/70 border-amber-300 text-amber-950 shadow-amber-500/15 ring-2 ring-amber-400/20'
@@ -516,12 +535,26 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                     : 'bg-gradient-to-br from-slate-100 to-slate-200 border-slate-300 text-slate-800'
                             }`}
                             title={
-                                booking.status === 'Fila de espera' && queuePosition 
+                                isEligibleForVaga
+                                    ? `Posição: ${queuePosition || 1}º lugar na fila. Vaga liberada disponível para este paciente!`
+                                    : booking.status === 'Fila de espera' && queuePosition 
                                     ? `Posição: ${queuePosition}º lugar na fila de ${booking.procedimento?.name || 'procedimento'} ${booking.priority === 'Especial' ? '(Agendamento Especial)' : ''}` 
                                     : `Status: ${booking.status}`
                             }
                         >
-                            {booking.status === 'Fila de espera' ? (
+                            {isEligibleForVaga ? (
+                                <>
+                                    <span className="text-[7.5px] font-black uppercase tracking-wider text-emerald-900 leading-none">
+                                        VAGA LIVRE
+                                    </span>
+                                    <span className="text-xl sm:text-2xl font-black font-mono leading-none tracking-tight text-emerald-950 my-1">
+                                        {queuePosition ? `${queuePosition}º` : '1º'}
+                                    </span>
+                                    <span className="text-[7px] font-black uppercase tracking-wider text-emerald-800 leading-none">
+                                        DEFINIR DATA
+                                    </span>
+                                </>
+                            ) : booking.status === 'Fila de espera' ? (
                                 <>
                                     <span className="text-[8.5px] font-black uppercase tracking-wider text-amber-900 leading-none">
                                         {booking.priority === 'Especial' ? 'ESPECIAL' : 'POSIÇÃO'}
@@ -680,19 +713,47 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                 />
 
                                 {/* STATUS */}
-                                <DataItem 
-                                    label="Status" 
-                                    value={booking.status} 
-                                    colorClass={getStatusStyle(booking.status)} 
-                                    isBadge={true} 
-                                    flex="col-span-1 wide:col-span-2" 
-                                />
+                                {isEligibleForVaga ? (
+                                    <DataItem 
+                                        label="Status" 
+                                        value={
+                                            <span className="flex items-center gap-1.5 text-emerald-950 font-black">
+                                                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping inline-block" />
+                                                Definir Data
+                                            </span>
+                                        } 
+                                        colorClass="text-emerald-950 bg-emerald-100 border-emerald-400 font-black shadow-2xs" 
+                                        isBadge={true} 
+                                        flex="col-span-1 wide:col-span-2" 
+                                    />
+                                ) : (
+                                    <DataItem 
+                                        label="Status" 
+                                        value={booking.status} 
+                                        colorClass={getStatusStyle(booking.status)} 
+                                        isBadge={true} 
+                                        flex="col-span-1 wide:col-span-2" 
+                                    />
+                                )}
                             </div>
 
                             {/* Ações Rápidas de Linha (Desktop) + Chevron */}
                             <div className="flex items-center gap-2 self-end wide:self-center shrink-0">
-                                <div className="hidden sm:flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                                    {canEdit && (
+                                <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                    {/* Botão de Destaque: DEFINIR DATA quando elegível */}
+                                    {isEligibleForVaga && canEdit && onOpenDefinirData && (
+                                        <button
+                                            type="button"
+                                            onClick={() => onOpenDefinirData(booking)}
+                                            className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl text-xs uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-md shadow-emerald-600/20 active:scale-95 cursor-pointer shrink-0"
+                                            title="Definir Data e Horário para o Paciente"
+                                        >
+                                            <Calendar className="w-3.5 h-3.5" />
+                                            <span>Definir Data</span>
+                                        </button>
+                                    )}
+
+                                    {canEdit && !isEligibleForVaga && (
                                         <button
                                             type="button"
                                             onClick={() => onEdit(booking)}
@@ -802,6 +863,19 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                     </div>
                                 ) : (
                                     <>
+                                        {/* Ação de Definir Data no Expandido */}
+                                        {isEligibleForVaga && canEdit && onOpenDefinirData && (
+                                            <button
+                                                type="button"
+                                                onClick={(e) => { e.stopPropagation(); onOpenDefinirData(booking); }}
+                                                className="flex items-center gap-1.5 px-4 py-2 text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-all text-xs font-black uppercase tracking-wider shadow-md shadow-emerald-600/25 active:scale-95 cursor-pointer"
+                                                title="Definir Data e Horário para o Paciente"
+                                            >
+                                                <Calendar className="w-4 h-4" />
+                                                Definir Data
+                                            </button>
+                                        )}
+
                                         {/* Editar */}
                                         {canEdit && (
                                             <button
@@ -1182,15 +1256,26 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     }, [allBookings, reportDataFila]);
 
     // Load data
+    const [allVagas, setAllVagas] = useState<ConsultaVaga[]>([]);
+    const [isDefinirDataModalOpen, setIsDefinirDataModalOpen] = useState(false);
+    const [bookingForDefinirData, setBookingForDefinirData] = useState<ConsultaAgendamento | null>(null);
+
+    const handleOpenDefinirData = (booking: ConsultaAgendamento) => {
+        setBookingForDefinirData(booking);
+        setIsDefinirDataModalOpen(true);
+    };
+
     const loadData = async (silent = false) => {
         if (!silent) setLoading(true);
         try {
-            const [allBookingData, procData] = await Promise.all([
+            const [allBookingData, procData, allVagasData] = await Promise.all([
                 db.getAgendamentos(), // Fetch all unfiltered for correct queue calculation
-                db.getProcedimentos()
+                db.getProcedimentos(),
+                db.getVagas()
             ]);
             setProcedures(procData);
             setAllBookings(allBookingData);
+            setAllVagas(allVagasData);
 
             // 1. Agrupar e calcular a fila de espera estritamente por PROCEDIMENTO
             const allWaitlist = allBookingData.filter(b => b.status === 'Fila de espera');
@@ -1634,6 +1719,10 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
         return sortedBookings.slice(0, displayLimit);
     }, [sortedBookings, displayLimit]);
 
+    const eligibilityMap = useMemo(() => {
+        return db.getQueueEligibilityMap(allBookings, allVagas);
+    }, [allBookings, allVagas]);
+
 
 
 
@@ -1812,36 +1901,42 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                     </div>
                 ) : bookings.length > 0 ? (
                     <div className="space-y-3 w-full pb-4">
-                        {visibleBookings.map((booking) => (
-                            <AgendamentoCard
-                                key={booking.id}
-                                booking={booking}
-                                queuePosition={queuePositions[booking.id]}
-                                specialSequence={specialSequences[booking.id]}
-                                isOperating={operatingId === booking.id}
-                                canEdit={canEdit}
-                                canComplete={canComplete}
-                                canCancel={canCancel}
-                                canDelete={canDelete}
-                                onEdit={handleOpenEditModal}
-                                onAgentInfo={handleOpenAgentInfo}
-                                onDownloadPdf={handleDownloadPdf}
-                                onStatusUpdate={handleStatusUpdate}
-                                onOpenCancelModal={handleOpenCancelModal}
-                                onDelete={handleDelete}
-                                onReagendar={handleReagendar}
-                                onOpenRetornoModal={(b) => {
-                                    setRetornoBooking(b);
-                                    const tomorrow = new Date();
-                                    tomorrow.setDate(tomorrow.getDate() + 1);
-                                    setRetornoDate(tomorrow.toISOString().split('T')[0]);
-                                    setIsRetornoModalOpen(true);
-                                }}
-                                isGenerating={isGenerating}
-                                formatPatientName={formatPatientName}
-                                agentPsf={agentPsfMap[(booking.paciente?.agente_saude || '').toUpperCase().trim()]}
-                            />
-                        ))}
+                        {visibleBookings.map((booking) => {
+                            const eligibility = eligibilityMap.get(booking.id);
+                            return (
+                                <AgendamentoCard
+                                    key={booking.id}
+                                    booking={booking}
+                                    queuePosition={queuePositions[booking.id]}
+                                    specialSequence={specialSequences[booking.id]}
+                                    isEligibleForVaga={eligibility?.isEligible}
+                                    freeSlotsCount={eligibility?.freeSlotsCount}
+                                    isOperating={operatingId === booking.id}
+                                    canEdit={canEdit}
+                                    canComplete={canComplete}
+                                    canCancel={canCancel}
+                                    canDelete={canDelete}
+                                    onEdit={handleOpenEditModal}
+                                    onAgentInfo={handleOpenAgentInfo}
+                                    onDownloadPdf={handleDownloadPdf}
+                                    onStatusUpdate={handleStatusUpdate}
+                                    onOpenCancelModal={handleOpenCancelModal}
+                                    onDelete={handleDelete}
+                                    onReagendar={handleReagendar}
+                                    onOpenRetornoModal={(b) => {
+                                        setRetornoBooking(b);
+                                        const tomorrow = new Date();
+                                        tomorrow.setDate(tomorrow.getDate() + 1);
+                                        setRetornoDate(tomorrow.toISOString().split('T')[0]);
+                                        setIsRetornoModalOpen(true);
+                                    }}
+                                    onOpenDefinirData={handleOpenDefinirData}
+                                    isGenerating={isGenerating}
+                                    formatPatientName={formatPatientName}
+                                    agentPsf={agentPsfMap[(booking.paciente?.agente_saude || '').toUpperCase().trim()]}
+                                />
+                            );
+                        })}
 
                         {/* Barra de Paginação / Carregar Mais Agendamentos */}
                         {sortedBookings.length > visibleBookings.length && (
@@ -2739,6 +2834,19 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                 </div>,
                 document.body
             )}
+
+            {/* MODAL DEFINIR DATA E HORÁRIO */}
+            <DefinirDataModal
+                isOpen={isDefinirDataModalOpen}
+                booking={bookingForDefinirData}
+                onClose={() => {
+                    setIsDefinirDataModalOpen(false);
+                    setBookingForDefinirData(null);
+                }}
+                onSuccess={() => {
+                    loadData(true);
+                }}
+            />
         </div>
     );
 };

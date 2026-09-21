@@ -280,22 +280,41 @@ export const getMovimentacoes = async (filters?: MovimentacaoFilters): Promise<F
 
         const MOVIMENTACAO_COLUMNS = 'id, medicamento_id, medicamento_nome, medicamento_categoria, quantidade, tipo, data, responsavel_id, responsavel_nome, paciente_nome, paciente_cpf, lote, validade, observacoes, criado_em';
 
-        let query = supabase
-            .from('farmacia_movimentacoes')
-            .select(MOVIMENTACAO_COLUMNS)
-            .order('data', { ascending: false });
+        let allData: FarmaciaMovimentacao[] = [];
+        let from = 0;
+        const CHUNK_SIZE = 1000;
+        let hasMore = true;
 
-        if (filters?.medicamentoNome) {
-            query = query.ilike('medicamento_nome', `%${filters.medicamentoNome}%`);
+        while (hasMore) {
+            let query = supabase
+                .from('farmacia_movimentacoes')
+                .select(MOVIMENTACAO_COLUMNS)
+                .order('data', { ascending: false })
+                .range(from, from + CHUNK_SIZE - 1);
+
+            if (filters?.medicamentoNome) {
+                query = query.ilike('medicamento_nome', `%${filters.medicamentoNome}%`);
+            }
+            if (filters?.categoria) {
+                query = query.eq('medicamento_categoria', filters.categoria);
+            }
+
+            const { data, error } = await query;
+            if (error) throw error;
+
+            if (data && data.length > 0) {
+                allData.push(...(data as FarmaciaMovimentacao[]));
+                if (data.length < CHUNK_SIZE) {
+                    hasMore = false;
+                } else {
+                    from += CHUNK_SIZE;
+                }
+            } else {
+                hasMore = false;
+            }
         }
-        if (filters?.categoria) {
-            query = query.eq('medicamento_categoria', filters.categoria);
-        }
 
-        const { data, error } = await query.limit(500);
-        if (error) throw error;
-
-        let filtered = ((data || []) as FarmaciaMovimentacao[]).filter(m => 
+        let filtered = allData.filter(m => 
             !m.responsavel_nome?.toLowerCase().includes('guilherme') &&
             !m.paciente_nome?.toLowerCase().includes('guilherme')
         );
