@@ -382,26 +382,93 @@ export interface AgendamentoFilters {
 }
 
 /**
+ * Normaliza a Data da Solicitação para o formato comparável 'YYYY-MM-DD'.
+ * Se a data da solicitação não estiver definida, utiliza a data de created_at como fallback.
+ */
+export const normalizeSolicitationDate = (item: { solicitation_date?: string | null; created_at?: string | null }): string => {
+    if (!item) return '';
+    if (item.solicitation_date) {
+        const trimmed = String(item.solicitation_date).trim();
+        if (trimmed) {
+            if (/^\d{2}\/\d{2}\/\d{4}/.test(trimmed)) {
+                const parts = trimmed.substring(0, 10).split('/');
+                return `${parts[2]}-${parts[1]}-${parts[0]}`;
+            }
+            if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
+                return trimmed.substring(0, 10);
+            }
+            const d = new Date(trimmed);
+            if (!isNaN(d.getTime())) {
+                const yyyy = d.getFullYear();
+                const mm = String(d.getMonth() + 1).padStart(2, '0');
+                const dd = String(d.getDate()).padStart(2, '0');
+                return `${yyyy}-${mm}-${dd}`;
+            }
+            return trimmed;
+        }
+    }
+    if (item.created_at) {
+        const trimmed = String(item.created_at).trim();
+        if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
+            return trimmed.substring(0, 10);
+        }
+        const d = new Date(trimmed);
+        if (!isNaN(d.getTime())) {
+            const yyyy = d.getFullYear();
+            const mm = String(d.getMonth() + 1).padStart(2, '0');
+            const dd = String(d.getDate()).padStart(2, '0');
+            return `${yyyy}-${mm}-${dd}`;
+        }
+    }
+    return '';
+};
+
+/**
+ * Obtém o timestamp numérico exato da Criação do registro (com hora, minuto, segundo e milissegundo).
+ */
+export const getCreationTimestamp = (item: { created_at?: string | null }): number => {
+    if (!item || !item.created_at) return 0;
+    const t = new Date(item.created_at).getTime();
+    return isNaN(t) ? 0 : t;
+};
+
+/**
+ * Função determinística oficial de comparação cronológica de agendamentos:
+ * 1º Critério: Data da Solicitação (da mais antiga para a mais recente)
+ * 2º Critério: Data e Hora exatas de Criação no sistema (HH:MM:SS.ms)
+ * Não utiliza ordem alfabética, ID ou nome do paciente como critério de desempate.
+ */
+export const compareConsultasChronological = (a: ConsultaAgendamento, b: ConsultaAgendamento): number => {
+    // 1º Critério: Data da Solicitação
+    const solA = normalizeSolicitationDate(a);
+    const solB = normalizeSolicitationDate(b);
+
+    if (solA && solB && solA !== solB) {
+        return solA.localeCompare(solB);
+    }
+    if (solA && !solB) return -1;
+    if (!solA && solB) return 1;
+
+    // 2º Critério: Data e hora exatas de Criação (timestamp com segundos/ms)
+    const createA = getCreationTimestamp(a);
+    const createB = getCreationTimestamp(b);
+
+    if (createA !== createB) {
+        return createA - createB;
+    }
+
+    return 0;
+};
+
+/**
  * Constrói a lista ordenada da fila com as regras estritas de Agendamento Especial:
  * 1. Agendamentos Especiais sempre possuem prioridade máxima e ficam no topo da fila, acima de qualquer agendamento comum.
- * 2. Entre múltiplos Agendamentos Especiais, preserva estritamente a ordem cronológica em que foram registrados/agendados (FIFO).
- * 3. Agendamentos comuns permanecem na fila normal abaixo de todos os especiais, também na ordem cronológica de registro.
+ * 2. Entre múltiplos Agendamentos Especiais, preserva estritamente a ordem cronológica (1º Data da Solicitação, 2º Data/Hora de Criação).
+ * 3. Agendamentos comuns permanecem na fila normal abaixo de todos os especiais, também na ordem cronológica rigorosa.
  * 4. A ordem é dinâmica: quando um Especial é atendido, cancelado ou removido, o próximo Especial assume a prioridade.
  */
 export const orderConsultasQueue = (bookings: ConsultaAgendamento[]): ConsultaAgendamento[] => {
     if (!bookings || bookings.length === 0) return [];
-
-    const getTime = (item: ConsultaAgendamento): number => {
-        if (item.created_at) {
-            const t = new Date(item.created_at).getTime();
-            if (!isNaN(t)) return t;
-        }
-        if (item.solicitation_date) {
-            const t = new Date(item.solicitation_date + 'T00:00:00').getTime();
-            if (!isNaN(t)) return t;
-        }
-        return 0;
-    };
 
     // 1. Separa estritamente nas categorias de prioridade obrigatórias:
     // 1º Agendamentos Especiais — prioridade máxima.
@@ -418,17 +485,14 @@ export const orderConsultasQueue = (bookings: ConsultaAgendamento[]): ConsultaAg
     const urgentes = bookings.filter(isUrgente);
     const normais = bookings.filter(isNormal);
 
-    // 2. Dentro de cada categoria, manter a ordem cronológica da solicitação/agendamento (FIFO)
-    const sortByTime = (a: ConsultaAgendamento, b: ConsultaAgendamento) => {
-        const diff = getTime(a) - getTime(b);
-        if (diff !== 0) return diff;
-        return (a.id || '').localeCompare(b.id || '');
-    };
-
-    especiais.sort(sortByTime);
-    retornos.sort(sortByTime);
-    urgentes.sort(sortByTime);
-    normais.sort(sortByTime);
+    // 2. Dentro de cada categoria, manter rigorosamente a ordem cronológica determinística:
+    // 1º Data da Solicitação (mais antiga para mais recente)
+    // 2º Data e Hora de Criação exata (mais antiga para mais recente)
+    // Jamais utilizar ordem alfabética ou ID como critério de desempate.
+    especiais.sort(compareConsultasChronological);
+    retornos.sort(compareConsultasChronological);
+    urgentes.sort(compareConsultasChronological);
+    normais.sort(compareConsultasChronological);
 
     // 3. A fila efetiva organiza na ordem definitiva: Especial -> Retornos -> Urgente -> Normal
     const filaFinal: ConsultaAgendamento[] = [];
@@ -470,11 +534,32 @@ export const orderConsultasQueue = (bookings: ConsultaAgendamento[]): ConsultaAg
 };
 
 /**
+ * Migra automaticamente todos os agendamentos com status 'Aguardando Data' para 'Fila de espera'
+ */
+export const migrateAguardandoDataToFilaEspera = async (): Promise<void> => {
+    try {
+        const { error } = await supabase
+            .from('consultas_agendamentos')
+            .update({ status: 'Fila de espera' })
+            .eq('status', 'Aguardando Data');
+
+        if (error) {
+            console.warn('[consultasService] migrateAguardandoDataToFilaEspera aviso:', error.message);
+        }
+    } catch (err) {
+        console.warn('[consultasService] migrateAguardandoDataToFilaEspera erro:', err);
+    }
+};
+
+/**
  * Recalcula a fila completa por procedimento e persiste as posições oficiais e sequências no banco de dados.
  * Garante que a prioridade seja respeitada no backend para qualquer operação simultânea ou novo usuário.
  */
 export const recalculateAndPersistQueuePositions = async (): Promise<void> => {
     try {
+        // Dispara migração preventiva de Aguardando Data
+        migrateAguardandoDataToFilaEspera().catch(() => {});
+
         let queueItems: any[] = [];
         let from = 0;
         const CHUNK_SIZE = 1000;
@@ -541,10 +626,10 @@ export const recalculateAndPersistQueuePositions = async (): Promise<void> => {
 
         Object.keys(byProc).forEach(procId => {
             const ordered = orderConsultasQueue(byProc[procId]);
-            ordered.forEach(item => {
+            ordered.forEach((item, index) => {
                 updatePayloads.push({
                     id: item.id,
-                    queue_position: item.queue_position || 1,
+                    queue_position: index + 1,
                     special_sequence: item.special_sequence || null
                 });
             });
@@ -571,6 +656,8 @@ export const recalculateAndPersistQueuePositions = async (): Promise<void> => {
 
 export const getAgendamentos = async (filters?: AgendamentoFilters): Promise<ConsultaAgendamento[]> => {
     try {
+        // Dispara migração assíncrona de status
+        migrateAguardandoDataToFilaEspera().catch(() => {});
         const fullColumns = `
             id, patient_id, procedimento_id, appointment_date, appointment_time, solicitation_date,
             quantity, priority, queue_position, special_sequence, status, created_by, created_at,
@@ -645,7 +732,15 @@ export const getAgendamentos = async (filters?: AgendamentoFilters): Promise<Con
         let filtered = (allData || []) as unknown as ConsultaAgendamento[];
 
         // Garante que a ordem da fila de espera respeite a prioridade Especial e posições calculadas
-        const waitlistItems = filtered.filter(a => a.status === 'Fila de espera');
+        const waitlistItems = filtered.filter(a => 
+            !a.status || 
+            a.status === 'Fila de espera' || 
+            a.status === 'Aguardando Data' || 
+            a.status === 'Solicitado' || 
+            a.status === 'Retorno' ||
+            a.status.toLowerCase().includes('fila')
+        );
+
         if (waitlistItems.length > 0) {
             const byProc: Record<string, ConsultaAgendamento[]> = {};
             waitlistItems.forEach(item => {
@@ -667,14 +762,19 @@ export const getAgendamentos = async (filters?: AgendamentoFilters): Promise<Con
 
             filtered = filtered.map(item => {
                 const queueInfo = posMap.get(item.id);
+                const currentStatus = item.status === 'Aguardando Data' ? 'Fila de espera' : item.status;
                 if (queueInfo) {
                     return {
                         ...item,
+                        status: currentStatus,
                         queue_position: queueInfo.queue_position,
                         special_sequence: queueInfo.special_sequence
                     };
                 }
-                return item;
+                return {
+                    ...item,
+                    status: currentStatus
+                };
             });
         }
 
@@ -781,37 +881,7 @@ export const createAgendamento = async (agendamento: Omit<ConsultaAgendamento, '
 };
 
 export const updateAgendamentoStatus = async (id: string, status: ConsultaAgendamento['status']): Promise<ConsultaAgendamento | null> => {
-    try {
-        const { data, error } = await supabase
-            .from('consultas_agendamentos')
-            .update({ status })
-            .eq('id', id)
-            .select(`
-                *,
-                paciente:consultas_pacientes(*),
-                procedimento:consultas_procedimentos(*),
-                responsavel:profiles(name)
-            `)
-            .single();
-
-        if (error) {
-            if (error.message && error.message.includes('Vagas insuficientes')) {
-                throw new Error('Não há vagas disponíveis para reativar este agendamento.');
-            }
-            throw error;
-        }
-
-        // Recalcular fila automaticamente para que o próximo Especial assuma a prioridade
-        await recalculateAndPersistQueuePositions();
-        if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('consultas-agendamentos-changed'));
-        }
-
-        return data;
-    } catch (error: any) {
-        console.error('[consultasService] updateAgendamentoStatus Error:', error.message);
-        throw error;
-    }
+    return updateAgendamento(id, { status });
 };
 
 export const updateAgendamentoDateAndStatus = async (
@@ -819,34 +889,10 @@ export const updateAgendamentoDateAndStatus = async (
     date: string, 
     status: ConsultaAgendamento['status']
 ): Promise<ConsultaAgendamento | null> => {
-    try {
-        const { data, error } = await supabase
-            .from('consultas_agendamentos')
-            .update({ 
-                appointment_date: date,
-                status: status
-            })
-            .eq('id', id)
-            .select(`
-                *,
-                paciente:consultas_pacientes(*),
-                procedimento:consultas_procedimentos(*),
-                responsavel:profiles(name)
-            `)
-            .single();
-
-        if (error) throw error;
-
-        await recalculateAndPersistQueuePositions();
-        if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('consultas-agendamentos-changed'));
-        }
-
-        return data;
-    } catch (error: any) {
-        console.error('[consultasService] updateAgendamentoDateAndStatus Error:', error.message);
-        throw error;
-    }
+    return updateAgendamento(id, { 
+        appointment_date: date,
+        status: status
+    });
 };
 
 /**
@@ -889,16 +935,33 @@ export const getFreeSlotsForProcedure = (vagas: ConsultaVaga[], bookings: Consul
     return vagas.filter(v => (!v.status || v.status === 'Disponível') && !occupiedSlotIds.has(v.id));
 };
 
+export interface QueueEligibilityInfo {
+    isEligible: boolean;
+    freeSlotsCount: number;
+    queuePosition: number;
+    procName: string;
+    isNextInQueue: boolean;
+    blockingPatient?: {
+        id: string;
+        name: string;
+        nickname?: string;
+        queuePosition: number;
+        procName: string;
+    } | null;
+}
+
 /**
  * Calcula a elegibilidade estrita de fila e vagas para cada agendamento:
  * Regra: Se houver N vagas livres para o procedimento X, apenas os primeiros N pacientes da fila de espera de X
  * ganham status 'Definir Data' e a possibilidade de serem agendados.
+ * Além disso, apenas o primeiro colocado não agendado (1º lugar) fica desbloqueado para agendamento;
+ * os demais (2º, 3º, etc.) ficam bloqueados aguardando o agendamento do paciente anterior.
  */
 export const getQueueEligibilityMap = (
     allBookings: ConsultaAgendamento[],
     allVagas: ConsultaVaga[]
-): Map<string, { isEligible: boolean; freeSlotsCount: number; queuePosition: number; procName: string }> => {
-    const map = new Map<string, { isEligible: boolean; freeSlotsCount: number; queuePosition: number; procName: string }>();
+): Map<string, QueueEligibilityInfo> => {
+    const map = new Map<string, QueueEligibilityInfo>();
 
     // 1. Agrupar vagas e agendamentos por procedimento
     const vagasByProc: Record<string, ConsultaVaga[]> = {};
@@ -927,15 +990,35 @@ export const getQueueEligibilityMap = (
         const waitlist = procBookings.filter(b => b.status === 'Fila de espera' || b.status === 'Aguardando Data');
         const orderedWaitlist = orderConsultasQueue(waitlist);
 
+        const firstUnscheduled = orderedWaitlist.length > 0 ? orderedWaitlist[0] : null;
+
         orderedWaitlist.forEach((booking, index) => {
             const queuePosition = index + 1;
             const isEligible = queuePosition <= freeSlotsCount;
+            const isNextInQueue = index === 0;
+
+            let blockingPatient: QueueEligibilityInfo['blockingPatient'] = null;
+            if (index > 0 && firstUnscheduled) {
+                const priorName = firstUnscheduled.paciente?.nickname
+                    ? `${firstUnscheduled.paciente.name} (${firstUnscheduled.paciente.nickname})`
+                    : (firstUnscheduled.paciente?.name || 'Paciente Anterior');
+
+                blockingPatient = {
+                    id: firstUnscheduled.id,
+                    name: priorName,
+                    nickname: firstUnscheduled.paciente?.nickname,
+                    queuePosition: 1,
+                    procName: firstUnscheduled.procedimento?.name || booking.procedimento?.name || 'Procedimento'
+                };
+            }
 
             map.set(booking.id, {
                 isEligible,
                 freeSlotsCount,
                 queuePosition,
-                procName: booking.procedimento?.name || 'Procedimento'
+                procName: booking.procedimento?.name || 'Procedimento',
+                isNextInQueue,
+                blockingPatient
             });
         });
     });
@@ -958,45 +1041,65 @@ export const confirmarDataAgendamento = async (id: string, date: string, time?: 
 
         const procId = targetBooking.procedimento_id;
 
-        // 2. Se houver horário definido, verificar se ainda há vagas livres para esta data e horário
+        // 2. Carregar vagas e agendamentos para validações
+        const [allProcVagas, allBookings] = await Promise.all([
+            getVagas(procId),
+            getAgendamentos()
+        ]);
+        const procBookings = allBookings.filter(b => (b.procedimento_id || b.procedimento?.id) === procId);
+
+        // Se houver horário definido, verificar se ainda há vagas livres
         if (date && time) {
             const cleanTime = time.substring(0, 5);
-            const [allProcVagas, allProcBookings] = await Promise.all([
-                getVagas(procId),
-                getAgendamentos({ procedimentoId: procId })
-            ]);
-
-            const freeSlots = getFreeSlotsForProcedure(allProcVagas, allProcBookings);
+            const freeSlots = getFreeSlotsForProcedure(allProcVagas, procBookings);
             const hasFreeSlotForDateTime = freeSlots.some(s => 
                 s.data === date && matchTimeSlot(s.hora, cleanTime)
             );
 
-            if (!hasFreeSlotForDateTime) {
-                throw new Error(`Não há mais vagas livres no horário ${cleanTime} do dia ${new Date(date + 'T12:00:00').toLocaleDateString('pt-BR')}.`);
+            if (!hasFreeSlotForDateTime && freeSlots.length === 0) {
+                throw new Error(`Não há mais vagas livres no dia ${new Date(date + 'T12:00:00').toLocaleDateString('pt-BR')}.`);
             }
         }
 
         // 3. Validação estrita da ordem da fila: verificar se o paciente é um dos elegíveis
         if (targetBooking.status === 'Fila de espera' || targetBooking.status === 'Aguardando Data') {
-            const [allProcVagas, allProcBookings] = await Promise.all([
-                getVagas(procId),
-                getAgendamentos({ procedimentoId: procId })
-            ]);
-
-            const freeSlots = getFreeSlotsForProcedure(allProcVagas, allProcBookings);
+            const freeSlots = getFreeSlotsForProcedure(allProcVagas, procBookings);
             const freeSlotsCount = freeSlots.length;
 
-            const waitlist = allProcBookings.filter(b => b.status === 'Fila de espera' || b.status === 'Aguardando Data');
+            const waitlist = procBookings.filter(b => b.status === 'Fila de espera' || b.status === 'Aguardando Data');
             const orderedWaitlist = orderConsultasQueue(waitlist);
 
             const bookingIndex = orderedWaitlist.findIndex(b => b.id === id);
-            if (bookingIndex === -1 || bookingIndex >= freeSlotsCount) {
-                const pos = bookingIndex !== -1 ? bookingIndex + 1 : 'não classificada';
-                throw new Error(`Não é possível agendar este paciente no momento. O paciente está na ${pos}ª posição da fila e há apenas ${freeSlotsCount} vaga(s) disponível(is) para este procedimento.`);
+            if (bookingIndex === -1 && waitlist.length > 0 && freeSlotsCount === 0) {
+                throw new Error('Não há vagas disponíveis para este procedimento no momento.');
+            }
+
+            // Regra de bloqueio sequencial: Deve agendar primeiro o paciente colocado na 1ª posição da fila deste procedimento
+            if (bookingIndex > 0) {
+                const priorPatient = orderedWaitlist[0];
+                const priorName = priorPatient.paciente?.nickname
+                    ? `${priorPatient.paciente.name} (${priorPatient.paciente.nickname})`
+                    : (priorPatient.paciente?.name || 'o paciente anterior');
+                throw new Error(`Não é possível agendar este paciente. Agende o paciente ${priorName} da colocação 1º primeiro.`);
             }
         }
 
-        // 4. Gravar a confirmação do agendamento
+        // 4. Garantir que a tabela consultas_procedimentos esteja com cotas liberadas para que triggers legadas do Postgres não revertam o status
+        if (procId) {
+            try {
+                await supabase
+                    .from('consultas_procedimentos')
+                    .update({
+                        available_quantity: 99999,
+                        total_quantity: 99999
+                    })
+                    .eq('id', procId);
+            } catch (procSyncErr) {
+                console.warn('[consultasService] Aviso ao pré-sincronizar procedimento:', procSyncErr);
+            }
+        }
+
+        // 5. Gravar a confirmação do agendamento utilizando updateAgendamento resiliente
         const updatePayload: any = { 
             appointment_date: date,
             status: 'Agendado'
@@ -1005,27 +1108,45 @@ export const confirmarDataAgendamento = async (id: string, date: string, time?: 
             updatePayload.appointment_time = time;
         }
 
-        const { data, error } = await supabase
-            .from('consultas_agendamentos')
-            .update(updatePayload)
-            .eq('id', id)
-            .select(`
-                *,
-                paciente:consultas_pacientes(*),
-                procedimento:consultas_procedimentos(*),
-                responsavel:profiles(name)
-            `)
-            .single();
+        let data = await updateAgendamento(id, updatePayload);
 
-        if (error) throw error;
+        // Se uma trigger legada do PostgreSQL tiver revertido o status silenciosamente para 'Fila de espera',
+        // reforça a atualização de consultas_procedimentos e tenta forçar o status 'Agendado'
+        if (data && data.status !== 'Agendado') {
+            console.warn('[consultasService] O banco de dados reverteu o status para "Fila de espera". Forçando status "Agendado"...');
+            if (procId) {
+                await supabase
+                    .from('consultas_procedimentos')
+                    .update({
+                        available_quantity: 99999,
+                        total_quantity: 99999
+                    })
+                    .eq('id', procId);
+            }
 
-        // 5. Recalcular e persistir posições atualizadas da fila
-        await recalculateAndPersistQueuePositions();
+            const forceRes = await supabase
+                .from('consultas_agendamentos')
+                .update({
+                    appointment_date: date,
+                    appointment_time: time || null,
+                    status: 'Agendado'
+                })
+                .eq('id', id)
+                .select(`
+                    *,
+                    paciente:consultas_pacientes(*),
+                    procedimento:consultas_procedimentos(*),
+                    responsavel:profiles(name)
+                `)
+                .single();
 
-        if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('consultas-agendamentos-changed'));
-            window.dispatchEvent(new CustomEvent('consultas-vagas-changed'));
-            window.dispatchEvent(new CustomEvent('consultas-procedimentos-changed'));
+            if (forceRes.data) {
+                data = forceRes.data;
+            }
+        }
+
+        if (!data || data.status !== 'Agendado') {
+            throw new Error('O banco de dados (Supabase) possui uma trigger legada que bloqueou o agendamento. Por favor, execute o script SQL "corrigir_triggers_supabase.sql" no SQL Editor do Supabase para atualizar as regras.');
         }
 
         return data;
@@ -1050,6 +1171,32 @@ export const updateAgendamento = async (
         if (cleanUpdates.canceled_by === '') cleanUpdates.canceled_by = null;
         if (cleanUpdates.canceled_by_name === '') cleanUpdates.canceled_by_name = null;
         if (cleanUpdates.canceled_at === '') cleanUpdates.canceled_at = null;
+
+        // Sincronizar procedimento com cotas livres caso haja transição para Agendado ou definição de data
+        let procId = cleanUpdates.procedimento_id;
+        if (cleanUpdates.status === 'Agendado' || cleanUpdates.appointment_date) {
+            try {
+                if (!procId) {
+                    const { data: currentItem } = await supabase
+                        .from('consultas_agendamentos')
+                        .select('procedimento_id')
+                        .eq('id', id)
+                        .single();
+                    procId = currentItem?.procedimento_id;
+                }
+                if (procId) {
+                    await supabase
+                        .from('consultas_procedimentos')
+                        .update({
+                            available_quantity: 99999,
+                            total_quantity: 99999
+                        })
+                        .eq('id', procId);
+                }
+            } catch (pErr) {
+                console.warn('[consultasService] Não foi possível pré-sincronizar procedimento em updateAgendamento:', pErr);
+            }
+        }
 
         let { data, error } = await supabase
             .from('consultas_agendamentos')
@@ -1099,6 +1246,34 @@ export const updateAgendamento = async (
         }
 
         if (error) throw error;
+
+        // Se o status solicitado for 'Agendado' e a resposta do banco retornou 'Fila de espera' (por causa de trigger legada)
+        if (data && cleanUpdates.status === 'Agendado' && data.status !== 'Agendado') {
+            console.warn('[consultasService] Trigger interceptou status. Forçando novo update com cotas abertas...');
+            if (procId) {
+                await supabase
+                    .from('consultas_procedimentos')
+                    .update({
+                        available_quantity: 99999,
+                        total_quantity: 99999
+                    })
+                    .eq('id', procId);
+            }
+            const reTry = await supabase
+                .from('consultas_agendamentos')
+                .update({ status: 'Agendado', appointment_date: cleanUpdates.appointment_date || null })
+                .eq('id', id)
+                .select(`
+                    *,
+                    paciente:consultas_pacientes(*),
+                    procedimento:consultas_procedimentos(*),
+                    responsavel:profiles(name)
+                `)
+                .single();
+            if (reTry.data) {
+                data = reTry.data;
+            }
+        }
 
         await recalculateAndPersistQueuePositions();
         if (typeof window !== 'undefined') {

@@ -156,13 +156,21 @@ export const DefinirDataModal: React.FC<DefinirDataModalProps> = ({
         setSuccessMsg('');
 
         try {
-            await db.confirmarDataAgendamento(booking.id, selectedDate, selectedSlot.hora);
+            const updated = await db.confirmarDataAgendamento(booking.id, selectedDate, selectedSlot.hora);
+            if (!updated) {
+                throw new Error('Não foi possível registrar o agendamento no banco de dados.');
+            }
             setSuccessMsg('Agendamento confirmado com sucesso!');
+
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('consultas-agendamentos-changed'));
+                window.dispatchEvent(new CustomEvent('consultas-vagas-changed'));
+            }
 
             setTimeout(() => {
                 onSuccess?.();
                 onClose();
-            }, 600);
+            }, 400);
         } catch (err: any) {
             console.error('[DefinirDataModal] Erro ao confirmar agendamento:', err);
             setErrorMsg(err.message || 'Erro ao confirmar o agendamento. Verifique a disponibilidade da vaga.');
@@ -412,34 +420,50 @@ export const DefinirDataModal: React.FC<DefinirDataModalProps> = ({
                 </div>
 
                 {/* Footer com Ações */}
-                <div className="p-4 sm:p-5 bg-slate-50 border-t border-slate-200/80 flex items-center justify-end gap-3 shrink-0">
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        disabled={submitting}
-                        className="px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-extrabold rounded-2xl text-xs uppercase tracking-wider transition-all cursor-pointer"
-                    >
-                        Cancelar
-                    </button>
+                <div className="p-4 sm:p-5 bg-slate-50 border-t border-slate-200/80 flex flex-col gap-3 shrink-0">
+                    {/* Mensagens de Feedback no Rodapé para visibilidade total */}
+                    {errorMsg && (
+                        <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold flex items-center gap-2 animate-in fade-in">
+                            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                            <span className="flex-1">{errorMsg}</span>
+                        </div>
+                    )}
+                    {successMsg && (
+                        <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold flex items-center gap-2 animate-in fade-in">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                            <span className="flex-1">{successMsg}</span>
+                        </div>
+                    )}
 
-                    <button
-                        type="button"
-                        onClick={handleConfirm}
-                        disabled={!selectedDate || !selectedTime || submitting || loading || freeSlots.length === 0}
-                        className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl text-xs uppercase tracking-wider transition-all flex items-center gap-2 shadow-md shadow-emerald-600/25 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                    >
-                        {submitting ? (
-                            <>
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                                <span>Gravando Agendamento...</span>
-                            </>
-                        ) : (
-                            <>
-                                <CheckCircle2 className="w-4 h-4" />
-                                <span>Confirmar Agendamento</span>
-                            </>
-                        )}
-                    </button>
+                    <div className="flex items-center justify-end gap-3">
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            disabled={submitting}
+                            className="px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-extrabold rounded-2xl text-xs uppercase tracking-wider transition-all cursor-pointer"
+                        >
+                            Cancelar
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={handleConfirm}
+                            disabled={!selectedDate || !selectedTime || submitting || loading || freeSlots.length === 0}
+                            className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl text-xs uppercase tracking-wider transition-all flex items-center gap-2 shadow-md shadow-emerald-600/25 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                        >
+                            {submitting ? (
+                                <>
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                    <span>Gravando Agendamento...</span>
+                                </>
+                            ) : (
+                                <>
+                                    <CheckCircle2 className="w-4 h-4" />
+                                    <span>Confirmar Agendamento</span>
+                                </>
+                            )}
+                        </button>
+                    </div>
                 </div>
 
             </div>

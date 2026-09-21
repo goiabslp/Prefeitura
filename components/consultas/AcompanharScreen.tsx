@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { User, ConsultaPaciente, ConsultaAgendamento, ConsultaProcedimento, AppState, ConsultaVaga } from '../../types';
-import { ArrowLeft, Search, Filter, Calendar, CheckCircle2, XCircle, Trash2, Loader2, Sparkles, Clock, FileDown, UserX, Repeat, RotateCcw, X, Activity, Check, Edit2, ChevronDown, ChevronLeft, ChevronRight, User as UserIcon, BarChart3, Users, UserCheck, Building2, ShieldCheck, FileText, Phone, MapPin } from 'lucide-react';
+import { ArrowLeft, Search, Filter, Calendar, CheckCircle2, XCircle, Trash2, Loader2, Sparkles, Clock, FileDown, UserX, Repeat, RotateCcw, X, Activity, Check, Edit2, ChevronDown, ChevronLeft, ChevronRight, User as UserIcon, BarChart3, Users, UserCheck, Building2, ShieldCheck, FileText, Phone, MapPin, Lock } from 'lucide-react';
 import * as db from '../../services/consultasService';
 import { useAgentesSaude } from '../../services/agentesSaudeService';
 import { jsPDF } from 'jspdf';
@@ -425,13 +425,15 @@ const getPriorityStyle = (priority: string, is_retorno?: boolean) => {
     return 'text-slate-600 bg-slate-500/10 border-slate-200 font-semibold';
 };
 
-// Card de Agendamento no estilo idêntico ao AbastecimentoCard (com React.memo)
 interface AgendamentoCardProps {
     booking: ConsultaAgendamento;
     queuePosition?: number;
     specialSequence?: number;
     isEligibleForVaga?: boolean;
     freeSlotsCount?: number;
+    isNextInQueue?: boolean;
+    blockingPatient?: db.QueueEligibilityInfo['blockingPatient'];
+    onOpenBlockedQueueModal?: (booking: ConsultaAgendamento, blockingPatient: NonNullable<db.QueueEligibilityInfo['blockingPatient']>) => void;
     isOperating: boolean;
     canEdit: boolean;
     canComplete: boolean;
@@ -457,6 +459,9 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
     specialSequence,
     isEligibleForVaga = false,
     freeSlotsCount,
+    isNextInQueue = true,
+    blockingPatient,
+    onOpenBlockedQueueModal,
     isOperating,
     canEdit,
     canComplete,
@@ -497,7 +502,9 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                 onClick={() => setIsExpanded(!isExpanded)}
                 className={`group rounded-2xl border transition-all duration-300 relative overflow-hidden cursor-pointer ${
                     isEligibleForVaga
-                    ? 'bg-gradient-to-r from-emerald-50/85 via-emerald-50/40 to-white border-emerald-400 ring-2 ring-emerald-400/30 shadow-md shadow-emerald-500/10'
+                    ? isNextInQueue
+                        ? 'bg-gradient-to-r from-emerald-50/85 via-emerald-50/40 to-white border-emerald-400 ring-2 ring-emerald-400/30 shadow-md shadow-emerald-500/10'
+                        : 'bg-gradient-to-r from-emerald-50/50 via-amber-50/30 to-white border-emerald-300/80 ring-1 ring-emerald-300/30 shadow-xs'
                     : isExpanded 
                     ? 'bg-white border-cyan-200 ring-1 ring-cyan-100 shadow-lg shadow-cyan-500/5' 
                     : 'bg-white border-slate-200/60 hover:shadow-md hover:border-cyan-200/50'
@@ -506,7 +513,9 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                 {/* Faixa lateral indicadora */}
                 <div className={`absolute top-0 left-0 w-1.5 h-full transition-all ${
                     isEligibleForVaga 
-                    ? 'bg-emerald-500 shadow-sm shadow-emerald-500/50'
+                    ? isNextInQueue
+                        ? 'bg-emerald-500 shadow-sm shadow-emerald-500/50'
+                        : 'bg-amber-400 shadow-sm shadow-amber-400/40'
                     : isExpanded ? 'bg-cyan-500' : 'bg-gradient-to-b from-transparent via-cyan-400 to-transparent group-hover:via-cyan-500'
                 }`} />
 
@@ -514,14 +523,18 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                     {/* CARD DE PRIMEIRA INFORMAÇÃO - POSIÇÃO GRANDE E DADOS DO PACIENTE */}
                     <div className={`border-b wide:border-b-0 wide:border-r p-2.5 sm:p-3 px-3 sm:px-4 flex items-center gap-3 shrink-0 self-stretch wide:w-[380px] transition-all relative ${
                         isEligibleForVaga 
-                        ? 'bg-emerald-100/50 border-emerald-200/90' 
+                        ? isNextInQueue
+                            ? 'bg-emerald-100/50 border-emerald-200/90' 
+                            : 'bg-amber-50/40 border-amber-200/70'
                         : 'bg-slate-50/90 border-slate-100 group-hover:bg-cyan-50/40 group-hover:border-cyan-100/60'
                     }`}>
                         {/* Bloco de Destaque: POSIÇÃO Grande e Visível */}
                         <div 
                             className={`w-16 h-16 sm:w-[74px] sm:h-[74px] rounded-2xl flex flex-col items-center justify-center shrink-0 border transition-all duration-300 shadow-xs relative overflow-hidden ${
                                 isEligibleForVaga
-                                    ? 'bg-gradient-to-br from-emerald-100 via-emerald-200/90 to-teal-200 border-emerald-400 text-emerald-950 shadow-emerald-500/20 ring-2 ring-emerald-400/40'
+                                    ? isNextInQueue
+                                        ? 'bg-gradient-to-br from-emerald-100 via-emerald-200/90 to-teal-200 border-emerald-400 text-emerald-950 shadow-emerald-500/20 ring-2 ring-emerald-400/40'
+                                        : 'bg-gradient-to-br from-emerald-50 via-teal-50/60 to-amber-100/80 border-emerald-300 text-slate-800 shadow-xs ring-1 ring-emerald-300/40'
                                     : booking.status === 'Fila de espera'
                                     ? booking.priority === 'Especial'
                                         ? 'bg-gradient-to-br from-amber-100 via-amber-200 to-yellow-200 border-amber-400 text-amber-950 shadow-amber-500/20 ring-2 ring-amber-400/40'
@@ -536,31 +549,47 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                             }`}
                             title={
                                 isEligibleForVaga
-                                    ? `Posição: ${queuePosition || 1}º lugar na fila. Vaga liberada disponível para este paciente!`
+                                    ? isNextInQueue
+                                        ? `Posição: ${queuePosition || 1}º lugar na fila. Vaga liberada e disponível para agendamento imediato!`
+                                        : `Posição: ${queuePosition || 1}º lugar na fila. Bloqueado: Agende o paciente ${blockingPatient?.name || 'anterior'} da colocação ${blockingPatient?.queuePosition || 1}º primeiro.`
                                     : booking.status === 'Fila de espera' && queuePosition 
                                     ? `Posição: ${queuePosition}º lugar na fila de ${booking.procedimento?.name || 'procedimento'} ${booking.priority === 'Especial' ? '(Agendamento Especial)' : ''}` 
                                     : `Status: ${booking.status}`
                             }
                         >
                             {isEligibleForVaga ? (
-                                <>
-                                    <span className="text-[7.5px] font-black uppercase tracking-wider text-emerald-900 leading-none">
-                                        VAGA LIVRE
-                                    </span>
-                                    <span className="text-xl sm:text-2xl font-black font-mono leading-none tracking-tight text-emerald-950 my-1">
-                                        {queuePosition ? `${queuePosition}º` : '1º'}
-                                    </span>
-                                    <span className="text-[7px] font-black uppercase tracking-wider text-emerald-800 leading-none">
-                                        DEFINIR DATA
-                                    </span>
-                                </>
-                            ) : booking.status === 'Fila de espera' ? (
+                                isNextInQueue ? (
+                                    <>
+                                        <span className="text-[7.5px] font-black uppercase tracking-wider text-emerald-900 leading-none">
+                                            VAGA LIVRE
+                                        </span>
+                                        <span className="text-xl sm:text-2xl font-black font-mono leading-none tracking-tight text-emerald-950 my-1">
+                                            {queuePosition ? `${queuePosition}º` : '1º'}
+                                        </span>
+                                        <span className="text-[7px] font-black uppercase tracking-wider text-emerald-800 leading-none">
+                                            DEFINIR DATA
+                                        </span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <span className="text-[7.5px] font-black uppercase tracking-wider text-emerald-900 leading-none">
+                                            VAGA LIVRE
+                                        </span>
+                                        <span className="text-xl sm:text-2xl font-black font-mono leading-none tracking-tight text-slate-800 my-1">
+                                            {queuePosition ? `${queuePosition}º` : (booking.queue_position ? `${booking.queue_position}º` : '2º')}
+                                        </span>
+                                        <span className="text-[6.5px] font-black uppercase tracking-wider text-amber-800 leading-none flex items-center gap-0.5">
+                                            <Lock className="w-2 h-2 inline shrink-0" /> AGUARDANDO
+                                        </span>
+                                    </>
+                                )
+                            ) : (!booking.status || booking.status === 'Fila de espera' || booking.status === 'Aguardando Data' || booking.status === 'Solicitado' || booking.status === 'Retorno') ? (
                                 <>
                                     <span className="text-[8.5px] font-black uppercase tracking-wider text-amber-900 leading-none">
                                         {booking.priority === 'Especial' ? 'ESPECIAL' : 'POSIÇÃO'}
                                     </span>
                                     <span className="text-2xl sm:text-[28px] font-black font-mono leading-none tracking-tight text-amber-950 my-1">
-                                        {queuePosition ? `${queuePosition}º` : '--'}
+                                        {queuePosition ? `${queuePosition}º` : (booking.queue_position ? `${booking.queue_position}º` : '1º')}
                                     </span>
                                     <span className="text-[7.5px] font-black uppercase tracking-widest text-amber-800 leading-none">
                                         {booking.priority === 'Especial' ? 'PRIORITÁRIO' : 'NA FILA'}
@@ -700,9 +729,9 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                     label="Prioridade" 
                                     value={
                                         booking.priority === 'Especial' 
-                                            ? 'AGENDAMENTO ESPECIAL' 
+                                            ? 'Especial' 
                                             : (booking.is_retorno || booking.retorno_tipo || booking.status === 'Retorno')
-                                            ? `RETORNO — ${(booking.retorno_tipo || '1º RETORNO').toUpperCase()}`
+                                            ? (booking.retorno_tipo || 'Retorno')
                                             : booking.priority === 'Urgência' 
                                             ? 'Urgência' 
                                             : 'Normal'
@@ -712,20 +741,54 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                     flex="col-span-1 wide:col-span-2" 
                                 />
 
-                                {/* STATUS */}
+                                {/* STATUS: Torna-se o próprio botão moderno quando o status for "Definir Data" */}
                                 {isEligibleForVaga ? (
-                                    <DataItem 
-                                        label="Status" 
-                                        value={
-                                            <span className="flex items-center gap-1.5 text-emerald-950 font-black">
-                                                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping inline-block" />
-                                                Definir Data
+                                    isNextInQueue ? (
+                                        <div className="flex flex-col gap-1 col-span-1 wide:col-span-2 min-w-0 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+                                            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400/80 ml-0.5 whitespace-nowrap overflow-hidden text-ellipsis flex items-center gap-1.5">
+                                                <span className="truncate">Status</span>
                                             </span>
-                                        } 
-                                        colorClass="text-emerald-950 bg-emerald-100 border-emerald-400 font-black shadow-2xs" 
-                                        isBadge={true} 
-                                        flex="col-span-1 wide:col-span-2" 
-                                    />
+                                            {canEdit && onOpenDefinirData ? (
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        onOpenDefinirData(booking);
+                                                    }}
+                                                    className="inline-flex items-center justify-center gap-1.5 px-3 py-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 active:from-emerald-800 active:to-teal-800 text-white font-black rounded-xl text-xs uppercase tracking-wider transition-all shadow-md shadow-emerald-600/25 active:scale-95 cursor-pointer w-fit"
+                                                    title="Clique para Definir Data e Horário para o Paciente"
+                                                >
+                                                    <Calendar className="w-3.5 h-3.5 shrink-0" />
+                                                    <span className="whitespace-nowrap">Definir Data</span>
+                                                </button>
+                                            ) : (
+                                                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-600 text-white font-black rounded-xl text-xs uppercase tracking-wider shadow-xs w-fit">
+                                                    <Calendar className="w-3.5 h-3.5 shrink-0" />
+                                                    <span className="whitespace-nowrap">Definir Data</span>
+                                                </span>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <div className="flex flex-col gap-1 col-span-1 wide:col-span-2 min-w-0 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+                                            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400/80 ml-0.5 whitespace-nowrap overflow-hidden text-ellipsis flex items-center gap-1.5">
+                                                <span className="truncate">Status</span>
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    if (blockingPatient && onOpenBlockedQueueModal) {
+                                                        onOpenBlockedQueueModal(booking, blockingPatient);
+                                                    }
+                                                }}
+                                                className="inline-flex items-center justify-center gap-1.5 px-3 py-1 bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-400/90 font-black rounded-xl text-xs uppercase tracking-wider transition-all shadow-2xs active:scale-95 cursor-pointer w-fit"
+                                                title={`Bloqueado: Agende o paciente ${blockingPatient?.name || 'anterior'} da colocação ${blockingPatient?.queuePosition || 1}º primeiro`}
+                                            >
+                                                <Lock className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                                                <span className="whitespace-nowrap">Definir Data</span>
+                                            </button>
+                                        </div>
+                                    )
                                 ) : (
                                     <DataItem 
                                         label="Status" 
@@ -740,20 +803,7 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                             {/* Ações Rápidas de Linha (Desktop) + Chevron */}
                             <div className="flex items-center gap-2 self-end wide:self-center shrink-0">
                                 <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                                    {/* Botão de Destaque: DEFINIR DATA quando elegível */}
-                                    {isEligibleForVaga && canEdit && onOpenDefinirData && (
-                                        <button
-                                            type="button"
-                                            onClick={() => onOpenDefinirData(booking)}
-                                            className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl text-xs uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-md shadow-emerald-600/20 active:scale-95 cursor-pointer shrink-0"
-                                            title="Definir Data e Horário para o Paciente"
-                                        >
-                                            <Calendar className="w-3.5 h-3.5" />
-                                            <span>Definir Data</span>
-                                        </button>
-                                    )}
-
-                                    {canEdit && !isEligibleForVaga && (
+                                    {canEdit && (
                                         <button
                                             type="button"
                                             onClick={() => onEdit(booking)}
@@ -864,16 +914,35 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                 ) : (
                                     <>
                                         {/* Ação de Definir Data no Expandido */}
-                                        {isEligibleForVaga && canEdit && onOpenDefinirData && (
-                                            <button
-                                                type="button"
-                                                onClick={(e) => { e.stopPropagation(); onOpenDefinirData(booking); }}
-                                                className="flex items-center gap-1.5 px-4 py-2 text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-all text-xs font-black uppercase tracking-wider shadow-md shadow-emerald-600/25 active:scale-95 cursor-pointer"
-                                                title="Definir Data e Horário para o Paciente"
-                                            >
-                                                <Calendar className="w-4 h-4" />
-                                                Definir Data
-                                            </button>
+                                        {isEligibleForVaga && canEdit && (
+                                            isNextInQueue ? (
+                                                onOpenDefinirData && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => { e.stopPropagation(); onOpenDefinirData(booking); }}
+                                                        className="flex items-center gap-1.5 px-4 py-2 text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-all text-xs font-black uppercase tracking-wider shadow-md shadow-emerald-600/25 active:scale-95 cursor-pointer"
+                                                        title="Definir Data e Horário para o Paciente"
+                                                    >
+                                                        <Calendar className="w-4 h-4" />
+                                                        Definir Data
+                                                    </button>
+                                                )
+                                            ) : (
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => { 
+                                                        e.stopPropagation(); 
+                                                        if (blockingPatient && onOpenBlockedQueueModal) {
+                                                            onOpenBlockedQueueModal(booking, blockingPatient);
+                                                        }
+                                                    }}
+                                                    className="flex items-center gap-1.5 px-4 py-2 text-amber-950 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-xl transition-all text-xs font-black uppercase tracking-wider shadow-2xs active:scale-95 cursor-pointer"
+                                                    title={`Bloqueado: Agende o paciente ${blockingPatient?.name || 'anterior'} da colocação ${blockingPatient?.queuePosition || 1}º primeiro`}
+                                                >
+                                                    <Lock className="w-4 h-4 text-amber-700" />
+                                                    Definir Data (Bloqueado)
+                                                </button>
+                                            )
                                         )}
 
                                         {/* Editar */}
@@ -1259,10 +1328,36 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     const [allVagas, setAllVagas] = useState<ConsultaVaga[]>([]);
     const [isDefinirDataModalOpen, setIsDefinirDataModalOpen] = useState(false);
     const [bookingForDefinirData, setBookingForDefinirData] = useState<ConsultaAgendamento | null>(null);
+    const [blockedQueueTarget, setBlockedQueueTarget] = useState<{
+        currentBooking: ConsultaAgendamento;
+        blockingPatient: NonNullable<db.QueueEligibilityInfo['blockingPatient']>;
+    } | null>(null);
 
     const handleOpenDefinirData = (booking: ConsultaAgendamento) => {
         setBookingForDefinirData(booking);
         setIsDefinirDataModalOpen(true);
+    };
+
+    const handleOpenBlockedQueueModal = (
+        booking: ConsultaAgendamento,
+        blockingPatient: NonNullable<db.QueueEligibilityInfo['blockingPatient']>
+    ) => {
+        setBlockedQueueTarget({
+            currentBooking: booking,
+            blockingPatient
+        });
+    };
+
+    const handleScheduleBlockingPatient = () => {
+        if (!blockedQueueTarget) return;
+        const targetId = blockedQueueTarget.blockingPatient.id;
+        const targetBooking = allBookings.find(b => b.id === targetId) || bookings.find(b => b.id === targetId);
+        
+        setBlockedQueueTarget(null);
+        if (targetBooking) {
+            setBookingForDefinirData(targetBooking);
+            setIsDefinirDataModalOpen(true);
+        }
     };
 
     const loadData = async (silent = false) => {
@@ -1278,7 +1373,16 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
             setAllVagas(allVagasData);
 
             // 1. Agrupar e calcular a fila de espera estritamente por PROCEDIMENTO
-            const allWaitlist = allBookingData.filter(b => b.status === 'Fila de espera');
+            const isWaitlistItem = (b: ConsultaAgendamento) => 
+                !b.status || 
+                b.status === 'Fila de espera' || 
+                b.status === 'Aguardando Data' || 
+                b.status === 'Solicitado' || 
+                b.status === 'Retorno' ||
+                b.status.toLowerCase().includes('fila') ||
+                b.status.toLowerCase().includes('aguard');
+
+            const allWaitlist = allBookingData.filter(isWaitlistItem);
             
             const waitlistByProc: Record<string, ConsultaAgendamento[]> = {};
             allWaitlist.forEach(b => {
@@ -1295,7 +1399,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
             Object.keys(waitlistByProc).forEach(procKey => {
                 const procList = waitlistByProc[procKey];
                 // Regra oficial da fila para este procedimento:
-                // Agendamento Especial no topo da fila deste procedimento, seguido de comuns por ordem cronológica (FIFO)
+                // Agendamento Especial no topo da fila deste procedimento, seguido de comuns por ordem cronológica (FIFO da data de solicitação)
                 const orderedProcList = db.orderConsultasQueue(procList);
 
                 let specialCount = 0;
@@ -1344,53 +1448,12 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                 filtered = filtered.filter(a => a.appointment_date === filterDate);
             }
             if (filterStatus) {
-                filtered = filtered.filter(a => a.status === filterStatus);
+                if (filterStatus === 'Definir Data') {
+                    filtered = filtered.filter(a => a.status === 'Fila de espera' || a.status === 'Aguardando Data');
+                } else {
+                    filtered = filtered.filter(a => a.status === filterStatus);
+                }
             }
-
-            // Ordenação dos agendamentos na visualização:
-            filtered.sort((a, b) => {
-                const isWaitlistA = a.status === 'Fila de espera';
-                const isWaitlistB = b.status === 'Fila de espera';
-
-                // Se ambos estão na fila de espera
-                if (isWaitlistA && isWaitlistB) {
-                    const isSpecialA = a.priority === 'Especial';
-                    const isSpecialB = b.priority === 'Especial';
-
-                    // 1. Agendamento Especial sempre tem prioridade máxima no topo
-                    if (isSpecialA !== isSpecialB) {
-                        return isSpecialA ? -1 : 1;
-                    }
-
-                    // 2. Se for o mesmo procedimento, ordenar estritamente pela posição na fila do procedimento
-                    const procA = (a.procedimento?.name || a.procedimento_id || '').trim();
-                    const procB = (b.procedimento?.name || b.procedimento_id || '').trim();
-                    if (procA === procB) {
-                        const posA = positionMap[a.id] ?? 999999;
-                        const posB = positionMap[b.id] ?? 999999;
-                        if (posA !== posB) return posA - posB;
-                    }
-
-                    // 3. Se forem procedimentos diferentes:
-                    // Mantém a ordem por data de solicitação mais antiga (FIFO geral)
-                    const timeA = a.solicitation_date ? new Date(a.solicitation_date + 'T00:00:00').getTime() : (a.created_at ? new Date(a.created_at).getTime() : 0);
-                    const timeB = b.solicitation_date ? new Date(b.solicitation_date + 'T00:00:00').getTime() : (b.created_at ? new Date(b.created_at).getTime() : 0);
-                    if (timeA !== timeB) return timeA - timeB;
-
-                    const posA = positionMap[a.id] ?? 999999;
-                    const posB = positionMap[b.id] ?? 999999;
-                    return posA - posB;
-                }
-
-                // Fila de espera vem antes dos demais status
-                if (isWaitlistA !== isWaitlistB) {
-                    return isWaitlistA ? -1 : 1;
-                }
-
-                const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
-                const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
-                return timeB - timeA;
-            });
 
             setBookings(filtered);
         } catch (error) {
@@ -1708,20 +1771,92 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
         }
     };
 
+    const eligibilityMap = useMemo(() => {
+        return db.getQueueEligibilityMap(allBookings, allVagas);
+    }, [allBookings, allVagas]);
+
     const sortedBookings = useMemo(() => {
-        if (filterStatus === 'Fila de espera') {
-            return db.orderConsultasQueue(bookings);
+        let list = [...bookings];
+
+        // Se o usuário filtrou especificamente por "Definir Data"
+        if (filterStatus === 'Definir Data') {
+            list = list.filter(item => eligibilityMap.get(item.id)?.isEligible);
         }
-        return bookings;
-    }, [bookings, filterStatus]);
+
+        return list.sort((a, b) => {
+            const eligA = eligibilityMap.get(a.id);
+            const eligB = eligibilityMap.get(b.id);
+            const isDefinirDataA = !!eligA?.isEligible;
+            const isDefinirDataB = !!eligB?.isEligible;
+
+            // 1. PRIORIDADE MÁXIMA NA ORDENAÇÃO PADRÃO:
+            // Pacientes com status "Definir Data" (vaga liberada disponível) no topo absoluto
+            if (isDefinirDataA !== isDefinirDataB) {
+                return isDefinirDataA ? -1 : 1;
+            }
+
+            // Se ambos são "Definir Data":
+            if (isDefinirDataA && isDefinirDataB) {
+                const posA = eligA?.queuePosition ?? (queuePositions[a.id] ?? 999999);
+                const posB = eligB?.queuePosition ?? (queuePositions[b.id] ?? 999999);
+
+                // 1.1 Organizados rigorosamente pela posição da fila (1º lugar, 2º lugar, 3º lugar...)
+                if (posA !== posB) {
+                    return posA - posB;
+                }
+
+                // 1.2 Em caso de empate de posição entre procedimentos diferentes:
+                // Agendamento Especial vem primeiro
+                const isSpecialA = a.priority === 'Especial';
+                const isSpecialB = b.priority === 'Especial';
+                if (isSpecialA !== isSpecialB) {
+                    return isSpecialA ? -1 : 1;
+                }
+
+                // 1.3 Ordem cronológica determinística estrita: Data da Solicitação e Data/Hora de Criação
+                return db.compareConsultasChronological(a, b);
+            }
+
+            // 2. Demais pacientes da Fila de espera (sem vaga liberada no momento)
+            const isWaitlistA = a.status === 'Fila de espera' || a.status === 'Aguardando Data';
+            const isWaitlistB = b.status === 'Fila de espera' || b.status === 'Aguardando Data';
+
+            if (isWaitlistA && isWaitlistB) {
+                const isSpecialA = a.priority === 'Especial';
+                const isSpecialB = b.priority === 'Especial';
+                if (isSpecialA !== isSpecialB) {
+                    return isSpecialA ? -1 : 1;
+                }
+
+                const posA = eligA?.queuePosition ?? (queuePositions[a.id] ?? 999999);
+                const posB = eligB?.queuePosition ?? (queuePositions[b.id] ?? 999999);
+                if (posA !== posB) {
+                    return posA - posB;
+                }
+
+                // Ordem cronológica determinística estrita: Data da Solicitação e Data/Hora de Criação
+                return db.compareConsultasChronological(a, b);
+            }
+
+            // Fila de espera vem antes dos agendamentos finalizados/confirmados
+            if (isWaitlistA !== isWaitlistB) {
+                return isWaitlistA ? -1 : 1;
+            }
+
+            // 3. Demais registros (Agendados, Realizados, Cancelados, etc.)
+            const dateA = a.appointment_date ? new Date(a.appointment_date + 'T12:00:00').getTime() : 0;
+            const dateB = b.appointment_date ? new Date(b.appointment_date + 'T12:00:00').getTime() : 0;
+            if (dateA !== dateB) return dateB - dateA;
+
+            const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+            const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+            return timeB - timeA;
+        });
+    }, [bookings, eligibilityMap, filterStatus, queuePositions]);
 
     const visibleBookings = useMemo(() => {
         return sortedBookings.slice(0, displayLimit);
     }, [sortedBookings, displayLimit]);
-
-    const eligibilityMap = useMemo(() => {
-        return db.getQueueEligibilityMap(allBookings, allVagas);
-    }, [allBookings, allVagas]);
 
 
 
@@ -1842,16 +1977,16 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                         onChange={setFilterStatus}
                         options={[
                             { value: '', label: 'Todos os Status' },
-                            { value: 'Solicitado', label: 'Solicitado' },
-                            { value: 'Agendado', label: 'Agendado' },
-                            { value: 'Aguardando Data', label: 'Aguardando Data' },
+                            { value: 'Definir Data', label: 'Definir Data' },
                             { value: 'Fila de espera', label: 'Fila de espera' },
+                            { value: 'Agendado', label: 'Agendado' },
+                            { value: 'Solicitado', label: 'Solicitado' },
                             { value: 'Realizado', label: 'Realizado' },
                             { value: 'Não Realizado', label: 'Não Realizado' },
                             { value: 'Cancelado', label: 'Cancelado' },
                         ]}
                         placeholder="Status"
-                        minWidth="w-28 sm:w-32 lg:w-36"
+                        minWidth="w-28 sm:w-36 lg:w-40"
                     />
 
                     {/* Action Button 1: Relatório */}
@@ -1903,14 +2038,19 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                     <div className="space-y-3 w-full pb-4">
                         {visibleBookings.map((booking) => {
                             const eligibility = eligibilityMap.get(booking.id);
+                            const cardQueuePos = queuePositions[booking.id] ?? eligibility?.queuePosition ?? booking.queue_position;
+                            const cardSpecialSeq = specialSequences[booking.id] ?? booking.special_sequence;
                             return (
                                 <AgendamentoCard
                                     key={booking.id}
                                     booking={booking}
-                                    queuePosition={queuePositions[booking.id]}
-                                    specialSequence={specialSequences[booking.id]}
+                                    queuePosition={cardQueuePos}
+                                    specialSequence={cardSpecialSeq}
                                     isEligibleForVaga={eligibility?.isEligible}
                                     freeSlotsCount={eligibility?.freeSlotsCount}
+                                    isNextInQueue={eligibility ? eligibility.isNextInQueue : true}
+                                    blockingPatient={eligibility?.blockingPatient}
+                                    onOpenBlockedQueueModal={handleOpenBlockedQueueModal}
                                     isOperating={operatingId === booking.id}
                                     canEdit={canEdit}
                                     canComplete={canComplete}
@@ -2828,6 +2968,123 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                 className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white font-extrabold rounded-xl text-xs uppercase tracking-wider transition-all shadow-xs cursor-pointer active:scale-95"
                             >
                                 Fechar
+                            </button>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
+
+            {/* MODAL: AVISO DE ORDEM DA FILA (BLOQUEIO DE DEFINIR DATA) */}
+            {blockedQueueTarget && createPortal(
+                <div className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden border border-amber-200/90 flex flex-col animate-in zoom-in-95 duration-200">
+                        {/* Header */}
+                        <div className="p-4 sm:p-5 bg-gradient-to-r from-amber-500 via-amber-600 to-orange-500 text-white flex justify-between items-center shrink-0 shadow-sm">
+                            <div className="flex items-center gap-3 min-w-0">
+                                <div className="w-10 h-10 rounded-2xl bg-white/20 border border-white/30 flex items-center justify-center text-white shadow-inner shrink-0">
+                                    <Lock className="w-5 h-5" />
+                                </div>
+                                <div className="min-w-0">
+                                    <h3 className="text-sm sm:text-base font-black uppercase tracking-tight truncate">
+                                        Ordem da Fila Obrigatória
+                                    </h3>
+                                    <p className="text-[11px] text-amber-100 font-semibold uppercase truncate">
+                                        Sequência de Atendimento do Procedimento
+                                    </p>
+                                </div>
+                            </div>
+                            <button 
+                                onClick={() => setBlockedQueueTarget(null)} 
+                                className="p-2 hover:bg-white/20 rounded-xl text-white/80 hover:text-white transition-colors cursor-pointer shrink-0"
+                                title="Fechar"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        {/* Body */}
+                        <div className="p-5 sm:p-6 space-y-4 bg-slate-50/50">
+                            {/* Mensagem Principal Destacada Conforme Solicitado */}
+                            <div className="bg-amber-50 border-2 border-amber-300/90 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col items-center text-center">
+                                <div className="w-12 h-12 rounded-2xl bg-amber-100 border border-amber-300 flex items-center justify-center text-amber-700 mb-2.5 shadow-inner">
+                                    <Lock className="w-6 h-6" />
+                                </div>
+                                <span className="text-[10px] font-black uppercase tracking-widest text-amber-800 mb-1.5 bg-amber-200/60 px-2.5 py-0.5 rounded-full border border-amber-300">
+                                    Ação Bloqueada
+                                </span>
+                                <h4 className="text-base sm:text-lg font-black text-amber-950 leading-snug uppercase">
+                                    Agende o paciente <span className="text-amber-900 underline decoration-amber-500 decoration-2 underline-offset-2">{blockedQueueTarget.blockingPatient.name}</span> da colocação <span className="bg-amber-200 text-amber-950 px-2 py-0.5 rounded-md border border-amber-300 font-mono font-black">{blockedQueueTarget.blockingPatient.queuePosition}º</span> primeiro
+                                </h4>
+                                <p className="text-xs text-amber-800/90 font-semibold mt-2.5 max-w-md leading-relaxed">
+                                    Para cumprir a fila de espera com equidade, os pacientes devem ser agendados sequencialmente conforme a colocação de cada um no procedimento.
+                                </p>
+                            </div>
+
+                            {/* Resumo Comparativo */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                {/* Paciente 1º (Pendente) */}
+                                <div className="bg-emerald-50/90 border border-emerald-300/80 rounded-2xl p-3.5 flex flex-col justify-between shadow-2xs">
+                                    <div>
+                                        <span className="text-[9px] font-black uppercase text-emerald-800 tracking-wider flex items-center gap-1 mb-1">
+                                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" /> Agendar Primeiro (1º)
+                                        </span>
+                                        <span className="text-xs font-black text-emerald-950 uppercase block truncate" title={blockedQueueTarget.blockingPatient.name}>
+                                            {blockedQueueTarget.blockingPatient.name}
+                                        </span>
+                                    </div>
+                                    <div className="mt-2.5 pt-2 border-t border-emerald-200/80 flex items-center justify-between text-[10px] font-bold text-emerald-800">
+                                        <span>Posição Atual:</span>
+                                        <span className="font-mono font-black text-emerald-950 bg-emerald-200/80 px-2 py-0.5 rounded-md border border-emerald-300">
+                                            {blockedQueueTarget.blockingPatient.queuePosition}º Lugar
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {/* Paciente Atual Clicado (Bloqueado) */}
+                                <div className="bg-slate-100/90 border border-slate-200 rounded-2xl p-3.5 flex flex-col justify-between shadow-2xs">
+                                    <div>
+                                        <span className="text-[9px] font-black uppercase text-slate-500 tracking-wider flex items-center gap-1 mb-1">
+                                            <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" /> Paciente Selecionado
+                                        </span>
+                                        <span className="text-xs font-black text-slate-800 uppercase block truncate" title={formatPatientName(blockedQueueTarget.currentBooking.paciente)}>
+                                            {formatPatientName(blockedQueueTarget.currentBooking.paciente)}
+                                        </span>
+                                    </div>
+                                    <div className="mt-2.5 pt-2 border-t border-slate-200/80 flex items-center justify-between text-[10px] font-bold text-slate-600">
+                                        <span>Posição Atual:</span>
+                                        <span className="font-mono font-black text-slate-800 bg-slate-200 px-2 py-0.5 rounded-md border border-slate-300">
+                                            {queuePositions[blockedQueueTarget.currentBooking.id] || '--'}º Lugar
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Procedimento */}
+                            <div className="bg-white border border-slate-200/90 rounded-2xl p-3 px-4 flex items-center justify-between text-xs shadow-2xs">
+                                <span className="font-black text-slate-400 uppercase text-[10px]">Procedimento:</span>
+                                <span className="font-black text-slate-900 uppercase truncate max-w-[280px]">
+                                    {blockedQueueTarget.blockingPatient.procName}
+                                </span>
+                            </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-4 border-t border-slate-100 bg-white flex flex-col sm:flex-row items-center justify-end gap-2.5">
+                            <button
+                                type="button"
+                                onClick={() => setBlockedQueueTarget(null)}
+                                className="w-full sm:w-auto px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold rounded-xl text-xs uppercase tracking-wider transition-all cursor-pointer"
+                            >
+                                Entendido
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleScheduleBlockingPatient}
+                                className="w-full sm:w-auto px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl text-xs uppercase tracking-wider transition-all shadow-md shadow-emerald-600/25 flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer"
+                            >
+                                <Calendar className="w-4 h-4" />
+                                Agendar {blockedQueueTarget.blockingPatient.name.split(' ')[0]} Agora
                             </button>
                         </div>
                     </div>

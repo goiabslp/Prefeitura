@@ -133,7 +133,7 @@ export const RHModule: React.FC<RHModuleProps> = ({
                 />
             )}
             <div className="flex-1 flex flex-col h-full bg-[#f8fafc] w-full max-w-[100vw] overflow-hidden relative">
-                <main ref={mainRef} className="flex-1 p-4 md:p-6 overflow-y-auto lg:overflow-hidden flex flex-col justify-center items-center">
+                <main ref={mainRef} className={`flex-1 overflow-hidden flex flex-col w-full h-full min-h-0 ${showHistorico || (activeTab === 'historico' && subView !== 'horas-extras') ? 'p-2 sm:p-3 lg:p-4' : !isFormView ? 'p-4 md:p-6 overflow-y-auto lg:overflow-hidden justify-center items-center' : 'p-4 md:p-6 overflow-y-auto'}`}>
                     {!isFormView ? (
                         <div className="w-full max-h-full flex flex-col items-center justify-center container mx-auto">
                             {/* Fixed Back Button - Standardized Position */}
@@ -209,7 +209,7 @@ export const RHModule: React.FC<RHModuleProps> = ({
                             </div>
                         </div>
                     ) : showHistorico || (activeTab === 'historico' && subView !== 'horas-extras') ? (
-                        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 flex-1 flex flex-col w-full h-full">
+                        <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 flex-1 flex flex-col w-full h-full min-h-0">
                             <HorasExtrasHistory
                                 userRole={userRole}
                                 currentUserSector={userRole === 'admin' ? 'Geral' : (users.find(u => u.id === userId)?.sector || 'Geral')}
