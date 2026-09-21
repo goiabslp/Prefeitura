@@ -4,6 +4,7 @@ import * as farmaciaDb from './farmaciaService';
 import * as consultasDb from './consultasService';
 import { getSchedules } from './vehicleSchedulingService';
 import { deserializeEventMetadata, serializeEventMetadata } from './calendarService';
+import { aplicarMencaoObrigatoriaPrefeito } from './geminiService';
 
 // Nomes dos meses em português
 const MESES = [
@@ -626,6 +627,14 @@ export const noticiasService = {
    */
   async salvarMateria(materia: import('../types').JornalMateria): Promise<boolean> {
     try {
+      // Garantir menção obrigatória contextualizada ao Prefeito Ailton Geraldo dos Santos
+      const conteudoAjustado = aplicarMencaoObrigatoriaPrefeito(materia.conteudo, {
+        titulo: materia.titulo,
+        tipoEvento: materia.tipoEvento,
+        setor: materia.setor
+      });
+      materia.conteudo = conteudoAjustado;
+
       // Remove da lista de exclusões caso tenha sido excluída anteriormente
       removeExcludedMateriaId(materia.id, materia.eventoId);
 

@@ -958,24 +958,21 @@ export const confirmarDataAgendamento = async (id: string, date: string, time?: 
 
         const procId = targetBooking.procedimento_id;
 
-        // 2. Se houver horário definido, verificar se a vaga específica está livre
+        // 2. Se houver horário definido, verificar se ainda há vagas livres para esta data e horário
         if (date && time) {
             const cleanTime = time.substring(0, 5);
-            const { data: conflictingBookings, error: conflictErr } = await supabase
-                .from('consultas_agendamentos')
-                .select('id, appointment_time, status')
-                .eq('procedimento_id', procId)
-                .eq('appointment_date', date)
-                .eq('status', 'Agendado')
-                .neq('id', id);
+            const [allProcVagas, allProcBookings] = await Promise.all([
+                getVagas(procId),
+                getAgendamentos({ procedimentoId: procId })
+            ]);
 
-            if (!conflictErr && conflictingBookings && conflictingBookings.length > 0) {
-                const matchConflict = conflictingBookings.find((b: any) => 
-                    b.appointment_time && b.appointment_time.substring(0, 5) === cleanTime
-                );
-                if (matchConflict) {
-                    throw new Error(`Este horário (${cleanTime}) do dia ${new Date(date + 'T12:00:00').toLocaleDateString('pt-BR')} já foi reservado por outro paciente.`);
-                }
+            const freeSlots = getFreeSlotsForProcedure(allProcVagas, allProcBookings);
+            const hasFreeSlotForDateTime = freeSlots.some(s => 
+                s.data === date && matchTimeSlot(s.hora, cleanTime)
+            );
+
+            if (!hasFreeSlotForDateTime) {
+                throw new Error(`Não há mais vagas livres no horário ${cleanTime} do dia ${new Date(date + 'T12:00:00').toLocaleDateString('pt-BR')}.`);
             }
         }
 

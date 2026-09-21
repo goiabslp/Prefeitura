@@ -27,7 +27,9 @@ import {
   ArrowRight,
   ShieldCheck,
   AlertCircle,
-  Flag
+  Flag,
+  Sun,
+  Sunset
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../../services/supabaseClient';
@@ -338,7 +340,16 @@ export const NovoEventoPage: React.FC<NovoEventoPageProps> = ({
   selectedDate,
   currentUserId
 }) => {
-  const [currentStep, setCurrentStep] = useState<StepKey>('identificacao');
+  const getInitialStepFromUrl = (): StepKey => {
+    if (typeof window === 'undefined') return 'identificacao';
+    const path = window.location.pathname.toLowerCase();
+    if (path.includes('/programacao')) return 'programacao';
+    if (path.includes('/setor')) return 'setor';
+    if (path.includes('/jornal')) return 'jornal';
+    return 'identificacao';
+  };
+
+  const [currentStep, setCurrentStep] = useState<StepKey>(getInitialStepFromUrl);
   const [title, setTitle] = useState('');
   const [type, setType] = useState('Pessoal');
   const [sector, setSector] = useState('');
@@ -429,6 +440,48 @@ export const NovoEventoPage: React.FC<NovoEventoPageProps> = ({
     };
   }, []);
 
+  // Preenchimento reativo de eventToEdit
+  useEffect(() => {
+    if (eventToEdit) {
+      setTitle(eventToEdit.title || '');
+      setType(eventToEdit.type || 'Pessoal');
+      
+      const initialSectorIds: string[] = [];
+      if (eventToEdit.sector_id) {
+        initialSectorIds.push(eventToEdit.sector_id);
+      }
+      if (eventToEdit.sector && sectorsList.length > 0) {
+        const rawSectors = eventToEdit.sector.split(',').map(s => s.trim().toLowerCase());
+        sectorsList.forEach(s => {
+          if (rawSectors.includes(s.name.toLowerCase()) && !initialSectorIds.includes(s.id)) {
+            initialSectorIds.push(s.id);
+          }
+        });
+      }
+      setSelectedSectorIds(initialSectorIds);
+
+      setSelectedPersonIds(eventToEdit.person_ids || []);
+      setStartDate(eventToEdit.start_date || selectedDate);
+      setEndDate(eventToEdit.end_date || eventToEdit.start_date || selectedDate);
+      setIsAllDay(eventToEdit.is_all_day !== false && !eventToEdit.start_time);
+      setIsIndefinite(Boolean(eventToEdit.is_indefinite));
+      setStartTime(eventToEdit.start_time || '08:00');
+      setEndTime(eventToEdit.end_time || '17:00');
+      setDescription(eventToEdit.description || '');
+      setIsRecurring(Boolean(eventToEdit.is_recurring));
+      setImageUrl(eventToEdit.image_url || '');
+      setPublishToNews(Boolean(eventToEdit.publish_to_news));
+      setProfessionalId(eventToEdit.professional_id || '');
+
+      if (eventToEdit.invites && eventToEdit.invites.length > 0) {
+        setSelectedInvites(eventToEdit.invites.map(i => ({ user_id: i.user_id, role: i.role })));
+      }
+    } else {
+      setStartDate(selectedDate || getLocalISOData(new Date()).date);
+      setEndDate(selectedDate || getLocalISOData(new Date()).date);
+    }
+  }, [eventToEdit, sectorsList]);
+
   // Inicialização inicial e carregamento de entidades
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -444,54 +497,17 @@ export const NovoEventoPage: React.FC<NovoEventoPageProps> = ({
         if (sectorsData) setSectorsList(sectorsData);
         if (jobsData) setJobsList(jobsData);
         if (personsData) setPersons(personsData);
-
-        if (eventToEdit) {
-          setTitle(eventToEdit.title);
-          setType(eventToEdit.type || 'Pessoal');
-          
-          // Inicializar múltiplos setores
-          const initialSectorIds: string[] = [];
-          if (eventToEdit.sector_id) {
-            initialSectorIds.push(eventToEdit.sector_id);
-          }
-          if (eventToEdit.sector && sectorsData) {
-            const rawSectors = eventToEdit.sector.split(',').map(s => s.trim().toLowerCase());
-            sectorsData.forEach(s => {
-              if (rawSectors.includes(s.name.toLowerCase()) && !initialSectorIds.includes(s.id)) {
-                initialSectorIds.push(s.id);
-              }
-            });
-          }
-          setSelectedSectorIds(initialSectorIds);
-
-          setSelectedPersonIds(eventToEdit.person_ids || []);
-          setStartDate(eventToEdit.start_date || selectedDate);
-          setEndDate(eventToEdit.end_date || eventToEdit.start_date || selectedDate);
-          setIsAllDay(eventToEdit.is_all_day !== false);
-          setIsIndefinite(Boolean(eventToEdit.is_indefinite));
-          setStartTime(eventToEdit.start_time || '08:00');
-          setEndTime(eventToEdit.end_time || '17:00');
-          setDescription(eventToEdit.description || '');
-          setIsRecurring(Boolean(eventToEdit.is_recurring));
-          setImageUrl(eventToEdit.image_url || '');
-          setPublishToNews(Boolean(eventToEdit.publish_to_news));
-          setProfessionalId(eventToEdit.professional_id || '');
-
-          if (eventToEdit.invites && eventToEdit.invites.length > 0) {
-            setSelectedInvites(eventToEdit.invites.map(i => ({ user_id: i.user_id, role: i.role })));
-          }
-        } else {
-          setStartDate(selectedDate || getLocalISOData(new Date()).date);
-          setEndDate(selectedDate || getLocalISOData(new Date()).date);
-        }
       } catch (err) {
         console.error('Erro ao inicializar página de evento:', err);
       }
     };
 
     fetchInitialData();
+    const initialStep = getInitialStepFromUrl();
+    setCurrentStep(initialStep);
     const baseRoute = eventToEdit ? `/Calendario/Editar/${eventToEdit.id}` : '/Calendario/Novo';
-    window.history.pushState({ step: 'identificacao' }, '', `${baseRoute}/Identificacao`);
+    const stepCapitalized = initialStep.charAt(0).toUpperCase() + initialStep.slice(1);
+    window.history.pushState({ step: initialStep }, '', `${baseRoute}/${stepCapitalized}`);
   }, []);
 
   const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1207,166 +1223,260 @@ export const NovoEventoPage: React.FC<NovoEventoPageProps> = ({
             className="bg-white rounded-3xl p-4 sm:p-5 lg:p-6 border border-slate-200 shadow-sm flex-1 flex flex-col justify-between overflow-hidden gap-3"
           >
             <div className="border-b border-slate-100 pb-2 shrink-0">
-              <h2 className="text-sm sm:text-base font-black text-slate-900 uppercase tracking-tight">
-                Programação, Datas & Horários
-              </h2>
-              <p className="text-[11px] text-slate-500 font-medium">
-                Defina os prazos, datas de início e término e configure a modalidade de horário.
-              </p>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-sm sm:text-base font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
+                    <Clock className="w-4.5 h-4.5 text-indigo-600" />
+                    <span>Programação, Datas & Horários</span>
+                  </h2>
+                  <p className="text-[11px] text-slate-500 font-medium">
+                    Defina as datas de início e término e especifique os horários deste compromisso.
+                  </p>
+                </div>
+                <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 hidden sm:inline-block">
+                  Passo 3 de 4
+                </span>
+              </div>
             </div>
 
-            <div className="flex-1 flex flex-col justify-around gap-2.5 overflow-hidden">
+            <div className="flex-1 flex flex-col justify-around gap-3 overflow-y-auto pr-1 custom-scrollbar">
               
-              {/* Toggles Rápidos */}
-              <div className="flex flex-wrap items-center gap-3 bg-slate-50 p-2.5 rounded-2xl border border-slate-200/80 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setIsAllDay(!isAllDay)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
-                    isAllDay
-                      ? 'bg-indigo-600 text-white shadow-xs'
-                      : 'bg-white text-slate-700 border border-slate-200'
-                  }`}
-                >
-                  <Clock className="w-3.5 h-3.5" />
-                  <span>Evento de Dia Inteiro</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    const next = !isIndefinite;
-                    setIsIndefinite(next);
-                    if (next) setEndDate(startDate);
-                  }}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
-                    isIndefinite
-                      ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-xs'
-                      : 'bg-white text-slate-700 border border-slate-200'
-                  }`}
-                >
-                  <span>Sem Data de Término Definida</span>
-                  <span className="font-mono font-black text-xs">∞</span>
-                </button>
-              </div>
-
-              {/* Cards de Datas */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                
-                {/* Data Início */}
-                <div ref={startDatePickerRef} className="space-y-1 bg-slate-50/70 p-3 rounded-2xl border border-slate-200 relative">
-                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 block">
-                    Data de Início <span className="text-rose-500">*</span>
-                  </span>
-                  
+              {/* 1. SEÇÃO DE DATAS */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10.5px] font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                    <CalendarDays className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>1. Datas do Evento</span>
+                  </label>
                   <button
                     type="button"
                     onClick={() => {
-                      setShowStartDatePicker(!showStartDatePicker);
-                      setShowEndDatePicker(false);
+                      const next = !isIndefinite;
+                      setIsIndefinite(next);
+                      if (next) setEndDate(startDate);
                     }}
-                    className="w-full bg-white p-2.5 rounded-xl border border-slate-200 flex items-center justify-between text-left font-black text-xs sm:text-sm text-slate-900 shadow-2xs cursor-pointer group"
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition-all cursor-pointer flex items-center gap-1 ${
+                      isIndefinite
+                        ? 'bg-violet-600 text-white shadow-xs'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
                   >
-                    <span>
-                      {startDate ? startDate.split('-').reverse().join('/') : 'Selecionar data'}
-                    </span>
-                    <CalendarDays className={`w-4 h-4 transition-colors ${showStartDatePicker ? 'text-indigo-600' : 'text-slate-400 group-hover:text-indigo-500'}`} />
+                    <span>Sem Data de Término Definida</span>
+                    <span className="font-mono font-black text-xs">∞</span>
                   </button>
+                </div>
 
-                  <AnimatePresence>
-                    {showStartDatePicker && (
-                      <DatePickerModal
-                        title="Selecionar Data de Início"
-                        selectedDate={startDate}
-                        onSelectDate={(newDate) => {
-                          setStartDate(newDate);
-                          if (isIndefinite || !endDate || endDate < newDate) setEndDate(newDate);
-                        }}
-                        onClose={() => setShowStartDatePicker(false)}
-                      />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Data Início */}
+                  <div ref={startDatePickerRef} className="space-y-1 bg-slate-50/80 p-3 rounded-2xl border border-slate-200 relative">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 block">
+                      Data de Início <span className="text-rose-500">*</span>
+                    </span>
+                    
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowStartDatePicker(!showStartDatePicker);
+                        setShowEndDatePicker(false);
+                      }}
+                      className="w-full bg-white p-2.5 rounded-xl border border-slate-200 flex items-center justify-between text-left font-black text-xs sm:text-sm text-slate-900 shadow-2xs cursor-pointer group"
+                    >
+                      <span>
+                        {startDate ? startDate.split('-').reverse().join('/') : 'Selecionar data'}
+                      </span>
+                      <CalendarDays className={`w-4 h-4 transition-colors ${showStartDatePicker ? 'text-indigo-600' : 'text-slate-400 group-hover:text-indigo-500'}`} />
+                    </button>
+
+                    <AnimatePresence>
+                      {showStartDatePicker && (
+                        <DatePickerModal
+                          title="Selecionar Data de Início"
+                          selectedDate={startDate}
+                          onSelectDate={(newDate) => {
+                            setStartDate(newDate);
+                            if (isIndefinite || !endDate || endDate < newDate) setEndDate(newDate);
+                          }}
+                          onClose={() => setShowStartDatePicker(false)}
+                        />
+                      )}
+                    </AnimatePresence>
+                  </div>
+
+                  {/* Data Término */}
+                  <div ref={endDatePickerRef} className="space-y-1 bg-slate-50/80 p-3 rounded-2xl border border-slate-200 relative">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 block">
+                      Data de Término
+                    </span>
+                    
+                    {isIndefinite ? (
+                      <div className="bg-white p-2.5 rounded-xl border border-slate-200 flex items-center justify-between text-indigo-700">
+                        <span className="text-xs sm:text-sm font-black">Tempo Indeterminado</span>
+                        <span className="text-[10px] font-mono font-black bg-indigo-100 text-indigo-800 px-1.5 py-0.2 rounded">∞</span>
+                      </div>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowEndDatePicker(true);
+                            setShowStartDatePicker(false);
+                          }}
+                          className="w-full bg-white p-2.5 rounded-xl border border-slate-200 flex items-center justify-between text-left font-black text-xs sm:text-sm text-slate-900 shadow-2xs cursor-pointer group"
+                        >
+                          <span>
+                            {endDate ? endDate.split('-').reverse().join('/') : 'Selecionar data'}
+                          </span>
+                          <CalendarDays className={`w-4 h-4 transition-colors ${showEndDatePicker ? 'text-indigo-600' : 'text-slate-400 group-hover:text-indigo-500'}`} />
+                        </button>
+
+                        <AnimatePresence>
+                          {showEndDatePicker && (
+                            <DatePickerModal
+                              title="Selecionar Data de Término"
+                              selectedDate={endDate || startDate}
+                              minDate={startDate}
+                              onSelectDate={(newDate) => setEndDate(newDate)}
+                              onClose={() => setShowEndDatePicker(false)}
+                            />
+                          )}
+                        </AnimatePresence>
+                      </>
                     )}
-                  </AnimatePresence>
+                  </div>
                 </div>
-
-                {/* Data Término */}
-                <div ref={endDatePickerRef} className="space-y-1 bg-slate-50/70 p-3 rounded-2xl border border-slate-200 relative">
-                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 block">
-                    Data de Término
-                  </span>
-                  
-                  {isIndefinite ? (
-                    <div className="bg-white p-2.5 rounded-xl border border-slate-200 flex items-center justify-between text-indigo-700">
-                      <span className="text-xs sm:text-sm font-black">Tempo Indeterminado</span>
-                      <span className="text-[10px] font-mono font-black bg-indigo-100 text-indigo-800 px-1.5 py-0.2 rounded">∞</span>
-                    </div>
-                  ) : (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowEndDatePicker(true);
-                          setShowStartDatePicker(false);
-                        }}
-                        className="w-full bg-white p-2.5 rounded-xl border border-slate-200 flex items-center justify-between text-left font-black text-xs sm:text-sm text-slate-900 shadow-2xs cursor-pointer group"
-                      >
-                        <span>
-                          {endDate ? endDate.split('-').reverse().join('/') : 'Selecionar data'}
-                        </span>
-                        <CalendarDays className={`w-4 h-4 transition-colors ${showEndDatePicker ? 'text-indigo-600' : 'text-slate-400 group-hover:text-indigo-500'}`} />
-                      </button>
-
-                      <AnimatePresence>
-                        {showEndDatePicker && (
-                          <DatePickerModal
-                            title="Selecionar Data de Término"
-                            selectedDate={endDate || startDate}
-                            minDate={startDate}
-                            onSelectDate={(newDate) => setEndDate(newDate)}
-                            onClose={() => setShowEndDatePicker(false)}
-                          />
-                        )}
-                      </AnimatePresence>
-                    </>
-                  )}
-                </div>
-
               </div>
 
-              {/* Horários */}
-              <AnimatePresence>
-                {!isAllDay && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-indigo-50/80 rounded-2xl border border-indigo-100 overflow-hidden shrink-0"
-                  >
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-black uppercase tracking-wider text-indigo-950 block">Horário de Início</label>
-                      <input
-                        type="time"
-                        required={!isAllDay}
-                        value={startTime}
-                        onChange={e => setStartTime(e.target.value)}
-                        className="w-full px-3 py-1.5 rounded-xl border border-indigo-200 bg-white font-bold text-xs text-slate-800 outline-none shadow-2xs"
-                      />
+              {/* 2. SEÇÃO DE HORÁRIOS (CAMPO DEDICADO DE HORÁRIO) */}
+              <div className="space-y-2 bg-gradient-to-br from-indigo-50/70 via-slate-50/70 to-blue-50/50 p-3 sm:p-4 rounded-2xl border border-indigo-100/90 shadow-2xs">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label className="text-[10.5px] font-black uppercase tracking-wider text-indigo-950 flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>2. Horário do Evento</span>
+                  </label>
+
+                  {/* Alternância: Horário Marcado vs Dia Inteiro */}
+                  <div className="flex items-center gap-1.5 bg-white p-1 rounded-xl border border-indigo-200/80 shadow-2xs">
+                    <button
+                      type="button"
+                      onClick={() => setIsAllDay(false)}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition-all flex items-center gap-1 cursor-pointer ${
+                        !isAllDay 
+                          ? 'bg-indigo-600 text-white shadow-xs' 
+                          : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                      }`}
+                    >
+                      <Clock className="w-3 h-3" />
+                      <span>Horário Marcado</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsAllDay(true)}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-black transition-all flex items-center gap-1 cursor-pointer ${
+                        isAllDay 
+                          ? 'bg-indigo-600 text-white shadow-xs' 
+                          : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                      }`}
+                    >
+                      <Sun className="w-3 h-3" />
+                      <span>Dia Inteiro</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Inputs de Horário */}
+                {!isAllDay ? (
+                  <div className="space-y-2.5 animate-in fade-in duration-200">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {/* Horário de Início */}
+                      <div className="space-y-1 bg-white p-2.5 rounded-xl border border-indigo-200/80 shadow-2xs">
+                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-600 flex items-center gap-1">
+                          <Sun className="w-3 h-3 text-amber-500" />
+                          <span>Horário de Início</span>
+                        </label>
+                        <div className="relative flex items-center">
+                          <input
+                            type="time"
+                            value={startTime}
+                            onChange={e => {
+                              setStartTime(e.target.value);
+                              setIsAllDay(false);
+                            }}
+                            className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50/50 font-mono font-black text-sm text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Horário de Término */}
+                      <div className="space-y-1 bg-white p-2.5 rounded-xl border border-indigo-200/80 shadow-2xs">
+                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-600 flex items-center gap-1">
+                          <Sunset className="w-3 h-3 text-orange-500" />
+                          <span>Horário de Término</span>
+                        </label>
+                        <div className="relative flex items-center">
+                          <input
+                            type="time"
+                            value={endTime}
+                            onChange={e => {
+                              setEndTime(e.target.value);
+                              setIsAllDay(false);
+                            }}
+                            className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50/50 font-mono font-black text-sm text-slate-900 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all"
+                          />
+                        </div>
+                      </div>
                     </div>
 
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-black uppercase tracking-wider text-indigo-950 block">Horário de Término</label>
-                      <input
-                        type="time"
-                        required={!isAllDay}
-                        value={endTime}
-                        onChange={e => setEndTime(e.target.value)}
-                        className="w-full px-3 py-1.5 rounded-xl border border-indigo-200 bg-white font-bold text-xs text-slate-800 outline-none shadow-2xs"
-                      />
+                    {/* Presets Rápidos de Horário */}
+                    <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                      <span className="text-[9.5px] font-bold text-slate-500 uppercase tracking-wider">Atalhos rápidos:</span>
+                      {[
+                        { label: '08:00 - 12:00 (Manhã)', start: '08:00', end: '12:00' },
+                        { label: '13:00 - 17:00 (Tarde)', start: '13:00', end: '17:00' },
+                        { label: '08:00 - 17:00 (Comercial)', start: '08:00', end: '17:00' },
+                        { label: '19:00 - 22:00 (Noite)', start: '19:00', end: '22:00' }
+                      ].map(preset => (
+                        <button
+                          key={preset.label}
+                          type="button"
+                          onClick={() => {
+                            setStartTime(preset.start);
+                            setEndTime(preset.end);
+                            setIsAllDay(false);
+                          }}
+                          className={`px-2 py-0.5 rounded-lg text-[9.5px] font-bold transition-all border cursor-pointer ${
+                            startTime === preset.start && endTime === preset.end && !isAllDay
+                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
+                              : 'bg-white text-slate-700 border-slate-200/90 hover:border-indigo-300 hover:bg-indigo-50/60'
+                          }`}
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
                     </div>
-                  </motion.div>
+                  </div>
+                ) : (
+                  <div className="p-3 bg-white/90 rounded-xl border border-dashed border-indigo-200 text-center animate-in fade-in duration-200 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5 text-left">
+                      <div className="w-8 h-8 rounded-lg bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600 shrink-0">
+                        <Sun className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-slate-800">Compromisso de Dia Inteiro</p>
+                        <p className="text-[10px] text-slate-500">Este evento não possui horário fixo e permanecerá ativo durante todo o dia.</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsAllDay(false)}
+                      className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-[10.5px] font-black uppercase tracking-wider transition-all cursor-pointer shrink-0"
+                    >
+                      Definir Horário
+                    </button>
+                  </div>
                 )}
-              </AnimatePresence>
+              </div>
 
-              {/* Recorrência Anual */}
+              {/* 3. RECORRÊNCIA ANUAL */}
               {(type !== 'Aniversário' && type !== 'Feriado Municipal') ? (
                 <div
                   onClick={() => setIsRecurring(!isRecurring)}

@@ -29,13 +29,13 @@ export const DefinirDataModal: React.FC<DefinirDataModalProps> = ({
     const [vagas, setVagas] = useState<ConsultaVaga[]>([]);
     const [confirmedBookings, setConfirmedBookings] = useState<ConsultaAgendamento[]>([]);
     const [selectedDate, setSelectedDate] = useState<string>('');
-    const [selectedTime, setSelectedTime] = useState<string>('');
+    const [selectedSlotId, setSelectedSlotId] = useState<string>('');
 
     // Carregar vagas livres do procedimento
     useEffect(() => {
         if (!isOpen || !booking) {
             setSelectedDate('');
-            setSelectedTime('');
+            setSelectedSlotId('');
             setErrorMsg('');
             setSuccessMsg('');
             setVagas([]);
@@ -103,22 +103,32 @@ export const DefinirDataModal: React.FC<DefinirDataModalProps> = ({
     useEffect(() => {
         if (availableDates.length > 0 && (!selectedDate || !datesMap[selectedDate])) {
             setSelectedDate(availableDates[0]);
-            setSelectedTime('');
+            setSelectedSlotId('');
         }
     }, [availableDates]);
 
-    // Horários da data selecionada
+    // Horários e slots da data selecionada
     const timesForSelectedDate = useMemo(() => {
         if (!selectedDate || !datesMap[selectedDate]) return [];
         return datesMap[selectedDate];
     }, [selectedDate, datesMap]);
 
-    // Auto-selecionar o primeiro horário se houver
+    // Auto-selecionar apenas a primeira vaga do dia
     useEffect(() => {
-        if (timesForSelectedDate.length > 0 && (!selectedTime || !timesForSelectedDate.some(s => s.hora === selectedTime))) {
-            setSelectedTime(timesForSelectedDate[0].hora);
+        if (timesForSelectedDate.length > 0) {
+            if (!selectedSlotId || !timesForSelectedDate.some(s => s.id === selectedSlotId)) {
+                setSelectedSlotId(timesForSelectedDate[0].id);
+            }
+        } else {
+            setSelectedSlotId('');
         }
     }, [timesForSelectedDate]);
+
+    const selectedSlot = useMemo(() => {
+        return timesForSelectedDate.find(s => s.id === selectedSlotId) || null;
+    }, [timesForSelectedDate, selectedSlotId]);
+
+    const selectedTime = selectedSlot ? selectedSlot.hora : '';
 
     if (!isOpen || !booking) return null;
 
@@ -136,8 +146,8 @@ export const DefinirDataModal: React.FC<DefinirDataModalProps> = ({
             setErrorMsg('Por favor, selecione uma data para o agendamento.');
             return;
         }
-        if (!selectedTime) {
-            setErrorMsg('Por favor, selecione um horário para o agendamento.');
+        if (!selectedSlot) {
+            setErrorMsg('Por favor, selecione uma vaga de horário para o agendamento.');
             return;
         }
 
@@ -146,7 +156,7 @@ export const DefinirDataModal: React.FC<DefinirDataModalProps> = ({
         setSuccessMsg('');
 
         try {
-            await db.confirmarDataAgendamento(booking.id, selectedDate, selectedTime);
+            await db.confirmarDataAgendamento(booking.id, selectedDate, selectedSlot.hora);
             setSuccessMsg('Agendamento confirmado com sucesso!');
 
             setTimeout(() => {
@@ -297,7 +307,7 @@ export const DefinirDataModal: React.FC<DefinirDataModalProps> = ({
                                                 type="button"
                                                 onClick={() => {
                                                     setSelectedDate(dateStr);
-                                                    setSelectedTime('');
+                                                    setSelectedSlotId('');
                                                 }}
                                                 className={`p-3 rounded-2xl border text-left transition-all duration-200 cursor-pointer relative ${
                                                     isSelected
@@ -328,31 +338,47 @@ export const DefinirDataModal: React.FC<DefinirDataModalProps> = ({
                             {selectedDate && timesForSelectedDate.length > 0 && (
                                 <div className="pt-2 animate-in fade-in duration-150">
                                     <label className="block text-[11px] font-black uppercase tracking-wider text-slate-700 mb-2">
-                                        2. Selecione o Horário ({timesForSelectedDate.length} disponíveis neste dia)
+                                        2. Selecione o Horário ({timesForSelectedDate.length} {timesForSelectedDate.length === 1 ? 'vaga disponível' : 'vagas disponíveis'} neste dia)
                                     </label>
-                                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5">
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                                         {timesForSelectedDate.map(slot => {
-                                            const isSelected = selectedTime === slot.hora;
+                                            const isSelected = selectedSlotId === slot.id;
                                             const hourNumber = parseInt(slot.hora.substring(0, 2), 10);
                                             const isMorning = hourNumber < 12;
+
+                                            // Contar índice quando há múltiplas vagas no mesmo horário
+                                            const sameTimeSlots = timesForSelectedDate.filter(s => s.hora.substring(0, 5) === slot.hora.substring(0, 5));
+                                            const isMultiSlot = sameTimeSlots.length > 1;
+                                            const slotIndexForTime = isMultiSlot ? sameTimeSlots.findIndex(s => s.id === slot.id) + 1 : null;
 
                                             return (
                                                 <button
                                                     key={slot.id}
                                                     type="button"
-                                                    onClick={() => setSelectedTime(slot.hora)}
-                                                    className={`py-2.5 px-3 rounded-2xl border font-mono font-black text-xs transition-all duration-200 flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs ${
+                                                    onClick={() => setSelectedSlotId(slot.id)}
+                                                    className={`py-2.5 px-3 rounded-2xl border font-black text-xs transition-all duration-200 flex items-center justify-between gap-1.5 cursor-pointer shadow-2xs ${
                                                         isSelected
-                                                            ? 'bg-emerald-600 border-emerald-600 text-white shadow-md shadow-emerald-600/25 scale-[1.02]'
-                                                            : 'bg-white border-slate-200 text-slate-800 hover:border-emerald-300 hover:bg-emerald-50/50'
+                                                            ? 'bg-emerald-600 border-emerald-600 text-white shadow-md shadow-emerald-600/25 scale-[1.02] ring-2 ring-emerald-600/30'
+                                                            : 'bg-white border-slate-200 text-slate-800 hover:border-emerald-300 hover:bg-emerald-50/40'
                                                     }`}
                                                 >
-                                                    {isMorning ? (
-                                                        <Sun className={`w-3 h-3 ${isSelected ? 'text-amber-200' : 'text-amber-500'}`} />
-                                                    ) : (
-                                                        <Sunset className={`w-3 h-3 ${isSelected ? 'text-orange-200' : 'text-orange-500'}`} />
-                                                    )}
-                                                    <span>{slot.hora.substring(0, 5)}</span>
+                                                    <div className="flex items-center gap-1.5 font-mono">
+                                                        {isMorning ? (
+                                                            <Sun className={`w-3.5 h-3.5 ${isSelected ? 'text-amber-200' : 'text-amber-500'}`} />
+                                                        ) : (
+                                                            <Sunset className={`w-3.5 h-3.5 ${isSelected ? 'text-orange-200' : 'text-orange-500'}`} />
+                                                        )}
+                                                        <span className="text-xs">{slot.hora.substring(0, 5)}</span>
+                                                    </div>
+                                                    {isMultiSlot ? (
+                                                        <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-extrabold uppercase tracking-wider ${
+                                                            isSelected ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'
+                                                        }`}>
+                                                            Vaga {slotIndexForTime}
+                                                        </span>
+                                                    ) : isSelected ? (
+                                                        <Check className="w-3.5 h-3.5 text-white" />
+                                                    ) : null}
                                                 </button>
                                             );
                                         })}

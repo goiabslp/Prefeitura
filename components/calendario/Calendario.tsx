@@ -97,12 +97,33 @@ export const Calendario: React.FC<CalendarioProps> = ({ onBack, userRole, curren
 
     // Detecção e sincronização de Rotas (/Calendario/Novo, /Calendario/Editar)
     useEffect(() => {
-        const checkRoute = () => {
-            const path = window.location.pathname.toLowerCase();
-            if (path.startsWith('/calendario/novo') || path.startsWith('/calendario/editar')) {
+        const checkRoute = async () => {
+            const rawPath = window.location.pathname;
+            const path = rawPath.toLowerCase();
+            if (path.startsWith('/calendario/novo')) {
                 setIsEventPageOpen(true);
+            } else if (path.startsWith('/calendario/editar')) {
+                setIsEventPageOpen(true);
+                const parts = rawPath.split('/').filter(Boolean);
+                // Exemplo: ['Calendario', 'Editar', '7edc3332-a5f5-41eb-a99a-acf1c4a02547', 'Programacao']
+                const eventId = parts[2];
+                if (eventId && (!eventToEdit || eventToEdit.id !== eventId)) {
+                    try {
+                        const { data, error } = await supabase
+                            .from('calendar_events')
+                            .select('*')
+                            .eq('id', eventId)
+                            .single();
+                        if (data && !error) {
+                            setEventToEdit(data as CalendarEvent);
+                        }
+                    } catch (err) {
+                        console.error('Erro ao carregar evento da URL:', err);
+                    }
+                }
             } else if (path === '/calendario') {
                 setIsEventPageOpen(false);
+                setEventToEdit(null);
             }
         };
 

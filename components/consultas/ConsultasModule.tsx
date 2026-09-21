@@ -3,7 +3,6 @@ import React, { useState, useEffect } from 'react';
 import { User, AppState } from '../../types';
 import { ArrowLeft, PlusCircle, Activity, History, Database, Users, ShieldCheck, CalendarClock, CalendarCheck } from 'lucide-react';
 import { NovoAgendamentoScreen } from './NovoAgendamentoScreen';
-import { AgendarScreen } from './AgendarScreen';
 import { AcompanharScreen } from './AcompanharScreen';
 import { DadosScreen } from './DadosScreen';
 import { LiberarVagasScreen } from './LiberarVagasScreen';
@@ -47,7 +46,6 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
 
     const isNovoAgendamentoActive = isModuleActive('sub_consultas_novo_agendamento') || isModuleActive('parent_consultas_novo_agendamento');
     const isLiberarVagasActive = isModuleActive('sub_consultas_liberar_vagas') !== false || isModuleActive('parent_consultas_liberar_vagas') !== false;
-    const isAgendarActive = isModuleActive('sub_consultas_agendar') !== false || isModuleActive('parent_consultas_agendar') !== false;
     const isAcompanharActive = isModuleActive('sub_consultas_acompanhar') || isModuleActive('parent_consultas_acompanhar');
     const isDadosActive = isModuleActive('sub_consultas_dados') || isModuleActive('parent_consultas_dados');
     const isPacientesActive = isModuleActive('sub_consultas_pacientes') || isModuleActive('parent_consultas_pacientes');
@@ -55,7 +53,6 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
 
     const canAccessNovoAgendamento = userCanAccessSubmodule(currentUser, 'parent_consultas', 'sub_consultas_novo_agendamento', isMobileViewport ? mobileModuleStatus : moduleStatus);
     const canAccessLiberarVagas = userCanAccessSubmodule(currentUser, 'parent_consultas', 'sub_consultas_liberar_vagas', isMobileViewport ? mobileModuleStatus : moduleStatus);
-    const canAccessAgendar = userCanAccessSubmodule(currentUser, 'parent_consultas', 'sub_consultas_agendar', isMobileViewport ? mobileModuleStatus : moduleStatus);
     const canAccessAcompanhar = userCanAccessSubmodule(currentUser, 'parent_consultas', 'sub_consultas_acompanhar', isMobileViewport ? mobileModuleStatus : moduleStatus);
     const canAccessDados = userCanAccessSubmodule(currentUser, 'parent_consultas', 'sub_consultas_dados', isMobileViewport ? mobileModuleStatus : moduleStatus);
     const canAccessPacientes = userCanAccessSubmodule(currentUser, 'parent_consultas', 'sub_consultas_pacientes', isMobileViewport ? mobileModuleStatus : moduleStatus);
@@ -63,19 +60,17 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
 
     const showNovoAgendamento = (subView === 'novo-agendamento' || (subView?.startsWith('novo-agendamento') ?? false) || subView === 'vagas-reservadas') && canAccessNovoAgendamento;
     const showLiberarVagas = (subView === 'liberar-vagas') && canAccessLiberarVagas;
-    const showAgendar = (subView === 'agendar') && canAccessAgendar;
     const showAcompanhar = (subView === 'acompanhar' || subView === 'definir-agenda') && canAccessAcompanhar;
     const showDados = (subView === 'dados' || (subView?.startsWith('dados') ?? false)) && canAccessDados;
     const showPacientes = (subView === 'pacientes') && canAccessPacientes;
     const showGestor = (subView === 'gestor') && canAccessGestor;
     
-    const isSubView = showNovoAgendamento || showLiberarVagas || showAgendar || showAcompanhar || showDados || showPacientes || showGestor;
+    const isSubView = showNovoAgendamento || showLiberarVagas || showAcompanhar || showDados || showPacientes || showGestor;
 
     const renderMainScreen = () => {
         const visibleCardsCount = [
             canAccessNovoAgendamento,
             canAccessLiberarVagas,
-            canAccessAgendar,
             canAccessAcompanhar,
             canAccessPacientes,
             canAccessDados,
@@ -83,7 +78,7 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
         ].filter(Boolean).length;
 
         const gridClass = visibleCardsCount >= 6
-            ? "w-full grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-7 gap-2.5 md:gap-3.5 max-w-7xl mb-4"
+            ? "w-full grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 xl:grid-cols-6 gap-2.5 md:gap-3.5 max-w-7xl mb-4"
             : visibleCardsCount === 5
             ? "w-full grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 max-w-6xl mb-4"
             : "w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 max-w-5xl mb-4";
@@ -162,29 +157,7 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
                             </button>
                         )}
 
-                        {/* Card 3: Agendar */}
-                        {canAccessAgendar && (
-                            <button
-                                onClick={() => onNavigate('consultas:agendar')}
-                                className="group relative w-full min-h-[115px] md:min-h-[135px] rounded-[2rem] bg-gradient-to-br from-white to-slate-50 border border-slate-100 shadow-[0_10px_35px_rgba(0,0,0,0.03)] hover:shadow-[0_25px_60px_rgba(16,185,129,0.15)] hover:border-emerald-200 hover:from-white hover:to-emerald-50/20 hover:-translate-y-1.5 active:scale-95 transition-all duration-300 ease-out flex flex-col items-center justify-center text-center overflow-hidden p-3.5 md:p-4 cursor-pointer shrink-0"
-                            >
-                                <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
-                                <div className="absolute bottom-0 left-0 w-20 h-20 bg-emerald-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
-
-                                <div className="w-11 h-11 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center mb-2 text-white group-hover:scale-110 group-hover:rotate-6 transition-all duration-300 shadow-md shadow-emerald-500/30 ring-4 ring-white">
-                                    <CalendarCheck className="w-5.5 h-5.5" />
-                                </div>
-
-                                <h3 className="text-sm md:text-base font-extrabold text-slate-800 mb-0.5 group-hover:text-slate-900 tracking-tight uppercase text-center">
-                                    Agendar
-                                </h3>
-                                <p className="text-[9px] md:text-[10px] font-bold text-slate-400 group-hover:text-emerald-600 transition-colors uppercase tracking-wider text-center">
-                                    Vagas Disponíveis
-                                </p>
-                            </button>
-                        )}
-
-                        {/* Card 4: Acompanhar */}
+                        {/* Card 3: Acompanhar */}
                         {canAccessAcompanhar && (
                             <button
                                 onClick={() => onNavigate('consultas:acompanhar')}
@@ -273,7 +246,7 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
                             </button>
                         )}
 
-                        {!canAccessNovoAgendamento && !canAccessLiberarVagas && !canAccessAgendar && !canAccessAcompanhar && !canAccessPacientes && !canAccessDados && !canAccessGestor && (
+                        {!canAccessNovoAgendamento && !canAccessLiberarVagas && !canAccessAcompanhar && !canAccessPacientes && !canAccessDados && !canAccessGestor && (
                             <div className="col-span-full text-center p-8 bg-white border border-slate-200 rounded-[2rem] shadow-sm max-w-md mx-auto">
                                 <Activity className="w-12 h-12 text-slate-300 mx-auto mb-4" />
                                 <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Regulação & Consultas</h3>
@@ -305,13 +278,6 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
                             currentUser={currentUser}
                             onBack={() => onNavigate('consultas')}
                             onNavigate={onNavigate}
-                        />
-                    ) : showAgendar ? (
-                        <AgendarScreen
-                            currentUser={currentUser}
-                            onBack={() => onNavigate('consultas')}
-                            onNavigate={onNavigate}
-                            appState={appState}
                         />
                     ) : showAcompanhar ? (
                         <AcompanharScreen

@@ -45,7 +45,8 @@ import {
   Sliders,
   Move,
   RotateCcw,
-  Check
+  Check,
+  Plus
 } from 'lucide-react';
 
 interface NoticiasModuleProps {
@@ -938,6 +939,22 @@ export const NoticiasModule: React.FC<NoticiasModuleProps> = ({
               <span className="hidden sm:inline">Conhecer o módulo</span>
             </button>
 
+            {/* Botão Nova Matéria */}
+            <button
+              type="button"
+              onClick={() => {
+                window.history.pushState({ page: 'novo-evento' }, '', '/Calendario/Novo/Identificacao');
+                if (onNavigate) {
+                  onNavigate('calendario:novo:identificacao');
+                }
+              }}
+              className="px-2.5 sm:px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white text-xs font-black transition-all active:scale-95 cursor-pointer shadow-md flex items-center gap-1.5 shrink-0"
+              title="Criar nova matéria oficial para o Jornal"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Nova Matéria</span>
+            </button>
+
             {/* Atualizar */}
             <button
               onClick={() => loadBoletim()}
@@ -1171,6 +1188,21 @@ export const NoticiasModule: React.FC<NoticiasModuleProps> = ({
                   </div>
                   
                   <div className="flex items-center gap-2 font-sans">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        window.history.pushState({ page: 'novo-evento' }, '', '/Calendario/Novo/Identificacao');
+                        if (onNavigate) {
+                          onNavigate('calendario:novo:identificacao');
+                        }
+                      }}
+                      className="px-3 py-1 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 shadow-sm"
+                      title="Criar nova reportagem no Jornal Oficial"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Nova Matéria</span>
+                    </button>
+
                     {isAdmin && (
                       <button
                         type="button"
