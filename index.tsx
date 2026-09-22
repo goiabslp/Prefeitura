@@ -7,12 +7,7 @@ import { SystemSettingsProvider } from './contexts/SystemSettingsContext';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister';
 import { queryClient } from './services/queryClient';
-import { errorMonitor } from './services/errorMonitorService';
 import { GlobalErrorBoundary } from './components/common/GlobalErrorBoundary';
-import { GlobalErrorModal } from './components/common/GlobalErrorModal';
-
-// Inicializa os interceptores globais de runtime JS, console e promises
-errorMonitor.init();
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -37,7 +32,6 @@ root.render(
             }}
           >
             <App />
-            <GlobalErrorModal />
           </PersistQueryClientProvider>
         </SystemSettingsProvider>
       </AuthProvider>

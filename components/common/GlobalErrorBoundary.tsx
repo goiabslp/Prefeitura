@@ -1,5 +1,4 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
-import { errorMonitor } from '../../services/errorMonitorService';
 
 interface Props {
     children: ReactNode;
@@ -21,16 +20,11 @@ export class GlobalErrorBoundary extends Component<Props, State> {
     }
 
     public componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
-        // Notifica o serviço global de monitoramento de erro
-        errorMonitor.captureError(error, {
-            type: 'Erro de Renderização React',
-            stack: errorInfo.componentStack || error.stack
-        });
+        console.warn('[GlobalErrorBoundary] Erro de renderização capturado:', error.message);
     }
 
     private handleReset = () => {
         this.setState({ hasError: false, error: null });
-        errorMonitor.dismiss();
     };
 
     public render(): ReactNode {

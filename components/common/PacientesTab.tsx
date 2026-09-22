@@ -257,24 +257,24 @@ export const PacientesTab: React.FC<PacientesTabProps> = ({
     }, [patients, patientSearch, isMobile]);
 
     return (
-        <div className="flex-1 flex flex-col h-full min-h-0 space-y-3.5 overflow-hidden">
-            {/* Header Mobile (Limpa, sem cortes, apenas 1 campo de busca) */}
-            <div className="block md:hidden bg-white rounded-3xl p-3 shadow-sm border border-slate-200/80 space-y-2.5 shrink-0 overflow-hidden">
+        <div className="flex-1 flex flex-col h-full min-h-0 gap-2 overflow-hidden">
+            {/* Header Mobile (Ultracompacto, sem cortes, 1 campo de busca limpo) */}
+            <div className="block md:hidden bg-white rounded-2xl p-2.5 shadow-2xs border border-slate-200/90 space-y-2 shrink-0 overflow-hidden">
                 <div className="flex items-center justify-between gap-2 w-full min-w-0">
                     <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
                         {onBack && (
                             <button
                                 onClick={onBack}
-                                className="p-2 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-600 transition-all cursor-pointer shrink-0"
+                                className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all cursor-pointer shrink-0"
                                 title="Voltar"
                             >
-                                <ArrowLeft className="w-4.5 h-4.5" />
+                                <ArrowLeft className="w-4 h-4" />
                             </button>
                         )}
-                        <div className={`w-8.5 h-8.5 rounded-2xl border flex items-center justify-center shadow-2xs shrink-0 ${
+                        <div className={`w-7.5 h-7.5 rounded-xl border flex items-center justify-center shadow-2xs shrink-0 ${
                             accentColor === 'pink' ? 'bg-pink-50 border-pink-200/80 text-pink-600' : 'bg-sky-50 border-sky-200/80 text-sky-600'
                         }`}>
-                            <Users className="w-4 h-4" />
+                            <Users className="w-3.5 h-3.5" />
                         </div>
                         <h2 className="text-xs font-black text-slate-900 uppercase tracking-tight truncate min-w-0">
                             {title}
@@ -283,7 +283,7 @@ export const PacientesTab: React.FC<PacientesTabProps> = ({
 
                     <button
                         onClick={() => handleOpenPatientModal()}
-                        className={`px-3 py-1.5 text-white font-black rounded-2xl shadow-md active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center gap-1 cursor-pointer shrink-0 ${
+                        className={`px-2.5 py-1 text-white font-black rounded-xl shadow-sm active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center gap-1 cursor-pointer shrink-0 ${
                             accentColor === 'pink' ? 'bg-pink-600 hover:bg-pink-700 shadow-pink-500/20' : 'bg-sky-600 hover:bg-sky-700 shadow-sky-500/20'
                         }`}
                     >
@@ -296,16 +296,16 @@ export const PacientesTab: React.FC<PacientesTabProps> = ({
                     <input
                         type="text"
                         placeholder="Buscar por nome, CPF ou SUS..."
-                        className="w-full bg-slate-50 border border-slate-200/90 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 rounded-2xl pl-9 pr-9 py-2 text-xs font-bold transition-all text-slate-900 placeholder:text-slate-400 shadow-2xs"
+                        className="w-full bg-slate-50 border border-slate-200/90 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/10 rounded-xl pl-8 pr-8 py-1.5 text-xs font-bold transition-all text-slate-900 placeholder:text-slate-400 shadow-2xs"
                         value={patientSearch}
                         onChange={(e) => setPatientSearch(e.target.value)}
                     />
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-3.5 h-3.5" />
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 w-3.5 h-3.5" />
                     {patientSearch && (
                         <button
                             type="button"
                             onClick={() => setPatientSearch('')}
-                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-600 p-0.5 rounded-full hover:bg-slate-200/60 transition-colors cursor-pointer"
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-600 p-0.5 rounded-full hover:bg-slate-200/60 transition-colors cursor-pointer"
                             title="Limpar busca"
                         >
                             <X className="w-3.5 h-3.5" />
@@ -314,55 +314,54 @@ export const PacientesTab: React.FC<PacientesTabProps> = ({
                 </div>
             </div>
 
-            {/* Header Desktop (Rigorosamente na MESMA LINHA) */}
-            <div className="hidden md:flex bg-white rounded-3xl p-3.5 md:px-5 shadow-sm border border-slate-200/80 items-center justify-between gap-3 shrink-0">
+            {/* Header Desktop (Rigorosamente compacto na MESMA LINHA) */}
+            <div className="hidden md:flex bg-white rounded-2xl py-2 px-3 sm:px-4 shadow-2xs border border-slate-200/90 items-center justify-between gap-3 shrink-0">
                 {/* Esquerda: Voltar + Ícone + Título */}
-                <div className="flex items-center gap-3 shrink-0 min-w-0">
+                <div className="flex items-center gap-2.5 shrink-0 min-w-0">
                     {onBack && (
                         <button
                             onClick={onBack}
-                            className="p-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-600 transition-all cursor-pointer shrink-0"
+                            className="p-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all cursor-pointer shrink-0"
                             title="Voltar"
                         >
-                            <ArrowLeft className="w-5 h-5" />
+                            <ArrowLeft className="w-4 h-4" />
                         </button>
                     )}
-                    <div className={`w-10 h-10 rounded-2xl border flex items-center justify-center shadow-sm shrink-0 ${
+                    <div className={`w-8 h-8 rounded-xl border flex items-center justify-center shadow-2xs shrink-0 ${
                         accentColor === 'pink' ? 'bg-pink-50 border-pink-200/80 text-pink-600' : 'bg-sky-50 border-sky-200/80 text-sky-600'
                     }`}>
-                        <Users className="w-5 h-5" />
+                        <Users className="w-4 h-4" />
                     </div>
-                    <div className="hidden lg:block min-w-0">
-                        <h2 className="text-base font-black text-slate-900 uppercase tracking-tight leading-none truncate">
+                    <div className="min-w-0">
+                        <h2 className="text-xs sm:text-sm font-black text-slate-900 uppercase tracking-tight leading-none truncate">
                             {title}
                         </h2>
-                        <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider mt-0.5 truncate">
+                        <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-0.5 leading-none truncate">
                             {subtitle}
                         </p>
-                    </div>
-                    <div className="lg:hidden min-w-0">
-                        <h2 className="text-sm font-black text-slate-900 uppercase tracking-tight leading-none truncate">
-                            {title}
-                        </h2>
                     </div>
                 </div>
 
                 {/* Direita: Busca + Contador + Botão Novo Paciente na mesma linha */}
-                <div className="flex items-center gap-2.5 shrink-0">
-                    <div className="relative w-44 sm:w-64 lg:w-80">
+                <div className="flex items-center gap-2 shrink-0">
+                    <div className="relative w-48 sm:w-64 lg:w-80">
                         <input
                             type="text"
                             placeholder="Buscar por Nome, Apelido, CPF ou Cartão SUS..."
-                            className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs font-semibold placeholder:text-slate-400 focus:bg-white focus:border-sky-500 focus:ring-2 focus:ring-sky-500/15 transition-all text-slate-900 shadow-2xs"
+                            className={`w-full bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-7 py-1.5 text-xs font-bold placeholder:text-slate-400 focus:bg-white transition-all text-slate-900 shadow-2xs ${
+                                accentColor === 'pink'
+                                    ? 'focus:border-pink-500 focus:ring-2 focus:ring-pink-500/15'
+                                    : 'focus:border-sky-500 focus:ring-2 focus:ring-sky-500/15'
+                            }`}
                             value={patientSearch}
                             onChange={(e) => setPatientSearch(e.target.value)}
                         />
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 w-3.5 h-3.5" />
                         {patientSearch && (
                             <button
                                 type="button"
                                 onClick={() => setPatientSearch('')}
-                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-600 p-0.5 rounded-full hover:bg-slate-200/60 transition-colors cursor-pointer"
+                                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-600 p-0.5 rounded-full hover:bg-slate-200/60 transition-colors cursor-pointer"
                                 title="Limpar busca"
                             >
                                 <X className="w-3.5 h-3.5" />
@@ -370,8 +369,12 @@ export const PacientesTab: React.FC<PacientesTabProps> = ({
                         )}
                     </div>
 
-                    <div className="px-3.5 py-2 bg-sky-50 border border-sky-200/80 rounded-xl flex items-center gap-1.5 text-sky-700 font-extrabold text-xs shrink-0 shadow-2xs">
-                        <Users className="w-3.5 h-3.5 text-sky-600" />
+                    <div className={`px-2.5 py-1 rounded-xl flex items-center gap-1.5 font-black text-[11px] shrink-0 shadow-2xs border ${
+                        accentColor === 'pink'
+                            ? 'bg-pink-50 border-pink-200/80 text-pink-700'
+                            : 'bg-sky-50 border-sky-200/80 text-sky-700'
+                    }`}>
+                        <Users className={`w-3.5 h-3.5 ${accentColor === 'pink' ? 'text-pink-600' : 'text-sky-600'}`} />
                         <span>
                             {patientSearch 
                                 ? `${filteredPatients.length} de ${patients.length}` 
@@ -382,22 +385,22 @@ export const PacientesTab: React.FC<PacientesTabProps> = ({
 
                     <button
                         onClick={() => handleOpenPatientModal()}
-                        className={`px-4 py-2 text-white font-extrabold rounded-xl shadow-md active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                        className={`px-3.5 py-1.5 text-white font-black rounded-xl shadow-sm active:scale-95 transition-all text-xs uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shrink-0 ${
                             accentColor === 'pink' ? 'bg-pink-600 hover:bg-pink-700 shadow-pink-500/20' : 'bg-sky-600 hover:bg-sky-700 shadow-sky-500/20'
                         }`}
                     >
-                        <Plus className="w-4 h-4" /> <span className="whitespace-nowrap">Novo Paciente</span>
+                        <Plus className="w-3.5 h-3.5" /> <span className="whitespace-nowrap">Novo Paciente</span>
                     </button>
                 </div>
             </div>
 
-            {/* Tabela de Pacientes com Rolagem Interna */}
+            {/* Tabela de Pacientes com Rolagem Interna Otimizada */}
             {isMobile && !patientSearch.trim() ? (
-                <div className="flex-1 bg-white border border-slate-200/80 rounded-3xl p-8 flex flex-col items-center justify-center text-center animate-in fade-in duration-300">
-                    <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-sky-50 via-sky-100/60 to-blue-100 border border-sky-200/80 flex items-center justify-center text-sky-600 shadow-inner mb-4">
-                        <Search className="w-8 h-8" />
+                <div className="flex-1 bg-white border border-slate-200/90 rounded-2xl p-6 flex flex-col items-center justify-center text-center animate-in fade-in duration-200 shadow-2xs">
+                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-slate-50 to-slate-100 border border-slate-200 flex items-center justify-center text-slate-500 shadow-inner mb-3">
+                        <Search className="w-6 h-6" />
                     </div>
-                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight mb-1">
+                    <h3 className="text-base font-black text-slate-900 uppercase tracking-tight mb-1">
                         Qual paciente você procura?
                     </h3>
                     <p className="text-xs font-semibold text-slate-500 max-w-md">
@@ -405,56 +408,60 @@ export const PacientesTab: React.FC<PacientesTabProps> = ({
                     </p>
                 </div>
             ) : filteredPatients.length > 0 ? (
-                <div className="flex-1 bg-white border border-slate-200 rounded-2xl overflow-y-auto min-h-0 shadow-sm">
+                <div className="flex-1 bg-white border border-slate-200/90 rounded-2xl overflow-y-auto min-h-0 shadow-2xs">
                     <table className="w-full text-left border-collapse">
-                        <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-100 shadow-sm">
+                        <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200/80 shadow-2xs">
                             <tr className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
-                                <th className="p-4">Nome</th>
-                                <th className="p-4">CPF</th>
-                                <th className="p-4">Nascimento</th>
-                                <th className="p-4 text-right">Ações</th>
+                                <th className="py-2.5 px-3 sm:px-4">Nome</th>
+                                <th className="py-2.5 px-3 sm:px-4">CPF</th>
+                                <th className="py-2.5 px-3 sm:px-4">Nascimento</th>
+                                <th className="py-2.5 px-3 sm:px-4 text-right">Ações</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-700">
                             {filteredPatients.map(p => (
-                                <tr key={p.id} className="hover:bg-slate-50/50 transition-colors">
-                                    <td className="p-4">
-                                        <div className="flex items-center gap-2.5 flex-wrap">
-                                            <span className="font-extrabold text-slate-900">{formatPatientName(p)}</span>
+                                <tr key={p.id} className="hover:bg-slate-50/80 transition-colors group">
+                                    <td className="py-2 px-3 sm:px-4">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <span className="font-black text-slate-900 text-xs tracking-tight">{formatPatientName(p)}</span>
                                             {isPatientIncomplete(p) && (
                                                 <span 
-                                                    className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200/80 shrink-0 shadow-2xs"
+                                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[8.5px] font-black uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200/90 shrink-0 shadow-2xs"
                                                     title="Cadastro incompleto: possui campos obrigatórios pendentes (Telefone, Bairro, Rua, Cidade, SUS ou ACS)"
                                                 >
-                                                    <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0" />
+                                                    <AlertTriangle className="w-2.5 h-2.5 text-amber-500 shrink-0" />
                                                     Incompleto
                                                 </span>
                                             )}
                                         </div>
                                     </td>
-                                    <td className="p-4">{p.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}</td>
-                                    <td className="p-4">{new Date(p.birth_date + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
-                                    <td className="p-4 text-right">
-                                        <div className="flex items-center justify-end gap-2">
+                                    <td className="py-2 px-3 sm:px-4 font-mono font-bold text-slate-600 text-xs">
+                                        {p.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}
+                                    </td>
+                                    <td className="py-2 px-3 sm:px-4 font-bold text-slate-600 text-xs">
+                                        {new Date(p.birth_date + 'T00:00:00').toLocaleDateString('pt-BR')}
+                                    </td>
+                                    <td className="py-2 px-3 sm:px-4 text-right">
+                                        <div className="flex items-center justify-end gap-1.5">
                                             <button
                                                 onClick={() => handleOpenHistory(p)}
-                                                className="px-2.5 py-1 text-slate-500 hover:text-sky-600 hover:bg-sky-50 border border-slate-200 rounded-lg text-[10px] uppercase font-bold transition-all cursor-pointer"
+                                                className="px-2.5 py-1 text-slate-600 hover:text-sky-700 hover:bg-sky-50 border border-slate-200 rounded-lg text-[10px] uppercase font-black transition-all cursor-pointer"
                                             >
                                                 Histórico
                                             </button>
                                             <button
                                                 onClick={() => handleOpenPatientModal(p)}
-                                                className="p-1.5 text-amber-600 hover:text-white hover:bg-amber-500 border border-amber-100 hover:border-amber-500 rounded-lg transition-all cursor-pointer"
+                                                className="p-1 text-amber-600 hover:text-white hover:bg-amber-500 border border-amber-200 hover:border-amber-500 rounded-lg transition-all cursor-pointer"
                                                 title="Editar Dados"
                                             >
-                                                <Edit2 className="w-4 h-4" />
+                                                <Edit2 className="w-3.5 h-3.5" />
                                             </button>
                                             <button
                                                 onClick={() => handleDeletePatient(p.id)}
-                                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 hover:border-rose-200 rounded-lg transition-all cursor-pointer"
+                                                className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 hover:border-rose-200 rounded-lg transition-all cursor-pointer"
                                                 title="Excluir Paciente"
                                             >
-                                                <Trash2 className="w-4 h-4" />
+                                                <Trash2 className="w-3.5 h-3.5" />
                                             </button>
                                         </div>
                                     </td>
@@ -464,7 +471,7 @@ export const PacientesTab: React.FC<PacientesTabProps> = ({
                     </table>
                 </div>
             ) : (
-                <div className="flex-1 flex flex-col items-center justify-center text-center text-xs font-bold text-slate-400 py-12 bg-white border border-slate-200 rounded-2xl">
+                <div className="flex-1 flex flex-col items-center justify-center text-center text-xs font-bold text-slate-400 py-12 bg-white border border-slate-200/90 rounded-2xl shadow-2xs">
                     Nenhum paciente encontrado.
                 </div>
             )}

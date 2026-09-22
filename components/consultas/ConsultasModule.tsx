@@ -323,7 +323,7 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
                             onNavigate={onNavigate}
                         />
                     ) : showPacientes ? (
-                        <div className="w-full max-w-[98%] 2xl:max-w-[1536px] mx-auto flex flex-col h-full max-h-full min-h-0 bg-white/95 backdrop-blur-md rounded-[2.5rem] border border-slate-200/80 shadow-[0_20px_60px_rgba(0,0,0,0.06)] overflow-hidden animate-in fade-in duration-300 p-4 md:p-5">
+                        <div className="w-full flex-1 flex flex-col h-full max-h-full min-h-0 bg-white/95 backdrop-blur-md rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden animate-in fade-in duration-200 p-2 sm:p-3">
                             <PacientesTab onBack={() => onNavigate('consultas')} accentColor="sky" />
                         </div>
                     ) : showDados ? (
