@@ -160,6 +160,7 @@ const VIEW_TO_PATH: Record<string, string> = {
   'vehicle-scheduling': '/AgendamentoVeiculos',
   'vehicle-scheduling:agendamento': '/AgendamentoVeiculos',
   'vehicle-scheduling:vs_calendar': '/AgendamentoVeiculos/Agendar',
+  'vehicle-scheduling:vs_novo': '/AgendamentoVeiculos/Agendar/Novo',
   'vehicle-scheduling:vs_day': '/AgendamentoVeiculos/Agendar/Dia',
   'vehicle-scheduling:vs_history': '/AgendamentoVeiculos/Historico',
   'vehicle-scheduling:vs_approvals': '/AgendamentoVeiculos/Aprovacoes',
@@ -4936,6 +4937,7 @@ const App: React.FC = () => {
                 currentUserPermissions={currentUser?.permissions || []}
                 requestedView={(() => {
                   if (activeBlock === 'vs_calendar') return 'calendar';
+                  if (activeBlock === 'vs_novo') return 'novo';
                   if (activeBlock === 'vs_day') return 'day';
                   if (activeBlock === 'vs_history') return 'history';
                   if (activeBlock === 'vs_approvals') return 'approvals';
@@ -4945,6 +4947,7 @@ const App: React.FC = () => {
                 })()}
                 onNavigate={(path) => {
                   if (path === '/AgendamentoVeiculos/Agendar') setActiveBlock('vs_calendar');
+                  else if (path.startsWith('/AgendamentoVeiculos/Agendar/Novo')) setActiveBlock('vs_novo');
                   else if (path.startsWith('/AgendamentoVeiculos/Agendar/Dia')) setActiveBlock('vs_day');
                   else if (path === '/AgendamentoVeiculos/Historico') setActiveBlock('vs_history');
                   else if (path === '/AgendamentoVeiculos/Aprovacoes') setActiveBlock('vs_approvals');

@@ -225,7 +225,7 @@ export type AppPermission =
   | 'sub_art_logos' | 'sub_art_referencias'
   | (string & {});
 
-export type BlockType = 'oficio' | 'compras' | 'diarias' | 'agendamento' | 'abastecimento' | 'vs_calendar' | 'vs_day' | 'vs_history' | 'vs_approvals' | 'vs_consultar' | 'dashboard' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'licitacao' | 'consultas' | 'farmacia' | 'art';
+export type BlockType = 'oficio' | 'compras' | 'diarias' | 'agendamento' | 'abastecimento' | 'vs_calendar' | 'vs_novo' | 'vs_day' | 'vs_history' | 'vs_approvals' | 'vs_consultar' | 'dashboard' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'licitacao' | 'consultas' | 'farmacia' | 'art';
 
 export interface FarmaciaMedicamento {
   id: string;

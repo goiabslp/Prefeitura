@@ -627,252 +627,354 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
   return (
     <div className="flex-1 h-full w-full bg-slate-100 p-4 md:p-6 lg:p-8 overflow-auto custom-scrollbar">
       {!isEditingPage ? (
-        <div className="w-full space-y-6 animate-fade-in">
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-          <div>
+        <div className="w-full space-y-3.5 sm:space-y-5 animate-fade-in pb-12">
+          {/* Header Compacto da Lista */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 bg-white p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-sm">
             <div className="flex items-center gap-3">
               {onBack && (
                 <button
+                  type="button"
                   onClick={onBack}
-                  className="p-2 -ml-2 text-slate-400 hover:text-slate-800 hover:bg-slate-200 rounded-lg transition-all"
+                  className="p-2 sm:p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-all flex items-center justify-center cursor-pointer hover:-translate-x-0.5 shadow-xs shrink-0"
                   title="Voltar"
                 >
-                  <ArrowLeft className="w-6 h-6" />
+                  <ArrowLeft className="w-5 h-5" />
                 </button>
               )}
-              <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">{isAdmin ? 'Gestão de Usuários' : 'Meu Perfil'}</h2>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-xl sm:text-2xl lg:text-3xl font-black text-slate-900 tracking-tight truncate">
+                    {isAdmin ? 'Gestão de Usuários' : 'Meu Perfil'}
+                  </h2>
+                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-indigo-50 text-indigo-700 border border-indigo-100 shrink-0">
+                    {filteredUsers.length} {filteredUsers.length === 1 ? 'usuário' : 'usuários'}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 mt-0.5 truncate hidden sm:block">
+                  {isAdmin ? 'Configuração de acessos, permissões e contas da equipe.' : 'Gerencie seus dados de acesso ao sistema.'}
+                </p>
+              </div>
             </div>
-            <p className="text-slate-500 mt-1">{isAdmin ? 'Configuração de acessos e permissões da equipe.' : 'Gerencie seus dados pessoais de acesso ao sistema.'}</p>
-          </div>
-          {isAdmin && (
-            <button
-              onClick={() => handleOpenNewUser()}
-              className="px-5 py-3 bg-slate-900 hover:bg-indigo-600 text-white font-bold rounded-xl shadow-lg hover:shadow-indigo-500/30 transition-all flex items-center gap-2 cursor-pointer"
-            >
-              <Plus className="w-5 h-5" />
-              Novo Usuário
-            </button>
-          )}
-        </div>
 
-        {isAdmin && (
-          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3">
-            <Search className="w-5 h-5 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Buscar usuário..."
-              className="flex-1 bg-transparent outline-none text-slate-700 font-medium placeholder:text-slate-400"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-        )}
-
-        <div className="grid gap-4 animate-fade-in">
-          {filteredUsers.map((user, index) => {
-            const isCurrentUser = user.id === currentUser.id;
-            return (
-              <div
-                key={user.id}
-                style={{ animationDelay: `${index * 50}ms` }}
-                className={`relative group overflow-hidden p-0 rounded-[2rem] border transition-all duration-300 animate-slide-up
-                  ${isCurrentUser
-                    ? 'bg-gradient-to-br from-indigo-50/80 to-white/50 border-indigo-200/60 shadow-lg shadow-indigo-500/10'
-                    : 'bg-white/60 backdrop-blur-xl border-white/40 shadow-sm hover:shadow-xl hover:shadow-slate-200/50 hover:border-white/80'
-                  }`}
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => handleOpenNewUser()}
+                className="w-full sm:w-auto px-4 sm:px-5 py-2.5 bg-slate-900 hover:bg-indigo-600 text-white font-bold rounded-xl shadow-md hover:shadow-indigo-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer text-xs sm:text-sm active:scale-95 shrink-0"
               >
-                {/* Decorative background flash */}
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000 pointer-events-none" />
+                <Plus className="w-4 h-4" />
+                <span>Novo Usuário</span>
+              </button>
+            )}
+          </div>
 
-                <div className="relative p-6 flex flex-col md:flex-row items-center justify-between gap-6 z-10">
-                  <div className="flex items-center gap-5 w-full md:w-auto">
-                    {/* Iniciais do Usuário com Estilo Moderno */}
-                    <div className={`relative w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-black shadow-inner overflow-hidden shrink-0 group-hover:scale-105 transition-transform duration-300
-                      ${user.role === 'admin' ? 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white' :
-                        user.role === 'compras' ? 'bg-gradient-to-br from-emerald-500 to-teal-500 text-white' :
-                          user.role === 'licitacao' ? 'bg-gradient-to-br from-blue-500 to-cyan-600 text-white' :
-                            user.role === 'marketing' ? 'bg-gradient-to-br from-fuchsia-500 to-pink-600 text-white' :
-                              'bg-gradient-to-br from-slate-700 to-slate-800 text-white'
+          {/* Barra de Busca Rápida */}
+          {isAdmin && (
+            <div className="bg-white px-3.5 py-2.5 sm:px-4 sm:py-3 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-2.5">
+              <Search className="w-4 h-4 text-slate-400 shrink-0" />
+              <input
+                type="text"
+                placeholder="Buscar por nome, sigla, setor ou cargo..."
+                className="flex-1 bg-transparent outline-none text-slate-800 text-xs sm:text-sm font-medium placeholder:text-slate-400"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTerm('')}
+                  className="p-1 text-slate-400 hover:text-slate-600 rounded-lg transition-colors cursor-pointer"
+                  title="Limpar busca"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Grid de Cards de Usuário Compactos */}
+          <div className="grid gap-2.5 sm:gap-3 animate-fade-in">
+            {filteredUsers.map((user, index) => {
+              const isCurrentUser = user.id === currentUser.id;
+              const isBlocked = user.status === 'blocked';
+
+              return (
+                <div
+                  key={user.id}
+                  style={{ animationDelay: `${index * 30}ms` }}
+                  onClick={() => handleOpenEditUser(user)}
+                  className={`relative group p-3 sm:p-4 rounded-2xl border transition-all duration-200 animate-slide-up cursor-pointer hover:shadow-md ${
+                    isCurrentUser
+                      ? 'bg-gradient-to-br from-indigo-50/70 to-white/90 border-indigo-200/80 shadow-xs ring-1 ring-indigo-500/10'
+                      : isBlocked
+                        ? 'bg-slate-50/80 border-slate-200 opacity-75'
+                        : 'bg-white hover:bg-slate-50/50 border-slate-200/80 shadow-xs hover:border-indigo-200'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    {/* Informações Principais + Avatar */}
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      {/* Avatar Compacto */}
+                      <div className={`w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center text-sm sm:text-base font-black text-white shadow-xs shrink-0 ${
+                        user.role === 'admin' ? 'bg-gradient-to-br from-indigo-500 to-purple-600' :
+                        user.role === 'compras' ? 'bg-gradient-to-br from-emerald-500 to-teal-500' :
+                        user.role === 'licitacao' ? 'bg-gradient-to-br from-blue-500 to-cyan-600' :
+                        user.role === 'marketing' ? 'bg-gradient-to-br from-fuchsia-500 to-pink-600' :
+                        'bg-gradient-to-br from-slate-700 to-slate-800'
                       }`}>
-                      {user.name.charAt(0).toUpperCase()}
-                    </div>
-
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <h3 className="font-bold text-lg text-slate-800 tracking-tight">{user.name}</h3>
-                        <span className="text-xs font-semibold text-slate-400">(@{user.username})</span>
-                        {isCurrentUser && (
-                          <span className="px-2 py-0.5 bg-indigo-600 text-white text-[10px] font-black uppercase tracking-wider rounded-lg shadow-lg shadow-indigo-500/30 whitespace-nowrap">
-                            Você
-                          </span>
-                        )}
+                        {(user.name || 'U').charAt(0).toUpperCase()}
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider border backdrop-blur-sm
-                          ${user.role === 'admin' ? 'bg-indigo-50/50 text-indigo-700 border-indigo-100' :
-                            user.role === 'compras' ? 'bg-emerald-50/50 text-emerald-700 border-emerald-100' :
-                            user.role === 'licitacao' ? 'bg-blue-50/50 text-blue-700 border-blue-100' :
-                            user.role === 'marketing' ? 'bg-fuchsia-50/50 text-fuchsia-700 border-fuchsia-100' :
-                            'bg-slate-50/50 text-slate-600 border-slate-200'
+                      {/* Dados Cadastrais */}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <h3 className="font-extrabold text-xs sm:text-sm text-slate-800 tracking-tight truncate max-w-[200px] sm:max-w-none group-hover:text-indigo-600 transition-colors">
+                            {user.name}
+                          </h3>
+                          {user.username && (
+                            <span className="text-[11px] font-bold text-slate-400">
+                              (@{user.username})
+                            </span>
+                          )}
+                          {isCurrentUser && (
+                            <span className="px-1.5 py-0.2 rounded-md bg-indigo-600 text-white text-[9px] font-black uppercase tracking-wider shadow-xs">
+                              Você
+                            </span>
+                          )}
+                          {isBlocked && (
+                            <span className="px-1.5 py-0.2 rounded-md bg-rose-100 text-rose-700 text-[9px] font-black uppercase tracking-wider border border-rose-200">
+                              Bloqueado
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-1.5 flex-wrap mt-1 text-[11px]">
+                          {/* Badge Perfil */}
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold uppercase tracking-wider border ${
+                            user.role === 'admin' ? 'bg-indigo-50 text-indigo-700 border-indigo-100' :
+                            user.role === 'compras' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' :
+                            user.role === 'licitacao' ? 'bg-blue-50 text-blue-700 border-blue-100' :
+                            user.role === 'marketing' ? 'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-100' :
+                            'bg-slate-100 text-slate-600 border-slate-200'
                           }`}>
-                          {user.role === 'admin' && <ShieldCheck className="w-3 h-3" />}
-                          {user.role === 'compras' && <ShoppingCart className="w-3 h-3" />}
-                          {user.role === 'licitacao' && <Gavel className="w-3 h-3" />}
-                          {user.role === 'marketing' && <Megaphone className="w-3 h-3" />}
-                          {user.role === 'collaborator' && <UserIcon className="w-3 h-3" />}
-                          {user.role}
-                        </span>
-
-                        {user.testRole && (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200 shadow-sm">
-                            <FlaskConical className="w-3 h-3 text-amber-500 animate-pulse" />
-                            Teste: {user.testRole}
+                            {user.role === 'admin' && <ShieldCheck className="w-3 h-3" />}
+                            {user.role === 'compras' && <ShoppingCart className="w-3 h-3" />}
+                            {user.role === 'licitacao' && <Gavel className="w-3 h-3" />}
+                            {user.role === 'marketing' && <Megaphone className="w-3 h-3" />}
+                            {user.role === 'collaborator' && <UserIcon className="w-3 h-3" />}
+                            <span>{user.role}</span>
                           </span>
-                        )}
 
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-slate-100/50 text-slate-500 border border-slate-200/50">
-                          {user.jobTitle || 'Sem Cargo'}
-                        </span>
+                          {user.testRole && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200">
+                              <FlaskConical className="w-2.5 h-2.5 text-amber-500" />
+                              <span>Teste: {user.testRole}</span>
+                            </span>
+                          )}
+
+                          {user.jobTitle && (
+                            <span className="text-slate-500 truncate max-w-[150px] sm:max-w-xs font-medium">
+                              • {user.jobTitle}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  {/* Actions - Modernized */}
-                  <div className="flex items-center gap-3 w-full md:w-auto justify-end border-t md:border-t-0 border-slate-100 pt-4 md:pt-0">
-                    {isAdmin && user.id !== currentUser.id && onImpersonateUser && (
+                    {/* Ações Rápidas à Direita */}
+                    <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                      {isAdmin && user.id !== currentUser.id && onImpersonateUser && (
+                        <button
+                          type="button"
+                          onClick={() => setImpersonateModal({ isOpen: true, targetUser: user })}
+                          className="p-2 sm:px-3 sm:py-1.5 rounded-xl bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200/80 transition-all flex items-center gap-1.5 text-xs font-bold cursor-pointer"
+                          title="Acessar como usuário"
+                        >
+                          <UserCheck className="w-4 h-4 text-amber-600" />
+                          <span className="hidden md:inline">Simular</span>
+                        </button>
+                      )}
+
                       <button
                         type="button"
-                        onClick={() => setImpersonateModal({ isOpen: true, targetUser: user })}
-                        className="group/btn relative px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/90 text-amber-900 hover:from-amber-100 hover:to-orange-100 hover:border-amber-300 hover:shadow-md hover:shadow-amber-500/15 hover:-translate-y-0.5 transition-all duration-300 flex items-center gap-2 font-bold text-xs uppercase tracking-wide cursor-pointer"
-                        title="Acessar o sistema com a visão e permissões deste usuário"
+                        onClick={() => handleOpenEditUser(user)}
+                        className="p-2 sm:px-3 sm:py-1.5 rounded-xl bg-indigo-50 sm:bg-white text-indigo-600 border border-indigo-100 sm:border-slate-200 hover:bg-indigo-600 hover:text-white transition-all flex items-center gap-1.5 text-xs font-bold cursor-pointer shadow-xs"
+                        title="Editar Usuário"
                       >
-                        <UserCheck className="w-4 h-4 text-amber-600 group-hover/btn:scale-110 transition-transform" />
-                        <span className="hidden sm:inline">Acessar como usuário</span>
+                        <Edit2 className="w-4 h-4" />
+                        <span className="hidden sm:inline">Editar</span>
                       </button>
+
+                      {isAdmin && user.username !== 'admin' && user.id !== currentUser.id && (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmModal({
+                            isOpen: true,
+                            title: "Excluir Usuário",
+                            message: `Deseja realmente remover o acesso de "${user.name}"? Esta ação é irreversível.`,
+                            type: 'danger',
+                            onConfirm: () => {
+                              onDeleteUser(user.id);
+                              showToast("Usuário removido.");
+                              setConfirmModal({ ...confirmModal, isOpen: false });
+                            }
+                          })}
+                          className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-100 transition-all cursor-pointer"
+                          title="Remover Usuário"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+
+            {filteredUsers.length === 0 && (
+              <div className="bg-white p-8 rounded-2xl border border-slate-200 text-center space-y-3">
+                <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
+                  <Search className="w-6 h-6" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-700 text-sm">Nenhum usuário encontrado</h4>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Não encontramos resultados para "{searchTerm}". Tente outro termo de busca.
+                  </p>
+                </div>
+                {searchTerm && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchTerm('')}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                  >
+                    Limpar Busca
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        /* PÁGINA COMPLETA DE EDIÇÃO/CADASTRO DO USUÁRIO */
+        <div className="w-full space-y-3.5 sm:space-y-5 animate-fade-in pb-12">
+          {/* Header Superior da Página de Edição Compacto */}
+          <div className="bg-white p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-sm space-y-3">
+            {/* Top Bar: Voltar + Rota/Breadcrumb + Status */}
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <button
+                  type="button"
+                  onClick={handleBackToList}
+                  className="p-1.5 sm:p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-all flex items-center justify-center cursor-pointer hover:-translate-x-0.5 shadow-xs shrink-0"
+                  title="Voltar"
+                >
+                  <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
+                </button>
+                <span className="inline-flex items-center gap-1.5 text-[10px] sm:text-xs font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50/90 px-2.5 py-1 rounded-lg border border-indigo-100 shadow-xs truncate">
+                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse shrink-0"></span>
+                  <span className="truncate max-w-[160px] sm:max-w-none">
+                    {editingUser ? `/Admin/Usuarios/Editar/${editingUser.id}/${TAB_SLUGS[activeUserTab]}` : `/Admin/Usuarios/Novo/${TAB_SLUGS[activeUserTab]}`}
+                  </span>
+                </span>
+              </div>
+
+              {editingUser && isAdmin && currentUser.id !== editingUser.id && (
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, status: formData.status === 'blocked' ? 'active' : 'blocked' })}
+                  className={`px-2.5 py-1 rounded-lg text-[10px] sm:text-xs font-bold uppercase tracking-wider transition-all shadow-xs cursor-pointer flex items-center gap-1.5 shrink-0 ${
+                    formData.status === 'blocked'
+                      ? 'bg-rose-100 text-rose-700 border border-rose-200 hover:bg-rose-200'
+                      : 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
+                  }`}
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full ${formData.status === 'blocked' ? 'bg-rose-500' : 'bg-emerald-500 animate-pulse'}`}></span>
+                  <span className="whitespace-nowrap">{formData.status === 'blocked' ? 'Desbloquear' : 'Bloquear'}</span>
+                </button>
+              )}
+            </div>
+
+            {/* Linha Principal: Avatar + Nome/Cargo + Ações Rápidas */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1 border-t border-slate-100">
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                {/* Avatar Compacto */}
+                <div className={`w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center text-base sm:text-lg font-black text-white shadow-xs shrink-0 ${
+                  formData.role === 'admin' ? 'bg-gradient-to-br from-indigo-500 to-purple-600' :
+                  formData.role === 'compras' ? 'bg-gradient-to-br from-emerald-500 to-teal-500' :
+                  formData.role === 'licitacao' ? 'bg-gradient-to-br from-blue-500 to-cyan-600' :
+                  formData.role === 'marketing' ? 'bg-gradient-to-br from-fuchsia-500 to-pink-600' :
+                  'bg-gradient-to-br from-slate-700 to-slate-800'
+                }`}>
+                  {(formData.name || 'U').charAt(0).toUpperCase()}
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <h2 className="text-sm sm:text-lg font-black text-slate-900 tracking-tight truncate leading-tight">
+                    {isAdmin ? (editingUser ? `Editar: ${editingUser.name}` : 'Novo Usuário') : 'Meu Perfil'}
+                  </h2>
+                  <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium truncate mt-0.5">
+                    {formData.username && (
+                      <span className="font-bold text-slate-700">@{formData.username}</span>
                     )}
-
-                    <button
-                      onClick={() => handleOpenEditUser(user)}
-                      className="group/btn relative px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-500 hover:text-indigo-600 hover:border-indigo-200 hover:shadow-lg hover:shadow-indigo-500/10 hover:-translate-y-0.5 transition-all duration-300 flex items-center gap-2 font-bold text-xs uppercase tracking-wide cursor-pointer"
-                    >
-                      <Edit2 className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
-                      <span className="hidden sm:inline">Editar</span>
-                    </button>
-
-                    {isAdmin && user.username !== 'admin' && user.id !== currentUser.id && (
-                      <button
-                        onClick={() => setConfirmModal({
-                          isOpen: true,
-                          title: "Excluir Usuário",
-                          message: `Deseja realmente remover o acesso de "${user.name}"? Esta ação é irreversível.`,
-                          type: 'danger',
-                          onConfirm: () => {
-                            onDeleteUser(user.id);
-                            showToast("Usuário removido.");
-                            setConfirmModal({ ...confirmModal, isOpen: false });
-                          }
-                        })}
-                        className="group/btn relative px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-400 hover:text-red-600 hover:border-red-200 hover:shadow-lg hover:shadow-red-500/10 hover:-translate-y-0.5 transition-all duration-300 flex items-center gap-2 font-bold text-xs uppercase tracking-wide"
-                        title="Remover Acesso"
-                      >
-                        <Trash2 className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
-                        <span className="hidden sm:inline">Excluir</span>
-                      </button>
+                    {formData.jobTitle && (
+                      <>
+                        <span>•</span>
+                        <span className="truncate">{formData.jobTitle}</span>
+                      </>
                     )}
                   </div>
                 </div>
               </div>
-            );
-          })}
-        </div>
-      </div>
-    ) : (
-        /* PÁGINA COMPLETA DE EDIÇÃO/CADASTRO DO USUÁRIO */
-        <div className="w-full space-y-6 animate-fade-in pb-12">
-          {/* Header Superior da Página de Edição */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm">
-            <div className="flex items-center gap-4">
-              <button
-                type="button"
-                onClick={handleBackToList}
-                className="p-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl transition-all flex items-center justify-center cursor-pointer hover:-translate-x-0.5 shadow-sm"
-                title="Voltar para Lista de Usuários"
-              >
-                <ArrowLeft className="w-5 h-5" />
-              </button>
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 px-3 py-1 rounded-lg border border-indigo-100 flex items-center gap-1.5 shadow-sm">
-                    <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>
-                    {editingUser ? `/Admin/Usuarios/Editar/${editingUser.id}/${TAB_SLUGS[activeUserTab]}` : `/Admin/Usuarios/Novo/${TAB_SLUGS[activeUserTab]}`}
-                  </span>
-                  {editingUser && isAdmin && currentUser.id !== editingUser.id && (
-                    <button
-                      type="button"
-                      onClick={() => setFormData({ ...formData, status: formData.status === 'blocked' ? 'active' : 'blocked' })}
-                      className={`px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wider transition-all shadow-sm cursor-pointer ${
-                        formData.status === 'blocked'
-                          ? 'bg-rose-100 text-rose-700 hover:bg-rose-200 hover:shadow-md'
-                          : 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
-                      }`}
-                    >
-                      {formData.status === 'blocked' ? 'Desbloquear Usuário' : 'Bloquear Usuário'}
-                    </button>
-                  )}
-                </div>
-                <h2 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight mt-1.5">
-                  {isAdmin ? (editingUser ? `Editar: ${editingUser.name}` : 'Novo Usuário') : 'Meu Perfil'}
-                </h2>
-              </div>
-            </div>
 
-            <div className="flex items-center gap-3 self-end md:self-auto">
-              <button
-                type="button"
-                onClick={handleBackToList}
-                className="px-5 py-2.5 font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer text-sm"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleSave}
-                className="px-6 py-2.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-indigo-600 shadow-lg hover:shadow-indigo-500/20 flex items-center gap-2 transition-all cursor-pointer text-sm"
-              >
-                <Save className="w-4 h-4" />
-                {isAdmin ? 'Salvar Usuário' : 'Salvar Alterações'}
-              </button>
+              {/* Botões de Ação organizados e proporcionais */}
+              <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleBackToList}
+                  className="px-3 sm:px-4 py-2 font-bold text-slate-600 hover:bg-slate-100 bg-slate-50 sm:bg-transparent rounded-xl transition-colors cursor-pointer text-xs text-center border border-slate-200 sm:border-slate-200/80 whitespace-nowrap"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  className="px-4 sm:px-5 py-2 bg-slate-900 text-white font-bold rounded-xl hover:bg-indigo-600 shadow-sm hover:shadow-indigo-500/20 flex items-center justify-center gap-1.5 transition-all cursor-pointer text-xs active:scale-95 whitespace-nowrap"
+                >
+                  <Save className="w-3.5 h-3.5 shrink-0" />
+                  <span>{isAdmin ? 'Salvar Usuário' : 'Salvar'}</span>
+                </button>
+              </div>
             </div>
           </div>
 
           {/* Barra de Navegação por Abas (Nova ROTA URL para cada aba) */}
-          <div className="flex items-center gap-2 p-1.5 bg-slate-200/60 backdrop-blur-md rounded-2xl border border-slate-300/60 shadow-inner max-w-full overflow-x-auto custom-scrollbar">
+          <div className="flex items-center gap-1 sm:gap-1.5 p-1 bg-slate-200/70 backdrop-blur-md rounded-xl border border-slate-300/60 shadow-inner max-w-full overflow-x-auto scrollbar-none">
             <button
               type="button"
               onClick={() => handleChangeTab('dados')}
-              className={`flex items-center gap-2.5 px-6 py-3 rounded-xl font-bold text-sm transition-all duration-200 shrink-0 cursor-pointer ${
+              className={`flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-lg font-bold text-xs transition-all duration-200 shrink-0 cursor-pointer whitespace-nowrap ${
                 activeUserTab === 'dados'
-                  ? 'bg-white text-indigo-700 shadow-md shadow-slate-200 ring-1 ring-slate-200'
+                  ? 'bg-white text-indigo-700 shadow-xs ring-1 ring-slate-200'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
               }`}
             >
-              <UserIcon className={`w-4 h-4 ${activeUserTab === 'dados' ? 'text-indigo-600' : 'text-slate-400'}`} />
+              <UserIcon className={`w-3.5 h-3.5 ${activeUserTab === 'dados' ? 'text-indigo-600' : 'text-slate-400'}`} />
               <span>Dados</span>
             </button>
 
             <button
               type="button"
               onClick={() => handleChangeTab('modulos')}
-              className={`flex items-center gap-2.5 px-6 py-3 rounded-xl font-bold text-sm transition-all duration-200 shrink-0 cursor-pointer ${
+              className={`flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-lg font-bold text-xs transition-all duration-200 shrink-0 cursor-pointer whitespace-nowrap ${
                 activeUserTab === 'modulos'
-                  ? 'bg-white text-indigo-700 shadow-md shadow-slate-200 ring-1 ring-slate-200'
+                  ? 'bg-white text-indigo-700 shadow-xs ring-1 ring-slate-200'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
               }`}
             >
-              <LayoutGrid className={`w-4 h-4 ${activeUserTab === 'modulos' ? 'text-indigo-600' : 'text-slate-400'}`} />
+              <LayoutGrid className={`w-3.5 h-3.5 ${activeUserTab === 'modulos' ? 'text-indigo-600' : 'text-slate-400'}`} />
               <span>Módulos Autorizados</span>
-              <span className={`px-2 py-0.5 rounded-full text-xs font-black transition-colors ${
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black transition-colors ${
                 activeUserTab === 'modulos' 
                   ? 'bg-indigo-100 text-indigo-700' 
                   : 'bg-slate-300/80 text-slate-700'
@@ -884,15 +986,15 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
             <button
               type="button"
               onClick={() => handleChangeTab('assinaturas')}
-              className={`flex items-center gap-2.5 px-6 py-3 rounded-xl font-bold text-sm transition-all duration-200 shrink-0 cursor-pointer ${
+              className={`flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-lg font-bold text-xs transition-all duration-200 shrink-0 cursor-pointer whitespace-nowrap ${
                 activeUserTab === 'assinaturas'
-                  ? 'bg-white text-indigo-700 shadow-md shadow-slate-200 ring-1 ring-slate-200'
+                  ? 'bg-white text-indigo-700 shadow-xs ring-1 ring-slate-200'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
               }`}
             >
-              <PenTool className={`w-4 h-4 ${activeUserTab === 'assinaturas' ? 'text-indigo-600' : 'text-slate-400'}`} />
+              <PenTool className={`w-3.5 h-3.5 ${activeUserTab === 'assinaturas' ? 'text-indigo-600' : 'text-slate-400'}`} />
               <span>Assinaturas</span>
-              <span className={`px-2 py-0.5 rounded-full text-xs font-black transition-colors ${
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black transition-colors ${
                 activeUserTab === 'assinaturas' 
                   ? 'bg-indigo-100 text-indigo-700' 
                   : 'bg-slate-300/80 text-slate-700'
@@ -904,17 +1006,22 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
 
           {/* ABA: DADOS */}
           {activeUserTab === 'dados' && (
-            <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm p-5 md:p-7 space-y-6 animate-fade-in">
-                {/* Tipo de Perfil Compacto */}
-                <div className="space-y-2">
-                  <label className={labelClass}>Tipo de Perfil</label>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+            <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-sm p-3.5 sm:p-5 md:p-7 space-y-4 sm:space-y-6 animate-fade-in">
+                {/* Tipo de Perfil */}
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <label className={labelClass}>Tipo de Perfil</label>
+                    <span className="text-[11px] text-slate-400 font-medium hidden sm:inline">
+                      Nível de autorização geral do usuário
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
                     {[
-                      { id: 'admin', label: 'Admin', desc: 'Acesso total', icon: <ShieldCheck className="w-4 h-4" />, color: 'indigo' },
-                      { id: 'compras', label: 'Compras', desc: 'Módulos + Visão', icon: <ShoppingCart className="w-4 h-4" />, color: 'emerald' },
-                      { id: 'licitacao', label: 'Licitação', desc: 'Licitação', icon: <Gavel className="w-4 h-4" />, color: 'blue' },
-                      { id: 'marketing', label: 'Marketing', desc: 'Gestão de mídia', icon: <Megaphone className="w-4 h-4" />, color: 'fuchsia' },
-                      { id: 'collaborator', label: 'Colaborador', desc: 'Operação básica', icon: <UserIcon className="w-4 h-4" />, color: 'slate' }
+                      { id: 'admin', label: 'Admin', desc: 'Acesso total ao sistema', icon: <ShieldCheck className="w-4 h-4" />, color: 'indigo' },
+                      { id: 'compras', label: 'Compras', desc: 'Módulos + Visão operacional', icon: <ShoppingCart className="w-4 h-4" />, color: 'emerald' },
+                      { id: 'licitacao', label: 'Licitação', desc: 'Gestão de Licitações', icon: <Gavel className="w-4 h-4" />, color: 'blue' },
+                      { id: 'marketing', label: 'Marketing', desc: 'Gestão de mídia e notícias', icon: <Megaphone className="w-4 h-4" />, color: 'fuchsia' },
+                      { id: 'collaborator', label: 'Colaborador', desc: 'Operação e consultas básicas', icon: <UserIcon className="w-4 h-4" />, color: 'slate' }
                     ].map((role) => {
                       const isSelected = formData.role === role.id;
                       const canEditRole = isAdmin;
@@ -925,26 +1032,27 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                           type="button"
                           disabled={!canEditRole}
                           onClick={() => handleRoleChange(role.id as UserRole)}
-                          className={`relative px-3 py-2 rounded-xl border-2 text-left transition-all duration-200 flex items-center gap-2.5 ${isSelected
-                            ? `bg-${role.color}-50 border-${role.color}-600 ring-2 ring-${role.color}-600/10 shadow-xs`
-                            : `bg-white border-slate-200 hover:border-slate-300 ${!canEditRole ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`
-                            }`}
+                          className={`relative p-3 rounded-2xl border-2 text-left transition-all duration-200 flex items-center gap-3 ${
+                            isSelected
+                              ? `bg-${role.color}-50/60 border-${role.color}-600 ring-2 ring-${role.color}-600/10 shadow-sm`
+                              : `bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/50 ${!canEditRole ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`
+                          }`}
                         >
-                          <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
+                          <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-colors shadow-xs ${
                             isSelected ? `bg-${role.color}-600 text-white` : `bg-slate-100 text-slate-500`
                           }`}>
                             {role.icon}
                           </div>
                           <div className="min-w-0 flex-1">
-                            <h4 className={`font-black text-xs truncate ${isSelected ? `text-${role.color}-950` : 'text-slate-800'}`}>
+                            <h4 className={`font-black text-xs sm:text-sm truncate ${isSelected ? `text-${role.color}-950` : 'text-slate-800'}`}>
                               {role.label}
                             </h4>
-                            <p className="text-[9px] text-slate-400 font-medium truncate leading-none mt-0.5">
+                            <p className="text-[10px] text-slate-400 font-medium truncate mt-0.5">
                               {role.desc}
                             </p>
                           </div>
                           {isSelected && (
-                            <CheckCircle2 className={`w-3.5 h-3.5 text-${role.color}-600 shrink-0 ml-auto`} />
+                            <CheckCircle2 className={`w-4 h-4 text-${role.color}-600 shrink-0 ml-auto`} />
                           )}
                         </button>
                       );
@@ -954,27 +1062,27 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
 
                 {/* Tipo de Perfil Teste Compacto (Apenas para Administradores) */}
                 {isAdmin && (
-                  <div className="space-y-2 pt-3 border-t border-slate-100">
-                    <div className="flex items-center justify-between">
+                  <div className="space-y-2.5 pt-4 border-t border-slate-100">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         <label className={labelClass}>Tipo de Perfil Teste</label>
                         <span className="text-[10px] text-slate-400 font-medium hidden sm:inline">
                           (Simular visualização de outro perfil)
                         </span>
                       </div>
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 shrink-0">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 shrink-0 shadow-xs">
                         <FlaskConical className="w-3 h-3 text-amber-500" />
                         Apenas Administradores
                       </span>
                     </div>
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
                       {[
-                        { id: '', label: 'Sem Teste', desc: 'Perfil real', icon: <RotateCcw className="w-4 h-4" />, color: 'slate' },
-                        { id: 'admin', label: 'Admin', desc: 'Como Admin', icon: <ShieldCheck className="w-4 h-4" />, color: 'indigo' },
-                        { id: 'compras', label: 'Compras', desc: 'Como Compras', icon: <ShoppingCart className="w-4 h-4" />, color: 'emerald' },
-                        { id: 'licitacao', label: 'Licitação', desc: 'Como Licitação', icon: <Gavel className="w-4 h-4" />, color: 'blue' },
-                        { id: 'marketing', label: 'Marketing', desc: 'Como Marketing', icon: <Megaphone className="w-4 h-4" />, color: 'fuchsia' },
-                        { id: 'collaborator', label: 'Colaborador', desc: 'Como Colaborador', icon: <UserIcon className="w-4 h-4" />, color: 'slate' }
+                        { id: '', label: 'Sem Teste', desc: 'Perfil real', icon: <RotateCcw className="w-3.5 h-3.5" />, color: 'slate' },
+                        { id: 'admin', label: 'Admin', desc: 'Como Admin', icon: <ShieldCheck className="w-3.5 h-3.5" />, color: 'indigo' },
+                        { id: 'compras', label: 'Compras', desc: 'Como Compras', icon: <ShoppingCart className="w-3.5 h-3.5" />, color: 'emerald' },
+                        { id: 'licitacao', label: 'Licitação', desc: 'Como Licitação', icon: <Gavel className="w-3.5 h-3.5" />, color: 'blue' },
+                        { id: 'marketing', label: 'Marketing', desc: 'Como Marketing', icon: <Megaphone className="w-3.5 h-3.5" />, color: 'fuchsia' },
+                        { id: 'collaborator', label: 'Colaborador', desc: 'Como Colaborador', icon: <UserIcon className="w-3.5 h-3.5" />, color: 'slate' }
                       ].map((tRole) => {
                         const isSelected = (!formData.testRole && tRole.id === '') || formData.testRole === tRole.id;
 
@@ -983,7 +1091,7 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                             key={tRole.id || 'none'}
                             type="button"
                             onClick={() => setFormData({ ...formData, testRole: (tRole.id as UserRole) || null })}
-                            className={`relative px-2.5 py-2 rounded-xl border-2 text-left transition-all duration-200 flex items-center gap-2 cursor-pointer ${isSelected
+                            className={`relative p-2 sm:p-2.5 rounded-xl border-2 text-left transition-all duration-200 flex items-center gap-2 cursor-pointer ${isSelected
                               ? `bg-${tRole.color}-50 border-${tRole.color}-600 ring-2 ring-${tRole.color}-600/10 shadow-xs`
                               : 'bg-white border-slate-200 hover:border-slate-300'
                               }`}
@@ -1011,7 +1119,8 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-slate-100">
+                {/* Campos Cadastrais */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5 pt-4 border-t border-slate-100">
                   <div className="md:col-span-2">
                     <label className={labelClass}>Nome Completo</label>
                     {persons && persons.length > 0 ? (
@@ -1052,7 +1161,6 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                             }}
                             className={`${inputClass} pr-10 cursor-pointer`}
                             placeholder="Comece a digitar para buscar..."
-                            // list="persons-list" // Removed to prevent native dropdown conflict
                             disabled={!isAdmin && !isEditingSelf}
                           />
                           <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
@@ -1060,7 +1168,6 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                           </div>
                         </div>
 
-                        {/* Hidden native datalist REMOVED to solve "black select" issue */}
                         {/* Custom Dropdown Suggestion */}
                         <div className="absolute left-0 top-full mt-1 w-full bg-white rounded-xl shadow-xl border border-slate-100 max-h-48 overflow-y-auto hidden group-focus-within:block z-50 custom-scrollbar animate-slide-up">
                           {persons.filter(p => p.name.toLowerCase().includes((formData.name || '').toLowerCase()) && p.name !== formData.name).length > 0 ? (
@@ -1112,9 +1219,9 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                       <input value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} className={inputClass} placeholder="Ex: Nome do Colaborador" />
                     )}
                   </div>
-                  <div>
-                    <label className={labelClass}>Usuário de Acesso</label>
 
+                  <div>
+                    <label className={labelClass}>Usuário de Acesso (Sigla)</label>
                     <input value={formData.username} onChange={e => setFormData({ ...formData, username: e.target.value.toUpperCase() })} className={inputClass} disabled={(!editingUser || !isAdmin)} placeholder="ex: AAA" />
                   </div>
 
@@ -1136,17 +1243,14 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                       value={formData.whatsapp || ''}
                       onChange={(e) => {
                         let val = e.target.value.replace(/\D/g, '');
-                        // Mask: +00 00 0 0000-0000 (13 digits)
-                        // +CC DD D NNNN-NNNN (e.g. +55 31 9 8888-8888)
-
                         if (val.length > 13) val = val.slice(0, 13);
 
                         let formatted = '';
-                        if (val.length > 0) formatted += '+' + val.slice(0, 2); // CC
-                        if (val.length > 2) formatted += ' ' + val.slice(2, 4); // DDD
-                        if (val.length > 4) formatted += ' ' + val.slice(4, 5); // 9
-                        if (val.length > 5) formatted += ' ' + val.slice(5, 9); // First 4
-                        if (val.length > 9) formatted += '-' + val.slice(9, 13); // Last 4
+                        if (val.length > 0) formatted += '+' + val.slice(0, 2);
+                        if (val.length > 2) formatted += ' ' + val.slice(2, 4);
+                        if (val.length > 4) formatted += ' ' + val.slice(4, 5);
+                        if (val.length > 5) formatted += ' ' + val.slice(5, 9);
+                        if (val.length > 9) formatted += '-' + val.slice(9, 13);
 
                         setFormData({ ...formData, whatsapp: formatted });
                       }}
@@ -1174,7 +1278,7 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                                 const newPass = generateStrongPassword();
                                 setFormData(prev => ({ ...prev, password: newPass }));
                               }}
-                              className="text-slate-400 hover:text-cyan-600 transition-colors"
+                              className="text-slate-400 hover:text-cyan-600 transition-colors cursor-pointer"
                               title="Gerar nova senha forte"
                             >
                               <RefreshCw className="w-4 h-4" />
@@ -1182,7 +1286,7 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                             <button
                               type="button"
                               onClick={() => setShowPassword(!showPassword)}
-                              className="text-slate-400 hover:text-indigo-600 transition-colors"
+                              className="text-slate-400 hover:text-indigo-600 transition-colors cursor-pointer"
                             >
                               {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                             </button>
@@ -1190,7 +1294,7 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                         </div>
 
                         {/* Password Strength Checklist */}
-                        <div className="grid grid-cols-2 gap-2 mt-3 pl-1">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 sm:gap-2 mt-3 pl-1">
                           {[
                             { valid: (formData.password?.length || 0) >= 8, label: "Mínimo 8 caracteres" },
                             { valid: /[A-Z]/.test(formData.password || ''), label: "Letra Maiúscula" },
@@ -1199,8 +1303,8 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                             { valid: /[^A-Za-z0-9]/.test(formData.password || ''), label: "Caractere Especial" }
                           ].map((req, idx) => (
                             <div key={idx} className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider ${req.valid ? 'text-emerald-600' : 'text-slate-400'}`}>
-                              {req.valid ? <CheckCircle2 className="w-3 h-3" /> : <div className="w-3 h-3 rounded-full border-2 border-slate-300" />}
-                              {req.label}
+                              {req.valid ? <CheckCircle2 className="w-3.5 h-3.5 shrink-0" /> : <div className="w-3.5 h-3.5 rounded-full border-2 border-slate-300 shrink-0" />}
+                              <span>{req.label}</span>
                             </div>
                           ))}
                         </div>
@@ -1208,14 +1312,14 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                     ) : (
                       <div className="space-y-3">
                         <div className="bg-slate-100 rounded-xl p-3 border border-slate-200 flex items-center gap-3 text-slate-400 italic text-xs">
-                          <Lock className="w-4 h-4" /> Senha protegida (visível apenas ao usuário)
+                          <Lock className="w-4 h-4 shrink-0" /> Senha protegida (visível apenas ao usuário)
                         </div>
 
                         {isAdmin && (
                           <button
                             type="button"
                             onClick={handleResetPassword}
-                            className="w-full py-3 bg-amber-50 text-amber-700 border border-amber-200 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-amber-100 transition-all flex items-center justify-center gap-2 shadow-sm hover:shadow-md active:scale-[0.98]"
+                            className="w-full py-3 bg-amber-50 text-amber-700 border border-amber-200 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-amber-100 transition-all flex items-center justify-center gap-2 shadow-sm hover:shadow-md active:scale-[0.98] cursor-pointer"
                           >
                             <RotateCcw className="w-4 h-4" /> Resetar para Senha Temporária
                           </button>
@@ -1235,7 +1339,7 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                                 </div>
                                 <button
                                   onClick={copyToClipboard}
-                                  className="flex items-center gap-1.5 px-2 py-1 bg-white/10 hover:bg-white/20 rounded-lg transition-all text-[9px] font-bold uppercase tracking-wider"
+                                  className="flex items-center gap-1.5 px-2 py-1 bg-white/10 hover:bg-white/20 rounded-lg transition-all text-[9px] font-bold uppercase tracking-wider cursor-pointer"
                                 >
                                   {copied ? <Check className="w-3 h-3 text-emerald-300" /> : <Copy className="w-3 h-3" />}
                                   {copied ? 'Copiado!' : 'Copiar'}
@@ -1311,6 +1415,7 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                       </div>
                     </div>
                   </div>
+
                   <div className="relative">
                     <label className={labelClass}>Setor</label>
                     <div className="relative group">
@@ -1361,112 +1466,6 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                         )}
                       </div>
                     </div>
-                  </div>
-                </div>
-
-                {/* Seção: Integração com Google Agenda */}
-                <div className="border-t border-slate-100 pt-6">
-                  <div className="p-6 rounded-2xl bg-gradient-to-br from-slate-50 to-indigo-50/30 border border-slate-200/80 shadow-sm space-y-4">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                      <div className="flex items-center gap-3">
-                        <div className="p-3 rounded-xl bg-white border border-slate-200 text-indigo-600 shadow-sm">
-                          <Calendar className="w-6 h-6" />
-                        </div>
-                        <div>
-                          <h4 className="font-extrabold text-slate-800 text-sm flex items-center gap-2">
-                            Integração com Google Agenda
-                            {formData.google_connected ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                                Conectado
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-slate-100 text-slate-500 border border-slate-200">
-                                Não Conectado
-                              </span>
-                            )}
-                          </h4>
-                          <p className="text-xs text-slate-500 mt-0.5">
-                            Sincronize automaticamente os eventos do sistema com a conta pessoal do Google Agenda.
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Botões de Ação */}
-                      <div className="flex items-center gap-2 shrink-0">
-                        {formData.google_connected ? (
-                          <>
-                            <button
-                              type="button"
-                              disabled={googleLoading}
-                              onClick={async () => {
-                                setGoogleLoading(true);
-                                const res = await googleCalendarService.syncAllUserEvents(formData as User);
-                                setGoogleLoading(false);
-                                setFormData(prev => ({ ...prev, last_google_sync_at: new Date().toISOString() }));
-                                showToast(`${res.syncedCount} evento(s) sincronizado(s) com o Google Agenda!`);
-                              }}
-                              className="px-3.5 py-2 bg-white hover:bg-slate-50 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer"
-                            >
-                              <RefreshCw className={`w-3.5 h-3.5 ${googleLoading ? 'animate-spin' : ''}`} />
-                              Sincronizar Agora
-                            </button>
-
-                            <button
-                              type="button"
-                              disabled={googleLoading}
-                              onClick={async () => {
-                                if (!formData.id) return;
-                                setGoogleLoading(true);
-                                await googleCalendarService.disconnectAccount(formData.id);
-                                setGoogleLoading(false);
-                                setFormData(prev => ({ ...prev, google_connected: false, google_email: undefined }));
-                                showToast('Conta Google Agenda desconectada.');
-                              }}
-                              className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer"
-                            >
-                              <X className="w-3.5 h-3.5" />
-                              Desconectar
-                            </button>
-                          </>
-                        ) : (
-                          <button
-                            type="button"
-                            disabled={googleLoading}
-                            onClick={() => {
-                              setConnectGoogleEmail(formData.email || (formData.username ? `${formData.username.toLowerCase()}@saojosedogoiabal.mg.gov.br` : ''));
-                              setIsGoogleConnectModalOpen(true);
-                            }}
-                            className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-extrabold flex items-center gap-2 shadow-md shadow-indigo-500/20 active:scale-95 transition-all cursor-pointer uppercase tracking-wider"
-                          >
-                            <Calendar className="w-4 h-4" />
-                            Conectar Google Agenda
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Detalhes de Conexão */}
-                    {formData.google_connected && (
-                      <div className="pt-3 border-t border-slate-200/60 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                        <div className="bg-white p-2.5 rounded-xl border border-slate-100">
-                          <span className="text-[10px] font-bold text-slate-400 uppercase block">Conta Vinculada</span>
-                          <span className="font-bold text-slate-700 truncate block">{formData.google_email || 'Não informado'}</span>
-                        </div>
-                        <div className="bg-white p-2.5 rounded-xl border border-slate-100">
-                          <span className="text-[10px] font-bold text-slate-400 uppercase block">Data de Conexão</span>
-                          <span className="font-bold text-slate-700 block">
-                            {formData.google_connected_at ? new Date(formData.google_connected_at).toLocaleDateString('pt-BR') : 'Hoje'}
-                          </span>
-                        </div>
-                        <div className="bg-white p-2.5 rounded-xl border border-slate-100">
-                          <span className="text-[10px] font-bold text-slate-400 uppercase block">Última Sincronização</span>
-                          <span className="font-bold text-slate-700 block">
-                            {formData.last_google_sync_at ? new Date(formData.last_google_sync_at).toLocaleString('pt-BR') : 'Agora'}
-                          </span>
-                        </div>
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>
@@ -1778,32 +1777,6 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
             </div>
           )}
 
-          {/* Rodapé da Página com Ações */}
-          <div className="bg-white rounded-2xl border border-slate-200/80 p-5 flex items-center justify-between shadow-sm">
-            <button
-              type="button"
-              onClick={handleBackToList}
-              className="px-6 py-3 font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer flex items-center gap-2 text-sm"
-            >
-              <ArrowLeft className="w-4 h-4" /> Voltar para Lista
-            </button>
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={handleBackToList}
-                className="px-6 py-3 font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer text-sm"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleSave}
-                className="px-8 py-3 bg-slate-900 text-white font-bold rounded-xl hover:bg-indigo-600 shadow-xl flex items-center gap-2 transition-all cursor-pointer text-sm"
-              >
-                <Save className="w-5 h-5" /> {isAdmin ? 'Salvar Usuário' : 'Salvar Alterações'}
-              </button>
-            </div>
-          </div>
         </div>
       )}
 

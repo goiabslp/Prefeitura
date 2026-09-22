@@ -37,7 +37,7 @@ interface VehicleSchedulingScreenProps {
   currentUserPermissions?: AppPermission[];
   currentUserSector?: string;
   currentUserSectorId?: string;
-  requestedView?: 'menu' | 'calendar' | 'history' | 'approvals' | 'dashboard' | 'day' | 'consultar';
+  requestedView?: 'menu' | 'calendar' | 'novo' | 'history' | 'approvals' | 'dashboard' | 'day' | 'consultar';
   onNavigate?: (path: string) => void;
   state: AppState;
 }
@@ -147,7 +147,7 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
   onNavigate,
   state
 }) => {
-  const [activeSubView, setActiveSubView] = useState<'menu' | 'calendar' | 'history' | 'approvals' | 'dashboard' | 'day' | 'consultar'>('menu');
+  const [activeSubView, setActiveSubView] = useState<'menu' | 'calendar' | 'novo' | 'history' | 'approvals' | 'dashboard' | 'day' | 'consultar'>('menu');
 
   const normalizeString = (str: string) =>
     str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
@@ -219,7 +219,6 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
   const activeGlobalStatus = isMobileViewport ? mobileModuleStatus : moduleStatus;
 
   const canAccessAgendar = userCanAccessSubmodule(userObj, 'parent_agendamento_veiculo', 'sub_agendamento_agendar', activeGlobalStatus);
-  const canAccessDia = canAccessAgendar; // O dia é parte integrante e inseparável do fluxo de agendamento
   const canAccessMeus = userCanAccessSubmodule(userObj, 'parent_agendamento_veiculo', 'sub_agendamento_historico', activeGlobalStatus);
   const canAccessAprovacoes = userCanAccessSubmodule(userObj, 'parent_agendamento_veiculo', 'sub_agendamento_aprovacoes', activeGlobalStatus);
   const canAccessDashboard = userCanAccessSubmodule(userObj, 'parent_agendamento_veiculo', 'sub_agendamento_dashboard', activeGlobalStatus);
@@ -247,29 +246,94 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
     }
   }, [activeSubView]);
 
-  const handleSubViewChange = (view: 'menu' | 'calendar' | 'history' | 'approvals' | 'dashboard' | 'day' | 'consultar') => {
+  const handleSubViewChange = (view: 'menu' | 'calendar' | 'novo' | 'history' | 'approvals' | 'dashboard' | 'day' | 'consultar') => {
     setActiveSubView(view);
     if (onNavigate) {
       const paths = {
         'menu': '/AgendamentoVeiculos',
         'calendar': '/AgendamentoVeiculos/Agendar',
-        'day': '/AgendamentoVeiculos/Agendar/Dia',
+        'novo': '/AgendamentoVeiculos/Agendar/Novo',
+        'day': '/AgendamentoVeiculos/Agendar',
         'history': '/AgendamentoVeiculos/Historico',
         'approvals': '/AgendamentoVeiculos/Aprovacoes',
         'dashboard': '/AgendamentoVeiculos/Dashboard',
         'consultar': '/AgendamentoVeiculos/Consultar'
       };
-      if (view === 'day') {
-        const dateStr = selectedDay 
-          ? `${selectedDay.getFullYear()}-${String(selectedDay.getMonth() + 1).padStart(2, '0')}-${String(selectedDay.getDate()).padStart(2, '0')}`
-          : `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`;
-        onNavigate(`/AgendamentoVeiculos/Agendar/Dia?date=${dateStr}`);
-      } else {
-        onNavigate(paths[view]);
-      }
+      onNavigate(paths[view]);
     }
   };
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState<Date>(new Date());
+  const [calendarViewMode, setCalendarViewMode] = useState<'day' | 'month'>(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      return 'day';
+    }
+    return 'day';
+  });
+  const daysBarRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (daysBarRef.current) {
+      const activeEl = daysBarRef.current.querySelector('[data-selected="true"]');
+      if (activeEl) {
+        activeEl.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+      }
+    }
+  }, [selectedCalendarDate, currentDate, calendarViewMode]);
+
+  const handleGoToToday = () => {
+    const today = new Date();
+    setCurrentDate(today);
+    setSelectedCalendarDate(today);
+  };
+
+  const handlePrevMonth = () => {
+    const newDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1);
+    setCurrentDate(newDate);
+    const today = new Date();
+    if (newDate.getFullYear() === today.getFullYear() && newDate.getMonth() === today.getMonth()) {
+      setSelectedCalendarDate(today);
+    } else {
+      setSelectedCalendarDate(newDate);
+    }
+  };
+
+  const handleNextMonth = () => {
+    const newDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1);
+    setCurrentDate(newDate);
+    const today = new Date();
+    if (newDate.getFullYear() === today.getFullYear() && newDate.getMonth() === today.getMonth()) {
+      setSelectedCalendarDate(today);
+    } else {
+      setSelectedCalendarDate(newDate);
+    }
+  };
+
+  const handlePrevDay = () => {
+    const prev = new Date(selectedCalendarDate);
+    prev.setDate(prev.getDate() - 1);
+    setSelectedCalendarDate(prev);
+    if (prev.getMonth() !== currentDate.getMonth() || prev.getFullYear() !== currentDate.getFullYear()) {
+      setCurrentDate(new Date(prev.getFullYear(), prev.getMonth(), 1));
+    }
+  };
+
+  const handleNextDay = () => {
+    const next = new Date(selectedCalendarDate);
+    next.setDate(next.getDate() + 1);
+    setSelectedCalendarDate(next);
+    if (next.getMonth() !== currentDate.getMonth() || next.getFullYear() !== currentDate.getFullYear()) {
+      setCurrentDate(new Date(next.getFullYear(), next.getMonth(), 1));
+    }
+  };
+
+  const handleSelectDay = (dayDate: Date) => {
+    setSelectedCalendarDate(dayDate);
+    if (dayDate.getMonth() !== currentDate.getMonth() || dayDate.getFullYear() !== currentDate.getFullYear()) {
+      setCurrentDate(new Date(dayDate.getFullYear(), dayDate.getMonth(), 1));
+    }
+  };
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isPassengerModalOpen, setIsPassengerModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
@@ -439,6 +503,56 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
     while (days.length < 42) days.push({ day: days.length - (daysInMonth + firstDay) + 1, month: month + 1, year, isCurrent: false });
     return days;
   }, [currentDate]);
+
+  const monthDays = useMemo(() => {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const list = [];
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateObj = new Date(year, month, d);
+      const dayKey = `${String(d).padStart(2, '0')}-${String(month + 1).padStart(2, '0')}`;
+      const holidayName = HOLIDAYS[dayKey];
+      const isToday = new Date().getDate() === d && new Date().getMonth() === month && new Date().getFullYear() === year;
+      const isSelected = selectedCalendarDate.getDate() === d && selectedCalendarDate.getMonth() === month && selectedCalendarDate.getFullYear() === year;
+      
+      const dayStart = new Date(year, month, d, 0, 0, 0).getTime();
+      const dayEnd = new Date(year, month, d, 23, 59, 59).getTime();
+      const daySchedules = schedules.filter(s => {
+        if (s.status === 'cancelado') return false;
+        const dep = new Date(s.departureDateTime).getTime();
+        const ret = new Date(s.returnDateTime).getTime();
+        return (dep <= dayEnd) && (ret >= dayStart);
+      });
+
+      const weekdayShort = dateObj.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '').slice(0, 3).toUpperCase();
+
+      list.push({
+        day: d,
+        dateObj,
+        weekdayShort,
+        holidayName,
+        isToday,
+        isSelected,
+        schedulesCount: daySchedules.length,
+        isPast: isDateBeforeToday(dateObj)
+      });
+    }
+    return list;
+  }, [currentDate, selectedCalendarDate, schedules]);
+
+  const selectedDaySchedules = useMemo(() => {
+    const start = new Date(selectedCalendarDate.getFullYear(), selectedCalendarDate.getMonth(), selectedCalendarDate.getDate(), 0, 0, 0).getTime();
+    const end = new Date(selectedCalendarDate.getFullYear(), selectedCalendarDate.getMonth(), selectedCalendarDate.getDate(), 23, 59, 59).getTime();
+    return schedules
+      .filter(s => {
+        if (s.status === 'cancelado') return false;
+        const dep = new Date(s.departureDateTime).getTime();
+        const ret = new Date(s.returnDateTime).getTime();
+        return (dep <= end) && (ret >= start);
+      })
+      .sort((a, b) => a.departureDateTime.localeCompare(b.departureDateTime));
+  }, [selectedCalendarDate, schedules]);
 
   const handleOpenModal = (s?: VehicleSchedule, initialDate?: Date, initialVehicleId?: string, initialReturnDate?: Date) => {
     setModalActiveTab('dados_gerais');
@@ -655,16 +769,13 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
             {(() => {
               const visibleCount = [
                 canAccessConsultar,
-                canAccessDia,
                 canAccessAgendar,
                 canAccessMeus,
                 canAccessAprovacoes,
                 canAccessDashboard
               ].filter(Boolean).length;
 
-              const gridClass = visibleCount >= 6
-                ? "w-full grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 desktop:gap-4 max-w-7xl"
-                : visibleCount === 5
+              const gridClass = visibleCount >= 5
                 ? "w-full grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 desktop:gap-4 max-w-6xl"
                 : "w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 desktop:gap-4 max-w-5xl";
 
@@ -687,25 +798,6 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
 
                       <h3 className="text-sm md:text-base lg:text-lg font-bold text-slate-800 mb-0.5 group-hover:text-slate-900 tracking-tight text-center">Consultar Veículo</h3>
                       <p className="text-[9px] md:text-[10px] font-bold text-slate-400 group-hover:text-violet-600 transition-colors uppercase tracking-wider text-center">Disponibilidade</p>
-                    </button>
-                  )}
-
-                  {/* Card: Agendar por Dia */}
-                  {canAccessDia && (
-                    <button
-                      onClick={() => handleSubViewChange('day')}
-                      className="group relative w-full min-h-[110px] md:min-h-[135px] py-4 md:py-5 px-3 md:px-4 rounded-[2rem] bg-gradient-to-br from-white to-slate-50/50 border border-slate-100 shadow-[0_10px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_25px_60px_rgb(0,0,0,0.12)] hover:shadow-sky-500/30 hover:border-sky-200 hover:from-white hover:to-sky-50/30 transition-all duration-300 ease-spring hover:-translate-y-1.5 active:scale-95 flex flex-col items-center justify-center overflow-hidden shrink-0"
-                      style={{ animationDelay: '50ms' }}
-                    >
-                      <div className="absolute top-0 right-0 w-32 h-32 bg-sky-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
-                      <div className="absolute bottom-0 left-0 w-24 h-24 bg-sky-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
-
-                      <div className="relative w-11 h-11 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-sky-500 to-sky-600 flex items-center justify-center mb-2.5 text-white group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300 shadow-md shadow-sky-500/30 ring-4 ring-white">
-                        <CalendarDays className="w-5 h-5 md:w-6 md:h-6 drop-shadow-md" />
-                      </div>
-
-                      <h3 className="text-sm md:text-base lg:text-lg font-bold text-slate-800 mb-0.5 group-hover:text-slate-900 tracking-tight text-center">Agendar por Dia</h3>
-                      <p className="text-[9px] md:text-[10px] font-bold text-slate-400 group-hover:text-sky-600 transition-colors uppercase tracking-wider text-center">Escala Diária</p>
                     </button>
                   )}
 
@@ -802,516 +894,420 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
     </>
   );
 
-  const renderCalendar = () => (
-    <div className="flex-1 flex flex-col overflow-hidden animate-fade-in h-full bg-slate-100/60">
-      {/* Header bar */}
-      <div className="bg-white border-b border-slate-200/80 px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0 z-20 shadow-sm">
-        <div className="flex items-center gap-4">
-          <button 
-            onClick={() => handleSubViewChange('menu')} 
-            className="w-11 h-11 bg-white rounded-2xl flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 border border-slate-200/80 shadow-sm transition-all active:scale-95 group"
-            title="Voltar ao Menu Principal"
-          >
-            <ArrowLeft className="w-5 h-5 group-hover:-translate-x-0.5 transition-transform" />
-          </button>
-          <div>
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-xl bg-indigo-50 text-indigo-600">
-                <CalendarDays className="w-5 h-5" />
-              </div>
-              <h2 className="text-2xl md:text-3xl font-black text-slate-900 uppercase tracking-tight leading-none">Agendar Veículo</h2>
-            </div>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1 ml-0.5">Calendário Interativo de Viagens</p>
-          </div>
-        </div>
+  const handleStartNovoAgendamento = (initialDate?: Date) => {
+    handleOpenModal(undefined, initialDate || selectedCalendarDate);
+    handleSubViewChange('novo');
+  };
 
-        {/* Month Selector */}
-        <div className="flex items-center gap-2 bg-slate-100/90 p-1.5 rounded-2xl border border-slate-200/80 shadow-inner">
-          <button 
-            onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))} 
-            className="p-2 hover:bg-white hover:shadow-sm rounded-xl text-slate-600 transition-all active:scale-90"
-            title="Mês Anterior"
-          >
-            <ChevronLeft className="w-5 h-5" />
-          </button>
-          <div className="px-6 text-sm font-black text-slate-900 uppercase tracking-widest min-w-[220px] text-center">
-            {currentDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
-          </div>
-          <button 
-            onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))} 
-            className="p-2 hover:bg-white hover:shadow-sm rounded-xl text-slate-600 transition-all active:scale-90"
-            title="Próximo Mês"
-          >
-            <ChevronRight className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Actions */}
-        <div className="flex items-center gap-3">
-          <button 
-            onClick={() => setCurrentDate(new Date())} 
-            className="px-4 py-2.5 bg-white border border-slate-200 text-slate-700 hover:text-indigo-600 hover:border-indigo-300 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm active:scale-95"
-          >
-            Hoje
-          </button>
-          <button 
-            onClick={() => handleOpenModal()} 
-            className="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-black rounded-xl shadow-lg shadow-indigo-600/20 transition-all hover:-translate-y-0.5 active:scale-95 flex items-center gap-2 uppercase text-[10px] tracking-[0.2em]"
-          >
-            <Plus className="w-4 h-4" /> Novo Agendamento
-          </button>
-        </div>
+  const renderAccessDenied = () => (
+    <div className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-50 text-center animate-fade-in">
+      <div className="w-16 h-16 rounded-3xl bg-rose-50 text-rose-600 flex items-center justify-center mb-4 shadow-sm border border-rose-100">
+        <Lock className="w-8 h-8" />
       </div>
-
-      {/* Weekday headers */}
-      <div className="grid grid-cols-7 bg-slate-900 shrink-0 shadow-md z-10">
-        {['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'].map((d, i) => (
-          <div key={d} className={`py-3.5 text-center text-[10px] font-black uppercase tracking-[0.25em] border-r border-slate-800/60 last:border-0 ${i === 0 || i === 6 ? 'text-amber-400' : 'text-slate-300'}`}>
-            {d}
-          </div>
-        ))}
-      </div>
-
-      {/* Grid container with custom smooth scroll & explicit row minimum heights to prevent clipping */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar p-2 md:p-4 bg-slate-200/50">
-        <div className="grid grid-cols-7 gap-2 w-full">
-          {calendarData.map((cell, idx) => {
-            if (!cell.isCurrent) {
-              return (
-                <div key={idx} className="bg-slate-100/40 rounded-2xl min-h-[140px] md:min-h-[165px] p-2 border border-slate-200/30 opacity-40 select-none">
-                  <span className="text-xs font-bold text-slate-400">{cell.day}</span>
-                </div>
-              );
-            }
-
-            const dayStart = new Date(cell.year, cell.month, cell.day, 0, 0, 0).getTime();
-            const dayEnd = new Date(cell.year, cell.month, cell.day, 23, 59, 59).getTime();
-            const dateObj = new Date(cell.year, cell.month, cell.day);
-            const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 6;
-            const dayKey = `${String(cell.day).padStart(2, '0')}-${String(cell.month + 1).padStart(2, '0')}`;
-            const holidayName = HOLIDAYS[dayKey];
-            const isHoliday = !!holidayName;
-            
-            const daySchedules = schedules.filter(s => {
-              if (s.status === 'cancelado') return false;
-              const dep = new Date(s.departureDateTime).getTime();
-              const ret = new Date(s.returnDateTime).getTime();
-              return (dep <= dayEnd) && (ret >= dayStart);
-            });
-
-            const isToday = new Date().getDate() === cell.day && new Date().getMonth() === cell.month && new Date().getFullYear() === cell.year;
-
-            // Visual background styling
-            let cellBgClass = 'bg-white hover:bg-slate-50/90 border-slate-200/80';
-            if (isToday) cellBgClass = 'bg-indigo-50/30 border-indigo-300 ring-2 ring-indigo-500/20';
-            else if (isHoliday) cellBgClass = 'bg-rose-50/60 border-rose-200/80';
-            else if (isWeekend) cellBgClass = 'bg-slate-50/90 border-slate-200/60';
-
-            const cellDateStr = `${cell.year}-${String(cell.month + 1).padStart(2, '0')}-${String(cell.day).padStart(2, '0')}`;
-
-            return (
-              <div 
-                key={idx} 
-                className={`group relative min-h-[140px] md:min-h-[165px] flex flex-col p-2.5 rounded-2xl border transition-all duration-300 cursor-pointer shadow-xs hover:shadow-xl hover:z-20 hover:-translate-y-1 ${cellBgClass}`}
-                onClick={() => {
-                  if (onNavigate) {
-                    onNavigate(`/AgendamentoVeiculos/Agendar/Dia?date=${cellDateStr}`);
-                  } else {
-                    setSelectedDay(new Date(cell.year, cell.month, cell.day));
-                    setActiveSubView('day');
-                  }
-                }}
-              >
-                {/* Cell Header */}
-                <div className="flex items-center justify-between mb-2 shrink-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className={`text-xs font-black w-7 h-7 flex items-center justify-center rounded-xl transition-transform group-hover:scale-110 ${
-                      isToday 
-                        ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30' 
-                        : isHoliday 
-                        ? 'text-rose-700 bg-rose-100 font-extrabold' 
-                        : isWeekend 
-                        ? 'text-indigo-900 bg-indigo-100/60' 
-                        : 'text-slate-800 bg-slate-100'
-                    }`}>
-                      {cell.day}
-                    </span>
-                    {isToday && (
-                      <span className="text-[8px] font-black uppercase tracking-widest text-indigo-600 bg-indigo-100/80 px-1.5 py-0.5 rounded-md">Hoje</span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-1">
-                    {isHoliday && (
-                      <span title={holidayName} className="text-rose-500 bg-white rounded-full p-1 shadow-sm">
-                        <Gift className="w-3.5 h-3.5" />
-                      </span>
-                    )}
-                    
-                    {/* Quick Add Plus button on hover */}
-                    {!isDateBeforeToday(dateObj) && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleOpenModal(undefined, new Date(cell.year, cell.month, cell.day, new Date().getHours() + 1, 0));
-                        }}
-                        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-indigo-600 hover:text-white text-indigo-600 rounded-lg transition-all shadow-xs"
-                        title="Agendar neste dia"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Day Schedules List - Completely visible with interactive clickable badges */}
-                <div className="flex-1 flex flex-col gap-1.5 overflow-hidden">
-                  {daySchedules.slice(0, 4).map(s => {
-                    const v = vehicles.find(veh => veh.id === s.vehicleId);
-                    const driver = persons.find(p => p.id === s.driverId);
-                    const cfg = STATUS_MAP[s.status];
-                    const styles = getScheduleStyles(s.status);
-                    const StatusIcon = cfg?.icon || Car;
-
-                    const depTimeStr = new Date(s.departureDateTime).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-
-                    return (
-                      <button
-                        key={s.id}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setViewingSchedule(s);
-                          setIsViewModalOpen(true);
-                        }}
-                        title={`Clique para visualizar agendamento: ${v?.model || 'Veículo'} (${s.destination}) - Motorista: ${driver?.name || 'Não inf.'}`}
-                        className={`group/item w-full text-left p-1.5 px-2 rounded-xl border flex items-center justify-between gap-1.5 transition-all duration-200 shadow-2xs hover:shadow-md hover:scale-[1.02] cursor-pointer ${styles.cardBg}`}
-                      >
-                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                          <div className={`w-5 h-5 rounded-lg flex items-center justify-center shrink-0 transition-transform group-hover/item:scale-110 ${styles.iconBg}`}>
-                            <StatusIcon className="w-3 h-3" />
-                          </div>
-                          <div className="flex flex-col min-w-0 flex-1">
-                            <div className="flex items-center justify-between gap-1">
-                              <span className="text-[9.5px] font-black uppercase truncate leading-tight tracking-tight">
-                                {v?.model || 'Veículo'}
-                              </span>
-                              <span className="text-[8px] font-mono font-bold opacity-80 shrink-0">
-                                {depTimeStr}
-                              </span>
-                            </div>
-                            {s.destination && (
-                              <span className="text-[8px] font-bold opacity-75 truncate leading-none mt-0.5">
-                                📍 {s.destination}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })}
-
-                  {daySchedules.length > 4 && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (onNavigate) {
-                          onNavigate(`/AgendamentoVeiculos/Agendar/Dia?date=${cellDateStr}`);
-                        } else {
-                          setSelectedDay(new Date(cell.year, cell.month, cell.day));
-                          setActiveSubView('day');
-                        }
-                      }}
-                      className="mt-auto py-1 px-2 text-[9px] font-black text-indigo-700 bg-indigo-100/80 hover:bg-indigo-600 hover:text-white rounded-lg text-center uppercase tracking-wider transition-all shadow-xs flex items-center justify-center gap-1 group/more"
-                    >
-                      <span>+ {daySchedules.length - 4} viagens</span>
-                      <ChevronRight className="w-3 h-3 group-hover/more:translate-x-0.5 transition-transform" />
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
+      <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Acesso Não Permitido</h3>
+      <p className="text-sm text-slate-500 mt-2 max-w-md">
+        Seu usuário não possui permissão para acessar esta seção de agendamento de veículos ou o recurso está inativo.
+      </p>
+      <button
+        onClick={() => handleSubViewChange('menu')}
+        className="mt-6 px-6 py-2.5 bg-slate-900 text-white font-bold text-xs uppercase tracking-wider rounded-xl hover:bg-indigo-600 transition-all shadow-md"
+      >
+        Voltar ao Menu
+      </button>
     </div>
   );
 
-  const renderDayView = () => {
-    if (!selectedDay) return null;
+  const renderCalendar = () => {
+    const selectedDayKey = `${String(selectedCalendarDate.getDate()).padStart(2, '0')}-${String(selectedCalendarDate.getMonth() + 1).padStart(2, '0')}`;
+    const selectedDayHoliday = HOLIDAYS[selectedDayKey];
+    const isSelectedDayToday = new Date().getDate() === selectedCalendarDate.getDate() && 
+      new Date().getMonth() === selectedCalendarDate.getMonth() && 
+      new Date().getFullYear() === selectedCalendarDate.getFullYear();
+    const isSelectedDayPast = isDateBeforeToday(selectedCalendarDate);
+
     return (
-      <div className="flex-1 flex flex-col overflow-hidden animate-fade-in h-full bg-slate-50">
-        <div className="bg-white border-b border-slate-200 px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0 z-20">
-          <div className="flex items-center gap-6">
+      <div className="flex-1 flex flex-col overflow-hidden animate-fade-in h-full bg-slate-100/60">
+        {/* Top Header Bar */}
+        <div className="bg-white border-b border-slate-200/80 px-4 md:px-6 py-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 shrink-0 z-20 shadow-xs">
+          <div className="flex items-center gap-3">
             <button 
-              onClick={() => handleSubViewChange('calendar')} 
-              className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 shadow-sm border border-slate-200/60 transition-all active:scale-95"
+              onClick={() => handleSubViewChange('menu')} 
+              className="w-10 h-10 md:w-11 md:h-11 bg-white rounded-2xl flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 border border-slate-200/80 shadow-xs transition-all active:scale-95 group shrink-0 cursor-pointer"
+              title="Voltar ao Menu Principal"
             >
-              <ArrowLeft className="w-6 h-6" />
+              <ArrowLeft className="w-5 h-5 group-hover:-translate-x-0.5 transition-transform" />
             </button>
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 bg-slate-900 text-white rounded-[1.2rem] flex flex-col items-center justify-center shadow-lg">
-                <span className="text-[9px] font-black uppercase leading-none mb-1 opacity-60">
-                  {selectedDay.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '')}
-                </span>
-                <span className="text-xl font-black leading-none">
-                  {selectedDay.getDate()}
-                </span>
+            <div>
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-xl bg-indigo-50 text-indigo-600">
+                  <CalendarDays className="w-5 h-5" />
+                </div>
+                <h2 className="text-xl md:text-2xl lg:text-3xl font-black text-slate-900 uppercase tracking-tight leading-none">Agendamento de Veículos</h2>
               </div>
-              <div>
-                <h3 className="text-2xl font-black text-slate-950 uppercase tracking-tight leading-none">
-                  {selectedDay.toLocaleDateString('pt-BR', { weekday: 'long' })}
-                </h3>
-                <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1.5 flex items-center gap-1.5">
-                  Monitoramento de Frota <ChevronRightIcon className="w-3 h-3 text-slate-350" /> {selectedDay.toLocaleDateString('pt-BR')}
-                </p>
-              </div>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1 ml-0.5">Calendário de Viagens e Agendamentos</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            {!isDateBeforeToday(selectedDay) && (
-              <button 
-                onClick={() => handleOpenModal(undefined, new Date(new Date(selectedDay).setHours(new Date().getHours() + 1, 0, 0, 0)))} 
-                className="px-6 py-3 bg-indigo-600 text-white font-black rounded-2xl shadow-lg shadow-indigo-600/20 flex items-center gap-3 uppercase text-[10px] tracking-[0.2em] hover:bg-indigo-700 transition-all active:scale-95"
-              >
-                <Plus className="w-4 h-4" /> Novo Agendamento
-              </button>
-            )}
+
+          {/* Center: Month Selector with Hoje in front */}
+          <div className="flex items-center gap-1.5 bg-slate-100/90 p-1.5 rounded-2xl border border-slate-200/80 shadow-inner order-3 md:order-2 w-full md:w-auto justify-between md:justify-center">
+            <button 
+              onClick={handlePrevMonth} 
+              className="p-2 hover:bg-white hover:shadow-xs rounded-xl text-slate-600 transition-all active:scale-90 shrink-0 cursor-pointer"
+              title="Mês Anterior"
+            >
+              <ChevronLeft className="w-4 h-4 md:w-5 md:h-5" />
+            </button>
+            <div className="px-2 md:px-5 text-xs md:text-sm font-black text-slate-900 uppercase tracking-wider text-center select-none truncate">
+              {currentDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+            </div>
+            <button 
+              onClick={handleNextMonth} 
+              className="p-2 hover:bg-white hover:shadow-xs rounded-xl text-slate-600 transition-all active:scale-90 shrink-0 cursor-pointer"
+              title="Próximo Mês"
+            >
+              <ChevronRight className="w-4 h-4 md:w-5 md:h-5" />
+            </button>
+
+            {/* Botão Hoje em frente ao Mês e Ano */}
+            <button 
+              onClick={handleGoToToday} 
+              className={`ml-1 px-3 py-1.5 border rounded-xl text-[10px] font-black uppercase tracking-wider transition-all shadow-xs active:scale-95 flex items-center gap-1 shrink-0 cursor-pointer ${
+                isSelectedDayToday
+                  ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm shadow-indigo-600/30'
+                  : 'bg-white border-slate-200 text-slate-700 hover:text-indigo-600 hover:border-indigo-300'
+              }`}
+              title="Ir para a data de hoje"
+            >
+              <Sparkles className={`w-3 h-3 ${isSelectedDayToday ? 'text-white' : 'text-indigo-600'}`} />
+              Hoje
+            </button>
+          </div>
+
+          {/* Spacer / Right */}
+          <div className="hidden md:block w-10"></div>
+        </div>
+
+        {/* ===================== WEB / DESKTOP VIEW (CALENDÁRIO COMPLETO COM AGENDAMENTOS) ===================== */}
+        <div className="hidden md:flex flex-col flex-1 overflow-hidden">
+          {/* Weekday headers */}
+          <div className="grid grid-cols-7 bg-slate-900 shrink-0 shadow-md z-10">
+            {['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'].map((d, i) => (
+              <div key={d} className={`py-3 text-center text-[10px] font-black uppercase tracking-[0.25em] border-r border-slate-800/60 last:border-0 ${i === 0 || i === 6 ? 'text-amber-400' : 'text-slate-300'}`}>
+                {d}
+              </div>
+            ))}
+          </div>
+
+          {/* Grid container */}
+          <div className="flex-1 overflow-y-auto custom-scrollbar p-2 md:p-3 bg-slate-200/50">
+            <div className="grid grid-cols-7 gap-2 w-full">
+              {calendarData.map((cell, idx) => {
+                if (!cell.isCurrent) {
+                  return (
+                    <div key={idx} className="bg-slate-100/40 rounded-2xl min-h-[130px] lg:min-h-[150px] p-2 border border-slate-200/30 opacity-40 select-none">
+                      <span className="text-xs font-bold text-slate-400">{cell.day}</span>
+                    </div>
+                  );
+                }
+
+                const dayStart = new Date(cell.year, cell.month, cell.day, 0, 0, 0).getTime();
+                const dayEnd = new Date(cell.year, cell.month, cell.day, 23, 59, 59).getTime();
+                const dateObj = new Date(cell.year, cell.month, cell.day);
+                const isWeekend = dateObj.getDay() === 0 || dateObj.getDay() === 6;
+                const dayKey = `${String(cell.day).padStart(2, '0')}-${String(cell.month + 1).padStart(2, '0')}`;
+                const holidayName = HOLIDAYS[dayKey];
+                const isHoliday = !!holidayName;
+                const isPast = isDateBeforeToday(dateObj);
+                
+                const daySchedules = schedules.filter(s => {
+                  if (s.status === 'cancelado') return false;
+                  const dep = new Date(s.departureDateTime).getTime();
+                  const ret = new Date(s.returnDateTime).getTime();
+                  return (dep <= dayEnd) && (ret >= dayStart);
+                }).sort((a, b) => a.departureDateTime.localeCompare(b.departureDateTime));
+
+                const isToday = new Date().getDate() === cell.day && new Date().getMonth() === cell.month && new Date().getFullYear() === cell.year;
+
+                // Visual background styling
+                let cellBgClass = 'bg-white hover:bg-slate-50/90 border-slate-200/80';
+                if (isToday) cellBgClass = 'bg-indigo-50/30 border-indigo-300 ring-2 ring-indigo-500/20';
+                else if (isHoliday) cellBgClass = 'bg-rose-50/60 border-rose-200/80';
+                else if (isWeekend) cellBgClass = 'bg-slate-50/90 border-slate-200/60';
+
+                return (
+                  <div 
+                    key={idx} 
+                    className={`group relative min-h-[130px] lg:min-h-[155px] flex flex-col p-2 rounded-2xl border transition-all duration-200 shadow-xs hover:shadow-lg hover:z-20 ${cellBgClass}`}
+                  >
+                    {/* Cell Header */}
+                    <div className="flex items-center justify-between mb-1.5 shrink-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className={`text-xs font-black w-6 h-6 lg:w-7 lg:h-7 flex items-center justify-center rounded-xl transition-transform group-hover:scale-110 ${
+                          isToday 
+                            ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30' 
+                            : isHoliday 
+                            ? 'text-rose-700 bg-rose-100 font-extrabold' 
+                            : isWeekend 
+                            ? 'text-indigo-900 bg-indigo-100/60' 
+                            : 'text-slate-800 bg-slate-100'
+                        }`}>
+                          {cell.day}
+                        </span>
+                        {isToday && (
+                          <span className="text-[8px] font-black uppercase tracking-widest text-indigo-600 bg-indigo-100/80 px-1.5 py-0.5 rounded-md">Hoje</span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        {isHoliday && (
+                          <span title={holidayName} className="text-rose-500 bg-white rounded-full p-1 shadow-xs">
+                            <Gift className="w-3.5 h-3.5" />
+                          </span>
+                        )}
+                        
+                        {/* Quick Add Plus button on hover */}
+                        {!isPast && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleStartNovoAgendamento(new Date(cell.year, cell.month, cell.day, new Date().getHours() + 1, 0));
+                            }}
+                            className="opacity-0 group-hover:opacity-100 p-1 hover:bg-indigo-600 hover:text-white text-indigo-600 rounded-lg transition-all shadow-xs cursor-pointer"
+                            title="Novo agendamento neste dia"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Day Schedules List */}
+                    <div className="flex-1 flex flex-col gap-1 overflow-y-auto custom-scrollbar max-h-[140px]">
+                      {daySchedules.slice(0, 3).map(s => {
+                        const v = vehicles.find(veh => veh.id === s.vehicleId);
+                        const driver = persons.find(p => p.id === s.driverId);
+                        const cfg = STATUS_MAP[s.status];
+                        const styles = getScheduleStyles(s.status);
+                        const StatusIcon = cfg?.icon || Car;
+
+                        const depTimeStr = new Date(s.departureDateTime).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+                        return (
+                          <button
+                            key={s.id}
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setViewingSchedule(s);
+                              setIsViewModalOpen(true);
+                            }}
+                            title={`Visualizar: ${v?.model || 'Veículo'} (${s.destination}) - Motorista: ${driver?.name || 'Não inf.'}`}
+                            className={`group/item w-full text-left p-1.5 rounded-xl border flex items-center justify-between gap-1.5 transition-all duration-200 shadow-2xs hover:shadow-md hover:scale-[1.01] cursor-pointer ${styles.cardBg}`}
+                          >
+                            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                              <div className={`w-5 h-5 rounded-lg flex items-center justify-center shrink-0 transition-transform group-hover/item:scale-110 ${styles.iconBg}`}>
+                                <StatusIcon className="w-3 h-3" />
+                              </div>
+                              <div className="flex flex-col min-w-0 flex-1">
+                                <div className="flex items-center justify-between gap-1">
+                                  <span className="text-[9.5px] font-black uppercase truncate leading-tight tracking-tight">
+                                    {v?.model || 'Veículo'}
+                                  </span>
+                                  <span className={`text-[8.5px] font-bold shrink-0 ${styles.timeColor}`}>
+                                    {depTimeStr}
+                                  </span>
+                                </div>
+                                <span className="text-[8px] opacity-70 truncate font-semibold">
+                                  {s.destination || 'Sem destino'}
+                                </span>
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+
+                      {daySchedules.length > 3 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedCalendarDate(new Date(cell.year, cell.month, cell.day));
+                          }}
+                          className="text-[8.5px] font-bold text-slate-500 hover:text-indigo-600 text-center py-0.5 rounded bg-slate-100/80 hover:bg-indigo-50 transition-colors"
+                        >
+                          +{daySchedules.length - 3} mais
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
 
-        <div className="flex-1 overflow-hidden flex flex-col md:flex-row min-h-0 bg-slate-100/40">
-          <div className="flex-1 flex flex-col border-r border-slate-200 overflow-hidden h-full">
-            <div className="px-10 py-5 bg-white border-b border-slate-100 flex items-center gap-3 shrink-0">
-              <Navigation className="w-4 h-4 text-indigo-600" />
-              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Atividades no Período</span>
-            </div>
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-6 md:p-8">
-              <div className="space-y-4 max-w-4xl mx-auto">
-                {(() => {
-                  const dayStart = new Date(selectedDay).setHours(0, 0, 0, 0);
-                  const dayEnd = new Date(selectedDay).setHours(23, 59, 59, 999);
-                  const daySchedules = schedules.filter(s => {
-                    const dep = new Date(s.departureDateTime).getTime();
-                    const ret = new Date(s.returnDateTime).getTime();
-                    return (dep <= dayEnd) && (ret >= dayStart) && s.status !== 'cancelado';
-                  }).sort((a, b) => a.departureDateTime.localeCompare(b.departureDateTime));
-                  const dayKey = `${String(selectedDay.getDate()).padStart(2, '0')}-${String(selectedDay.getMonth() + 1).padStart(2, '0')}`;
-                  const holiday = HOLIDAYS[dayKey];
-                  if (daySchedules.length === 0 && !holiday) {
-                    return (
-                      <div className="py-20 flex flex-col items-center justify-center text-center space-y-4 bg-white rounded-[2.5rem] border-2 border-dashed border-slate-200 shadow-xs">
-                        <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center text-slate-350">
-                          <Calendar className="w-8 h-8" />
-                        </div>
-                        <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">Nenhuma saída registrada para este dia.</p>
-                      </div>
-                    );
+        {/* ===================== MOBILE VIEW (PERMANECE COMO ESTÁ) ===================== */}
+        <div className="flex md:hidden flex-col flex-1 overflow-hidden">
+          {/* Horizontal Days Bar (Selector) */}
+          <div className="bg-white border-b border-slate-200/90 px-2 py-2.5 shrink-0 shadow-xs z-10">
+            <div className="flex items-center gap-1.5 max-w-5xl mx-auto">
+              <button
+                onClick={handlePrevDay}
+                className="w-8 h-10 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-600 hover:text-indigo-600 transition-all shrink-0 active:scale-90"
+                title="Dia Anterior"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+
+              {/* Days Scroll Container */}
+              <div 
+                ref={daysBarRef}
+                className="flex-1 overflow-x-auto custom-scrollbar flex items-center gap-1.5 py-1 px-1 scroll-smooth"
+              >
+                {monthDays.map((item) => {
+                  const isSelected = item.isSelected;
+                  const isToday = item.isToday;
+                  const isHoliday = !!item.holidayName;
+
+                  let btnStyle = "bg-white text-slate-700 border-slate-200 hover:border-indigo-300 hover:bg-slate-50";
+                  if (isSelected) {
+                    btnStyle = "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-600/30 scale-[1.03] ring-2 ring-indigo-300";
+                  } else if (isToday) {
+                    btnStyle = "bg-indigo-50/90 text-indigo-900 border-indigo-300 ring-1 ring-indigo-400/30";
+                  } else if (isHoliday) {
+                    btnStyle = "bg-rose-50/70 text-rose-800 border-rose-200 hover:border-rose-300";
                   }
+
                   return (
-                    <>
-                      {holiday && (
-                        <div className="bg-rose-50 border border-rose-100 p-6 rounded-[2.5rem] flex items-center gap-5 mb-4 animate-fade-in shadow-sm">
-                          <div className="w-12 h-12 bg-rose-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-rose-600/20 rotate-3">
-                            <Gift className="w-6 h-6" />
-                          </div>
-                          <div>
-                            <span className="text-[9px] font-black text-rose-400 uppercase tracking-widest leading-none">Feriado Nacional</span>
-                            <h4 className="text-lg font-black text-rose-900 leading-tight uppercase mt-0.5">{holiday}</h4>
-                          </div>
-                        </div>
-                      )}
-                      {daySchedules.map(s => {
-                        const v = vehicles.find(veh => veh.id === s.vehicleId);
-                        const d = persons.find(p => p.id === s.driverId);
-                        const sec = sectors.find(sec => sec.id === s.serviceSectorId);
-                        const cfg = STATUS_MAP[s.status];
-                        const vehicleSector = sectors.find(sec => sec.id === v?.sectorId)?.name || 'Sem Setor';
-                        const depDate = new Date(s.departureDateTime);
-                        const retDate = new Date(s.returnDateTime);
-                        const formatDT = (dt: Date) => dt.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ' ' + dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-                        return (
-                          <div key={s.id} className="bg-white p-5 rounded-[2.5rem] border border-slate-200 flex flex-col gap-4 hover:shadow-xl transition-all group shadow-sm border-l-[6px]" style={{ borderLeftColor: `var(--tw-color-${cfg.color}-500)` }}>
-                            <div className="flex justify-between items-center">
-                              <div className="flex items-center gap-4 min-w-0">
-                                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform bg-${cfg.color}-50 text-${cfg.color}-600`}>
-                                  <Car className="w-6 h-6" />
-                                </div>
-                                <div className="min-w-0 flex flex-col gap-1 items-start">
-                                  <div className="flex items-center gap-2">
-                                    <h4 className="text-lg font-black text-slate-900 uppercase tracking-tight truncate leading-none">{v?.model || 'Desconhecido'} <span className="text-slate-400 text-[10px] font-bold ml-1">{v?.brand}</span></h4>
-                                    <div className="px-2 py-0.5 rounded-lg bg-indigo-600 text-white text-[9px] font-black uppercase tracking-widest shadow-sm">ID: {s.protocol}</div>
-                                    {v?.sectorId && (<span className="text-[9px] font-black text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded align-middle">{vehicleSector}</span>)}
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-mono text-[9px] font-bold text-white bg-slate-900 px-2 py-0.5 rounded-md tracking-wider">{v?.plate || '---'}</span>
-                                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1"><Clock className="w-2.5 h-2.5" /> Criado em: {new Date(s.createdAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-1">
-                                <button onClick={() => { setViewingSchedule(s); setIsViewModalOpen(true); }} className="p-2.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"><Eye className="w-4.5 h-4.5" /></button>
-                                {s.requesterId === currentUserId && (<button onClick={() => handleOpenModal(s)} className="p-2.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all"><Edit3 className="w-4.5 h-4.5" /></button>)}
-                              </div>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
-                              <div className="md:col-span-3">
-                                <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-[9px] font-black uppercase tracking-widest bg-${cfg.color}-50 text-${cfg.color}-700 border-${cfg.color}-200/50`}><cfg.icon className="w-3.5 h-3.5" /> {cfg.label}</div>
-                              </div>
-                              <div className="md:col-span-4 flex items-center gap-2 min-w-0">
-                                <UserIcon className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                                <div className="flex flex-col min-w-0">
-                                  <span className="text-[7px] font-black text-slate-400 uppercase leading-none mb-0.5">Condutor Responsável</span>
-                                  <span className="text-xs font-bold text-slate-600 truncate">{d?.name || '---'}</span>
-                                </div>
-                              </div>
-                              <div className="md:col-span-5 flex items-center gap-2 min-w-0">
-                                <MapPin className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-                                <div className="flex flex-col min-w-0">
-                                  <span className="text-[7px] font-black text-slate-400 uppercase leading-none mb-0.5">Destino da Viagem</span>
-                                  <span className="text-xs font-black text-indigo-600 uppercase truncate" title={s.destination}>{s.destination}</span>
-                                </div>
-                              </div>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-12 gap-3 pt-3 border-t border-slate-50 items-center">
-                              <div className="md:col-span-8 flex items-center gap-2">
-                                <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                                <div className="flex items-center gap-4">
-                                  <div className="flex flex-col">
-                                    <span className="text-[7px] font-black text-slate-400 uppercase leading-none mb-1">Saída</span>
-                                    <span className="bg-slate-50 px-2 py-1 rounded border border-slate-100 text-[10px] font-black text-slate-500 uppercase tracking-tighter">{formatDT(depDate)}</span>
-                                  </div>
-                                  <ArrowRight className="w-3 h-3 text-slate-300 mt-2" />
-                                  <div className="flex flex-col">
-                                    <span className="text-[7px] font-black text-slate-400 uppercase leading-none mb-1">Retorno</span>
-                                    <span className="bg-slate-50 px-2 py-1 rounded border border-slate-100 text-[10px] font-black text-slate-500 uppercase tracking-tighter">{formatDT(retDate)}</span>
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="md:col-span-4 flex items-center justify-end min-w-0">
-                                <div className="flex items-center gap-3 bg-slate-50 px-4 py-2 rounded-xl border border-slate-100 w-full md:w-auto">
-                                  <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0"><Building2 className="w-4 h-4 text-indigo-600" /></div>
-                                  <div className="flex flex-col min-w-0">
-                                    <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest leading-none mb-0.5">Setor Atendido</span>
-                                    <span className="text-[10px] font-bold text-slate-800 uppercase leading-tight truncate">{sec?.name || 'Não informado'}</span>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </>
+                    <button
+                      key={item.day}
+                      data-selected={isSelected ? "true" : "false"}
+                      onClick={() => handleSelectDay(item.dateObj)}
+                      className={`min-w-[56px] py-2 px-1.5 rounded-2xl border flex flex-col items-center justify-center gap-0.5 transition-all duration-200 active:scale-95 shrink-0 cursor-pointer ${btnStyle}`}
+                      title={isHoliday ? `Feriado: ${item.holidayName}` : undefined}
+                    >
+                      <span className={`text-[9px] font-black uppercase tracking-wider leading-none ${
+                        isSelected ? 'text-indigo-100' : isToday ? 'text-indigo-600' : isHoliday ? 'text-rose-600' : 'text-slate-400'
+                      }`}>
+                        {item.weekdayShort}
+                      </span>
+
+                      <span className={`text-base font-black leading-tight ${
+                        isSelected ? 'text-white' : 'text-slate-900'
+                      }`}>
+                        {item.day}
+                      </span>
+
+                      <div className="flex items-center gap-1 min-h-[14px]">
+                        {isToday && (
+                          <span className={`text-[7.5px] font-black uppercase px-1 rounded ${
+                            isSelected ? 'bg-white text-indigo-700' : 'bg-indigo-600 text-white'
+                          }`}>
+                            Hoje
+                          </span>
+                        )}
+
+                        {isHoliday && !isToday && (
+                          <Gift className={`w-3 h-3 ${isSelected ? 'text-white' : 'text-rose-500'}`} />
+                        )}
+                      </div>
+                    </button>
                   );
-                })()}
+                })}
               </div>
+
+              <button
+                onClick={handleNextDay}
+                className="w-8 h-10 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-600 hover:text-indigo-600 transition-all shrink-0 active:scale-90"
+                title="Próximo Dia"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
             </div>
           </div>
 
-          <div className="w-full md:w-[26rem] flex flex-col overflow-hidden bg-slate-50/50 h-full border-l border-slate-200">
-            <div className="px-8 py-5 bg-white border-b border-slate-100 flex items-center gap-3 shrink-0">
-              <Activity className="w-4 h-4 text-emerald-600" />
-              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Veículos Livres no Dia</span>
-            </div>
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
-              {!isDateBeforeToday(selectedDay) ? (
-                <div className="space-y-6">
-                  {(() => {
-                    const dStart = new Date(selectedDay).setHours(0, 0, 0, 0);
-                    const dEnd = new Date(selectedDay).setHours(23, 59, 59, 999);
-                    const schedulableVehicles = vehicles.filter(v => v.status === 'operacional' && v.availableForScheduling === 'Sim');
-                    const available: Vehicle[] = [];
-                    const occupied: { vehicle: Vehicle, schedule: VehicleSchedule }[] = [];
-                    schedulableVehicles.forEach(v => {
-                      const occupyingSchedule = schedules.find(s => {
-                        if (s.vehicleId !== v.id || (s.status !== 'confirmado' && s.status !== 'em_curso')) return false;
-                        const sStart = new Date(s.departureDateTime).getTime();
-                        const sEnd = new Date(s.returnDateTime).getTime();
-                        return (sStart <= dEnd) && (sEnd >= dStart);
-                      });
-                      if (occupyingSchedule) occupied.push({ vehicle: v, schedule: occupyingSchedule });
-                      else available.push(v);
-                    });
-                    if (available.length === 0 && occupied.length === 0) {
-                      return (
-                        <div className="text-center py-10">
-                          <Info className="w-8 h-8 text-slate-350 mx-auto mb-2" />
-                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Nenhum veículo operacional disponível</p>
-                        </div>
-                      );
-                    }
-                    return (
-                      <>
-                        {available.length > 0 && (
-                          <div className="space-y-3">
-                            <div className="flex items-center gap-2 mb-2 ml-1">
-                              <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></div>
-                              <span className="text-[9px] font-black text-blue-600 uppercase tracking-widest">Disponíveis</span>
-                            </div>
-                            {available.map(v => {
-                              const vSector = sectors.find(s => s.id === v.sectorId)?.name || 'Sem Setor';
-                              return (
-                                <button key={v.id} onClick={() => handleOpenModal(undefined, new Date(new Date(selectedDay!).setHours(new Date().getHours() + 1, 0, 0, 0)), v.id)} className="w-full bg-blue-50/50 p-4 rounded-2xl border border-blue-100 hover:border-blue-400 hover:shadow-md transition-all flex items-center justify-between group text-left shadow-sm">
-                                  <div className="flex items-center gap-4 min-w-0">
-                                    <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-blue-400 group-hover:bg-blue-600 group-hover:text-white transition-all shrink-0 shadow-sm"><Car className="w-5 h-5" /></div>
-                                    <div className="min-w-0">
-                                      <span className="text-xs font-black text-blue-900 uppercase block truncate leading-tight">{v.brand} {v.model}</span>
-                                      <div className="flex items-center gap-2 mt-0.5">
-                                        <span className="text-[8px] font-mono font-bold text-blue-600 bg-white px-1.5 py-0.5 rounded border border-blue-100 tracking-wider uppercase">{v.plate}</span>
-                                        <span className="text-[9px] text-blue-450 font-bold uppercase">{vSector}</span>
-                                      </div>
-                                    </div>
-                                  </div>
-                                  <div className="p-2 text-blue-200 group-hover:text-blue-600 transition-colors"><Plus className="w-4 h-4" /></div>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        )}
-                        {occupied.length > 0 && (
-                          <div className="space-y-3 pt-4">
-                            <div className="flex items-center gap-2 mb-2 ml-1">
-                              <div className="w-2 h-2 rounded-full bg-orange-500"></div>
-                              <span className="text-[9px] font-black text-orange-600 uppercase tracking-widest">Ocupados no Período</span>
-                            </div>
-                            {occupied.map(({ vehicle, schedule }) => {
-                              const vSector = sectors.find(s => s.id === vehicle.sectorId)?.name || 'Sem Setor';
-                              return (
-                                <div key={vehicle.id} className="w-full bg-orange-50/50 p-4 rounded-2xl border border-orange-200 flex items-center justify-between group shadow-sm">
-                                  <div className="flex items-center gap-4 min-w-0">
-                                    <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-orange-400 shrink-0 shadow-sm"><Navigation className="w-5 h-5" /></div>
-                                    <div className="min-w-0">
-                                      <div className="flex items-center gap-2"><span className="text-xs font-black text-orange-900 uppercase truncate leading-tight">{vehicle.brand} {vehicle.model}</span></div>
-                                      <div className="flex items-center gap-2 mt-0.5">
-                                        <span className="text-[8px] font-mono font-bold text-orange-600 bg-white px-1.5 py-0.5 rounded border border-orange-100 tracking-wider uppercase">{vehicle.plate}</span>
-                                        <span className="text-[9px] text-orange-400 font-bold uppercase truncate flex items-center gap-1 max-w-[100px]"><MapPin className="w-2 h-2 shrink-0" /> {schedule.destination}</span>
-                                      </div>
-                                      <div className="text-[8px] font-black text-orange-300 uppercase mt-1">Lotação: {vSector}</div>
-                                    </div>
-                                  </div>
-                                  <div className="shrink-0 ml-2">
-                                    <div className="w-6 h-6 bg-white border border-orange-100 rounded-lg flex items-center justify-center text-orange-200 shadow-sm"><Lock className="w-3 h-3" /></div>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </>
-                    );
-                  })()}
-                </div>
-              ) : (
-                <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-6 bg-rose-50/50 m-4 rounded-[2.5rem] border border-rose-100/50">
-                  <div className="w-20 h-20 bg-rose-100 rounded-2xl flex items-center justify-center text-rose-500 shadow-xl shadow-rose-500/10 rotate-3"><AlertCircle className="w-10 h-10" /></div>
-                  <div className="max-w-xs mx-auto">
-                    <h3 className="text-lg font-black text-rose-900 uppercase tracking-tight mb-2">Data Passada</h3>
-                    <p className="text-xs font-bold text-rose-600/80 leading-relaxed uppercase tracking-wide">Não é permitido realizar agendamentos em períodos retroativos.</p>
-                    <div className="mt-4 px-4 py-2 bg-rose-100/50 rounded-xl border border-rose-200/50 inline-block">
-                      <p className="text-[10px] font-black text-rose-700 uppercase tracking-widest">Tente a partir de {new Date().toLocaleDateString('pt-BR')}</p>
+          {/* Mobile Main Content Area */}
+          <div className="flex-1 overflow-y-auto custom-scrollbar p-4 flex flex-col justify-center items-center">
+            <div className="w-full max-w-lg space-y-4 my-auto">
+              
+              {/* Selected Date Header Card */}
+              <div className="bg-white p-4 rounded-3xl border border-slate-200/90 shadow-sm flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-gradient-to-br from-slate-900 to-indigo-950 text-white rounded-2xl flex flex-col items-center justify-center shadow-md shrink-0">
+                    <span className="text-[9px] font-black uppercase leading-none opacity-60">
+                      {selectedCalendarDate.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '')}
+                    </span>
+                    <span className="text-xl font-black leading-none mt-1">
+                      {selectedCalendarDate.getDate()}
+                    </span>
+                  </div>
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-base font-black text-slate-900 uppercase tracking-tight leading-none">
+                        {selectedCalendarDate.toLocaleDateString('pt-BR', { weekday: 'long' })}
+                      </h3>
+                      {isSelectedDayToday && (
+                        <span className="text-[8px] font-black uppercase tracking-widest bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-md">
+                          Hoje
+                        </span>
+                      )}
                     </div>
+                    <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mt-1">
+                      {selectedCalendarDate.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
+                    </p>
                   </div>
                 </div>
+
+                {selectedDayHoliday && (
+                  <div className="flex items-center gap-1.5 bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-xl text-rose-800 text-[10px] font-bold shrink-0">
+                    <Gift className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                    <span className="truncate max-w-[120px]">{selectedDayHoliday}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Warning if past date */}
+              {isSelectedDayPast && (
+                <div className="bg-amber-50 border border-amber-200 p-3.5 rounded-2xl flex items-center justify-between gap-2 text-amber-900 text-[11px] font-bold">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>Data passada. Selecione hoje ou uma data futura.</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleGoToToday}
+                    className="px-2.5 py-1 bg-amber-600 text-white rounded-lg text-[9px] uppercase tracking-wider font-black shrink-0"
+                  >
+                    Hoje
+                  </button>
+                </div>
               )}
+
+              {/* Action Card: Novo Agendamento */}
+              <div className="bg-gradient-to-br from-white via-slate-50 to-indigo-50/40 p-5 rounded-3xl border border-slate-200/90 shadow-md relative overflow-hidden flex flex-col items-center text-center">
+                <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 via-indigo-600 to-purple-600 flex items-center justify-center mb-3 text-white shadow-lg shadow-indigo-600/30 ring-4 ring-white/80">
+                  <Car className="w-8 h-8 drop-shadow-md" />
+                </div>
+
+                <h3 className="text-lg font-black text-slate-900 tracking-tight uppercase mb-1">
+                  Realizar Novo Agendamento
+                </h3>
+
+                <p className="text-xs text-slate-500 font-medium mb-4 leading-relaxed">
+                  Clique abaixo para abrir o formulário e solicitar uma viagem para o dia <strong className="text-indigo-900 font-bold">{selectedCalendarDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })}</strong>.
+                </p>
+
+                <button
+                  type="button"
+                  onClick={() => handleStartNovoAgendamento(selectedCalendarDate)}
+                  disabled={isSelectedDayPast}
+                  className="w-full py-3.5 bg-gradient-to-r from-indigo-600 via-indigo-700 to-purple-600 text-white font-black rounded-xl shadow-md shadow-indigo-600/30 active:scale-95 transition-all flex items-center justify-center gap-2 uppercase text-xs tracking-wider disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
+                >
+                  <Plus className="w-4 h-4 stroke-[2.5]" />
+                  <span>Novo Agendamento</span>
+                </button>
+              </div>
+
             </div>
           </div>
         </div>
@@ -1319,166 +1315,94 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
     );
   };
 
-  return (
-    <div className="flex-1 flex flex-col overflow-hidden font-sans h-full bg-slate-50">
-      {activeSubView === 'menu' && renderDashboard()}
-      {activeSubView === 'calendar' && (canAccessAgendar ? renderCalendar() : (
-        <div className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-50 text-center">
-          <Lock className="w-12 h-12 text-slate-300 mb-4" />
-          <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Acesso Indisponível</h3>
-          <p className="text-xs text-slate-500 mt-2 mb-4">Você não possui permissão para agendar veículos ou este recurso está desabilitado.</p>
-          <button onClick={() => handleSubViewChange('menu')} className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold uppercase">Voltar ao Menu</button>
-        </div>
-      ))}
-      {activeSubView === 'day' && (canAccessAgendar ? renderDayView() : (
-        <div className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-50 text-center">
-          <Lock className="w-12 h-12 text-slate-300 mb-4" />
-          <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Acesso Indisponível</h3>
-          <p className="text-xs text-slate-500 mt-2 mb-4">Você não possui permissão para agendar veículos ou este recurso está desabilitado.</p>
-          <button onClick={() => handleSubViewChange('menu')} className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold uppercase">Voltar ao Menu</button>
-        </div>
-      ))}
-      {activeSubView === 'history' && (canAccessMeus ? (
-        <VehicleScheduleHistory
-          schedules={schedules}
-          vehicles={vehicles}
-          persons={persons}
-          sectors={sectors}
-          state={state}
-          onViewDetails={(s) => { setViewingSchedule(s); setIsViewModalOpen(true); }}
-          onEdit={(s) => handleOpenModal(s)}
-          onUpdateStatus={onUpdateStatusSchedule}
-          onUpdateSchedule={onUpdateSchedule}
-          onDelete={onDeleteSchedule}
-          onBack={() => handleSubViewChange('menu')}
-          currentUserId={currentUserId}
-          userRole={currentUserRole}
-          currentUserSector={currentUserSector}
-        />
-      ) : (
-        <div className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-50 text-center">
-          <Lock className="w-12 h-12 text-slate-300 mb-4" />
-          <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Acesso Indisponível</h3>
-          <p className="text-xs text-slate-500 mt-2 mb-4">Você não possui permissão para visualizar Meus Agendamentos ou este recurso está desabilitado.</p>
-          <button onClick={() => handleSubViewChange('menu')} className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold uppercase">Voltar ao Menu</button>
-        </div>
-      ))}
-      {activeSubView === 'approvals' && (canAccessAprovacoes ? (
-        <VehicleScheduleApprovals
-          schedules={schedules}
-          vehicles={vehicles}
-          persons={persons}
-          sectors={sectors}
-          onApprove={(s) => onUpdateStatusSchedule(s.id, 'confirmado')}
-          onReject={(s) => onUpdateStatusSchedule(s.id, 'cancelado', { reason: 'Rejeitado por Gestor', cancelledBy: currentUserName || 'Gestor' })}
-          onBack={() => handleSubViewChange('menu')}
-          currentUserId={currentUserId}
-          currentUserPersonId={currentUserPersonId}
-          currentUserRole={currentUserRole}
-          state={state}
-        />
-      ) : (
-        <div className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-50 text-center">
-          <Lock className="w-12 h-12 text-slate-300 mb-4" />
-          <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Acesso Indisponível</h3>
-          <p className="text-xs text-slate-500 mt-2 mb-4">Você não possui permissão para aprovações ou este recurso está desabilitado.</p>
-          <button onClick={() => handleSubViewChange('menu')} className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold uppercase">Voltar ao Menu</button>
-        </div>
-      ))}
-      {activeSubView === 'dashboard' && (canAccessDashboard ? (
-        <VehicleScheduleDashboard
-          schedules={schedules}
-          vehicles={vehicles}
-          persons={persons}
-          sectors={sectors}
-          onBack={() => handleSubViewChange('menu')}
-        />
-      ) : (
-        <div className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-50 text-center">
-          <Lock className="w-12 h-12 text-slate-300 mb-4" />
-          <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Acesso Indisponível</h3>
-          <p className="text-xs text-slate-500 mt-2 mb-4">Você não possui permissão para visualizar o Dashboard Analítico ou este recurso está desabilitado.</p>
-          <button onClick={() => handleSubViewChange('menu')} className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold uppercase">Voltar ao Menu</button>
-        </div>
-      ))}
-      {activeSubView === 'consultar' && (canAccessConsultar ? (
-        <ConsultarVeiculoScreen
-          onBack={() => handleSubViewChange('menu')}
-          onSelectVehicleToSchedule={(vehicleId, dateStr, startTime, endTime) => {
-            const [d, m, y] = dateStr.split('/');
-            const departureDate = new Date(`${y}-${m}-${d}T${startTime}:00`);
-            const returnDate = new Date(`${y}-${m}-${d}T${endTime}:00`);
-            handleOpenModal(undefined, departureDate, vehicleId, returnDate);
-          }}
-        />
-      ) : (
-        <div className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-50 text-center">
-          <Lock className="w-12 h-12 text-slate-300 mb-4" />
-          <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Acesso Indisponível</h3>
-          <p className="text-xs text-slate-500 mt-2 mb-4">Você não possui permissão para consultar veículos ou este recurso está desabilitado.</p>
-          <button onClick={() => handleSubViewChange('menu')} className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold uppercase">Voltar ao Menu</button>
-        </div>
-      ))}
+  const renderNovoAgendamento = () => {
+    const selectedVehicle = vehicles.find(v => v.id === formData.vehicleId);
+    const selectedDriver = persons.find(p => p.id === formData.driverId);
+    const selectedRequester = persons.find(p => p.id === formData.requesterPersonId);
+    const selectedSector = sectors.find(s => s.id === formData.serviceSectorId);
 
-      {isModalOpen && createPortal(
-        <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center sm:p-4 bg-slate-900/80 backdrop-blur-xl animate-fade-in">
-          <div className="bg-white sm:rounded-[3.5rem] rounded-t-[3.5rem] shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)] w-full max-w-5xl overflow-hidden flex flex-col animate-slide-up border border-white/20 h-full sm:h-auto max-h-[96vh]">
-            <div className="px-8 py-5 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
-              <div className="flex items-center gap-4">
-                <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg rotate-[-4deg] shrink-0"><Calendar className="w-5 h-5" /></div>
-                <div>
-                  <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight leading-tight">{editingSchedule ? 'Editar Agendamento' : 'Novo Agendamento'}</h3>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-none">O veículo ficará indisponível durante o intervalo se confirmado</p>
-                  </div>
+    const tabs: { id: 'dados_gerais' | 'destino' | 'data' | 'objetivo' | 'tripulacao'; label: string; icon: any }[] = [
+      { id: 'dados_gerais', label: 'Dados Gerais', icon: ClipboardList },
+      { id: 'destino', label: 'Destino', icon: MapPin },
+      { id: 'data', label: 'Horários', icon: Clock },
+      { id: 'objetivo', label: 'Objetivo', icon: FileText },
+      { id: 'tripulacao', label: 'Tripulação', icon: Users },
+    ];
+
+    const currentTabIndex = tabs.findIndex(t => t.id === modalActiveTab);
+
+    return (
+      <div className="flex-1 flex flex-col overflow-hidden animate-fade-in h-full bg-slate-100/60">
+        {/* Header da Nova Página */}
+        <div className="bg-white border-b border-slate-200/80 px-4 md:px-6 py-3.5 flex items-center justify-between shrink-0 z-20 shadow-xs">
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={() => handleSubViewChange('calendar')} 
+              className="w-10 h-10 md:w-11 md:h-11 bg-white rounded-2xl flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 border border-slate-200/80 shadow-xs transition-all active:scale-95 group shrink-0 cursor-pointer"
+              title="Voltar para o Calendário"
+            >
+              <ArrowLeft className="w-5 h-5 group-hover:-translate-x-0.5 transition-transform" />
+            </button>
+            <div>
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-xl bg-indigo-50 text-indigo-600">
+                  <Car className="w-5 h-5" />
                 </div>
+                <h2 className="text-xl md:text-2xl font-black text-slate-900 uppercase tracking-tight leading-none">
+                  {editingSchedule ? 'Editar Agendamento' : 'Novo Agendamento'}
+                </h2>
               </div>
-              <button onClick={() => setIsModalOpen(false)} className="p-2 bg-slate-50 hover:bg-rose-50 rounded-xl text-slate-400 hover:text-rose-600 transition-all"><X className="w-5 h-5" /></button>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1 ml-0.5">
+                Preenchimento dos dados da nova viagem
+              </p>
             </div>
-            
-            <div className="px-10 pt-4 bg-slate-50/10 border-b border-slate-100 flex flex-wrap gap-2 shrink-0">
-              {[
-                { id: 'dados_gerais', label: 'Dados Gerais', icon: ClipboardList },
-                { id: 'destino', label: 'Destino', icon: MapPin },
-                { id: 'data', label: 'Data', icon: CalendarDays },
-                { id: 'objetivo', label: 'Objetivo', icon: FileText },
-                { id: 'tripulacao', label: 'Tripulação', icon: Users },
-              ].map(tab => {
-                const TabIcon = tab.icon;
-                const isActive = modalActiveTab === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => setModalActiveTab(tab.id as any)}
-                    className={`flex items-center gap-2 px-5 py-3 rounded-t-2xl text-[10px] font-black uppercase tracking-wider transition-all border-b-2 ${
-                      isActive
-                        ? 'border-indigo-600 text-indigo-600 bg-indigo-50/40'
-                        : 'border-transparent text-slate-400 hover:text-slate-650 bg-transparent'
-                    }`}
-                  >
-                    <TabIcon className="w-4 h-4" />
-                    <span>{tab.label}</span>
-                  </button>
-                );
-              })}
-            </div>
+          </div>
+        </div>
 
-            <div className="p-10 flex-1 overflow-y-auto custom-scrollbar bg-slate-50/30">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        {/* Form Container */}
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-3 md:p-6">
+          <div className="max-w-4xl mx-auto space-y-4">
+            
+            {/* Form Tabs Card */}
+            <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm overflow-hidden flex flex-col">
+              
+              {/* Tab Navigation */}
+              <div className="px-4 md:px-6 pt-3 bg-slate-50/50 border-b border-slate-200/80 flex overflow-x-auto custom-scrollbar gap-2 shrink-0">
+                {tabs.map((tab) => {
+                  const TabIcon = tab.icon;
+                  const isActive = modalActiveTab === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setModalActiveTab(tab.id)}
+                      className={`flex items-center gap-2 px-4 py-3 rounded-t-2xl text-xs font-black uppercase tracking-wider transition-all border-b-2 shrink-0 cursor-pointer ${
+                        isActive
+                          ? 'border-indigo-600 text-indigo-600 bg-white shadow-xs'
+                          : 'border-transparent text-slate-400 hover:text-slate-700 bg-transparent'
+                      }`}
+                    >
+                      <TabIcon className="w-4 h-4" />
+                      <span>{tab.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Tab Bodies */}
+              <div className="p-4 md:p-8 flex-1">
                 {modalActiveTab === 'dados_gerais' && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full md:col-span-2 animate-fade-in">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5 animate-fade-in">
                     <div>
-                      <label className={labelClass}><Car className="w-3 h-3 inline mr-2" /> Veículo Operacional</label>
+                      <label className={labelClass}><Car className="w-3.5 h-3.5 inline mr-1.5 text-indigo-500" /> Veículo Operacional</label>
                       <button
-                        onClick={() => {
-                          setActiveSelectionField('vehicle');
-                        }}
-                        className={`${inputClass} flex items-center justify-between transition-all text-left hover:bg-white`}
+                        type="button"
+                        onClick={() => setActiveSelectionField('vehicle')}
+                        className={`${inputClass} flex items-center justify-between text-left hover:bg-white cursor-pointer`}
                       >
                         <span className={formData.vehicleId ? 'text-slate-900 font-bold' : 'text-slate-400'}>
-                          {vehicles.find(v => v.id === formData.vehicleId)
-                            ? `${vehicles.find(v => v.id === formData.vehicleId)?.brand} ${vehicles.find(v => v.id === formData.vehicleId)?.model} (${vehicles.find(v => v.id === formData.vehicleId)?.plate})`
+                          {selectedVehicle
+                            ? `${selectedVehicle.brand} ${selectedVehicle.model} (${selectedVehicle.plate})`
                             : 'Selecione o veículo...'}
                         </span>
                         <ChevronDown className="w-4 h-4 text-slate-400" />
@@ -1486,39 +1410,42 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
                     </div>
 
                     <div>
-                      <label className={labelClass}><UserIcon className="w-3 h-3 inline mr-2" /> Motorista Responsável</label>
-                      <button onClick={() => setActiveSelectionField('driver')} className={`${inputClass} flex items-center justify-between hover:bg-white transition-all text-left`}>
+                      <label className={labelClass}><UserIcon className="w-3.5 h-3.5 inline mr-1.5 text-indigo-500" /> Motorista Responsável</label>
+                      <button
+                        type="button"
+                        onClick={() => setActiveSelectionField('driver')}
+                        className={`${inputClass} flex items-center justify-between hover:bg-white text-left cursor-pointer`}
+                      >
                         <span className={formData.driverId ? 'text-slate-900 font-bold' : 'text-slate-400'}>
-                          {persons.find(p => p.id === formData.driverId)?.name || 'Selecione o motorista...'}
+                          {selectedDriver?.name || 'Selecione o motorista...'}
                         </span>
                         <ChevronDown className="w-4 h-4 text-slate-400" />
                       </button>
                     </div>
 
                     <div>
-                      <label className={labelClass}><UserCircle className="w-3 h-3 inline mr-2 text-indigo-500" /> Solicitante (Requerente)</label>
+                      <label className={labelClass}><UserCircle className="w-3.5 h-3.5 inline mr-1.5 text-indigo-500" /> Solicitante (Requerente)</label>
                       <button
-                        onClick={() => {
-                          setActiveSelectionField('requester');
-                        }}
-                        className={`${inputClass} flex items-center justify-between transition-all text-left hover:bg-white`}
+                        type="button"
+                        onClick={() => setActiveSelectionField('requester')}
+                        className={`${inputClass} flex items-center justify-between text-left hover:bg-white cursor-pointer`}
                       >
                         <span className={formData.requesterPersonId ? 'text-slate-900 font-bold' : 'text-slate-400'}>
-                          {persons.find(p => p.id === formData.requesterPersonId)?.name || 'Quem está solicitando?'}
+                          {selectedRequester?.name || 'Quem está solicitando?'}
                         </span>
                         <ChevronDown className="w-4 h-4 text-slate-400" />
                       </button>
                     </div>
 
                     <div>
-                      <label className={labelClass}><Landmark className="w-3 h-3 inline mr-2 text-indigo-500" /> Setor de Atendimento</label>
+                      <label className={labelClass}><Landmark className="w-3.5 h-3.5 inline mr-1.5 text-indigo-500" /> Setor de Atendimento</label>
                       <button
                         type="button"
                         onClick={() => setActiveSelectionField('sector')}
-                        className={`${inputClass} flex items-center justify-between transition-all text-left hover:bg-white`}
+                        className={`${inputClass} flex items-center justify-between text-left hover:bg-white cursor-pointer`}
                       >
-                        <span className={sectors.some(s => s.id === formData.serviceSectorId) ? 'text-slate-900 font-bold' : 'text-slate-400'}>
-                          {sectors.find(s => s.id === formData.serviceSectorId)?.name || 'Qual setor será atendido?'}
+                        <span className={selectedSector ? 'text-slate-900 font-bold' : 'text-slate-400'}>
+                          {selectedSector?.name || 'Qual setor será atendido?'}
                         </span>
                         <ChevronDown className="w-4 h-4 text-slate-400" />
                       </button>
@@ -1527,33 +1454,42 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
                 )}
 
                 {modalActiveTab === 'destino' && (
-                  <div className="grid grid-cols-1 gap-6 w-full md:col-span-2 animate-fade-in">
+                  <div className="space-y-5 animate-fade-in">
                     <div>
-                      <label className={labelClass}><MapPin className="w-3 h-3 inline mr-2" /> Itinerário / Destino</label>
+                      <label className={labelClass}><MapPin className="w-3.5 h-3.5 inline mr-1.5 text-indigo-500" /> Cidade de Destino (IBGE)</label>
                       <button
-                        onClick={() => {
-                          setActiveSelectionField('city');
-                        }}
-                        className={`${inputClass} flex items-center justify-between transition-all text-left hover:bg-white`}
+                        type="button"
+                        onClick={() => setActiveSelectionField('city')}
+                        className={`${inputClass} flex items-center justify-between text-left hover:bg-white cursor-pointer`}
                       >
                         <span className={formData.destination ? 'text-slate-900 font-bold' : 'text-slate-400'}>
-                          {formData.destination || 'Selecione ou busque a cidade...'}
+                          {formData.destination || 'Selecione ou busque a cidade de destino...'}
                         </span>
                         <ChevronDown className="w-4 h-4 text-slate-400" />
                       </button>
+                    </div>
+
+                    <div>
+                      <label className={labelClass}><Navigation className="w-3.5 h-3.5 inline mr-1.5 text-indigo-500" /> Local de Saída / Embarque (Opcional)</label>
+                      <input
+                        type="text"
+                        value={formData.vehicleLocation || ''}
+                        onChange={e => setFormData({ ...formData, vehicleLocation: e.target.value })}
+                        placeholder="Ex: Garagem Municipal, Secretaria de Obras, Prefeitura..."
+                        className={inputClass}
+                      />
                     </div>
                   </div>
                 )}
 
                 {modalActiveTab === 'data' && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full md:col-span-2 animate-fade-in">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5 animate-fade-in">
                     <div>
-                      <label className={labelClass}><Clock className="w-3 h-3 inline mr-2" /> Início Agendamento</label>
+                      <label className={labelClass}><Clock className="w-3.5 h-3.5 inline mr-1.5 text-indigo-500" /> Início do Agendamento (Saída)</label>
                       <button
-                        onClick={() => {
-                          setActiveDateField('departure');
-                        }}
-                        className={`${inputClass} h-[52px] flex items-center justify-between transition-all text-left hover:bg-white`}
+                        type="button"
+                        onClick={() => setActiveDateField('departure')}
+                        className={`${inputClass} h-[52px] flex items-center justify-between text-left hover:bg-white cursor-pointer`}
                       >
                         <span className={formData.departureDateTime ? 'text-slate-900 font-bold' : 'text-slate-400'}>
                           {formatDateDisplay(formData.departureDateTime)}
@@ -1561,13 +1497,13 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
                         <Calendar className="w-4 h-4 text-slate-400" />
                       </button>
                     </div>
+
                     <div>
-                      <label className={labelClass}><Clock className="w-3 h-3 inline mr-2" /> Fim Agendamento</label>
+                      <label className={labelClass}><Clock className="w-3.5 h-3.5 inline mr-1.5 text-indigo-500" /> Fim do Agendamento (Retorno)</label>
                       <button
-                        onClick={() => {
-                          setActiveDateField('return');
-                        }}
-                        className={`${inputClass} h-[52px] flex items-center justify-between transition-all text-left hover:bg-white`}
+                        type="button"
+                        onClick={() => setActiveDateField('return')}
+                        className={`${inputClass} h-[52px] flex items-center justify-between text-left hover:bg-white cursor-pointer`}
                       >
                         <span className={formData.returnDateTime ? 'text-slate-900 font-bold' : 'text-slate-400'}>
                           {formatDateDisplay(formData.returnDateTime)}
@@ -1579,148 +1515,297 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
                 )}
 
                 {modalActiveTab === 'objetivo' && (
-                  <div className="grid grid-cols-1 gap-6 w-full md:col-span-2 animate-fade-in">
+                  <div className="space-y-4 animate-fade-in">
                     <div>
-                      <label className={labelClass}><Info className="w-3 h-3 inline mr-2" /> Objetivo da Viagem</label>
+                      <label className={labelClass}><FileText className="w-3.5 h-3.5 inline mr-1.5 text-indigo-500" /> Finalidade / Motivo da Viagem</label>
                       <textarea
-                        value={formData.purpose}
+                        value={formData.purpose || ''}
                         onChange={e => setFormData({ ...formData, purpose: e.target.value })}
-                        className={`${inputClass} min-h-[160px] resize-none pt-4`}
-                        placeholder="Descreva brevemente o motivo da saída..."
+                        className={`${inputClass} min-h-[140px] resize-none pt-3.5`}
+                        placeholder="Descreva detalhadamente o objetivo da saída, compromissos ou serviços a serem realizados..."
                       />
                     </div>
                   </div>
                 )}
 
                 {modalActiveTab === 'tripulacao' && (
-                  <div className="grid grid-cols-1 gap-6 w-full md:col-span-2 animate-fade-in">
+                  <div className="space-y-5 animate-fade-in">
                     <div>
-                      <label className="block text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600 mb-4 flex items-center gap-2">
-                        <Users className="w-4 h-4" />
-                        Informações da Tripulação / Passageiros
-                        <span className="ml-2 text-[8px] bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded-full border border-rose-200">Obrigatório</span>
-                      </label>
+                      <label className={labelClass}><Users className="w-3.5 h-3.5 inline mr-1.5 text-indigo-500" /> Adicionar Passageiro / Tripulante</label>
+                      <div className="bg-slate-50/80 p-4 rounded-2xl border border-slate-200/80 space-y-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <input
+                            type="text"
+                            value={newPassenger.name}
+                            onChange={e => setNewPassenger({ ...newPassenger, name: e.target.value })}
+                            placeholder="Nome completo..."
+                            className={inputClass}
+                          />
+                          <input
+                            type="text"
+                            value={newPassenger.departureLocation}
+                            onChange={e => setNewPassenger({ ...newPassenger, departureLocation: e.target.value })}
+                            placeholder="Local de embarque / partida..."
+                            className={inputClass}
+                          />
+                        </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-12 gap-3 mb-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                        <div className="md:col-span-3">
-                          <input value={newPassenger.name} onChange={e => setNewPassenger({ ...newPassenger, name: e.target.value })} placeholder="Nome" className="w-full bg-white px-3 py-2 rounded-xl text-xs font-bold border border-slate-200 focus:border-indigo-500 outline-none" />
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <input
+                            type="time"
+                            value={newPassenger.appointmentTime}
+                            onChange={e => setNewPassenger({ ...newPassenger, appointmentTime: e.target.value })}
+                            className={inputClass}
+                          />
+                          <input
+                            type="text"
+                            value={newPassenger.appointmentLocation}
+                            onChange={e => setNewPassenger({ ...newPassenger, appointmentLocation: e.target.value })}
+                            placeholder="Local do compromisso / consulta..."
+                            className={inputClass}
+                          />
                         </div>
-                        <div className="md:col-span-3">
-                          <input value={newPassenger.departureLocation} onChange={e => setNewPassenger({ ...newPassenger, departureLocation: e.target.value })} placeholder="Local de Partida" className="w-full bg-white px-3 py-2 rounded-xl text-xs font-bold border border-slate-200 focus:border-indigo-500 outline-none" />
-                        </div>
-                        <div className="md:col-span-2">
-                          <input value={newPassenger.appointmentTime} onChange={e => setNewPassenger({ ...newPassenger, appointmentTime: e.target.value })} type="time" className="w-full bg-white px-3 py-2 rounded-xl text-xs font-bold border border-slate-200 focus:border-indigo-500 outline-none" />
-                        </div>
-                        <div className="md:col-span-3">
-                          <input value={newPassenger.appointmentLocation} onChange={e => setNewPassenger({ ...newPassenger, appointmentLocation: e.target.value })} placeholder="Local do Compromisso" className="w-full bg-white px-3 py-2 rounded-xl text-xs font-bold border border-slate-200 focus:border-indigo-500 outline-none" />
-                        </div>
-                        <div className="md:col-span-1 flex justify-end">
-                          <button onClick={handleAddPassenger} className="p-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-600/20"><Plus className="w-4 h-4" /></button>
+
+                        <button
+                          type="button"
+                          onClick={handleAddPassenger}
+                          className="w-full py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-black rounded-xl text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 border border-indigo-200 cursor-pointer"
+                        >
+                          <Plus className="w-4 h-4" /> Adicionar à Tripulação
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Passengers List */}
+                    {formData.passengers && formData.passengers.length > 0 ? (
+                      <div className="space-y-2">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                          Passageiros Confirmados ({formData.passengers.length}):
+                        </span>
+                        <div className="divide-y divide-slate-100 rounded-2xl border border-slate-200 overflow-hidden bg-white">
+                          {formData.passengers.map((p, idx) => (
+                            <div key={idx} className="p-3.5 flex items-center justify-between gap-3 text-xs">
+                              <div className="min-w-0 flex-1">
+                                <p className="font-black text-slate-900 truncate">{p.name}</p>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">
+                                  Partida: {p.departureLocation} | Horário: {p.appointmentTime} | Local: {p.appointmentLocation}
+                                </p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleRemovePassenger(idx)}
+                                className="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
+                                title="Remover passageiro"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ))}
                         </div>
                       </div>
-
-                      {formData.passengers && formData.passengers.length > 0 ? (
-                        <div className="overflow-hidden rounded-2xl border border-slate-200">
-                          <table className="w-full text-left border-collapse">
-                            <thead>
-                              <tr className="bg-slate-50 border-b border-slate-100 text-[9px] font-black uppercase tracking-widest text-slate-400">
-                                <th className="p-3 pl-4">Nome</th>
-                                <th className="p-3">Local de Partida</th>
-                                <th className="p-3">Horário do Compromisso</th>
-                                <th className="p-3">Local do Compromisso</th>
-                                <th className="p-3 w-10"></th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                              {formData.passengers.map((p, idx) => (
-                                <tr key={idx} className="text-xs font-bold text-slate-600 bg-white hover:bg-slate-50/50">
-                                  <td className="p-3 pl-4">{p.name}</td>
-                                  <td className="p-3">{p.departureLocation}</td>
-                                  <td className="p-3 font-mono">{p.appointmentTime}</td>
-                                  <td className="p-3">{p.appointmentLocation}</td>
-                                  <td className="p-3 text-right pr-4">
-                                    <button onClick={() => handleRemovePassenger(idx)} className="text-rose-400 hover:text-rose-600 transition-colors"><Trash2 className="w-4 h-4" /></button>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      ) : (
-                        <div className="text-center py-6 border-2 border-dashed border-slate-200 rounded-2xl">
-                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Nenhum passageiro adicionado</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {editingSchedule && (
-                  <div className="md:col-span-2 flex justify-end">
-                    <button onClick={() => { if (confirm("Remover agendamento?")) { onDeleteSchedule(editingSchedule.id); setIsModalOpen(false); } }} className="py-3.5 px-6 bg-rose-50 text-rose-600 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-rose-600 hover:text-white transition-all active:scale-95 border border-rose-100 h-[52px] shrink-0"><Trash2 className="w-4 h-4" /> Excluir Registro</button>
+                    ) : (
+                      <div className="text-center py-6 border-2 border-dashed border-slate-200 rounded-2xl">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Nenhum passageiro adicionado ainda</p>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
-            </div>
-            <div className="px-8 py-5 border-t border-slate-100 bg-white flex flex-col sm:flex-row justify-between items-center gap-4 shrink-0">
-              <button onClick={() => setIsModalOpen(false)} className="px-6 py-3 font-black text-slate-400 hover:text-rose-600 transition-all uppercase text-[10px] tracking-[0.2em]" disabled={isSaving}>Descartar</button>
-              <button onClick={handleSave} disabled={isSaving} className="px-8 py-3 bg-slate-900 text-white font-black rounded-2xl hover:bg-indigo-600 shadow-xl flex items-center justify-center gap-3 transition-all uppercase text-[10px] tracking-[0.2em] active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed">
-                {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                {isSaving ? 'Processando...' : (editingSchedule ? 'Atualizar Dados' : 'Confirmar Agendamento')}
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
 
-      {/* TOAST DE NOTIFICAÇÃO MODERNO (CENTRALIZADO NO TOPO - CORREÇÃO DE TAMANHO E TEXTO) */}
-      {toast.show && createPortal(
-        <div className="fixed top-10 left-0 right-0 z-[300] flex justify-center pointer-events-none px-6">
-          <div className={`animate-slide-down pointer-events-auto p-5 rounded-[2.5rem] shadow-2xl border flex items-center gap-5 backdrop-blur-2xl transition-all duration-500 max-w-2xl w-fit
-             ${toast.type === 'error' ? 'bg-rose-600/95 border-rose-500 text-white shadow-rose-500/30' :
-              toast.type === 'success' ? 'bg-emerald-600/95 border-emerald-500 text-white shadow-emerald-500/30' :
-                'bg-amber-500/95 border-amber-400 text-white shadow-amber-500/30'}
-           `}>
-            <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center shrink-0">
-              {toast.type === 'error' ? <ShieldAlert className="w-7 h-7" /> :
-                toast.type === 'success' ? <CheckCircle2 className="w-7 h-7" /> :
-                  <AlertTriangle className="w-7 h-7" />}
+              {/* Form Navigation */}
+              <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-between items-center gap-3">
+                <div>
+                  {currentTabIndex > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setModalActiveTab(tabs[currentTabIndex - 1].id)}
+                      className="px-4 py-2.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 font-bold rounded-xl text-xs uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <ChevronLeft className="w-4 h-4" /> Anterior
+                    </button>
+                  )}
+                </div>
+
+                <div>
+                  {currentTabIndex < tabs.length - 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setModalActiveTab(tabs[currentTabIndex + 1].id)}
+                      className="px-4 py-2.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 font-bold rounded-xl text-xs uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      Próximo <ChevronRight className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
             </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] leading-none mb-1.5 opacity-80">{toast.type === 'error' ? 'Atenção Crítica' : toast.type === 'success' ? 'Operação Concluída' : 'Aviso do Sistema'}</p>
-              <p className="text-sm sm:text-base font-bold leading-snug break-words">{toast.message}</p>
-            </div>
-            <button onClick={() => setToast(prev => ({ ...prev, show: false }))} className="ml-2 p-2.5 hover:bg-white/10 rounded-2xl transition-colors shrink-0 active:scale-90">
-              <X className="w-6 h-6" />
+
+          </div>
+        </div>
+
+        {/* Fixed Responsive Bottom Action Bar */}
+        <div className="bg-white/95 backdrop-blur-md border-t border-slate-200/90 px-4 md:px-8 py-3.5 shrink-0 shadow-lg z-30">
+          <div className="max-w-4xl mx-auto flex items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={() => handleSubViewChange('calendar')}
+              className="px-4 md:px-6 py-2.5 text-slate-500 hover:text-rose-600 font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
+              disabled={isSaving}
+            >
+              Cancelar
+            </button>
+
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={isSaving}
+              className="px-6 md:px-8 py-3 bg-gradient-to-r from-indigo-600 via-indigo-700 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-black rounded-2xl shadow-md shadow-indigo-600/25 transition-all hover:-translate-y-0.5 active:scale-95 flex items-center justify-center gap-2 uppercase text-xs tracking-wider disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
+            >
+              {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              <span>{isSaving ? 'Salvando...' : (editingSchedule ? 'Atualizar Dados' : 'Salvar Agendamento')}</span>
             </button>
           </div>
-        </div>,
-        document.body
-      )}
+        </div>
+      </div>
+    );
+  };
 
+  return (
+    <div className="flex-1 flex flex-col h-full overflow-hidden bg-slate-50 relative">
+      {activeSubView === 'menu' && renderDashboard()}
+      {activeSubView === 'calendar' && (canAccessAgendar ? renderCalendar() : renderAccessDenied())}
+      {activeSubView === 'novo' && (canAccessAgendar ? renderNovoAgendamento() : renderAccessDenied())}
+      {activeSubView === 'history' && (canAccessMeus ? (
+        <VehicleScheduleHistory
+          schedules={schedules}
+          vehicles={vehicles}
+          persons={persons}
+          sectors={sectors}
+          state={state}
+          onViewDetails={(s) => {
+            setViewingSchedule(s);
+            setIsViewModalOpen(true);
+          }}
+          onEdit={(s) => {
+            handleOpenModal(s);
+            handleSubViewChange('novo');
+          }}
+          onUpdateStatus={onUpdateStatusSchedule}
+          onUpdateSchedule={onUpdateSchedule}
+          onDelete={onDeleteSchedule}
+          onBack={() => handleSubViewChange('menu')}
+          currentUserId={currentUserId}
+          userRole={currentUserRole}
+          currentUserSector={currentUserSector}
+        />
+      ) : renderAccessDenied())}
+      {activeSubView === 'approvals' && (canAccessAprovacoes ? (
+        <VehicleScheduleApprovals
+          schedules={schedules}
+          vehicles={vehicles}
+          persons={persons}
+          sectors={sectors}
+          onApprove={(s) => onUpdateStatusSchedule(s.id, 'confirmado')}
+          onReject={(s) => onUpdateStatusSchedule(s.id, 'cancelado', { reason: 'Rejeitado por Gestor', cancelledBy: currentUserName || 'Gestor' })}
+          onBack={() => handleSubViewChange('menu')}
+          currentUserId={currentUserId}
+          currentUserRole={currentUserRole}
+          currentUserPersonId={currentUserPersonId}
+          state={state}
+        />
+      ) : renderAccessDenied())}
+      {activeSubView === 'dashboard' && (canAccessDashboard ? (
+        <VehicleScheduleDashboard
+          schedules={schedules}
+          vehicles={vehicles}
+          persons={persons}
+          sectors={sectors}
+          onBack={() => handleSubViewChange('menu')}
+        />
+      ) : renderAccessDenied())}
+      {activeSubView === 'consultar' && (canAccessConsultar ? (
+        <ConsultarVeiculoScreen
+          onBack={() => handleSubViewChange('menu')}
+          onSelectVehicleToSchedule={(vehicleId, dateStr, startTime, endTime) => {
+            try {
+              const [d, m, y] = dateStr.split('/');
+              const departureDate = new Date(`${y}-${m}-${d}T${startTime}:00`);
+              const returnDate = new Date(`${y}-${m}-${d}T${endTime}:00`);
+              handleOpenModal(undefined, departureDate, vehicleId, returnDate);
+              handleSubViewChange('novo');
+            } catch (e) {
+              handleOpenModal(undefined, new Date(), vehicleId);
+              handleSubViewChange('novo');
+            }
+          }}
+        />
+      ) : renderAccessDenied())}
+
+      {/* VIEW DETAILS MODAL */}
       {isViewModalOpen && viewingSchedule && createPortal(
         <div className="fixed inset-0 z-[210] flex items-end sm:items-center justify-center sm:p-4 bg-slate-900/80 backdrop-blur-xl animate-fade-in h-full">
           <div className="bg-white sm:rounded-[2.5rem] rounded-t-[2.5rem] shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col animate-slide-up border border-white/20 h-full sm:h-auto max-h-[96vh]">
             <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-              <div className="flex items-center gap-4"><div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg"><FileText className="w-6 h-6" /></div><div><h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Detalhes da Viagem</h3><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Informações completas do agendamento</p></div></div>
-              <button onClick={() => setIsViewModalOpen(false)} className="p-3 hover:bg-white rounded-xl text-slate-400"><X className="w-6 h-6" /></button>
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg">
+                  <FileText className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Detalhes da Viagem</h3>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Informações completas do agendamento</p>
+                </div>
+              </div>
+              <button onClick={() => setIsViewModalOpen(false)} className="p-3 hover:bg-white rounded-xl text-slate-400 cursor-pointer">
+                <X className="w-6 h-6" />
+              </button>
             </div>
             <div className="p-8 space-y-8 flex-1 overflow-y-auto custom-scrollbar">
               <div className="grid grid-cols-2 gap-6">
-                <div className="space-y-1"><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Veículo</p><p className="text-base font-bold text-slate-900 uppercase">{(vehicles.find(v => v.id === viewingSchedule.vehicleId))?.brand} {(vehicles.find(v => v.id === viewingSchedule.vehicleId))?.model} ({(vehicles.find(v => v.id === viewingSchedule.vehicleId))?.plate})</p></div>
-                <div className="space-y-1"><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Motorista</p><p className="text-base font-bold text-slate-900">{(persons.find(p => p.id === viewingSchedule.driverId))?.name}</p></div>
-                <div className="space-y-1"><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Setor</p><p className="text-base font-bold text-slate-900 uppercase">{(sectors.find(s => s.id === viewingSchedule.serviceSectorId))?.name || '---'}</p></div>
-                <div className="space-y-1"><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Solicitante</p><p className="text-base font-bold text-slate-900">{(persons.find(p => p.id === viewingSchedule.requesterPersonId))?.name || '---'}</p></div>
-                <div className="col-span-2 space-y-1"><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Localização de Retirada/Encontro</p><p className="text-base font-bold text-indigo-700 uppercase flex items-center gap-2"><MapPin className="w-4 h-4" />{viewingSchedule.vehicleLocation || 'Não especificada'}</p></div>
-                <div className="col-span-2 space-y-1"><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Destino</p><p className="text-base font-bold text-indigo-600 uppercase">{viewingSchedule.destination}</p></div>
-                <div className="space-y-1"><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Saída</p><p className="text-sm font-bold text-slate-700">{new Date(viewingSchedule.departureDateTime).toLocaleString('pt-BR')}</p></div>
-                <div className="space-y-1"><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Retorno</p><p className="text-sm font-bold text-slate-700">{new Date(viewingSchedule.returnDateTime).toLocaleString('pt-BR')}</p></div>
-                <div className="col-span-2 space-y-1"><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Objetivo</p><p className="text-sm font-medium text-slate-600 bg-slate-50 p-4 rounded-xl border border-slate-100 italic">"{viewingSchedule.purpose}"</p></div>
+                <div className="space-y-1">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Veículo</p>
+                  <p className="text-base font-bold text-slate-900 uppercase">{(vehicles.find(v => v.id === viewingSchedule.vehicleId))?.brand} {(vehicles.find(v => v.id === viewingSchedule.vehicleId))?.model} ({(vehicles.find(v => v.id === viewingSchedule.vehicleId))?.plate})</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Motorista</p>
+                  <p className="text-base font-bold text-slate-900">{(persons.find(p => p.id === viewingSchedule.driverId))?.name}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Setor</p>
+                  <p className="text-base font-bold text-slate-900 uppercase">{(sectors.find(s => s.id === viewingSchedule.serviceSectorId))?.name || '---'}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Solicitante</p>
+                  <p className="text-base font-bold text-slate-900">{(persons.find(p => p.id === viewingSchedule.requesterPersonId))?.name || '---'}</p>
+                </div>
+                <div className="col-span-2 space-y-1">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Localização de Retirada/Encontro</p>
+                  <p className="text-base font-bold text-indigo-700 uppercase flex items-center gap-2">
+                    <MapPin className="w-4 h-4" />{viewingSchedule.vehicleLocation || 'Não especificada'
+                  }</p>
+                </div>
+                <div className="col-span-2 space-y-1">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Destino</p>
+                  <p className="text-base font-bold text-indigo-600 uppercase">{viewingSchedule.destination}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Saída</p>
+                  <p className="text-sm font-bold text-slate-700">{new Date(viewingSchedule.departureDateTime).toLocaleString('pt-BR')}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Retorno</p>
+                  <p className="text-sm font-bold text-slate-700">{new Date(viewingSchedule.returnDateTime).toLocaleString('pt-BR')}</p>
+                </div>
+                <div className="col-span-2 space-y-1">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Objetivo</p>
+                  <p className="text-sm font-medium text-slate-600 bg-slate-50 p-4 rounded-xl border border-slate-100 italic">"{viewingSchedule.purpose}"</p>
+                </div>
 
                 {viewingSchedule.passengers && viewingSchedule.passengers.length > 0 && (
                   <div className="col-span-2 space-y-2 mt-2">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><Users className="w-3 h-3" /> Tripulação / Passageiros</p>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                      <Users className="w-3 h-3" /> Tripulação / Passageiros
+                    </p>
                     <div className="overflow-hidden rounded-xl border border-slate-200">
                       <table className="w-full text-left border-collapse">
                         <thead>
@@ -1746,10 +1831,45 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
                   </div>
                 )}
 
-                <div className="space-y-1"><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</p><div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full border mt-1 font-black text-[10px] uppercase tracking-widest bg-${STATUS_MAP[viewingSchedule.status].color}-50 text-${STATUS_MAP[viewingSchedule.status].color}-700 border-${STATUS_MAP[viewingSchedule.status].color}-200`}>{React.createElement(STATUS_MAP[viewingSchedule.status].icon, { className: "w-3 h-3" })}{STATUS_MAP[viewingSchedule.status].label}</div></div>
+                <div className="space-y-1">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</p>
+                  <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full border mt-1 font-black text-[10px] uppercase tracking-widest bg-${STATUS_MAP[viewingSchedule.status].color}-50 text-${STATUS_MAP[viewingSchedule.status].color}-700 border-${STATUS_MAP[viewingSchedule.status].color}-200`}>
+                    {React.createElement(STATUS_MAP[viewingSchedule.status].icon, { className: "w-3 h-3" })}
+                    {STATUS_MAP[viewingSchedule.status].label}
+                  </div>
+                </div>
               </div>
             </div>
-            <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-center"><button onClick={() => setIsViewModalOpen(false)} className="px-12 py-3 bg-slate-900 text-white font-black text-[10px] uppercase tracking-[0.2em] rounded-xl shadow-lg hover:bg-indigo-600 transition-all">Fechar Detalhes</button></div>
+            <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-center">
+              <button onClick={() => setIsViewModalOpen(false)} className="px-12 py-3 bg-slate-900 text-white font-black text-[10px] uppercase tracking-[0.2em] rounded-xl shadow-lg hover:bg-indigo-600 transition-all cursor-pointer">
+                Fechar Detalhes
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* TOAST DE NOTIFICAÇÃO MODERNO (CENTRALIZADO NO TOPO) */}
+      {toast.show && createPortal(
+        <div className="fixed top-10 left-0 right-0 z-[300] flex justify-center pointer-events-none px-6">
+          <div className={`animate-slide-down pointer-events-auto p-5 rounded-[2.5rem] shadow-2xl border flex items-center gap-5 backdrop-blur-2xl transition-all duration-500 max-w-2xl w-fit
+             ${toast.type === 'error' ? 'bg-rose-600/95 border-rose-500 text-white shadow-rose-500/30' :
+              toast.type === 'success' ? 'bg-emerald-600/95 border-emerald-500 text-white shadow-emerald-500/30' :
+                'bg-amber-500/95 border-amber-400 text-white shadow-amber-500/30'}
+           `}>
+            <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center shrink-0">
+              {toast.type === 'error' ? <ShieldAlert className="w-7 h-7" /> :
+                toast.type === 'success' ? <CheckCircle2 className="w-7 h-7" /> :
+                  <AlertTriangle className="w-7 h-7" />}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] leading-none mb-1.5 opacity-80">{toast.type === 'error' ? 'Atenção Crítica' : toast.type === 'success' ? 'Operação Concluída' : 'Aviso do Sistema'}</p>
+              <p className="text-sm sm:text-base font-bold leading-snug break-words">{toast.message}</p>
+            </div>
+            <button onClick={() => setToast(prev => ({ ...prev, show: false }))} className="ml-2 p-2.5 hover:bg-white/10 rounded-2xl transition-colors shrink-0 active:scale-90 cursor-pointer">
+              <X className="w-6 h-6" />
+            </button>
           </div>
         </div>,
         document.body
@@ -1886,7 +2006,6 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
           </div>
         )}
       />
-
 
       <SelectionModal
         isOpen={activeSelectionField === 'city'}
