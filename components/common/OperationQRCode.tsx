@@ -23,24 +23,30 @@ export const OperationQRCode: React.FC<OperationQRCodeProps> = ({
     useEffect(() => {
         let active = true;
         const fetchCodeAndQr = async () => {
+            if (!recordId) {
+                setLoading(false);
+                return;
+            }
             setLoading(true);
             try {
                 const opCode = await getOrCreateOperationCode(moduleName, recordId);
                 if (!active) return;
                 setCode(opCode);
 
-                // Generate QR Code URL with the protocol or code
-                // To keep it simple, we encode just the 6-character code, which the mobile scanner will read
-                const dataUrl = await QRCode.toDataURL(opCode, {
-                    margin: 2,
-                    width: 300,
-                    color: {
-                        dark: '#0f172a', // Slate 900
-                        light: '#ffffff'
-                    }
-                });
-                if (!active) return;
-                setQrDataUrl(dataUrl);
+                if (opCode) {
+                    // Generate QR Code URL with the protocol or code
+                    // To keep it simple, we encode just the 6-character code, which the mobile scanner will read
+                    const dataUrl = await QRCode.toDataURL(opCode, {
+                        margin: 2,
+                        width: 300,
+                        color: {
+                            dark: '#0f172a', // Slate 900
+                            light: '#ffffff'
+                        }
+                    });
+                    if (!active) return;
+                    setQrDataUrl(dataUrl);
+                }
             } catch (err) {
                 console.error('Error generating operation QR Code:', err);
             } finally {

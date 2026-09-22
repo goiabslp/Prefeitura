@@ -21,12 +21,24 @@ export const DynamicGlobalFooter: React.FC<DynamicGlobalFooterProps> = ({
   const isVisibleRef = useRef(false);
   isVisibleRef.current = isVisible;
 
+  // Só deve ser exibido estritamente na Página Inicial (/PaginaInicial ou /)
+  const isHomePage = (() => {
+    if (currentView !== 'home' || !!activeBlock) return false;
+    if (typeof window !== 'undefined') {
+      const path = window.location.pathname.replace(/\/$/, '').toLowerCase();
+      return path === '' || path === '/paginainicial';
+    }
+    return true;
+  })();
+
   // Reseta a visibilidade imediatamente ao mudar de tela ou aba
   useEffect(() => {
     setIsVisible(false);
-  }, [currentView, activeBlock]);
+  }, [currentView, activeBlock, isHomePage]);
 
   useEffect(() => {
+    if (!isHomePage) return;
+
     // Garante que containers de rolagem tenham espaçamento inferior para forçar a rolagem
     const enforceScrollPadding = () => {
       const scrollContainers = document.querySelectorAll('.overflow-y-auto, [data-scroll-container="true"]');
@@ -126,9 +138,9 @@ export const DynamicGlobalFooter: React.FC<DynamicGlobalFooterProps> = ({
       window.removeEventListener('scroll', handleWindowScroll);
       window.removeEventListener('wheel', handleWheel);
     };
-  }, []);
+  }, [isHomePage]);
 
-  if (!currentUser) return null;
+  if (!currentUser || !isHomePage) return null;
 
   return (
     <div

@@ -192,6 +192,7 @@ const VIEW_TO_PATH: Record<string, string> = {
   'licitacao:kanban': '/Licitacao/Kanban',
   'licitacao:kanban-view': '/Licitacao/Kanban/view',
   'consultas': '/Consultas',
+  'consultas:procedimentos': '/Consultas/Procedimentos',
   'consultas:pacientes': '/Consultas/Pacientes',
   'consultas:novo-agendamento': '/Consultas/NovoAgendamento',
   'consultas:novo-agendamento-paciente': '/Consultas/NovoAgendamento/Paciente',
@@ -205,6 +206,7 @@ const VIEW_TO_PATH: Record<string, string> = {
   'consultas:dados': '/Consultas/DADOS',
   'consultas:dados-dashboard': '/Consultas/DADOS/Dashboard',
   'consultas:dados-dashboard-geral': '/Consultas/DADOS/Dashboard/VisaoGeral',
+  'consultas:dados-dashboard-especialistas': '/Consultas/DADOS/Dashboard/Especialistas',
   'consultas:dados-dashboard-prazos': '/Consultas/DADOS/Dashboard/Prazos',
   'consultas:dados-dashboard-filas': '/Consultas/DADOS/Dashboard/Filas',
   'consultas:dados-dashboard-ia': '/Consultas/DADOS/Dashboard/IA',
@@ -5334,6 +5336,9 @@ const App: React.FC = () => {
                     setCurrentView('home');
                     setActiveBlock(null);
                     window.history.pushState({}, '', '/PaginaInicial');
+                  } else if (view === 'consultas:procedimentos') {
+                    setAppState(prev => ({ ...prev, view: 'procedimentos' }));
+                    window.history.pushState({}, '', '/Consultas/Procedimentos');
                   } else if (view === 'consultas:pacientes') {
                     setAppState(prev => ({ ...prev, view: 'pacientes' }));
                     window.history.pushState({}, '', '/Consultas/Pacientes');
@@ -5370,6 +5375,9 @@ const App: React.FC = () => {
                   } else if (view === 'consultas:dados-dashboard-geral') {
                     setAppState(prev => ({ ...prev, view: 'dados-dashboard-geral' }));
                     window.history.pushState({}, '', '/Consultas/DADOS/Dashboard/VisaoGeral');
+                  } else if (view === 'consultas:dados-dashboard-especialistas') {
+                    setAppState(prev => ({ ...prev, view: 'dados-dashboard-especialistas' }));
+                    window.history.pushState({}, '', '/Consultas/DADOS/Dashboard/Especialistas');
                   } else if (view === 'consultas:dados-dashboard-prazos') {
                     setAppState(prev => ({ ...prev, view: 'dados-dashboard-prazos' }));
                     window.history.pushState({}, '', '/Consultas/DADOS/Dashboard/Prazos');
@@ -5819,25 +5827,27 @@ const App: React.FC = () => {
 
           </div>
 
-          {/* Footer Global Dinâmico - Não é fixo e só aparece após rolar até o fim da página */}
-          <DynamicGlobalFooter
-            currentUser={currentUser}
-            currentView={currentView}
-            activeBlock={activeBlock}
-            onNavigatePolicy={(type) => {
-              if (type === 'web') {
-                window.history.pushState({}, '', '/PoliticaPrivacidade');
-                setCurrentView('politica-privacidade');
-              } else {
-                window.history.pushState({}, '', '/PoliticaPrivacidadeApp');
-                setCurrentView('politica-privacidade-app');
-              }
-            }}
-            onOpenEgressModal={() => {
-              setIsEgressModalOpen(true);
-              window.history.pushState({}, '', '/Admin/Egress');
-            }}
-          />
+          {/* Footer Global Dinâmico - Exibido exclusivamente na Página Inicial (/PaginaInicial) */}
+          {currentView === 'home' && !activeBlock && (
+            <DynamicGlobalFooter
+              currentUser={currentUser}
+              currentView={currentView}
+              activeBlock={activeBlock}
+              onNavigatePolicy={(type) => {
+                if (type === 'web') {
+                  window.history.pushState({}, '', '/PoliticaPrivacidade');
+                  setCurrentView('politica-privacidade');
+                } else {
+                  window.history.pushState({}, '', '/PoliticaPrivacidadeApp');
+                  setCurrentView('politica-privacidade-app');
+                }
+              }}
+              onOpenEgressModal={() => {
+                setIsEgressModalOpen(true);
+                window.history.pushState({}, '', '/Admin/Egress');
+              }}
+            />
+          )}
         </div>
       </ChatProvider>
 

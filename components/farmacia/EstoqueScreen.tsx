@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { User, FarmaciaMedicamento, FarmaciaMovimentacao } from '../../types';
-import { Package, Plus, Edit, Trash2, Calendar, AlertTriangle, ChevronRight, CheckCircle2, TrendingUp, Info, Loader2, Sparkles, SlidersHorizontal, X, XCircle, Search } from 'lucide-react';
+import { Package, Plus, Edit, Trash2, Calendar, AlertTriangle, ChevronRight, CheckCircle2, TrendingUp, Info, Loader2, Sparkles, SlidersHorizontal, X, XCircle, Search, Pill, ArrowLeft } from 'lucide-react';
 import * as db from '../../services/farmaciaService';
 import { useFarmaciaAlert } from './FarmaciaAlertContext';
 import { RAW_MEDS } from './medsToImportData';
@@ -13,7 +13,10 @@ const FORMAS_FARMACEUTICAS = [
 interface EstoqueScreenProps {
     currentUser?: User | null;
     onBack: () => void;
-    appState: any;
+    appState?: any;
+    lowStockMedicamentos?: any[];
+    hasCriticalItems?: boolean;
+    onOpenAlertModal?: () => void;
 }
 
 const parseDosagem = (dosagemStr: string | undefined | null) => {
@@ -37,7 +40,11 @@ const parseDosagem = (dosagemStr: string | undefined | null) => {
 
 export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
     currentUser,
-    onBack
+    onBack,
+    appState,
+    lowStockMedicamentos,
+    hasCriticalItems,
+    onOpenAlertModal
 }) => {
     const { showAlert, showConfirm } = useFarmaciaAlert();
 
@@ -669,20 +676,47 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
     };
 
     return (
-        <div className="w-full mx-auto flex flex-col flex-1 h-full max-h-full min-h-0 bg-slate-50/20 rounded-3xl border border-slate-200/80 shadow-xl overflow-hidden animate-in fade-in duration-300">
-            {/* Main Action Bar */}
-            <div className="px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white shrink-0">
-                <div className="flex items-center gap-2">
-                    <SlidersHorizontal className="w-5 h-5 text-pink-600" />
-                    <h3 className="font-extrabold text-slate-800 text-sm md:text-base uppercase tracking-tight">Painel de Estoque</h3>
+        <div className="w-full flex flex-col flex-1 h-full min-h-0 bg-white overflow-hidden animate-in fade-in duration-300">
+            {/* Header Unificado na Mesma Linha */}
+            <header className="bg-white border-b border-slate-200/80 px-4 md:px-6 py-3 flex flex-col lg:flex-row lg:items-center justify-between gap-3 shrink-0 z-40 shadow-xs">
+                {/* Lado Esquerdo: Voltar + Farmácia Popular + Painel de Estoque */}
+                <div className="flex items-center gap-3 shrink-0">
+                    <button
+                        onClick={onBack}
+                        className="group flex items-center gap-1.5 text-slate-500 hover:text-pink-600 font-bold transition-all p-1.5 pr-3 rounded-full bg-slate-50 hover:bg-pink-50/50 border border-slate-200/60 shadow-xs hover:shadow-sm"
+                        title="Voltar ao Menu Farmácia"
+                    >
+                        <div className="w-6 h-6 rounded-full bg-white border border-slate-200/60 flex items-center justify-center group-hover:border-pink-200 transition-colors">
+                            <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform text-slate-400 group-hover:text-pink-600" />
+                        </div>
+                        <span className="text-[10px] uppercase tracking-widest font-extrabold group-hover:text-pink-700">Voltar</span>
+                    </button>
+
+                    <div className="flex items-center gap-2.5">
+                        <div className="p-2 rounded-xl bg-pink-50 text-pink-600 shadow-inner">
+                            <Pill className="w-5 h-5 text-pink-600" />
+                        </div>
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <h2 className="text-base md:text-lg font-black text-slate-800 tracking-tight uppercase leading-none">Farmácia Popular</h2>
+                                <span className="text-slate-300 font-light hidden sm:inline">|</span>
+                                <span className="text-xs md:text-sm font-extrabold text-pink-600 uppercase tracking-tight flex items-center gap-1">
+                                    <SlidersHorizontal className="w-3.5 h-3.5 text-pink-500" />
+                                    Painel de Estoque
+                                </span>
+                            </div>
+                            <p className="text-slate-400 text-[9px] font-bold uppercase tracking-widest mt-0.5">Gestão e dispensação de medicamentos</p>
+                        </div>
+                    </div>
                 </div>
 
-                <div className="flex items-center gap-3 self-end sm:self-auto w-full sm:w-auto justify-end">
-                    <div className="relative w-full sm:w-[520px]">
+                {/* Lado Direito: Busca + Novo Medicamento + Alerta de Estoque */}
+                <div className="flex items-center gap-2.5 flex-1 lg:max-w-3xl justify-end">
+                    <div className="relative flex-1 max-w-md">
                         <input
                             type="text"
                             placeholder="Buscar por medicamento, lote..."
-                            className="w-full pl-9 pr-8 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:border-pink-500 bg-slate-50 focus:bg-white transition-all placeholder:text-slate-400"
+                            className="w-full pl-9 pr-8 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:border-pink-500 bg-slate-50 focus:bg-white transition-all placeholder:text-slate-400 shadow-xs"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
@@ -700,225 +734,243 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                     {canCreate && (
                         <button 
                             onClick={handleOpenAddModal}
-                            className="px-4 py-2 bg-pink-600 hover:bg-pink-700 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-md flex items-center gap-2 shrink-0"
+                            className="px-3.5 py-2 bg-pink-600 hover:bg-pink-700 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all shadow-sm active:scale-95 flex items-center gap-1.5 shrink-0 cursor-pointer"
                         >
                             <Plus className="w-4 h-4" />
-                            Novo Medicamento
+                            <span>Novo Medicamento</span>
+                        </button>
+                    )}
+
+                    {lowStockMedicamentos && lowStockMedicamentos.length > 0 && onOpenAlertModal && (
+                        <button
+                            onClick={onOpenAlertModal}
+                            className={`flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r ${
+                                hasCriticalItems 
+                                    ? 'from-rose-500/10 to-red-500/10 border-rose-200/50 text-rose-800 hover:text-rose-950 animate-pulse hover:animate-none' 
+                                    : 'from-amber-500/10 to-orange-500/10 border-amber-200/50 text-amber-800 hover:text-amber-950'
+                            } border rounded-xl text-xs font-black transition-all shadow-xs shrink-0 uppercase tracking-wider cursor-pointer`}
+                        >
+                            <AlertTriangle className={`w-3.5 h-3.5 shrink-0 ${hasCriticalItems ? 'text-rose-500' : 'text-amber-500'}`} />
+                            <span>Alerta ({lowStockMedicamentos.length})</span>
                         </button>
                     )}
                 </div>
-            </div>
+            </header>
 
-            {/* Lote List Container */}
-            <div className="flex-1 overflow-y-auto p-6 custom-scrollbar min-h-0">
-                <div className="bg-white border border-slate-200/60 rounded-3xl p-6 shadow-sm flex flex-col w-full">
-                    <div className="flex items-center gap-2 mb-4">
-                        <Package className="w-5 h-5 text-slate-700" />
-                        <h4 className="font-extrabold text-slate-800 text-sm uppercase tracking-tight">Estoque de Medicamentos por Lote</h4>
+            {/* Grid Container Ocupando a Tela Completa */}
+            <div className="flex-1 overflow-hidden flex flex-col min-h-0 bg-white">
+                <div className="px-6 py-2.5 bg-slate-50/70 border-b border-slate-100 flex items-center justify-between shrink-0">
+                    <div className="flex items-center gap-2">
+                        <Package className="w-4 h-4 text-slate-600" />
+                        <h4 className="font-extrabold text-slate-800 text-xs uppercase tracking-wider">Estoque de Medicamentos por Lote</h4>
                     </div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase">
+                        {groupedMedicamentos.length} medicamento(s) listado(s)
+                    </span>
+                </div>
 
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse">
-                            <thead>
-                                <tr className="bg-slate-50 border-b border-slate-100 text-[9px] font-black text-slate-400 uppercase tracking-wider">
-                                    <th className="p-3">Medicamento / Categoria</th>
-                                    <th className="p-3 text-center">Quantidade</th>
-                                    <th className="p-3 text-right">Ações</th>
+                <div className="flex-1 overflow-y-auto overflow-x-auto custom-scrollbar min-h-0">
+                    <table className="w-full text-left border-collapse">
+                        <thead className="sticky top-0 bg-slate-50/95 backdrop-blur-xs z-10 shadow-2xs">
+                            <tr className="border-b border-slate-200/80 text-[9px] font-black text-slate-400 uppercase tracking-wider">
+                                <th className="p-3.5 pl-6">Medicamento / Categoria</th>
+                                <th className="p-3.5 text-center">Quantidade</th>
+                                <th className="p-3.5 pr-6 text-right">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-700">
+                            {paginatedMedicamentos.length === 0 ? (
+                                <tr>
+                                    <td colSpan={3} className="p-12 text-center text-slate-400 font-semibold italic">
+                                        Nenhum lote ou medicamento encontrado.
+                                    </td>
                                 </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-700">
-                                {paginatedMedicamentos.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={3} className="p-8 text-center text-slate-400 font-semibold italic">
-                                            Nenhum lote ou medicamento encontrado.
-                                        </td>
-                                    </tr>
-                                ) : (
-                                    paginatedMedicamentos.map(med => {
-                                        const isExpanded = !!expandedMeds[med.key];
-                                        const isAllInativo = med.lotes.every(l => l.quantidade === 0 && l.lote === 'LOTE-INICIAL');
-                                        const badgeClass = getStockBadgeColor({
-                                            quantidade: med.quantidadeTotal,
-                                            limite_minimo: med.limite_minimo,
-                                            lote: isAllInativo ? 'LOTE-INICIAL' : ''
-                                        } as any);
+                            ) : (
+                                paginatedMedicamentos.map(med => {
+                                    const isExpanded = !!expandedMeds[med.key];
+                                    const isAllInativo = med.lotes.every(l => l.quantidade === 0 && l.lote === 'LOTE-INICIAL');
+                                    const badgeClass = getStockBadgeColor({
+                                        quantidade: med.quantidadeTotal,
+                                        limite_minimo: med.limite_minimo,
+                                        lote: isAllInativo ? 'LOTE-INICIAL' : ''
+                                    } as any);
 
-                                        return (
-                                            <React.Fragment key={med.key}>
-                                                <tr 
-                                                    className="hover:bg-slate-50/20 transition-colors border-b border-slate-100 cursor-pointer"
-                                                    onClick={() => toggleExpand(med.key)}
-                                                >
-                                                    <td className="p-3">
-                                                        <div className="flex items-center gap-2.5">
-                                                            <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
-                                                            <div>
-                                                                <div className="font-extrabold text-slate-800 uppercase flex items-center gap-2">
-                                                                    {med.nome}
-                                                                </div>
-                                                                <div className="flex flex-wrap gap-1 mt-1" onClick={e => e.stopPropagation()}>
-                                                                    {isAllInativo && (
-                                                                        <span className="inline-block px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider rounded bg-slate-200 text-slate-500">
-                                                                            INATIVO
-                                                                        </span>
-                                                                    )}
-                                                                    <span className="inline-block px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider rounded bg-slate-800 text-white">
-                                                                        Cód: {medicamentCodes[`${med.nome.toUpperCase()} - ${med.dosagem?.toUpperCase() || ''} - ${med.tipo?.toUpperCase() || ''}`] || '00000'}
+                                    return (
+                                        <React.Fragment key={med.key}>
+                                            <tr 
+                                                className="hover:bg-slate-50/40 transition-colors border-b border-slate-100 cursor-pointer"
+                                                onClick={() => toggleExpand(med.key)}
+                                            >
+                                                <td className="p-3.5 pl-6">
+                                                    <div className="flex items-center gap-2.5">
+                                                        <ChevronRight className={`w-4 h-4 text-slate-400 transition-transform ${isExpanded ? 'rotate-90 text-pink-600' : ''}`} />
+                                                        <div>
+                                                            <div className="font-extrabold text-slate-800 uppercase flex items-center gap-2">
+                                                                {med.nome}
+                                                            </div>
+                                                            <div className="flex flex-wrap gap-1 mt-1" onClick={e => e.stopPropagation()}>
+                                                                {isAllInativo && (
+                                                                    <span className="inline-block px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider rounded bg-slate-200 text-slate-500">
+                                                                        INATIVO
                                                                     </span>
-                                                                    <span className="inline-block px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded bg-pink-50 text-pink-600">
-                                                                        {med.categoria}
+                                                                )}
+                                                                <span className="inline-block px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider rounded bg-slate-800 text-white">
+                                                                    Cód: {medicamentCodes[`${med.nome.toUpperCase()} - ${med.dosagem?.toUpperCase() || ''} - ${med.tipo?.toUpperCase() || ''}`] || '00000'}
+                                                                </span>
+                                                                <span className="inline-block px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded bg-pink-50 text-pink-600">
+                                                                    {med.categoria}
+                                                                </span>
+                                                                {med.principio_ativo && (
+                                                                    <span className="inline-block px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded bg-emerald-50 text-emerald-700 border border-emerald-100">
+                                                                        P.Ativo: {med.principio_ativo}
                                                                     </span>
-                                                                    {med.principio_ativo && (
-                                                                        <span className="inline-block px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded bg-emerald-50 text-emerald-700 border border-emerald-100">
-                                                                            P.Ativo: {med.principio_ativo}
-                                                                        </span>
-                                                                    )}
-                                                                    {med.dosagem && (
-                                                                        <span className="inline-block px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded bg-pink-50 text-pink-700 border border-pink-100">
-                                                                            {med.dosagem}
-                                                                        </span>
-                                                                    )}
-                                                                    {med.tipo && (
-                                                                        <span className="inline-block px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded bg-slate-100 text-slate-600">
-                                                                            {med.tipo}
-                                                                        </span>
-                                                                    )}
-                                                                </div>
+                                                                )}
+                                                                {med.dosagem && (
+                                                                    <span className="inline-block px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded bg-pink-50 text-pink-700 border border-pink-100">
+                                                                        {med.dosagem}
+                                                                    </span>
+                                                                )}
+                                                                {med.tipo && (
+                                                                    <span className="inline-block px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded bg-slate-100 text-slate-600">
+                                                                        {med.tipo}
+                                                                    </span>
+                                                                )}
                                                             </div>
                                                         </div>
-                                                    </td>
-                                                    <td className="p-3 text-center">
-                                                        <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-black border ${badgeClass}`}>
-                                                            {med.quantidadeTotal} {med.unidade}
-                                                        </span>
-                                                    </td>
-                                                    <td className="p-3 text-right" onClick={e => e.stopPropagation()}>
-                                                        <div className="flex items-center justify-end gap-2">
-                                                            <button
-                                                                onClick={() => handleOpenAddStockForGroup(med.lotes[0])}
-                                                                className="px-2.5 py-1 text-[9px] font-black uppercase bg-pink-600 hover:bg-pink-700 text-white rounded-lg flex items-center gap-1 shadow-sm transition-all"
-                                                                title="Adicionar novo lote ou estoque para este medicamento"
-                                                            >
-                                                                <Plus className="w-3 h-3" />
-                                                                Adicionar Estoque
-                                                            </button>
-                                                            <button
-                                                                onClick={() => toggleExpand(med.key)}
-                                                                className="px-2.5 py-1 text-[9px] font-bold uppercase bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-350/20 rounded-lg"
-                                                            >
-                                                                {isExpanded ? 'Recolher' : `Lotes (${med.lotes.length})`}
-                                                            </button>
+                                                    </div>
+                                                </td>
+                                                <td className="p-3.5 text-center">
+                                                    <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-black border ${badgeClass}`}>
+                                                        {med.quantidadeTotal} {med.unidade}
+                                                    </span>
+                                                </td>
+                                                <td className="p-3.5 pr-6 text-right" onClick={e => e.stopPropagation()}>
+                                                    <div className="flex items-center justify-end gap-2">
+                                                        <button
+                                                            onClick={() => handleOpenAddStockForGroup(med.lotes[0])}
+                                                            className="px-2.5 py-1 text-[9px] font-black uppercase bg-pink-600 hover:bg-pink-700 text-white rounded-lg flex items-center gap-1 shadow-xs transition-all cursor-pointer"
+                                                            title="Adicionar novo lote ou estoque para este medicamento"
+                                                        >
+                                                            <Plus className="w-3 h-3" />
+                                                            Adicionar Estoque
+                                                        </button>
+                                                        <button
+                                                            onClick={() => toggleExpand(med.key)}
+                                                            className="px-2.5 py-1 text-[9px] font-bold uppercase bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-350/20 rounded-lg cursor-pointer"
+                                                        >
+                                                            {isExpanded ? 'Recolher' : `Lotes (${med.lotes.length})`}
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                            {isExpanded && (
+                                                <tr className="bg-slate-50/30">
+                                                    <td colSpan={3} className="p-4 pl-12 pr-6">
+                                                        <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-xs space-y-3">
+                                                            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                                                                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Detalhamento de Lotes e Validades</span>
+                                                                <span className="text-[9px] font-bold text-slate-400 uppercase">Total de {med.lotes.length} lote(s)</span>
+                                                            </div>
+                                                            <table className="w-full text-left border-collapse">
+                                                                <thead>
+                                                                    <tr className="border-b border-slate-100 text-[8px] font-black text-slate-450 uppercase tracking-wider">
+                                                                        <th className="py-2 pl-2">Identificação do Lote</th>
+                                                                        <th className="py-2">Data de Validade</th>
+                                                                        <th className="py-2 text-center">Quantidade</th>
+                                                                        <th className="py-2 text-right pr-2">Ações</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody className="divide-y divide-slate-50 text-[11px] font-semibold text-slate-650">
+                                                                    {med.lotes.map(lote => {
+                                                                        const isLoteExpired = lote.lote !== 'LOTE-INICIAL' && new Date(lote.validade).getTime() <= Date.now();
+                                                                        const loteBadge = getStockBadgeColor(lote);
+                                                                        return (
+                                                                            <tr key={lote.id} className="hover:bg-slate-50/40">
+                                                                                <td className="py-2.5 pl-2 font-mono uppercase text-slate-750">{lote.lote}</td>
+                                                                                <td className="py-2.5">
+                                                                                    {lote.lote === 'LOTE-INICIAL' ? '-' : (
+                                                                                        <span className={isLoteExpired ? 'text-rose-500 font-bold bg-rose-50 px-1.5 py-0.5 rounded' : 'text-slate-650'}>
+                                                                                            {formatDateBr(lote.validade)}
+                                                                                        </span>
+                                                                                    )}
+                                                                                </td>
+                                                                                <td className="py-2.5 text-center">
+                                                                                    <span className={`inline-flex px-1.5 py-0.5 rounded-full text-[9px] font-black border ${loteBadge}`}>
+                                                                                        {lote.quantidade} {lote.unidade}
+                                                                                    </span>
+                                                                                </td>
+                                                                                <td className="py-2.5 text-right pr-2">
+                                                                                    <div className="flex items-center justify-end gap-1.5">
+                                                                                        <button
+                                                                                            onClick={() => handleOpenAdjustModal(lote)}
+                                                                                            className="px-2 py-0.5 text-[9px] font-black uppercase bg-pink-50 text-pink-600 hover:bg-pink-100 border border-pink-200/40 rounded transition-colors cursor-pointer"
+                                                                                            title="Ajustar ou movimentar este lote específico"
+                                                                                        >
+                                                                                            Movimentar
+                                                                                        </button>
+                                                                                        {canEdit && (
+                                                                                            <button
+                                                                                                onClick={() => handleOpenEditModal(lote)}
+                                                                                                className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded transition-colors cursor-pointer"
+                                                                                                title="Editar dados do lote"
+                                                                                            >
+                                                                                                <Edit className="w-3.5 h-3.5" />
+                                                                                            </button>
+                                                                                        )}
+                                                                                        {canDelete && (
+                                                                                            <button
+                                                                                                onClick={() => handleDelete(lote.id, lote.nome)}
+                                                                                                className="p-1 text-slate-400 hover:text-rose-600 hover:bg-slate-100 rounded transition-colors cursor-pointer"
+                                                                                                title="Excluir este lote"
+                                                                                            >
+                                                                                                <Trash2 className="w-3.5 h-3.5" />
+                                                                                            </button>
+                                                                                        )}
+                                                                                    </div>
+                                                                                </td>
+                                                                            </tr>
+                                                                        );
+                                                                    })}
+                                                                </tbody>
+                                                            </table>
                                                         </div>
                                                     </td>
                                                 </tr>
-                                                {isExpanded && (
-                                                    <tr className="bg-slate-50/20">
-                                                        <td colSpan={3} className="p-4 pl-12">
-                                                            <div className="bg-white border border-slate-200/60 rounded-2xl p-4 shadow-xs space-y-3">
-                                                                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                                                                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Detalhamento de Lotes e Validades</span>
-                                                                    <span className="text-[9px] font-bold text-slate-400 uppercase">Total de {med.lotes.length} lote(s)</span>
-                                                                </div>
-                                                                <table className="w-full text-left border-collapse">
-                                                                    <thead>
-                                                                        <tr className="border-b border-slate-100 text-[8px] font-black text-slate-450 uppercase tracking-wider">
-                                                                            <th className="py-2 pl-2">Identificação do Lote</th>
-                                                                            <th className="py-2">Data de Validade</th>
-                                                                            <th className="py-2 text-center">Quantidade</th>
-                                                                            <th className="py-2 text-right pr-2">Ações</th>
-                                                                        </tr>
-                                                                    </thead>
-                                                                    <tbody className="divide-y divide-slate-50 text-[11px] font-semibold text-slate-650">
-                                                                        {med.lotes.map(lote => {
-                                                                            const isLoteExpired = lote.lote !== 'LOTE-INICIAL' && new Date(lote.validade).getTime() <= Date.now();
-                                                                            const loteBadge = getStockBadgeColor(lote);
-                                                                            return (
-                                                                                <tr key={lote.id} className="hover:bg-slate-50/40">
-                                                                                    <td className="py-2.5 pl-2 font-mono uppercase text-slate-750">{lote.lote}</td>
-                                                                                    <td className="py-2.5">
-                                                                                        {lote.lote === 'LOTE-INICIAL' ? '-' : (
-                                                                                            <span className={isLoteExpired ? 'text-rose-500 font-bold bg-rose-50 px-1.5 py-0.5 rounded' : 'text-slate-650'}>
-                                                                                                {formatDateBr(lote.validade)}
-                                                                                            </span>
-                                                                                        )}
-                                                                                    </td>
-                                                                                    <td className="py-2.5 text-center">
-                                                                                        <span className={`inline-flex px-1.5 py-0.5 rounded-full text-[9px] font-black border ${loteBadge}`}>
-                                                                                            {lote.quantidade} {lote.unidade}
-                                                                                        </span>
-                                                                                    </td>
-                                                                                    <td className="py-2.5 text-right pr-2">
-                                                                                        <div className="flex items-center justify-end gap-1.5">
-                                                                                            <button
-                                                                                                onClick={() => handleOpenAdjustModal(lote)}
-                                                                                                className="px-2 py-0.5 text-[9px] font-black uppercase bg-pink-50 text-pink-600 hover:bg-pink-100 border border-pink-200/40 rounded transition-colors"
-                                                                                                title="Ajustar ou movimentar este lote específico"
-                                                                                            >
-                                                                                                Movimentar
-                                                                                            </button>
-                                                                                            {canEdit && (
-                                                                                                <button
-                                                                                                    onClick={() => handleOpenEditModal(lote)}
-                                                                                                    className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded transition-colors"
-                                                                                                    title="Editar dados do lote"
-                                                                                                >
-                                                                                                    <Edit className="w-3.5 h-3.5" />
-                                                                                                </button>
-                                                                                            )}
-                                                                                            {canDelete && (
-                                                                                                <button
-                                                                                                    onClick={() => handleDelete(lote.id, lote.nome)}
-                                                                                                    className="p-1 text-slate-400 hover:text-rose-600 hover:bg-slate-100 rounded transition-colors"
-                                                                                                    title="Excluir este lote"
-                                                                                                >
-                                                                                                    <Trash2 className="w-3.5 h-3.5" />
-                                                                                                </button>
-                                                                                            )}
-                                                                                        </div>
-                                                                                    </td>
-                                                                                </tr>
-                                                                            );
-                                                                        })}
-                                                                    </tbody>
-                                                                </table>
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                )}
-                                            </React.Fragment>
-                                        );
-                                    })
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                    {totalPages > 1 && (
-                        <div className="flex items-center justify-between p-4 border-t border-slate-100 bg-slate-50/50 rounded-b-3xl">
-                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                                Mostrando {(currentPage - 1) * itemsPerPage + 1} a {Math.min(currentPage * itemsPerPage, groupedMedicamentos.length)} de {groupedMedicamentos.length} registros
-                            </span>
-                            <div className="flex items-center gap-2">
-                                <button
-                                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                                    disabled={currentPage === 1}
-                                    className="px-3 py-1.5 text-[10px] uppercase tracking-wider font-black text-slate-600 bg-white border border-slate-200 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-pink-50 hover:text-pink-600 transition-colors"
-                                >
-                                    Anterior
-                                </button>
-                                <span className="text-[11px] font-black text-slate-700 px-2">
-                                    Página {currentPage} de {totalPages}
-                                </span>
-                                <button
-                                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                                    disabled={currentPage === totalPages}
-                                    className="px-3 py-1.5 text-[10px] uppercase tracking-wider font-black text-slate-600 bg-white border border-slate-200 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-pink-50 hover:text-pink-600 transition-colors"
-                                >
-                                    Próxima
-                                </button>
-                            </div>
-                        </div>
-                    )}
+                                            )}
+                                        </React.Fragment>
+                                    );
+                                })
+                            )}
+                        </tbody>
+                    </table>
                 </div>
+
+                {totalPages > 1 && (
+                    <div className="flex items-center justify-between px-6 py-3 border-t border-slate-200/80 bg-slate-50/60 shrink-0">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                            Mostrando {(currentPage - 1) * itemsPerPage + 1} a {Math.min(currentPage * itemsPerPage, groupedMedicamentos.length)} de {groupedMedicamentos.length} registros
+                        </span>
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                disabled={currentPage === 1}
+                                className="px-3 py-1.5 text-[10px] uppercase tracking-wider font-black text-slate-600 bg-white border border-slate-200 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-pink-50 hover:text-pink-600 transition-colors cursor-pointer"
+                            >
+                                Anterior
+                            </button>
+                            <span className="text-[11px] font-black text-slate-700 px-2">
+                                Página {currentPage} de {totalPages}
+                            </span>
+                            <button
+                                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                disabled={currentPage === totalPages}
+                                className="px-3 py-1.5 text-[10px] uppercase tracking-wider font-black text-slate-600 bg-white border border-slate-200 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-pink-50 hover:text-pink-600 transition-colors cursor-pointer"
+                            >
+                                Próxima
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* ADD MODAL */}

@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient';
-import { ConsultaPaciente, ConsultaProcedimento, ConsultaAgendamento, ConsultaVaga } from '../types';
+import { ConsultaPaciente, ConsultaProcedimento, ConsultaAgendamento, ConsultaVaga, ConsultaEspecialista } from '../types';
 import { handleSupabaseError } from '../utils/errorUtils';
 
 // --- PACIENTES ---
@@ -292,9 +292,225 @@ export const getPacienteHistory = async (pacienteId: string): Promise<ConsultaAg
     }
 };
 
+// --- PROFISSIONAIS ESPECIALISTAS ---
+
+const ESPECIALISTA_STORAGE_KEY = 'consultas_especialistas_cache';
+
+export const getCachedEspecialistas = (): ConsultaEspecialista[] => {
+    if (typeof window === 'undefined') return [];
+    try {
+        const raw = localStorage.getItem(ESPECIALISTA_STORAGE_KEY);
+        return raw ? JSON.parse(raw) : [];
+    } catch {
+        return [];
+    }
+};
+
+export const saveCachedEspecialistas = (list: ConsultaEspecialista[]) => {
+    if (typeof window === 'undefined') return;
+    try {
+        localStorage.setItem(ESPECIALISTA_STORAGE_KEY, JSON.stringify(list));
+    } catch {}
+};
+
+export const getEspecialistas = async (onlyActive: boolean = false): Promise<ConsultaEspecialista[]> => {
+    try {
+        let { data, error } = await supabase
+            .from('consultas_especialistas')
+            .select('*')
+            .order('nome', { ascending: true });
+
+        if (error) {
+            let cached = getCachedEspecialistas();
+            if (onlyActive) {
+                cached = cached.filter(e => e.status === 'Ativo');
+            }
+            return cached.sort((a, b) => a.nome.localeCompare(b.nome));
+        }
+
+        if (data) {
+            saveCachedEspecialistas(data);
+            if (onlyActive) {
+                data = data.filter((e: ConsultaEspecialista) => e.status === 'Ativo');
+            }
+            return data;
+        }
+
+        return getCachedEspecialistas();
+    } catch (error) {
+        let cached = getCachedEspecialistas();
+        if (onlyActive) {
+            cached = cached.filter(e => e.status === 'Ativo');
+        }
+        return cached;
+    }
+};
+
+export const getEspecialistaById = async (id: string): Promise<ConsultaEspecialista | null> => {
+    try {
+        const { data, error } = await supabase
+            .from('consultas_especialistas')
+            .select('*')
+            .eq('id', id)
+            .maybeSingle();
+
+        if (!error && data) return data;
+        const cached = getCachedEspecialistas();
+        return cached.find(e => e.id === id) || null;
+    } catch {
+        const cached = getCachedEspecialistas();
+        return cached.find(e => e.id === id) || null;
+    }
+};
+
+export const createEspecialista = async (especialista: Omit<ConsultaEspecialista, 'id' | 'created_at' | 'updated_at'>): Promise<ConsultaEspecialista | null> => {
+    try {
+        const payload = {
+            nome: especialista.nome?.trim().toUpperCase(),
+            especialidade: especialista.especialidade?.trim().toUpperCase(),
+            grupo: especialista.grupo?.trim().toUpperCase() || 'MÉDICOS',
+            status: especialista.status || 'Ativo'
+        };
+
+        let { data, error } = await supabase
+            .from('consultas_especialistas')
+            .insert([payload])
+            .select()
+            .single();
+
+        let created: ConsultaEspecialista;
+        if (error || !data) {
+            created = {
+                id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `esp-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+                ...payload,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+            };
+            const list = getCachedEspecialistas();
+            list.push(created);
+            saveCachedEspecialistas(list);
+        } else {
+            created = data;
+            const list = getCachedEspecialistas().filter(e => e.id !== created.id);
+            list.push(created);
+            saveCachedEspecialistas(list);
+        }
+
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('consultas-especialistas-changed', { detail: created }));
+        }
+
+        return created;
+    } catch (error: any) {
+        const appError = handleSupabaseError(error);
+        console.error('[consultasService] createEspecialista Error:', appError.message);
+        throw appError;
+    }
+};
+
+export const updateEspecialista = async (id: string, updates: Partial<ConsultaEspecialista>): Promise<ConsultaEspecialista | null> => {
+    try {
+        const cleanUpdates: any = { ...updates, updated_at: new Date().toISOString() };
+        if (cleanUpdates.nome) cleanUpdates.nome = cleanUpdates.nome.trim().toUpperCase();
+        if (cleanUpdates.especialidade) cleanUpdates.especialidade = cleanUpdates.especialidade.trim().toUpperCase();
+        if (cleanUpdates.grupo) cleanUpdates.grupo = cleanUpdates.grupo.trim().toUpperCase();
+
+        let { data, error } = await supabase
+            .from('consultas_especialistas')
+            .update(cleanUpdates)
+            .eq('id', id)
+            .select()
+            .single();
+
+        let updated: ConsultaEspecialista;
+        if (error || !data) {
+            const list = getCachedEspecialistas();
+            const idx = list.findIndex(e => e.id === id);
+            if (idx > -1) {
+                list[idx] = { ...list[idx], ...cleanUpdates };
+                updated = list[idx];
+                saveCachedEspecialistas(list);
+            } else {
+                updated = { id, ...cleanUpdates } as ConsultaEspecialista;
+            }
+        } else {
+            updated = data;
+            const list = getCachedEspecialistas().map(e => e.id === id ? updated : e);
+            saveCachedEspecialistas(list);
+        }
+
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('consultas-especialistas-changed', { detail: updated }));
+        }
+
+        return updated;
+    } catch (error: any) {
+        const appError = handleSupabaseError(error);
+        console.error('[consultasService] updateEspecialista Error:', appError.message);
+        throw appError;
+    }
+};
+
+export const deleteEspecialista = async (id: string): Promise<boolean> => {
+    try {
+        // Validação de integridade referencial: verificar se há procedimentos associados a este especialista
+        const procs = await getProcedimentos();
+        const linkedProcs = procs.filter(p => p.especialista_id === id);
+        if (linkedProcs.length > 0) {
+            const names = linkedProcs.slice(0, 3).map(p => `"${p.name}"`).join(', ');
+            const extra = linkedProcs.length > 3 ? ` e mais ${linkedProcs.length - 3} procedimento(s)` : '';
+            throw new Error(`Não é possível excluir este especialista pois ele está vinculado a ${linkedProcs.length} procedimento(s): ${names}${extra}. Desvincule os procedimentos primeiro.`);
+        }
+
+        await supabase
+            .from('consultas_especialistas')
+            .delete()
+            .eq('id', id);
+
+        // Limpa cache local
+        const list = getCachedEspecialistas().filter(e => e.id !== id);
+        saveCachedEspecialistas(list);
+
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('consultas-especialistas-changed', { detail: { id } }));
+        }
+
+        return true;
+    } catch (error: any) {
+        const appError = handleSupabaseError(error);
+        console.error('[consultasService] deleteEspecialista Error:', appError.message);
+        throw appError;
+    }
+};
+
+/**
+ * Formata o label do procedimento conforme regra estrita:
+ * Com especialista: "Nome do Procedimento - Especialista" (ex: "Consulta em Dermatologia - João da Silva")
+ * Sem especialista: "Nome do Procedimento" (ex: "Consulta em Dermatologia")
+ */
+export const formatProcedimentoLabel = (
+    procedimento?: { name: string; especialista?: { nome: string } | null; especialista_id?: string | null } | null,
+    especialistasList?: ConsultaEspecialista[]
+): string => {
+    if (!procedimento) return '';
+    let espName = procedimento.especialista?.nome;
+    if (!espName && procedimento.especialista_id) {
+        const list = especialistasList || getCachedEspecialistas();
+        const found = list.find(e => e.id === procedimento.especialista_id);
+        if (found) {
+            espName = found.nome;
+        }
+    }
+    if (espName && espName.trim()) {
+        return `${procedimento.name} - ${espName.trim()}`;
+    }
+    return procedimento.name;
+};
+
 // --- PROCEDIMENTOS ---
 
-const PROCEDIMENTO_COLUMNS = 'id, name, code, type, available_quantity, total_quantity, status, recurso, created_at, updated_at';
+const PROCEDIMENTO_COLUMNS = 'id, name, code, type, available_quantity, total_quantity, status, recurso, especialista_id, created_at, updated_at';
+const PROCEDIMENTO_COLUMNS_FALLBACK = 'id, name, code, type, available_quantity, total_quantity, status, recurso, created_at, updated_at';
 
 export const getProcedimentos = async (onlyActive: boolean = false): Promise<ConsultaProcedimento[]> => {
     try {
@@ -304,9 +520,24 @@ export const getProcedimentos = async (onlyActive: boolean = false): Promise<Con
             query = query.eq('status', 'Ativo');
         }
 
-        const { data, error } = await query;
-        if (error) throw error;
-        return data || [];
+        let { data, error } = await query;
+        if (error && (error.code === 'PGRST204' || error.message?.includes('column') || error.message?.includes('schema cache'))) {
+            let fallbackQuery = supabase.from('consultas_procedimentos').select(PROCEDIMENTO_COLUMNS_FALLBACK).order('name', { ascending: true });
+            if (onlyActive) {
+                fallbackQuery = fallbackQuery.eq('status', 'Ativo');
+            }
+            const resFallback = await fallbackQuery;
+            data = resFallback.data as any;
+        }
+
+        const procs: ConsultaProcedimento[] = data || [];
+        const especialistas = await getEspecialistas();
+        const espMap = new Map<string, ConsultaEspecialista>(especialistas.map(e => [e.id, e]));
+
+        return procs.map(p => ({
+            ...p,
+            especialista: p.especialista_id ? espMap.get(p.especialista_id) || null : null
+        }));
     } catch (error) {
         const appError = handleSupabaseError(error);
         console.error('[consultasService] getProcedimentos Error:', appError.message);
@@ -316,11 +547,26 @@ export const getProcedimentos = async (onlyActive: boolean = false): Promise<Con
 
 export const createProcedimento = async (procedimento: Omit<ConsultaProcedimento, 'id' | 'created_at' | 'updated_at'>): Promise<ConsultaProcedimento | null> => {
     try {
-        const { data, error } = await supabase
+        let payload: any = { ...procedimento };
+        delete payload.especialista;
+
+        let { data, error } = await supabase
             .from('consultas_procedimentos')
-            .insert([procedimento])
+            .insert([payload])
             .select()
             .single();
+
+        // Fallback progressivo caso coluna especialista_id não exista no schema Supabase
+        if (error && (error.code === 'PGRST204' || error.message?.includes('column') || error.message?.includes('schema cache'))) {
+            delete payload.especialista_id;
+            const retryRes = await supabase
+                .from('consultas_procedimentos')
+                .insert([payload])
+                .select()
+                .single();
+            data = retryRes.data;
+            error = retryRes.error;
+        }
 
         if (error) throw error;
         return data;
@@ -333,12 +579,28 @@ export const createProcedimento = async (procedimento: Omit<ConsultaProcedimento
 
 export const updateProcedimento = async (id: string, updates: Partial<ConsultaProcedimento>): Promise<ConsultaProcedimento | null> => {
     try {
-        const { data, error } = await supabase
+        let payload: any = { ...updates };
+        delete payload.especialista;
+
+        let { data, error } = await supabase
             .from('consultas_procedimentos')
-            .update(updates)
+            .update(payload)
             .eq('id', id)
             .select()
             .single();
+
+        // Fallback progressivo caso coluna especialista_id não exista no schema Supabase
+        if (error && (error.code === 'PGRST204' || error.message?.includes('column') || error.message?.includes('schema cache'))) {
+            delete payload.especialista_id;
+            const retryRes = await supabase
+                .from('consultas_procedimentos')
+                .update(payload)
+                .eq('id', id)
+                .select()
+                .single();
+            data = retryRes.data;
+            error = retryRes.error;
+        }
 
         if (error) throw error;
         return data;

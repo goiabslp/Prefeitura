@@ -395,7 +395,17 @@ export const AbastecimentoService = {
                 if (!isValidFuel) throw new Error(`ERRO: Tipo de combustível "${fuelTypePrefix}" é inválido.`);
             }
 
-            // Omitted the override of station and invoice_number so edits can be saved
+            let finalSectorId = record.sectorId || (record as any).sector_id;
+            if (!finalSectorId && record.vehicle) {
+                const { data: vInfo } = await supabase
+                    .from('vehicles')
+                    .select('sector_id')
+                    .or(`plate.eq.${record.vehicle},id.eq.${record.vehicle}`)
+                    .maybeSingle();
+                if (vInfo?.sector_id) {
+                    finalSectorId = vInfo.sector_id;
+                }
+            }
 
             const dbRecord = {
                 id: record.id,
@@ -412,7 +422,7 @@ export const AbastecimentoService = {
                 fiscal: record.fiscal,
                 user_id: record.userId,
                 user_name: record.userName,
-                sector_id: record.sectorId,
+                sector_id: finalSectorId || null,
                 payment_status: record.payment_status || 'Em Aberto',
                 unit_price: record.unit_price,
                 projeto_atividade: record.projeto_atividade,

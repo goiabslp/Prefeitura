@@ -632,6 +632,16 @@ export const AGENTES_DE_SAUDE = [
   'Silvana Maria A De P Guilherme',
 ];
 
+export interface ConsultaEspecialista {
+  id: string;
+  nome: string;
+  especialidade: string;
+  grupo: string;
+  status: 'Ativo' | 'Inativo';
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface ConsultaProcedimento {
   id: string;
   name: string;
@@ -641,6 +651,8 @@ export interface ConsultaProcedimento {
   total_quantity: number;
   status: 'Ativo' | 'Inativo';
   recurso?: 'Não Se Aplica' | 'FM' | 'PPI';
+  especialista_id?: string | null;
+  especialista?: ConsultaEspecialista | null;
   created_at?: string;
   updated_at?: string;
 }

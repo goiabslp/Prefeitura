@@ -13,16 +13,24 @@ const generateCode = (): string => {
 
 export const getOrCreateOperationCode = async (moduleName: string, recordId: string): Promise<string> => {
     try {
-        // 1. Check if code already exists for this module & record_id
+        if (!recordId) return '';
+        const strRecordId = String(recordId).trim();
+        if (!strRecordId) return '';
+
+        // 1. Check if code already exists for this module & record_id (pega o mais recente se houver mais de um)
         const { data, error } = await supabase
             .from('operation_codes')
             .select('code')
             .eq('module', moduleName)
-            .eq('record_id', recordId)
-            .maybeSingle();
+            .eq('record_id', strRecordId)
+            .order('created_at', { ascending: false })
+            .limit(1);
 
-        if (error) throw error;
-        if (data) return data.code;
+        if (error) {
+            console.warn('[operationCodeService] Aviso ao consultar código existente:', error);
+        } else if (data && data.length > 0 && data[0]?.code) {
+            return data[0].code;
+        }
 
         // 2. If it does not exist, generate and try to insert
         let attempts = 0;
@@ -33,7 +41,7 @@ export const getOrCreateOperationCode = async (moduleName: string, recordId: str
                 .insert([{
                     code: newCode,
                     module: moduleName,
-                    record_id: recordId
+                    record_id: strRecordId
                 }]);
 
             if (!insertError) {
@@ -93,13 +101,16 @@ export const getCodeVariations = (code: string): string[] => {
 
 export const getRecordByOperationCode = async (code: string): Promise<OperationCode | null> => {
     try {
+        if (!code) return null;
         const variations = getCodeVariations(code);
         
         // Busca flexível tolerante a erros de digitação comuns
         const { data, error } = await supabase
             .from('operation_codes')
             .select('code, module, record_id, created_at')
-            .in('code', variations);
+            .in('code', variations)
+            .order('created_at', { ascending: false })
+            .limit(1);
 
         if (error) throw error;
         

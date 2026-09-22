@@ -7,6 +7,7 @@ import {
   ConsultasAnalyticsCompleto
 } from '../../../services/consultasAnalyticsService';
 import { ConsultasIAPanel } from './ConsultasIAPanel';
+import { EspecialistasDashboardTab } from './EspecialistasDashboardTab';
 import {
   BarChart3,
   Brain,
@@ -30,7 +31,8 @@ import {
   UserCheck,
   Layers,
   ArrowUpRight,
-  Sliders
+  Sliders,
+  UserPlus
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -54,7 +56,7 @@ interface ConsultasDashboardViewProps {
   onNavigate?: (view: string) => void;
 }
 
-type TabType = 'geral' | 'prazos' | 'filas' | 'ia' | 'eficiencia';
+type TabType = 'geral' | 'prazos' | 'filas' | 'ia' | 'eficiencia' | 'especialistas';
 
 export const ConsultasDashboardView: React.FC<ConsultasDashboardViewProps> = ({
   currentUser,
@@ -63,6 +65,7 @@ export const ConsultasDashboardView: React.FC<ConsultasDashboardViewProps> = ({
 }) => {
   // Sincronização de Aba com base na subView / Rota
   const activeTab: TabType = useMemo(() => {
+    if (subView === 'dados-dashboard-especialistas') return 'especialistas';
     if (subView === 'dados-dashboard-prazos') return 'prazos';
     if (subView === 'dados-dashboard-filas') return 'filas';
     if (subView === 'dados-dashboard-ia') return 'ia';
@@ -74,6 +77,7 @@ export const ConsultasDashboardView: React.FC<ConsultasDashboardViewProps> = ({
   const handleTabChange = (tabId: TabType) => {
     const routeMap: Record<TabType, { routeKey: string; path: string }> = {
       geral: { routeKey: 'consultas:dados-dashboard-geral', path: '/Consultas/DADOS/Dashboard/VisaoGeral' },
+      especialistas: { routeKey: 'consultas:dados-dashboard-especialistas', path: '/Consultas/DADOS/Dashboard/Especialistas' },
       prazos: { routeKey: 'consultas:dados-dashboard-prazos', path: '/Consultas/DADOS/Dashboard/Prazos' },
       filas: { routeKey: 'consultas:dados-dashboard-filas', path: '/Consultas/DADOS/Dashboard/Filas' },
       ia: { routeKey: 'consultas:dados-dashboard-ia', path: '/Consultas/DADOS/Dashboard/IA' },
@@ -267,6 +271,7 @@ export const ConsultasDashboardView: React.FC<ConsultasDashboardViewProps> = ({
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200/80 pb-3">
         {[
           { id: 'geral', label: 'Visão Geral & Funil', icon: BarChart3, path: '/Consultas/DADOS/Dashboard/VisaoGeral' },
+          { id: 'especialistas', label: 'Profissional Especialista', icon: Stethoscope, path: '/Consultas/DADOS/Dashboard/Especialistas', highlight: true },
           { id: 'prazos', label: 'Prazos Médios & SLA', icon: Clock, path: '/Consultas/DADOS/Dashboard/Prazos' },
           { id: 'filas', label: 'Fila & Especiais', icon: Users, path: '/Consultas/DADOS/Dashboard/Filas' },
           { id: 'ia', label: 'Diagnóstico & IA Preditiva', icon: Brain, path: '/Consultas/DADOS/Dashboard/IA', highlight: true },
@@ -930,6 +935,11 @@ export const ConsultasDashboardView: React.FC<ConsultasDashboardViewProps> = ({
           </div>
 
         </div>
+      )}
+
+      {/* === ABA 6: PROFISSIONAIS ESPECIALISTAS === */}
+      {activeTab === 'especialistas' && (
+        <EspecialistasDashboardTab currentUser={currentUser} />
       )}
 
     </div>

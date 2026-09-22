@@ -303,7 +303,7 @@ export const FarmaciaModule: React.FC<FarmaciaModuleProps> = ({
         <FarmaciaAlertProvider>
         <div className="flex-1 w-full h-full bg-[#f8fafc] relative flex flex-col overflow-hidden min-h-0">
             {/* Header / Subnav container */}
-            {subView !== 'consultar' && subView !== 'pacientes' && (
+            {subView !== 'consultar' && subView !== 'pacientes' && subView !== 'estoque' && (
                 <div className="bg-slate-50 border-b border-slate-200/60 p-4 md:px-8 flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0 z-40">
                     <div className="flex items-center gap-3">
                         <button
@@ -344,7 +344,7 @@ export const FarmaciaModule: React.FC<FarmaciaModuleProps> = ({
                 </div>
             )}
 
-            <main className="flex-1 overflow-y-auto p-4 md:p-6 custom-scrollbar flex flex-col min-h-0">
+            <main className={`flex-1 overflow-y-auto ${showEstoque || showConsultar ? 'p-0' : 'p-4 md:p-6'} custom-scrollbar flex flex-col min-h-0`}>
                 {!isSubView ? (
                     <FarmaciaDashboard
                         currentUser={currentUser}
@@ -368,6 +368,9 @@ export const FarmaciaModule: React.FC<FarmaciaModuleProps> = ({
                         currentUser={currentUser}
                         onBack={() => onNavigate('farmacia')}
                         appState={appState}
+                        lowStockMedicamentos={lowStockMedicamentos}
+                        hasCriticalItems={hasCriticalItems}
+                        onOpenAlertModal={() => setIsAlertModalOpen(true)}
                     />
                 ) : showDados ? (
                     <DadosScreen

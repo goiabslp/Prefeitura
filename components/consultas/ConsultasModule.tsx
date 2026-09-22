@@ -1,11 +1,12 @@
 // Módulo de Consultas e Regulação Municipal
 import React, { useState, useEffect } from 'react';
 import { User, AppState } from '../../types';
-import { ArrowLeft, PlusCircle, Activity, History, Database, Users, ShieldCheck, CalendarClock, CalendarCheck } from 'lucide-react';
+import { ArrowLeft, PlusCircle, Activity, History, Database, Users, ShieldCheck, CalendarClock, CalendarCheck, Settings } from 'lucide-react';
 import { NovoAgendamentoScreen } from './NovoAgendamentoScreen';
 import { AcompanharScreen } from './AcompanharScreen';
 import { DadosScreen } from './DadosScreen';
 import { LiberarVagasScreen } from './LiberarVagasScreen';
+import { ProcedimentosScreen } from './ProcedimentosScreen';
 import { PacientesTab } from '../common/PacientesTab';
 import { ModuleGestorScreen } from '../common/ModuleGestorScreen';
 import { useSystemSettings } from '../../contexts/SystemSettingsContext';
@@ -47,6 +48,7 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
     const isNovoAgendamentoActive = isModuleActive('sub_consultas_novo_agendamento') || isModuleActive('parent_consultas_novo_agendamento');
     const isLiberarVagasActive = isModuleActive('sub_consultas_liberar_vagas') !== false || isModuleActive('parent_consultas_liberar_vagas') !== false;
     const isAcompanharActive = isModuleActive('sub_consultas_acompanhar') || isModuleActive('parent_consultas_acompanhar');
+    const isProcedimentosActive = isModuleActive('sub_consultas_procedimentos') || isModuleActive('parent_consultas_procedimentos');
     const isDadosActive = isModuleActive('sub_consultas_dados') || isModuleActive('parent_consultas_dados');
     const isPacientesActive = isModuleActive('sub_consultas_pacientes') || isModuleActive('parent_consultas_pacientes');
     const isGestorActive = isModuleActive('sub_consultas_gestor') || isModuleActive('parent_consultas_gestor');
@@ -54,6 +56,7 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
     const canAccessNovoAgendamento = userCanAccessSubmodule(currentUser, 'parent_consultas', 'sub_consultas_novo_agendamento', isMobileViewport ? mobileModuleStatus : moduleStatus);
     const canAccessLiberarVagas = userCanAccessSubmodule(currentUser, 'parent_consultas', 'sub_consultas_liberar_vagas', isMobileViewport ? mobileModuleStatus : moduleStatus);
     const canAccessAcompanhar = userCanAccessSubmodule(currentUser, 'parent_consultas', 'sub_consultas_acompanhar', isMobileViewport ? mobileModuleStatus : moduleStatus);
+    const canAccessProcedimentos = userCanAccessSubmodule(currentUser, 'parent_consultas', 'sub_consultas_procedimentos', isMobileViewport ? mobileModuleStatus : moduleStatus);
     const canAccessDados = userCanAccessSubmodule(currentUser, 'parent_consultas', 'sub_consultas_dados', isMobileViewport ? mobileModuleStatus : moduleStatus);
     const canAccessPacientes = userCanAccessSubmodule(currentUser, 'parent_consultas', 'sub_consultas_pacientes', isMobileViewport ? mobileModuleStatus : moduleStatus);
     const canAccessGestor = userCanAccessSubmodule(currentUser, 'parent_consultas', 'sub_consultas_gestor', isMobileViewport ? mobileModuleStatus : moduleStatus);
@@ -61,23 +64,27 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
     const showNovoAgendamento = (subView === 'novo-agendamento' || (subView?.startsWith('novo-agendamento') ?? false) || subView === 'vagas-reservadas') && canAccessNovoAgendamento;
     const showLiberarVagas = (subView === 'liberar-vagas') && canAccessLiberarVagas;
     const showAcompanhar = (subView === 'acompanhar' || subView === 'definir-agenda') && canAccessAcompanhar;
+    const showProcedimentos = (subView === 'procedimentos') && canAccessProcedimentos;
     const showDados = (subView === 'dados' || (subView?.startsWith('dados') ?? false)) && canAccessDados;
     const showPacientes = (subView === 'pacientes') && canAccessPacientes;
     const showGestor = (subView === 'gestor') && canAccessGestor;
     
-    const isSubView = showNovoAgendamento || showLiberarVagas || showAcompanhar || showDados || showPacientes || showGestor;
+    const isSubView = showNovoAgendamento || showLiberarVagas || showAcompanhar || showProcedimentos || showDados || showPacientes || showGestor;
 
     const renderMainScreen = () => {
         const visibleCardsCount = [
             canAccessNovoAgendamento,
             canAccessLiberarVagas,
             canAccessAcompanhar,
+            canAccessProcedimentos,
             canAccessPacientes,
             canAccessDados,
             canAccessGestor
         ].filter(Boolean).length;
 
-        const gridClass = visibleCardsCount >= 6
+        const gridClass = visibleCardsCount >= 7
+            ? "w-full grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-7 gap-2.5 md:gap-3.5 max-w-7xl mb-4"
+            : visibleCardsCount === 6
             ? "w-full grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 xl:grid-cols-6 gap-2.5 md:gap-3.5 max-w-7xl mb-4"
             : visibleCardsCount === 5
             ? "w-full grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 max-w-6xl mb-4"
@@ -179,6 +186,28 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
                             </button>
                         )}
 
+                        {/* Card 4: Procedimentos */}
+                        {canAccessProcedimentos && (
+                            <button
+                                onClick={() => onNavigate('consultas:procedimentos')}
+                                className="group relative w-full min-h-[115px] md:min-h-[135px] rounded-[2rem] bg-gradient-to-br from-white to-slate-50 border border-slate-100 shadow-[0_10px_35px_rgba(0,0,0,0.03)] hover:shadow-[0_25px_60px_rgba(37,99,235,0.15)] hover:border-blue-200 hover:from-white hover:to-blue-50/20 hover:-translate-y-1.5 active:scale-95 transition-all duration-300 ease-out flex flex-col items-center justify-center text-center overflow-hidden p-3.5 md:p-4 cursor-pointer shrink-0"
+                            >
+                                <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
+                                <div className="absolute bottom-0 left-0 w-20 h-20 bg-blue-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
+
+                                <div className="w-11 h-11 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center mb-2 text-white group-hover:scale-110 group-hover:rotate-6 transition-all duration-300 shadow-md shadow-blue-500/30 ring-4 ring-white">
+                                    <Settings className="w-5.5 h-5.5" />
+                                </div>
+
+                                <h3 className="text-sm md:text-base font-extrabold text-slate-800 mb-0.5 group-hover:text-slate-900 tracking-tight uppercase text-center">
+                                    Procedimentos
+                                </h3>
+                                <p className="text-[9px] md:text-[10px] font-bold text-slate-400 group-hover:text-blue-600 transition-colors uppercase tracking-wider text-center">
+                                    Exames & Consultas
+                                </p>
+                            </button>
+                        )}
+
                         {/* Card 5: Pacientes */}
                         {canAccessPacientes && (
                             <button
@@ -246,7 +275,7 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
                             </button>
                         )}
 
-                        {!canAccessNovoAgendamento && !canAccessLiberarVagas && !canAccessAcompanhar && !canAccessPacientes && !canAccessDados && !canAccessGestor && (
+                        {!canAccessNovoAgendamento && !canAccessLiberarVagas && !canAccessAcompanhar && !canAccessProcedimentos && !canAccessPacientes && !canAccessDados && !canAccessGestor && (
                             <div className="col-span-full text-center p-8 bg-white border border-slate-200 rounded-[2rem] shadow-sm max-w-md mx-auto">
                                 <Activity className="w-12 h-12 text-slate-300 mx-auto mb-4" />
                                 <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Regulação & Consultas</h3>
@@ -286,6 +315,12 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
                             onNavigate={onNavigate}
                             subView={subView}
                             appState={appState}
+                        />
+                    ) : showProcedimentos ? (
+                        <ProcedimentosScreen
+                            currentUser={currentUser}
+                            onBack={() => onNavigate('consultas')}
+                            onNavigate={onNavigate}
                         />
                     ) : showPacientes ? (
                         <div className="w-full max-w-[98%] 2xl:max-w-[1536px] mx-auto flex flex-col h-full max-h-full min-h-0 bg-white/95 backdrop-blur-md rounded-[2.5rem] border border-slate-200/80 shadow-[0_20px_60px_rgba(0,0,0,0.06)] overflow-hidden animate-in fade-in duration-300 p-4 md:p-5">

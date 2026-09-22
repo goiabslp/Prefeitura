@@ -254,6 +254,13 @@ export const MODULE_ACCESS_TREE: ModuleItemDefinition[] = [
         routes: ['/Consultas/DefinirAgenda']
       },
       {
+        key: 'sub_consultas_procedimentos',
+        legacyKeys: ['parent_consultas_procedimentos'],
+        label: 'Procedimentos',
+        description: 'Gestão, cadastro, edição e suspensão de exames e consultas',
+        routes: ['/Consultas/Procedimentos']
+      },
+      {
         key: 'sub_consultas_pacientes',
         legacyKeys: ['parent_consultas_pacientes'],
         label: 'Pacientes',
@@ -269,6 +276,7 @@ export const MODULE_ACCESS_TREE: ModuleItemDefinition[] = [
           '/Consultas/DADOS',
           '/Consultas/DADOS/Dashboard',
           '/Consultas/DADOS/Dashboard/VisaoGeral',
+          '/Consultas/DADOS/Dashboard/Especialistas',
           '/Consultas/DADOS/Dashboard/Prazos',
           '/Consultas/DADOS/Dashboard/Filas',
           '/Consultas/DADOS/Dashboard/IA',

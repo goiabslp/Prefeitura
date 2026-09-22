@@ -24,25 +24,165 @@ const getFuelColor = (fuel: string) => {
     return 'text-purple-600 bg-purple-500/10 border-purple-500/20';
 };
 
-const DataItem = ({ label, value, icon: Icon, colorClass = "text-slate-700", flex = "flex-1", truncateValue = true, isBadge = false }: { label: string, value: string | number, icon?: any, colorClass?: string, flex?: string, truncateValue?: boolean, isBadge?: boolean }) => (
-    <div className={`flex flex-col gap-1 ${flex} min-w-0 overflow-hidden`}>
-        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400/80 ml-0.5 whitespace-nowrap overflow-hidden text-ellipsis flex items-center gap-1.5">
-            {Icon && !isBadge && <Icon className="w-3 h-3 shrink-0" />}
-            <span className="truncate">{label}</span>
+const DataItem = ({ 
+    label, 
+    value, 
+    icon: Icon, 
+    colorClass = "text-slate-700", 
+    flex = "flex-1", 
+    truncateValue = false, 
+    isBadge = false 
+}: { 
+    label: string, 
+    value: React.ReactNode, 
+    icon?: any, 
+    colorClass?: string, 
+    flex?: string, 
+    truncateValue?: boolean, 
+    isBadge?: boolean 
+}) => (
+    <div className={`flex flex-col gap-0.5 ${flex} min-w-0`}>
+        <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 whitespace-nowrap flex items-center gap-1 leading-none">
+            {Icon && !isBadge && <Icon className="w-2.5 h-2.5 shrink-0 text-slate-400" />}
+            <span className="whitespace-nowrap">{label}</span>
         </span>
-        <div className={`flex items-center text-sm font-bold transition-colors ${colorClass} ${isBadge ? 'px-2.5 py-0.5 rounded-lg border w-fit max-w-full' : ''}`}>
-            {Icon && isBadge && <Icon className="w-3.5 h-3.5 mr-1.5 shrink-0 opacity-70" />}
-            <span className={truncateValue ? "truncate" : "whitespace-nowrap"} title={String(value)}>{value}</span>
+        <div className={`flex items-center text-xs sm:text-[13px] font-bold transition-colors ${colorClass} ${isBadge ? 'px-2 py-0.5 rounded-md border text-[10px] font-black w-fit max-w-full leading-tight' : ''}`}>
+            {Icon && isBadge && <Icon className="w-3 h-3 mr-1 shrink-0 opacity-70" />}
+            {typeof value === 'string' || typeof value === 'number' ? (
+                <span className={truncateValue ? "truncate" : "whitespace-normal break-words leading-tight"} title={String(value)}>
+                    {value}
+                </span>
+            ) : (
+                value
+            )}
         </div>
     </div>
 );
 
-const AbastecimentoCard = ({ item, isAdmin, onEdit, onDelete, vehicleModelMap, vehiclePlateMap, vehicleSectorMap, vehicleImageMap, onPreviewImage }: any) => {
+const AbastecimentoCard = ({ 
+    item, 
+    isAdmin, 
+    onEdit, 
+    onDelete, 
+    vehicleModelMap, 
+    vehiclePlateMap, 
+    vehicleSectorMap, 
+    vehicleImageMap, 
+    sectorsList,
+    vehiclesList,
+    onPreviewImage 
+}: any) => {
     const [isExpanded, setIsExpanded] = useState(false);
     const fuelColor = getFuelColor(item.fuelType);
-    const vehiclePhoto = vehicleImageMap[item.vehicle];
-    const vehiclePlate = vehiclePlateMap[item.vehicle];
-    const vehicleModel = vehicleModelMap[item.vehicle] || item.vehicle;
+    
+    // Normalização das chaves do veículo para busca precisa nos mapas
+    const rawVehicle = (item.vehicle || '').trim();
+    const upperPlate = rawVehicle.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const cleanPlate = rawVehicle.toUpperCase();
+    const normalizedRaw = rawVehicle.replace(/\s+/g, ' ').toUpperCase();
+    
+    // 1. Resolução da Foto
+    let vehiclePhoto = vehicleImageMap[cleanPlate] || 
+                       vehicleImageMap[upperPlate] || 
+                       vehicleImageMap[rawVehicle] || 
+                       vehicleImageMap[normalizedRaw] || 
+                       '';
+
+    // 2. Resolução da Placa
+    let vehiclePlate = vehiclePlateMap[cleanPlate] || 
+                       vehiclePlateMap[upperPlate] || 
+                       vehiclePlateMap[rawVehicle] || 
+                       vehiclePlateMap[normalizedRaw] || 
+                       (rawVehicle && !rawVehicle.includes(' - ') ? rawVehicle : '');
+
+    // 3. Resolução do Modelo
+    let mappedModel = vehicleModelMap[cleanPlate] || 
+                      vehicleModelMap[upperPlate] || 
+                      vehicleModelMap[rawVehicle] || 
+                      vehicleModelMap[normalizedRaw] || 
+                      '';
+
+    // 4. Resolução do Setor
+    let vehicleSector = vehicleSectorMap[cleanPlate] || 
+                        vehicleSectorMap[upperPlate] || 
+                        vehicleSectorMap[rawVehicle] || 
+                        vehicleSectorMap[normalizedRaw] || 
+                        (item.sectorId && vehicleSectorMap[item.sectorId]) ||
+                        (item.sector_id && vehicleSectorMap[item.sector_id]) ||
+                        (item.sector && item.sector !== 'N/A' ? item.sector : '') ||
+                        '';
+
+    // Se ainda faltar alguma informação, faz busca minuciosa na lista de veículos
+    if ((!vehicleSector || !mappedModel || !vehiclePhoto) && Array.isArray(vehiclesList) && vehiclesList.length > 0) {
+        const found = vehiclesList.find((v: any) => {
+            const vPlate = (v.plate || '').trim().toUpperCase();
+            const vCleanPlate = vPlate.replace(/[^A-Z0-9]/g, '');
+            const vModelBrand = `${v.model || ''} ${v.brand || ''}`.replace(/\s+/g, ' ').trim().toUpperCase();
+            const vBrandModel = `${v.brand || ''} ${v.model || ''}`.replace(/\s+/g, ' ').trim().toUpperCase();
+            const vId = (v.id || '').trim();
+
+            return (
+                (upperPlate && (upperPlate === vCleanPlate || upperPlate === vPlate)) ||
+                (cleanPlate && (cleanPlate === vPlate || cleanPlate === vCleanPlate)) ||
+                (vId && vId === rawVehicle) ||
+                (normalizedRaw && vModelBrand && (normalizedRaw === vModelBrand || vModelBrand.includes(normalizedRaw) || normalizedRaw.includes(vModelBrand))) ||
+                (normalizedRaw && vBrandModel && (normalizedRaw === vBrandModel || vBrandModel.includes(normalizedRaw) || normalizedRaw.includes(vBrandModel)))
+            );
+        });
+
+        if (found) {
+            if (!vehiclePhoto) {
+                vehiclePhoto = found.vehicle_image_url || found.vehicleImageUrl || found.document_url || found.documentUrl || '';
+            }
+            if (!vehiclePlate) {
+                vehiclePlate = found.plate || '';
+            }
+            if (!mappedModel) {
+                const b = (found.brand || '').trim();
+                const m = (found.model || '').trim();
+                mappedModel = [m, b].filter(Boolean).join(' - ') || m || b || found.plate || '';
+            }
+            if (!vehicleSector) {
+                const sId = found.sector_id || found.sectorId;
+                if (found.sector && typeof found.sector === 'object' && found.sector.name) {
+                    vehicleSector = found.sector.name;
+                } else if (found.sector_name) {
+                    vehicleSector = found.sector_name;
+                } else if (sId && vehicleSectorMap[sId]) {
+                    vehicleSector = vehicleSectorMap[sId];
+                } else if (sId && Array.isArray(sectorsList)) {
+                    const sec = sectorsList.find((s: any) => s.id === sId);
+                    if (sec) vehicleSector = sec.name;
+                } else if (typeof found.sector === 'string' && found.sector.trim() && found.sector !== 'N/A') {
+                    vehicleSector = found.sector.trim();
+                }
+            }
+        }
+    }
+
+    // Se ainda não achou o setor pelo veículo, tenta resolver pelo sectorId do próprio abastecimento na sectorsList
+    if (!vehicleSector && (item.sectorId || item.sector_id) && Array.isArray(sectorsList)) {
+        const targetId = item.sectorId || item.sector_id;
+        const sec = sectorsList.find((s: any) => s.id === targetId);
+        if (sec) vehicleSector = sec.name;
+    }
+
+    // Fallback final para exibição limpa
+    if (!vehicleSector || vehicleSector === 'N/A') {
+        vehicleSector = '-';
+    }
+    
+    // Nome do Veículo (Modelo/Marca): se houver mapeamento válido, usa-o.
+    let vehicleModel = 'Veículo';
+    if (mappedModel && !mappedModel.includes('undefined') && mappedModel.trim() !== '') {
+        vehicleModel = mappedModel;
+    } else if (rawVehicle.includes(' - ') && !rawVehicle.includes('undefined')) {
+        vehicleModel = rawVehicle;
+    } else if (vehiclePlate && vehiclePlate !== rawVehicle) {
+        vehicleModel = vehiclePlate;
+    } else {
+        vehicleModel = rawVehicle || 'Veículo';
+    }
 
     return (
         <GestureItem
@@ -55,23 +195,23 @@ const AbastecimentoCard = ({ item, isAdmin, onEdit, onDelete, vehicleModelMap, v
             >
                 <div className={`absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-transparent via-cyan-400 to-transparent group-hover:via-cyan-500 transition-all ${isExpanded ? 'bg-cyan-500' : ''}`} />
 
-                <div className="flex flex-col wide:flex-row items-stretch min-h-[84px]">
+                <div className="flex flex-col wide:flex-row items-stretch min-h-[76px]">
                     
                     {/* CARD DE PRIMEIRA INFORMAÇÃO - FOTO E DADOS DO VEÍCULO (ALTURA TOTAL ATÉ CAMPO NOTA) */}
                     <div 
-                        className="bg-slate-50/90 border-b wide:border-b-0 wide:border-r border-slate-100 p-1.5 sm:p-2 px-3 sm:px-4 flex items-center gap-3 shrink-0 self-stretch wide:w-[320px] group-hover:bg-cyan-50/40 group-hover:border-cyan-100/60 transition-all relative"
+                        className="bg-slate-50/90 border-b wide:border-b-0 wide:border-r border-slate-100 p-1.5 sm:p-2 px-3 sm:px-4 flex items-center gap-3 shrink-0 self-stretch wide:w-[260px] group-hover:bg-cyan-50/40 group-hover:border-cyan-100/60 transition-all relative"
                         onClick={(e) => {
                             if (vehiclePhoto) {
                                 e.stopPropagation();
                                 onPreviewImage?.({
-                                    url: vehiclePhoto,
+                                   url: vehiclePhoto,
                                     title: `${vehicleModel} (${vehiclePlate || 'S/PLACA'})`
                                 });
                             }
                         }}
                     >
                         <div 
-                            className={`relative group/img w-18 h-18 sm:w-[76px] sm:h-[76px] rounded-xl overflow-hidden bg-slate-200 border-2 transition-all duration-300 flex items-center justify-center shrink-0 shadow-xs ${vehiclePhoto ? 'border-cyan-200 hover:border-cyan-400 cursor-pointer hover:shadow-md' : 'border-slate-200'}`}
+                            className={`relative group/img w-16 h-16 sm:w-[68px] sm:h-[68px] rounded-xl overflow-hidden bg-slate-200 border-2 transition-all duration-300 flex items-center justify-center shrink-0 shadow-xs ${vehiclePhoto ? 'border-cyan-200 hover:border-cyan-400 cursor-pointer hover:shadow-md' : 'border-slate-200'}`}
                             title={vehiclePhoto ? "Clique para ampliar a foto do veículo" : "Sem foto de veículo cadastrada"}
                         >
                             {vehiclePhoto ? (
@@ -90,12 +230,12 @@ const AbastecimentoCard = ({ item, isAdmin, onEdit, onDelete, vehicleModelMap, v
                                 </>
                             ) : (
                                 <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-slate-100 via-slate-200 to-slate-300 text-slate-400 p-1">
-                                    <Truck className="w-7 h-7 stroke-[1.5] text-slate-400" />
+                                    <Truck className="w-6 h-6 stroke-[1.5] text-slate-400" />
                                 </div>
                             )}
-                            {vehiclePlate && (
+                            {(vehiclePlate || rawVehicle) && (
                                 <div className="absolute bottom-0 inset-x-0 bg-slate-900/85 backdrop-blur-xs text-white text-[8px] font-mono font-bold text-center py-0.5 tracking-wider truncate px-0.5">
-                                    {vehiclePlate}
+                                    {vehiclePlate || rawVehicle}
                                 </div>
                             )}
                         </div>
@@ -104,41 +244,62 @@ const AbastecimentoCard = ({ item, isAdmin, onEdit, onDelete, vehicleModelMap, v
                             <span className="text-[8.5px] font-black uppercase tracking-widest text-cyan-700 bg-cyan-100/60 px-2 py-0.5 rounded-md border border-cyan-200/50 w-fit mb-0.5">
                                 Veículo
                             </span>
-                            <span className="text-xs sm:text-sm font-extrabold text-slate-900 truncate" title={vehicleModel}>
+                            <span className="text-xs sm:text-[13px] font-black text-slate-900 uppercase leading-snug whitespace-normal break-words" title={vehicleModel}>
                                 {vehicleModel}
                             </span>
-                            <span className="text-[10px] font-bold text-slate-500 font-mono flex items-center gap-1 mt-0.5">
+                            <span className="text-[9.5px] font-bold text-slate-500 font-mono flex items-center gap-1 mt-0.5">
                                 <Truck className="w-3 h-3 text-slate-400" />
-                                {vehiclePlate || 'S/ PLACA'}
+                                {vehiclePlate || rawVehicle || 'S/ PLACA'}
                             </span>
                         </div>
                     </div>
 
                     {/* CONTEÚDO PRINCIPAL DO REGISTRO (CAMPOS A PARTIR DO Nº NOTA) */}
-                    <div className="flex-1 p-4 pl-5 flex flex-col justify-center min-w-0">
-                        <div className="flex flex-col wide:flex-row wide:items-center gap-4">
-                            <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 wide:grid-cols-12 gap-3 items-center min-w-0">
-                                <DataItem label="Nº Nota" value={getDisplayInvoiceNumber(item.invoiceNumber) || '-'} icon={FileText} flex="col-span-1 wide:col-span-1" />
-                                <DataItem label="Data" value={formatLocalDateTime(item.date)} icon={Calendar} flex="col-span-1 wide:col-span-2" />
-                                <DataItem label="Motorista" value={item.driver} icon={User} colorClass="text-slate-600 uppercase tracking-tight" flex="col-span-1 wide:col-span-2" />
-                                <DataItem label="Setor" value={vehicleSectorMap[item.vehicle] || '-'} colorClass="text-slate-500 uppercase text-[10px]" flex="col-span-1 wide:col-span-2" />
+                    <div className="flex-1 p-3 sm:p-4 pl-4 sm:pl-5 flex flex-col justify-center min-w-0">
+                        <div className="flex flex-col wide:flex-row wide:items-center gap-3 wide:gap-4">
+                            <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 wide:flex wide:flex-row wide:items-center wide:justify-between gap-3 items-center min-w-0">
+                                <DataItem 
+                                    label="Nº Nota" 
+                                    value={getDisplayInvoiceNumber(item.invoiceNumber) || '-'} 
+                                    icon={FileText} 
+                                    flex="col-span-1 wide:w-auto min-w-[70px] shrink-0" 
+                                />
+                                <DataItem 
+                                    label="Data" 
+                                    value={formatLocalDateTime(item.date)} 
+                                    icon={Calendar} 
+                                    flex="col-span-1 wide:w-auto min-w-[130px] shrink-0" 
+                                />
+                                <DataItem 
+                                    label="Motorista" 
+                                    value={item.driver || '-'} 
+                                    icon={User} 
+                                    colorClass="text-slate-800 uppercase font-bold text-xs sm:text-[13px]" 
+                                    flex="col-span-2 sm:col-span-1 wide:flex-1 min-w-[150px]" 
+                                />
+                                <DataItem 
+                                    label="Setor" 
+                                    value={vehicleSector} 
+                                    colorClass="text-slate-600 uppercase font-semibold text-[11px] sm:text-xs" 
+                                    flex="col-span-2 sm:col-span-1 wide:flex-1 min-w-[150px]" 
+                                />
                                 <DataItem
                                     label="Combustível"
                                     value={item.fuelType.split(' - ')[0].toUpperCase()}
                                     colorClass={fuelColor}
-                                    flex="col-span-1 wide:col-span-2"
+                                    flex="col-span-1 wide:w-auto min-w-[85px] shrink-0"
                                     isBadge={true}
                                 />
                                 <DataItem
                                     label="Custo"
                                     value={`R$ ${item.cost.toFixed(2)}`}
-                                    colorClass="text-emerald-700 font-black"
-                                    flex="col-span-1 wide:col-span-3"
+                                    colorClass="text-emerald-700 font-black text-xs sm:text-sm"
+                                    flex="col-span-1 wide:w-auto min-w-[95px] shrink-0"
                                 />
                             </div>
 
                             {/* Chevron Toggle */}
-                            <div className={`text-slate-300 group-hover:text-cyan-500 transition-transform duration-300 ${isExpanded ? 'rotate-180 text-cyan-500' : ''}`}>
+                            <div className={`text-slate-300 group-hover:text-cyan-500 transition-transform duration-300 shrink-0 ${isExpanded ? 'rotate-180 text-cyan-500' : ''}`}>
                                 <ChevronDown className="w-5 h-5" />
                             </div>
                         </div>
@@ -151,7 +312,7 @@ const AbastecimentoCard = ({ item, isAdmin, onEdit, onDelete, vehicleModelMap, v
                                 colorClass="text-slate-400 font-mono text-[9px] bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200"
                                 flex="col-span-1 wide:w-auto"
                             />
-                            <DataItem label="Placa" value={vehiclePlateMap[item.vehicle] || '-'} colorClass="text-cyan-700 bg-cyan-50 px-2 py-0.5 rounded border border-cyan-100 font-mono text-xs" flex="col-span-1 wide:w-auto" />
+                            <DataItem label="Placa" value={vehiclePlateMap[item.vehicle] || vehiclePlate || '-'} colorClass="text-cyan-700 bg-cyan-50 px-2 py-0.5 rounded border border-cyan-100 font-mono text-xs" flex="col-span-1 wide:w-auto" />
                             <DataItem label="Fiscal" value={item.fiscal || 'Sistema'} icon={ShieldCheck} colorClass="text-slate-600 font-medium" flex="col-span-1 wide:w-auto" />
                             <DataItem label="Quantidade" value={`${item.liters.toFixed(3)} L`} flex="col-span-1 wide:w-auto" colorClass="text-slate-600" />
                             <DataItem label="Odômetro" value={`${item.odometer.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Km`} flex="col-span-1 wide:w-auto" colorClass="text-slate-600" />
@@ -206,6 +367,7 @@ export const AbastecimentoList: React.FC<AbastecimentoListProps> = ({ onBack, on
     const [vehiclePlateMap, setVehiclePlateMap] = useState<Record<string, string>>({});
     const [vehicleModelMap, setVehicleModelMap] = useState<Record<string, string>>({});
     const [vehicleImageMap, setVehicleImageMap] = useState<Record<string, string>>({});
+    const [allVehiclesList, setAllVehiclesList] = useState<any[]>([]);
     const [previewImageModal, setPreviewImageModal] = useState<{ url: string; title: string } | null>(null);
 
     // Pagination State
@@ -245,6 +407,110 @@ export const AbastecimentoList: React.FC<AbastecimentoListProps> = ({ onBack, on
         setPage(1);
     }, [filterMode, selectedDate, filterSector, filterFuel, filterStation, refreshTrigger]);
 
+    // Carrega Metadados (Veículos, Setores, Postos) de forma robusta e garantida
+    const loadMetadata = React.useCallback(async () => {
+        try {
+            const [vehiclesRes, sectorsRes, stationsRes] = await Promise.all([
+                supabase.from('vehicles').select('id, plate, model, brand, sector_id, vehicle_image_url, document_url'),
+                supabase.from('sectors').select('id, name'),
+                AbastecimentoService.getGasStations()
+            ]);
+
+            if (stationsRes) {
+                setGasStations(stationsRes.sort((a: any, b: any) => a.name.localeCompare(b.name)));
+            }
+
+            const sectorLookup: Record<string, string> = {};
+            if (sectorsRes.data) {
+                sectorsRes.data.forEach((s: any) => {
+                    sectorLookup[s.id] = s.name;
+                    sectorLookup[s.name] = s.name;
+                });
+                setSectorsList(sectorsRes.data.sort((a: any, b: any) => a.name.localeCompare(b.name)));
+            }
+
+            const vMap: Record<string, string> = { ...sectorLookup };
+            const pMap: Record<string, string> = {};
+            const modelMap: Record<string, string> = {};
+            const imgMap: Record<string, string> = {};
+            const combinedVehicles: any[] = [];
+
+            const registerVehicle = (v: any) => {
+                if (!v) return;
+                combinedVehicles.push(v);
+                const rawPlate = (v.plate || '').trim();
+                const plate = rawPlate.toUpperCase();
+                const cleanPlate = plate.replace(/[^A-Z0-9]/g, '');
+                const id = v.id || '';
+                const brand = (v.brand || '').trim();
+                const model = (v.model || '').trim();
+                const modelBrand = [model, brand].filter(Boolean).join(' - ').replace(/\s+/g, ' ').trim();
+                const cleanModelBrand = modelBrand.toUpperCase().replace(/[^A-Z0-9]/g, '');
+                const photoUrl = v.vehicle_image_url || v.vehicleImageUrl || v.document_url || v.documentUrl || '';
+                
+                let resolvedSector = '';
+                if (v.sector && typeof v.sector === 'object' && v.sector.name) {
+                    resolvedSector = v.sector.name;
+                } else if (v.sector_name) {
+                    resolvedSector = v.sector_name;
+                } else if (v.sector_id && sectorLookup[v.sector_id]) {
+                    resolvedSector = sectorLookup[v.sector_id];
+                } else if (v.sectorId && sectorLookup[v.sectorId]) {
+                    resolvedSector = sectorLookup[v.sectorId];
+                } else if (typeof v.sector === 'string' && sectorLookup[v.sector]) {
+                    resolvedSector = sectorLookup[v.sector];
+                } else if (typeof v.sector === 'string' && v.sector.trim()) {
+                    resolvedSector = v.sector.trim();
+                }
+
+                const keys = [
+                    plate, 
+                    cleanPlate, 
+                    id, 
+                    modelBrand, 
+                    modelBrand.toUpperCase(), 
+                    cleanModelBrand,
+                    rawPlate,
+                    model.toUpperCase(),
+                    brand.toUpperCase(),
+                    `${model} ${brand}`.replace(/\s+/g, ' ').trim().toUpperCase(),
+                    `${brand} ${model}`.replace(/\s+/g, ' ').trim().toUpperCase()
+                ].filter(Boolean);
+
+                keys.forEach(k => {
+                    if (resolvedSector) {
+                        vMap[k] = resolvedSector;
+                    }
+                    if (plate) pMap[k] = plate;
+                    if (modelBrand) modelMap[k] = modelBrand;
+                    if (photoUrl) imgMap[k] = photoUrl;
+                });
+            };
+
+            // Registra os veículos vindos via prop
+            if (vehicles && Array.isArray(vehicles)) {
+                vehicles.forEach(registerVehicle);
+            }
+
+            // Registra os veículos vindos do banco
+            if (vehiclesRes.data && Array.isArray(vehiclesRes.data)) {
+                vehiclesRes.data.forEach(registerVehicle);
+            }
+
+            setAllVehiclesList(combinedVehicles);
+            setVehicleSectorMap(vMap);
+            setVehiclePlateMap(pMap);
+            setVehicleModelMap(modelMap);
+            setVehicleImageMap(imgMap);
+        } catch (err) {
+            console.error('[AbastecimentoList] Erro ao carregar metadados:', err);
+        }
+    }, [vehicles]);
+
+    useEffect(() => {
+        loadMetadata();
+    }, [loadMetadata, refreshTrigger]);
+
     const loadSupplies = React.useCallback(async (currentPage: number, resetList: boolean = false) => {
         setIsLoading(true);
         try {
@@ -263,13 +529,7 @@ export const AbastecimentoList: React.FC<AbastecimentoListProps> = ({ onBack, on
                 filters.date = baseDateStr;
             }
 
-            const [dataRes, vehiclesRes, sectorsRes, stationsRes] = await Promise.all([
-                AbastecimentoService.getAbastecimentos(currentPage, 50, filters),
-                // Optimization: Load metadata only if maps are empty or forced refresh
-                Object.keys(vehicleSectorMap).length === 0 ? supabase.from('vehicles').select('plate, sector_id') : Promise.resolve({ data: null }),
-                Object.keys(vehicleSectorMap).length === 0 ? supabase.from('sectors').select('id, name') : Promise.resolve({ data: null }),
-                gasStations.length === 0 ? AbastecimentoService.getGasStations() : Promise.resolve(null)
-            ]);
+            const dataRes = await AbastecimentoService.getAbastecimentos(currentPage, 50, filters);
 
             if (resetList || currentPage === 1) {
                 setSupplies(dataRes.data);
@@ -280,64 +540,12 @@ export const AbastecimentoList: React.FC<AbastecimentoListProps> = ({ onBack, on
             setTotalCount(dataRes.count);
             setHasMore(dataRes.data.length === 50);
 
-            if (stationsRes) {
-                setGasStations(stationsRes.sort((a: any, b: any) => a.name.localeCompare(b.name)));
-            }
-
-            if (vehiclesRes.data && sectorsRes.data) {
-                const sectorLookup = sectorsRes.data.reduce((acc: any, s: any) => {
-                    acc[s.id] = s.name;
-                    return acc;
-                }, {});
-
-                // Update sectors list for dropdown
-                if (sectorsRes.data) {
-                    setSectorsList(sectorsRes.data.sort((a: any, b: any) => a.name.localeCompare(b.name)));
-                }
-
-                const vMap: Record<string, string> = {};
-                const pMap: Record<string, string> = {};
-                const modelMap: Record<string, string> = {};
-                const imgMap: Record<string, string> = {};
-
-                // Map photos from prop if present
-                if (vehicles && Array.isArray(vehicles)) {
-                    vehicles.forEach((v: any) => {
-                        const img = v.vehicle_image_url || v.vehicleImageUrl || v.photo_url || v.document_url || v.documentUrl || '';
-                        if (img) {
-                            if (v.plate) imgMap[v.plate] = img;
-                            const legacyKey = `${v.model} - ${v.brand}`;
-                            imgMap[legacyKey] = img;
-                        }
-                    });
-                }
-
-                vehiclesRes.data?.forEach((v: any) => {
-                    const sectorName = sectorLookup[v.sector_id] || 'N/A';
-                    const photoUrl = v.vehicle_image_url || v.vehicleImageUrl || v.photo_url || v.document_url || v.documentUrl || '';
-                    if (v.plate) {
-                        vMap[v.plate] = sectorName;
-                        pMap[v.plate] = v.plate;
-                        modelMap[v.plate] = `${v.model} - ${v.brand}`;
-                        if (photoUrl) imgMap[v.plate] = photoUrl;
-                    }
-                    const legacyKey = `${v.model} - ${v.brand}`;
-                    if (!vMap[legacyKey]) vMap[legacyKey] = sectorName;
-                    if (!pMap[legacyKey]) pMap[legacyKey] = v.plate || 'S/PLACA';
-                    if (photoUrl && !imgMap[legacyKey]) imgMap[legacyKey] = photoUrl;
-                });
-                setVehicleSectorMap(vMap);
-                setVehiclePlateMap(pMap);
-                setVehicleModelMap(modelMap);
-                setVehicleImageMap(imgMap);
-            }
-
         } catch (error) {
             console.error("Error loading supplies", error);
         } finally {
             setIsLoading(false);
         }
-    }, [debouncedSearch, filterSector, filterFuel, filterStation, filterMode, selectedDate, vehicleSectorMap, gasStations.length]); // Dependencies ensuring fresh state
+    }, [debouncedSearch, filterSector, filterFuel, filterStation, filterMode, selectedDate]); // Dependencies ensuring fresh state
 
     useEffect(() => {
         loadSupplies(page, page === 1);
@@ -534,6 +742,8 @@ export const AbastecimentoList: React.FC<AbastecimentoListProps> = ({ onBack, on
                                 vehiclePlateMap={vehiclePlateMap}
                                 vehicleSectorMap={vehicleSectorMap}
                                 vehicleImageMap={vehicleImageMap}
+                                sectorsList={sectorsList}
+                                vehiclesList={allVehiclesList}
                                 onPreviewImage={(imgData: { url: string; title: string }) => setPreviewImageModal(imgData)}
                             />
                         ))}

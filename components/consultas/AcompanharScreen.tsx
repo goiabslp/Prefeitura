@@ -379,13 +379,13 @@ const DataItem = ({
     truncateValue?: boolean; 
     isBadge?: boolean; 
 }) => (
-    <div className={`flex flex-col gap-1 ${flex} min-w-0 overflow-hidden`}>
-        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400/80 ml-0.5 whitespace-nowrap overflow-hidden text-ellipsis flex items-center gap-1.5">
-            {Icon && !isBadge && <Icon className="w-3 h-3 shrink-0" />}
+    <div className={`flex flex-col gap-0.5 ${flex} min-w-0 overflow-hidden`}>
+        <span className="text-[7.5px] font-black uppercase tracking-wider text-slate-400 ml-0.5 whitespace-nowrap overflow-hidden text-ellipsis flex items-center gap-1 leading-none">
+            {Icon && !isBadge && <Icon className="w-2 h-2 shrink-0" />}
             <span className="truncate">{label}</span>
         </span>
-        <div className={`flex items-center text-sm font-bold transition-colors ${colorClass} ${isBadge ? 'px-2.5 py-0.5 rounded-lg border w-fit max-w-full' : ''}`}>
-            {Icon && isBadge && <Icon className="w-3.5 h-3.5 mr-1.5 shrink-0 opacity-70" />}
+        <div className={`flex items-center text-[11px] sm:text-xs font-bold transition-colors ${colorClass} ${isBadge ? 'px-1.5 py-0.2 rounded-md border text-[8.5px] font-extrabold w-fit max-w-full' : ''}`}>
+            {Icon && isBadge && <Icon className="w-2.5 h-2.5 mr-0.5 shrink-0 opacity-70" />}
             {typeof value === 'string' || typeof value === 'number' ? (
                 <span className={truncateValue ? "truncate" : "whitespace-nowrap"} title={String(value)}>{value}</span>
             ) : (
@@ -497,48 +497,48 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
     const hasAgent = rawAgentName.length > 0;
 
     return (
-        <div className="rounded-2xl shadow-xs mb-3">
+        <div className="rounded-xl shadow-2xs mb-1.5">
             <div
                 onClick={() => setIsExpanded(!isExpanded)}
-                className={`group rounded-2xl border transition-all duration-300 relative overflow-hidden cursor-pointer ${
+                className={`group rounded-xl border transition-all duration-200 relative overflow-hidden cursor-pointer ${
                     isEligibleForVaga
                     ? isNextInQueue
-                        ? 'bg-gradient-to-r from-emerald-50/85 via-emerald-50/40 to-white border-emerald-400 ring-2 ring-emerald-400/30 shadow-md shadow-emerald-500/10'
-                        : 'bg-gradient-to-r from-emerald-50/50 via-amber-50/30 to-white border-emerald-300/80 ring-1 ring-emerald-300/30 shadow-xs'
+                        ? 'bg-gradient-to-r from-emerald-50/85 via-emerald-50/40 to-white border-emerald-400 ring-1 ring-emerald-400/30 shadow-xs'
+                        : 'bg-gradient-to-r from-emerald-50/50 via-amber-50/30 to-white border-emerald-300/80 ring-1 ring-emerald-300/30 shadow-2xs'
                     : isExpanded 
-                    ? 'bg-white border-cyan-200 ring-1 ring-cyan-100 shadow-lg shadow-cyan-500/5' 
-                    : 'bg-white border-slate-200/60 hover:shadow-md hover:border-cyan-200/50'
+                    ? 'bg-white border-cyan-200 ring-1 ring-cyan-100 shadow-md shadow-cyan-500/5' 
+                    : 'bg-white border-slate-200/60 hover:shadow-xs hover:border-cyan-200/50'
                 }`}
             >
                 {/* Faixa lateral indicadora */}
-                <div className={`absolute top-0 left-0 w-1.5 h-full transition-all ${
+                <div className={`absolute top-0 left-0 w-1 h-full transition-all ${
                     isEligibleForVaga 
                     ? isNextInQueue
-                        ? 'bg-emerald-500 shadow-sm shadow-emerald-500/50'
-                        : 'bg-amber-400 shadow-sm shadow-amber-400/40'
+                        ? 'bg-emerald-500 shadow-xs shadow-emerald-500/50'
+                        : 'bg-amber-400 shadow-xs shadow-amber-400/40'
                     : isExpanded ? 'bg-cyan-500' : 'bg-gradient-to-b from-transparent via-cyan-400 to-transparent group-hover:via-cyan-500'
                 }`} />
 
-                <div className="flex flex-col wide:flex-row items-stretch min-h-[84px]">
-                    {/* CARD DE PRIMEIRA INFORMAÇÃO - POSIÇÃO GRANDE E DADOS DO PACIENTE */}
-                    <div className={`border-b wide:border-b-0 wide:border-r p-2.5 sm:p-3 px-3 sm:px-4 flex items-center gap-3 shrink-0 self-stretch wide:w-[380px] transition-all relative ${
+                <div className="flex flex-col wide:flex-row items-stretch min-h-[46px] sm:min-h-[48px]">
+                    {/* CARD DE PRIMEIRA INFORMAÇÃO - POSIÇÃO E DADOS DO PACIENTE */}
+                    <div className={`border-b wide:border-b-0 wide:border-r p-1.5 sm:py-1 sm:px-2.5 flex items-center gap-2 shrink-0 self-stretch wide:w-[280px] transition-all relative ${
                         isEligibleForVaga 
                         ? isNextInQueue
                             ? 'bg-emerald-100/50 border-emerald-200/90' 
                             : 'bg-amber-50/40 border-amber-200/70'
                         : 'bg-slate-50/90 border-slate-100 group-hover:bg-cyan-50/40 group-hover:border-cyan-100/60'
                     }`}>
-                        {/* Bloco de Destaque: POSIÇÃO Grande e Visível */}
+                        {/* Bloco de Destaque: POSIÇÃO */}
                         <div 
-                            className={`w-16 h-16 sm:w-[74px] sm:h-[74px] rounded-2xl flex flex-col items-center justify-center shrink-0 border transition-all duration-300 shadow-xs relative overflow-hidden ${
+                            className={`w-10 h-10 sm:w-11 sm:h-11 rounded-lg flex flex-col items-center justify-center shrink-0 border transition-all duration-200 shadow-2xs relative overflow-hidden ${
                                 isEligibleForVaga
                                     ? isNextInQueue
-                                        ? 'bg-gradient-to-br from-emerald-100 via-emerald-200/90 to-teal-200 border-emerald-400 text-emerald-950 shadow-emerald-500/20 ring-2 ring-emerald-400/40'
-                                        : 'bg-gradient-to-br from-emerald-50 via-teal-50/60 to-amber-100/80 border-emerald-300 text-slate-800 shadow-xs ring-1 ring-emerald-300/40'
+                                        ? 'bg-gradient-to-br from-emerald-100 via-emerald-200/90 to-teal-200 border-emerald-400 text-emerald-950 ring-1 ring-emerald-400/40'
+                                        : 'bg-gradient-to-br from-emerald-50 via-teal-50/60 to-amber-100/80 border-emerald-300 text-slate-800 ring-1 ring-emerald-300/40'
                                     : booking.status === 'Fila de espera'
                                     ? booking.priority === 'Especial'
-                                        ? 'bg-gradient-to-br from-amber-100 via-amber-200 to-yellow-200 border-amber-400 text-amber-950 shadow-amber-500/20 ring-2 ring-amber-400/40'
-                                        : 'bg-gradient-to-br from-amber-50 via-amber-100/90 to-amber-200/70 border-amber-300 text-amber-950 shadow-amber-500/15 ring-2 ring-amber-400/20'
+                                        ? 'bg-gradient-to-br from-amber-100 via-amber-200 to-yellow-200 border-amber-400 text-amber-950 ring-1 ring-amber-400/40'
+                                        : 'bg-gradient-to-br from-amber-50 via-amber-100/90 to-amber-200/70 border-amber-300 text-amber-950 ring-1 ring-amber-400/20'
                                     : booking.status === 'Agendado'
                                     ? 'bg-gradient-to-br from-emerald-50 via-teal-50 to-emerald-100/80 border-emerald-300 text-emerald-950'
                                     : booking.status === 'Realizado'
@@ -560,63 +560,63 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                             {isEligibleForVaga ? (
                                 isNextInQueue ? (
                                     <>
-                                        <span className="text-[7.5px] font-black uppercase tracking-wider text-emerald-900 leading-none">
+                                        <span className="text-[6px] font-black uppercase tracking-wider text-emerald-900 leading-none">
                                             VAGA LIVRE
                                         </span>
-                                        <span className="text-xl sm:text-2xl font-black font-mono leading-none tracking-tight text-emerald-950 my-1">
+                                        <span className="text-sm sm:text-base font-black font-mono leading-none tracking-tight text-emerald-950 my-0.5">
                                             {queuePosition ? `${queuePosition}º` : '1º'}
                                         </span>
-                                        <span className="text-[7px] font-black uppercase tracking-wider text-emerald-800 leading-none">
+                                        <span className="text-[5.5px] font-black uppercase tracking-wider text-emerald-800 leading-none">
                                             DEFINIR DATA
                                         </span>
                                     </>
                                 ) : (
                                     <>
-                                        <span className="text-[7.5px] font-black uppercase tracking-wider text-emerald-900 leading-none">
+                                        <span className="text-[6px] font-black uppercase tracking-wider text-emerald-900 leading-none">
                                             VAGA LIVRE
                                         </span>
-                                        <span className="text-xl sm:text-2xl font-black font-mono leading-none tracking-tight text-slate-800 my-1">
+                                        <span className="text-sm sm:text-base font-black font-mono leading-none tracking-tight text-slate-800 my-0.5">
                                             {queuePosition ? `${queuePosition}º` : (booking.queue_position ? `${booking.queue_position}º` : '2º')}
                                         </span>
-                                        <span className="text-[6.5px] font-black uppercase tracking-wider text-amber-800 leading-none flex items-center gap-0.5">
-                                            <Lock className="w-2 h-2 inline shrink-0" /> AGUARDANDO
+                                        <span className="text-[5px] font-black uppercase tracking-wider text-amber-800 leading-none flex items-center gap-0.5">
+                                            <Lock className="w-1.5 h-1.5 inline shrink-0" /> AGUARDANDO
                                         </span>
                                     </>
                                 )
                             ) : (!booking.status || booking.status === 'Fila de espera' || booking.status === 'Aguardando Data' || booking.status === 'Solicitado' || booking.status === 'Retorno') ? (
                                 <>
-                                    <span className="text-[8.5px] font-black uppercase tracking-wider text-amber-900 leading-none">
+                                    <span className="text-[6.5px] font-black uppercase tracking-wider text-amber-900 leading-none">
                                         {booking.priority === 'Especial' ? 'ESPECIAL' : 'POSIÇÃO'}
                                     </span>
-                                    <span className="text-2xl sm:text-[28px] font-black font-mono leading-none tracking-tight text-amber-950 my-1">
+                                    <span className="text-base sm:text-lg font-black font-mono leading-none tracking-tight text-amber-950 my-0.5">
                                         {queuePosition ? `${queuePosition}º` : (booking.queue_position ? `${booking.queue_position}º` : '1º')}
                                     </span>
-                                    <span className="text-[7.5px] font-black uppercase tracking-widest text-amber-800 leading-none">
+                                    <span className="text-[5.5px] font-black uppercase tracking-widest text-amber-800 leading-none">
                                         {booking.priority === 'Especial' ? 'PRIORITÁRIO' : 'NA FILA'}
                                     </span>
                                 </>
                             ) : booking.status === 'Agendado' ? (
                                 <>
-                                    <span className="text-[8px] font-black uppercase tracking-wider text-emerald-800 leading-none">
+                                    <span className="text-[6.5px] font-black uppercase tracking-wider text-emerald-800 leading-none">
                                         STATUS
                                     </span>
-                                    <span className="text-xs sm:text-sm font-black uppercase tracking-tight text-emerald-950 my-1 text-center px-1 leading-tight">
+                                    <span className="text-[9.5px] sm:text-[10px] font-black uppercase tracking-tight text-emerald-950 my-0.5 text-center px-0.5 leading-tight">
                                         AGENDADO
                                     </span>
-                                    <span className="text-[7.5px] font-bold uppercase tracking-wider text-emerald-700 leading-none">
+                                    <span className="text-[5.5px] font-bold uppercase tracking-wider text-emerald-700 leading-none">
                                         CONFIRMADO
                                     </span>
                                 </>
                             ) : (
                                 <>
-                                    <span className="text-[8px] font-black uppercase tracking-wider text-slate-500 leading-none">
+                                    <span className="text-[6.5px] font-black uppercase tracking-wider text-slate-500 leading-none">
                                         STATUS
                                     </span>
-                                    <span className="text-[11px] sm:text-xs font-black uppercase tracking-tight text-slate-800 my-1 text-center px-1 leading-tight">
+                                    <span className="text-[8.5px] sm:text-[9.5px] font-black uppercase tracking-tight text-slate-800 my-0.5 text-center px-0.5 leading-tight">
                                         {booking.status}
                                     </span>
                                     {queuePosition ? (
-                                        <span className="text-[7.5px] font-mono font-bold text-slate-500 leading-none">
+                                        <span className="text-[6px] font-mono font-bold text-slate-500 leading-none">
                                             {queuePosition}º FILA
                                         </span>
                                     ) : null}
@@ -624,52 +624,52 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                             )}
                         </div>
 
-                        {/* Dados textuais do Paciente - Nome Completo */}
+                        {/* Dados textuais do Paciente */}
                         <div className="flex flex-col min-w-0 justify-center flex-1">
-                            <div className="flex items-center gap-1.5 mb-1 flex-wrap">
-                                <span className="text-[8.5px] font-black uppercase tracking-widest text-cyan-700 bg-cyan-100/60 px-2 py-0.5 rounded-md border border-cyan-200/50 w-fit">
+                            <div className="flex items-center gap-1 mb-0.5 flex-wrap">
+                                <span className="text-[7px] font-black uppercase tracking-wider text-cyan-700 bg-cyan-100/60 px-1 py-0.2 rounded border border-cyan-200/50 w-fit leading-none">
                                     Paciente
                                 </span>
                                 {booking.priority === 'Especial' && (
-                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider text-amber-950 bg-gradient-to-r from-amber-200 via-yellow-100 to-amber-200 border border-amber-400 shadow-xs ring-1 ring-amber-400/30">
-                                        <Sparkles className="w-3 h-3 text-amber-700 fill-amber-500 animate-pulse shrink-0" />
+                                    <span className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded text-[7px] font-black uppercase tracking-wider text-amber-950 bg-gradient-to-r from-amber-200 via-yellow-100 to-amber-200 border border-amber-400 shadow-2xs leading-none">
+                                        <Sparkles className="w-2 h-2 text-amber-700 fill-amber-500 shrink-0" />
                                         <span>AGENDAMENTO ESPECIAL</span>
                                         {(specialSequence || booking.special_sequence) ? (
-                                            <span className="ml-1 bg-amber-950/15 px-1.5 py-0.2 rounded text-[8px] font-black">
+                                            <span className="ml-0.5 bg-amber-950/15 px-0.8 py-0.2 rounded text-[6.5px] font-black">
                                                 Nº {specialSequence || booking.special_sequence}
                                             </span>
                                         ) : null}
                                     </span>
                                 )}
                                 {(booking.is_retorno || booking.retorno_tipo || booking.status === 'Retorno') && booking.priority !== 'Especial' && (
-                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider text-teal-950 bg-teal-100 border border-teal-300 shadow-2xs ring-1 ring-teal-400/20">
-                                        <RotateCcw className="w-3 h-3 text-teal-700 shrink-0" />
+                                    <span className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded text-[7px] font-black uppercase tracking-wider text-teal-950 bg-teal-100 border border-teal-300 shadow-2xs leading-none">
+                                        <RotateCcw className="w-2 h-2 text-teal-700 shrink-0" />
                                         <span>RETORNO — {(booking.retorno_tipo || '1º RETORNO').toUpperCase()}</span>
                                     </span>
                                 )}
                                 {booking.priority === 'Urgência' && (
-                                    <span className="text-[8px] font-black uppercase tracking-wider text-rose-700 bg-rose-100/70 px-1.5 py-0.2 rounded border border-rose-200 animate-pulse">
+                                    <span className="text-[7px] font-black uppercase tracking-wider text-rose-700 bg-rose-100/70 px-1 py-0.2 rounded border border-rose-200 leading-none">
                                         Urgente
                                     </span>
                                 )}
                             </div>
                             <span 
-                                className="text-xs sm:text-sm font-black text-slate-900 uppercase leading-snug break-words" 
+                                className="text-[11.5px] sm:text-xs font-black text-slate-900 uppercase leading-tight truncate" 
                                 title={patientName}
                             >
                                 {patientName}
                             </span>
-                            <span className="text-[10px] font-bold text-slate-500 font-mono flex items-center gap-1 mt-1">
-                                <UserIcon className="w-3 h-3 text-slate-400 shrink-0" />
+                            <span className="text-[8.5px] font-bold text-slate-500 font-mono flex items-center gap-1 mt-0.5 leading-none">
+                                <UserIcon className="w-2 h-2 text-slate-400 shrink-0" />
                                 {formattedCpf}
                             </span>
                         </div>
                     </div>
 
                     {/* CONTEÚDO PRINCIPAL DO REGISTRO */}
-                    <div className="flex-1 p-3.5 sm:p-4 pl-4 sm:pl-5 flex flex-col justify-center min-w-0">
-                        <div className="flex flex-col wide:flex-row wide:items-center gap-3 wide:gap-4">
-                            <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 wide:grid-cols-12 gap-3 items-center min-w-0">
+                    <div className="flex-1 p-1.5 sm:py-1 sm:px-3 flex flex-col justify-center min-w-0">
+                        <div className="flex flex-col wide:flex-row wide:items-center gap-1.5 wide:gap-2.5">
+                            <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 wide:grid-cols-12 gap-2 items-center min-w-0">
                                 {/* SOLICITADO */}
                                 <DataItem 
                                     label="Solicitado" 
@@ -679,22 +679,22 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                 />
 
                                 {/* EXAME / PROCEDIMENTO */}
-                                <div className="flex flex-col gap-1 col-span-2 sm:col-span-2 wide:col-span-4 min-w-0 overflow-hidden">
-                                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400/80 ml-0.5 whitespace-nowrap overflow-hidden text-ellipsis flex items-center gap-1.5">
-                                        <Activity className="w-3 h-3 shrink-0" />
+                                <div className="flex flex-col gap-0.5 col-span-2 sm:col-span-2 wide:col-span-4 min-w-0 overflow-hidden">
+                                    <span className="text-[7.5px] font-black uppercase tracking-wider text-slate-400 ml-0.5 whitespace-nowrap overflow-hidden text-ellipsis flex items-center gap-1 leading-none">
+                                        <Activity className="w-2 h-2 shrink-0" />
                                         <span className="truncate">Exame / Procedimento</span>
                                     </span>
-                                    <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-                                        <span className="text-xs sm:text-sm font-bold text-slate-900 uppercase truncate" title={booking.procedimento?.name}>
+                                    <div className="flex items-center gap-1 flex-wrap min-w-0">
+                                        <span className="text-[11.5px] sm:text-xs font-bold text-slate-900 uppercase truncate" title={booking.procedimento?.name}>
                                             {booking.procedimento?.name || 'Não informado'}
                                         </span>
                                         {booking.procedimento?.code && (
-                                            <span className="text-[9px] text-slate-500 font-extrabold bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200 shrink-0">
+                                            <span className="text-[7.5px] text-slate-500 font-extrabold bg-slate-100 px-1 py-0.2 rounded border border-slate-200 shrink-0 leading-none">
                                                 {booking.procedimento.code}
                                             </span>
                                         )}
                                         {booking.procedimento?.type && (
-                                            <span className={`px-1.5 py-0.2 text-[8px] font-black uppercase tracking-wider rounded shrink-0 ${
+                                            <span className={`px-1 py-0.2 text-[7px] font-black uppercase tracking-wider rounded shrink-0 leading-none ${
                                                 booking.procedimento.type === 'Exame'
                                                 ? 'bg-sky-50 text-sky-700 border border-sky-200'
                                                 : booking.procedimento.type === 'Consulta'
@@ -708,16 +708,16 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                 </div>
 
                                 {/* DATA AGENDADA */}
-                                <div className="flex flex-col gap-1 col-span-1 wide:col-span-2 min-w-0 overflow-hidden">
-                                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400/80 ml-0.5 whitespace-nowrap overflow-hidden text-ellipsis flex items-center gap-1.5">
-                                        <Clock className="w-3 h-3 shrink-0" />
+                                <div className="flex flex-col gap-0.5 col-span-1 wide:col-span-2 min-w-0 overflow-hidden">
+                                    <span className="text-[7.5px] font-black uppercase tracking-wider text-slate-400 ml-0.5 whitespace-nowrap overflow-hidden text-ellipsis flex items-center gap-1 leading-none">
+                                        <Clock className="w-2 h-2 shrink-0" />
                                         <span className="truncate">Data Agendada</span>
                                     </span>
-                                    <div className="flex items-center text-xs sm:text-sm font-bold text-slate-800 whitespace-nowrap">
+                                    <div className="flex items-center text-[11px] sm:text-xs font-bold text-slate-800 whitespace-nowrap">
                                         {appointmentDateFormatted ? (
                                             <span>{appointmentDateFormatted}</span>
                                         ) : (
-                                            <span className="inline-flex px-2 py-0.5 rounded text-[9px] font-black uppercase text-amber-800 bg-amber-50 border border-amber-300">
+                                            <span className="inline-flex px-1.5 py-0.2 rounded text-[7.5px] font-black uppercase text-amber-800 bg-amber-50 border border-amber-300 leading-none">
                                                 Aguardando Vaga
                                             </span>
                                         )}
@@ -741,11 +741,11 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                     flex="col-span-1 wide:col-span-2" 
                                 />
 
-                                {/* STATUS: Torna-se o próprio botão moderno quando o status for "Definir Data" */}
+                                {/* STATUS */}
                                 {isEligibleForVaga ? (
                                     isNextInQueue ? (
-                                        <div className="flex flex-col gap-1 col-span-1 wide:col-span-2 min-w-0 overflow-hidden" onClick={(e) => e.stopPropagation()}>
-                                            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400/80 ml-0.5 whitespace-nowrap overflow-hidden text-ellipsis flex items-center gap-1.5">
+                                        <div className="flex flex-col gap-0.5 col-span-1 wide:col-span-2 min-w-0 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+                                            <span className="text-[7.5px] font-black uppercase tracking-wider text-slate-400 ml-0.5 whitespace-nowrap overflow-hidden text-ellipsis flex items-center gap-1 leading-none">
                                                 <span className="truncate">Status</span>
                                             </span>
                                             {canEdit && onOpenDefinirData ? (
@@ -755,22 +755,22 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                                         e.stopPropagation();
                                                         onOpenDefinirData(booking);
                                                     }}
-                                                    className="inline-flex items-center justify-center gap-1.5 px-3 py-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 active:from-emerald-800 active:to-teal-800 text-white font-black rounded-xl text-xs uppercase tracking-wider transition-all shadow-md shadow-emerald-600/25 active:scale-95 cursor-pointer w-fit"
+                                                    className="inline-flex items-center justify-center gap-1 px-2 py-0.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 active:from-emerald-800 active:to-teal-800 text-white font-black rounded text-[9px] uppercase tracking-wider transition-all shadow-xs active:scale-95 cursor-pointer w-fit leading-none"
                                                     title="Clique para Definir Data e Horário para o Paciente"
                                                 >
-                                                    <Calendar className="w-3.5 h-3.5 shrink-0" />
+                                                    <Calendar className="w-2.5 h-2.5 shrink-0" />
                                                     <span className="whitespace-nowrap">Definir Data</span>
                                                 </button>
                                             ) : (
-                                                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-600 text-white font-black rounded-xl text-xs uppercase tracking-wider shadow-xs w-fit">
-                                                    <Calendar className="w-3.5 h-3.5 shrink-0" />
+                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-600 text-white font-black rounded text-[9px] uppercase tracking-wider shadow-2xs w-fit leading-none">
+                                                    <Calendar className="w-2.5 h-2.5 shrink-0" />
                                                     <span className="whitespace-nowrap">Definir Data</span>
                                                 </span>
                                             )}
                                         </div>
                                     ) : (
-                                        <div className="flex flex-col gap-1 col-span-1 wide:col-span-2 min-w-0 overflow-hidden" onClick={(e) => e.stopPropagation()}>
-                                            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400/80 ml-0.5 whitespace-nowrap overflow-hidden text-ellipsis flex items-center gap-1.5">
+                                        <div className="flex flex-col gap-0.5 col-span-1 wide:col-span-2 min-w-0 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+                                            <span className="text-[7.5px] font-black uppercase tracking-wider text-slate-400 ml-0.5 whitespace-nowrap overflow-hidden text-ellipsis flex items-center gap-1 leading-none">
                                                 <span className="truncate">Status</span>
                                             </span>
                                             <button
@@ -781,10 +781,10 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                                         onOpenBlockedQueueModal(booking, blockingPatient);
                                                     }
                                                 }}
-                                                className="inline-flex items-center justify-center gap-1.5 px-3 py-1 bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-400/90 font-black rounded-xl text-xs uppercase tracking-wider transition-all shadow-2xs active:scale-95 cursor-pointer w-fit"
+                                                className="inline-flex items-center justify-center gap-1 px-2 py-0.5 bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-400/90 font-black rounded text-[9px] uppercase tracking-wider transition-all shadow-2xs active:scale-95 cursor-pointer w-fit leading-none"
                                                 title={`Bloqueado: Agende o paciente ${blockingPatient?.name || 'anterior'} da colocação ${blockingPatient?.queuePosition || 1}º primeiro`}
                                             >
-                                                <Lock className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                                                <Lock className="w-2.5 h-2.5 text-amber-700 shrink-0" />
                                                 <span className="whitespace-nowrap">Definir Data</span>
                                             </button>
                                         </div>
@@ -800,23 +800,23 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                 )}
                             </div>
 
-                            {/* Ações Rápidas de Linha (Desktop) + Chevron */}
-                            <div className="flex items-center gap-2 self-end wide:self-center shrink-0">
-                                <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                            {/* Ações Rápidas de Linha + Chevron */}
+                            <div className="flex items-center gap-1 self-end wide:self-center shrink-0">
+                                <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
                                     {canEdit && (
                                         <button
                                             type="button"
                                             onClick={() => onEdit(booking)}
-                                            className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer"
+                                            className="p-1 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded transition-colors cursor-pointer"
                                             title="Editar Agendamento"
                                         >
-                                            <Edit2 className="w-3.5 h-3.5" />
+                                            <Edit2 className="w-2.5 h-2.5" />
                                         </button>
                                     )}
                                     <button
                                         type="button"
                                         onClick={() => onAgentInfo(booking)}
-                                        className="w-6 h-6 text-teal-700 hover:text-white hover:bg-teal-600 bg-teal-50 rounded-lg border border-teal-200 transition-colors flex items-center justify-center cursor-pointer font-black text-[10px]"
+                                        className="w-4.5 h-4.5 text-teal-700 hover:text-white hover:bg-teal-600 bg-teal-50 rounded border border-teal-200 transition-colors flex items-center justify-center cursor-pointer font-black text-[8px]"
                                         title="Ver Agente ACS e PSF"
                                     >
                                         A
@@ -825,15 +825,15 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                         type="button"
                                         onClick={() => onDownloadPdf(booking)}
                                         disabled={isGenerating}
-                                        className="p-1.5 text-slate-400 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                                        className="p-1 text-slate-400 hover:text-sky-600 hover:bg-sky-50 rounded transition-colors cursor-pointer disabled:opacity-50"
                                         title="Imprimir Comprovante (PDF)"
                                     >
-                                        <FileDown className="w-3.5 h-3.5" />
+                                        <FileDown className="w-2.5 h-2.5" />
                                     </button>
                                 </div>
 
-                                <div className={`text-slate-300 group-hover:text-cyan-500 transition-transform duration-300 ${isExpanded ? 'rotate-180 text-cyan-500' : ''}`}>
-                                    <ChevronDown className="w-5 h-5" />
+                                <div className={`text-slate-300 group-hover:text-cyan-500 transition-transform duration-200 ${isExpanded ? 'rotate-180 text-cyan-500' : ''}`}>
+                                    <ChevronDown className="w-3.5 h-3.5" />
                                 </div>
                             </div>
                         </div>
@@ -1913,18 +1913,18 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
             </div>
 
             {/* Desktop Integrated Single-Line Header */}
-            <div className="hidden md:flex bg-white border-b border-slate-200/80 p-3 md:px-4 shrink-0 items-center justify-between gap-3 overflow-x-auto custom-scrollbar">
+            <div className="hidden md:flex bg-white border-b border-slate-200/80 p-2 md:px-3.5 shrink-0 items-center justify-between gap-2.5 overflow-x-auto custom-scrollbar">
                 {/* Left: Voltar + Icon + Title + Counter */}
-                <div className="flex items-center gap-2.5 shrink-0">
+                <div className="flex items-center gap-2 shrink-0">
                     <button 
                         onClick={onBack} 
-                        className="p-2 -ml-1 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-2xl active:scale-95 transition-all cursor-pointer shrink-0"
+                        className="p-1.5 -ml-1 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-xl active:scale-95 transition-all cursor-pointer shrink-0"
                         title="Voltar"
                     >
-                        <ArrowLeft className="w-5 h-5" />
+                        <ArrowLeft className="w-4.5 h-4.5" />
                     </button>
-                    <div className="w-9.5 h-9.5 rounded-2xl bg-gradient-to-br from-sky-50 to-blue-50/80 border border-sky-200/80 flex items-center justify-center text-sky-600 shadow-2xs shrink-0">
-                        <Activity className="w-5 h-5" />
+                    <div className="w-8.5 h-8.5 rounded-xl bg-gradient-to-br from-sky-50 to-blue-50/80 border border-sky-200/80 flex items-center justify-center text-sky-600 shadow-2xs shrink-0">
+                        <Activity className="w-4.5 h-4.5" />
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                         <h3 className="font-black bg-gradient-to-r from-slate-900 via-slate-800 to-slate-700 bg-clip-text text-transparent tracking-tight text-sm md:text-base uppercase leading-none whitespace-nowrap">
@@ -2016,7 +2016,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
             </div>
 
             {/* List Table Area (Maximizes vertical height) */}
-            <div className="flex-1 overflow-auto bg-slate-50/30 p-3 md:p-4 min-h-0">
+            <div className="flex-1 overflow-auto bg-slate-50/30 p-2.5 md:p-3 min-h-0">
                 {loading ? (
                     <div className="h-full w-full flex flex-col items-center justify-center gap-2">
                         <Loader2 className="w-8 h-8 text-sky-600 animate-spin" />
@@ -2035,7 +2035,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                         </p>
                     </div>
                 ) : bookings.length > 0 ? (
-                    <div className="space-y-3 w-full pb-4">
+                    <div className="space-y-1.5 w-full pb-3">
                         {visibleBookings.map((booking) => {
                             const eligibility = eligibilityMap.get(booking.id);
                             const cardQueuePos = queuePositions[booking.id] ?? eligibility?.queuePosition ?? booking.queue_position;

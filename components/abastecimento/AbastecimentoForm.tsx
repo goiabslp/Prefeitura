@@ -238,7 +238,7 @@ export const AbastecimentoForm: React.FC<AbastecimentoFormProps> = ({
             station, invoiceNumber: customInvoiceId !== undefined ? customInvoiceId : invoiceNumber,
             userId: initialData?.userId || authUser?.id,
             userName: initialData?.userName || authUser?.name,
-            sectorId: mv?.sectorId || initialData?.sectorId,
+            sectorId: mv?.sectorId || (mv as any)?.sector_id || initialData?.sectorId || (initialData as any)?.sector_id,
             unit_price: unitPrice,
             created_at: initialData?.created_at,
             lastOdometer,
