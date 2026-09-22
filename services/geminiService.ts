@@ -143,6 +143,8 @@ export const generateMateriaJornalWithAI = async (dados: {
   descricao?: string;
   setor?: string;
   pessoas?: Array<{ name: string; role?: string; sector?: string }> | string[];
+  materiaAtual?: GeneratedMateriaJornal;
+  textoComplementar?: string;
 }): Promise<GeneratedMateriaJornal> => {
   try {
     const res = await fetch('/api/gemini', {
@@ -162,9 +164,16 @@ export const generateMateriaJornalWithAI = async (dados: {
     const data = await res.json();
     if (!data.text) throw new Error("Sem resposta da IA");
 
-    const json = JSON.parse(data.text);
+    let cleanText = String(data.text).trim();
+    if (cleanText.startsWith('```json')) {
+      cleanText = cleanText.replace(/^```json\s*/, '').replace(/\s*```$/, '').trim();
+    } else if (cleanText.startsWith('```')) {
+      cleanText = cleanText.replace(/^```\s*/, '').replace(/\s*```$/, '').trim();
+    }
 
-    let rawCorpo = json.corpo || `A Prefeitura Municipal de São José do Goiabal promoveu com sucesso a realização de "${dados.titulo}".\n\nA iniciativa reforça o compromisso contínuo da administração com a liderança institucional do Prefeito Ailton Geraldo dos Santos, valorizando a transparência e a entrega de serviços de excelência para toda a comunidade.`;
+    const json = JSON.parse(cleanText);
+
+    let rawCorpo = json.corpo || dados.materiaAtual?.corpo || `A Prefeitura Municipal de São José do Goiabal promoveu com sucesso a realização de "${dados.titulo}".\n\nA iniciativa reforça o compromisso contínuo da administração com a liderança institucional do Prefeito Ailton Geraldo dos Santos, valorizando a transparência e a entrega de serviços de excelência para toda a comunidade.`;
     
     // Garantia mandatória de menção institucional ao Prefeito
     rawCorpo = aplicarMencaoObrigatoriaPrefeito(rawCorpo, dados);
@@ -174,14 +183,14 @@ export const generateMateriaJornalWithAI = async (dados: {
     }
 
     return {
-      manchete: json.manchete || `Ação Municipal: ${dados.titulo}`,
-      subtitulo: json.subtitulo || `Administração municipal realiza ${dados.titulo} com foco no atendimento e desenvolvimento dos cidadãos.`,
+      manchete: json.manchete || dados.materiaAtual?.manchete || `Ação Municipal: ${dados.titulo}`,
+      subtitulo: json.subtitulo || dados.materiaAtual?.subtitulo || `Administração municipal realiza ${dados.titulo} com foco no atendimento e desenvolvimento dos cidadãos.`,
       corpo: rawCorpo,
-      categoria: json.categoria || (dados.setor ? dados.setor.toUpperCase() : (dados.tipoEvento === 'Reunião' ? 'GOVERNO & GESTÃO' : 'EVENTOS & COMUNIDADE')),
-      destaqueFrase: json.destaqueFrase || 'Trabalhando com seriedade e dedicação constante pelo progresso de São José do Goiabal.'
+      categoria: json.categoria || dados.materiaAtual?.categoria || (dados.setor ? dados.setor.toUpperCase() : (dados.tipoEvento === 'Reunião' ? 'GOVERNO & GESTÃO' : 'EVENTOS & COMUNIDADE')),
+      destaqueFrase: json.destaqueFrase || dados.materiaAtual?.destaqueFrase || 'Trabalhando com seriedade e dedicação constante pelo progresso de São José do Goiabal.'
     };
-  } catch (error) {
-    console.error("Erro ao gerar matéria com IA, usando gerador editorial nativo:", error);
+  } catch (error: any) {
+    console.info("Gerador editorial nativo ativado para matéria institucional:", error?.message || error);
     // Fallback editorial inteligente com aplicação mandatória da regra institucional
     const formatData = (dStr: string) => {
       if (!dStr) return '';
@@ -202,7 +211,7 @@ export const generateMateriaJornalWithAI = async (dados: {
       textoPessoas = `A atividade contou com a coordenação operacional de ${nomesCargos.join(', ')}, integrando os esforços do setor. `;
     }
 
-    const textoGeral = `${dados.titulo || ''} ${dados.descricao || ''} ${dados.setor || ''} ${JSON.stringify(dados.pessoas || '')}`.toLowerCase();
+    const textoGeral = `${dados.titulo || ''} ${dados.descricao || ''} ${dados.setor || ''} ${dados.textoComplementar || ''} ${JSON.stringify(dados.pessoas || '')}`.toLowerCase();
     
     const isEventoFestivo = dados.tipoEvento === 'Evento' ||
       textoGeral.includes('cavalgada') ||
@@ -238,7 +247,16 @@ export const generateMateriaJornalWithAI = async (dados: {
       mencaoAdminSec = ' Os trabalhos contaram com o suporte de planejamento e articulação da Secretaria de Administração e Governo, sob a coordenação do Secretário Guilherme Santos.';
     }
 
-    let fallbackCorpo = `Em contínuo compromisso com a eficiência da gestão e a entrega de serviços de excelência para a população, a Prefeitura Municipal de São José do Goiabal realizou "${dados.titulo}".\n\n${dados.setor ? `A ação foi conduzida pelo setor de ${dados.setor}. ` : ''}${textoPessoas}${dados.descricao ? `Durante a atividade, foram destacados avanços estratégicos: "${dados.descricao}". ` : ''}A iniciativa evidencia o trabalho constante da administração municipal em gerar resultados práticos e proporcionar melhorias concretas para toda a comunidade.${mencaoPrefeito}${mencaoAdminSec}\n\nOs desdobramentos e próximas etapas continuarão sendo acompanhados pelos setores responsáveis, demonstrando transparência e responsabilidade com o município.`;
+    let fallbackCorpo = '';
+    if (dados.materiaAtual && dados.textoComplementar) {
+      // Incorpora o texto complementar de forma articulada ao corpo já existente
+      const corpoExistente = dados.materiaAtual.corpo.replace(/\s+/g, ' ').trim();
+      const novoTrecho = dados.textoComplementar.trim();
+      fallbackCorpo = `${corpoExistente}\n\nAlém disso, ${novoTrecho.charAt(0).toLowerCase() + novoTrecho.slice(1)}`;
+      fallbackCorpo = aplicarMencaoObrigatoriaPrefeito(fallbackCorpo, dados);
+    } else {
+      fallbackCorpo = `Em contínuo compromisso com a eficiência da gestão e a entrega de serviços de excelência para a população, a Prefeitura Municipal de São José do Goiabal realizou "${dados.titulo}".\n\n${dados.setor ? `A ação foi conduzida pelo setor de ${dados.setor}. ` : ''}${textoPessoas}${dados.descricao ? `Durante a atividade, foram destacados avanços estratégicos: "${dados.descricao}". ` : ''}${dados.textoComplementar ? `Adicionalmente: "${dados.textoComplementar}". ` : ''}A iniciativa evidencia o trabalho constante da administração municipal em gerar resultados práticos e proporcionar melhorias concretas para toda a comunidade.${mencaoPrefeito}${mencaoAdminSec}\n\nOs desdobramentos e próximas etapas continuarão sendo acompanhados pelos setores responsáveis, demonstrando transparência e responsabilidade com o município.`;
+    }
     
     // Garantir rigoroso limite de caracteres
     if (fallbackCorpo.length > 1185) {
@@ -246,13 +264,13 @@ export const generateMateriaJornalWithAI = async (dados: {
     }
 
     return {
-      manchete: isEventoFestivo 
+      manchete: dados.materiaAtual?.manchete || (isEventoFestivo 
         ? `Cultura & Lazer: Prefeitura realiza "${dados.titulo}" com grande estrutura e organização`
-        : `Gestão & Resultados: Prefeitura realiza "${dados.titulo}" em benefício de São José do Goiabal`,
-      subtitulo: `Ação institucional realizada em ${dataFormatada} evidencia o compromisso com a eficiência pública e o atendimento à população.`,
+        : `Gestão & Resultados: Prefeitura realiza "${dados.titulo}" em benefício de São José do Goiabal`),
+      subtitulo: dados.materiaAtual?.subtitulo || `Ação institucional realizada em ${dataFormatada} evidencia o compromisso com a eficiência pública e o atendimento à população.`,
       corpo: fallbackCorpo,
-      categoria: isEventoFestivo ? 'EVENTOS & CULTURA' : cat,
-      destaqueFrase: `"Trabalho, compromisso e resultados concretos em favor de toda a população de São José do Goiabal."`
+      categoria: dados.materiaAtual?.categoria || (isEventoFestivo ? 'EVENTOS & CULTURA' : cat),
+      destaqueFrase: dados.materiaAtual?.destaqueFrase || `"Trabalho, compromisso e resultados concretos em favor de toda a população de São José do Goiabal."`
     };
   }
 };

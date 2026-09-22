@@ -4,6 +4,7 @@ import { AppState, User, ConsultaPaciente, ConsultaProcedimento } from '../../ty
 import { PageWrapper } from '../PageWrapper';
 import { CalendarDays, User as UserIcon, Activity } from 'lucide-react';
 import { getAgentesSaudeItems } from '../../services/agentesSaudeService';
+import { formatProcedimentoLabel } from '../../services/consultasService';
 
 interface ConsultaPdfGeneratorProps {
     bookingId: string;
@@ -185,7 +186,7 @@ export const ConsultaPdfGenerator: React.FC<ConsultaPdfGeneratorProps> = ({
                                         <div className="space-y-3 text-xs">
                                             <div>
                                                 <span className="block text-[7pt] font-bold uppercase text-slate-400 tracking-wider">Procedimento / Exame</span>
-                                                <span className="font-extrabold text-slate-800 text-sm uppercase">{procedure.name}</span>
+                                                <span className="font-extrabold text-slate-800 text-sm uppercase">{formatProcedimentoLabel(procedure)}</span>
                                             </div>
                                             <div className="grid grid-cols-2 gap-4">
                                                 <div>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { User, ConsultaAgendamento, ConsultaProcedimento, ConsultaVaga } from '../../../types';
 import * as db from '../../../services/consultasService';
+import { formatProcedimentoLabel } from '../../../services/consultasService';
 import {
   processarAnaliseConsultas,
   gerarMockConsultasDataset,
@@ -784,7 +785,7 @@ export const ConsultasDashboardView: React.FC<ConsultasDashboardViewProps> = ({
                         </td>
                         <td className="py-3 px-3">
                           <div className="font-bold text-slate-700">
-                            {item.procedimento?.name || 'Procedimento'}
+                            {formatProcedimentoLabel(item.procedimento) || 'Procedimento'}
                           </div>
                           <span className="text-[9px] font-black uppercase text-slate-400">
                             {item.procedimento?.type}

@@ -9,6 +9,7 @@ import {
     Users, ChevronDown, Moon, Wand2, SlidersHorizontal, Layers, Timer, Flame
 } from 'lucide-react';
 import * as db from '../../services/consultasService';
+import { formatProcedimentoLabel } from '../../services/consultasService';
 
 interface LiberarVagasScreenProps {
     currentUser?: User | null;
@@ -185,7 +186,7 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
     const filteredProcedures = useMemo(() => {
         return procedures.filter(p => {
             const matchesSearch = 
-                p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                formatProcedimentoLabel(p).toLowerCase().includes(searchTerm.toLowerCase()) ||
                 (p.code && p.code.toLowerCase().includes(searchTerm.toLowerCase())) ||
                 (p.recurso && p.recurso.toLowerCase().includes(searchTerm.toLowerCase()));
             
@@ -552,7 +553,7 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
                             <CalendarDays className="w-3.5 h-3.5" />
                         </span>
                         <h3 className="font-extrabold text-slate-800 text-sm tracking-tight truncate uppercase">
-                            {selectedProc ? selectedProc.name : "Liberar Vagas & Gestão de Procedimentos"}
+                            {selectedProc ? formatProcedimentoLabel(selectedProc) : "Liberar Vagas & Gestão de Procedimentos"}
                         </h3>
                         {selectedProc?.code && (
                             <span className="px-1.5 py-0.5 bg-slate-200 text-slate-700 rounded text-[10px] font-bold tracking-wider shrink-0">
@@ -751,8 +752,8 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
 
                                                     {/* Nome do Procedimento */}
                                                     <td className="py-2 px-3 border-b border-slate-100 bg-white group-hover:bg-sky-50">
-                                                        <span className="font-bold text-slate-800 text-xs group-hover:text-sky-700 transition-colors block truncate max-w-[500px]" title={p.name}>
-                                                            {p.name}
+                                                        <span className="font-bold text-slate-800 text-xs group-hover:text-sky-700 transition-colors block truncate max-w-[500px]" title={formatProcedimentoLabel(p)}>
+                                                            {formatProcedimentoLabel(p)}
                                                         </span>
                                                     </td>
 
@@ -1027,7 +1028,7 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
                                         )}
                                     </div>
                                     <p className="text-xs font-bold text-slate-500 truncate max-w-xl mt-0.5">
-                                        {selectedProc.name}
+                                        {formatProcedimentoLabel(selectedProc)}
                                     </p>
                                 </div>
                             </div>
@@ -1586,7 +1587,7 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
                 const targetSlots = getTargetSlotsForScope(bulkEditScope, bulkEditSelectedDate);
                 const scopeTitle = bulkEditScope === 'date' && bulkEditSelectedDate
                     ? `Vagas do dia ${formatReadableDate(bulkEditSelectedDate)}`
-                    : `Todas as Vagas de "${selectedProc.name}"`;
+                    : `Todas as Vagas de "${formatProcedimentoLabel(selectedProc)}"`;
 
                 return (
                     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
@@ -1706,7 +1707,7 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
                 const freeCount = targetSlots.length - bookedCount;
                 const scopeTitle = bulkDeleteScope === 'date' && bulkDeleteSelectedDate
                     ? `da data ${formatReadableDate(bulkDeleteSelectedDate)}`
-                    : `de todo o procedimento "${selectedProc.name}"`;
+                    : `de todo o procedimento "${formatProcedimentoLabel(selectedProc)}"`;
 
                 return (
                     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { User, ConsultaPaciente, ConsultaProcedimento, ConsultaAgendamento, ConsultaVaga } from '../../types';
 import { ArrowLeft, Users, Calendar, Settings, BarChart3, Plus, Edit2, Search, Check, AlertTriangle, Loader2, History, X, ChevronLeft, ChevronRight, Activity, Stethoscope, Sparkles, Trash2, ShieldCheck, UserCheck, FileSpreadsheet, TrendingUp, UserCog, PauseCircle, PlayCircle } from 'lucide-react';
 import * as db from '../../services/consultasService';
+import { formatProcedimentoLabel } from '../../services/consultasService';
 import { seedDefaultProcedures } from '../../services/procedimentosSeed';
 import { ResponsiveContainer, AreaChart, XAxis, YAxis, Tooltip, Area, CartesianGrid } from 'recharts';
 import { PacientesTab, formatPatientName } from '../common/PacientesTab';
@@ -515,13 +516,13 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
     };
 
     const filteredProcedures = procedures.filter(p => 
-        p.name.toLowerCase().includes(procSearch.toLowerCase()) ||
+        formatProcedimentoLabel(p).toLowerCase().includes(procSearch.toLowerCase()) ||
         (p.code && p.code.includes(procSearch))
     );
 
     const filteredHistory = historyLogs.filter(h => 
         h.paciente?.name.toLowerCase().includes(historySearch.toLowerCase()) ||
-        h.procedimento?.name.toLowerCase().includes(historySearch.toLowerCase())
+        formatProcedimentoLabel(h.procedimento).toLowerCase().includes(historySearch.toLowerCase())
     );
 
     return (
@@ -674,7 +675,7 @@ export const DadosScreen: React.FC<DadosScreenProps> = ({
                                                     <div className="text-[10px] text-slate-400">CPF: {h.paciente?.cpf}</div>
                                                 </td>
                                                 <td className="p-4">
-                                                    <div className="font-bold text-slate-800">{h.procedimento?.name || 'Exame Deletado'}</div>
+                                                    <div className="font-bold text-slate-800">{formatProcedimentoLabel(h.procedimento) || 'Exame Deletado'}</div>
                                                     <span className="text-[9px] text-slate-400">{h.procedimento?.type}</span>
                                                 </td>
                                                 <td className="p-4 text-slate-500">

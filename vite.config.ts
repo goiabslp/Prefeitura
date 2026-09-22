@@ -29,12 +29,13 @@ function geminiDevPlugin() {
             const data = JSON.parse(body);
             const { tipo, dados } = data;
             const env = loadEnv('', process.cwd(), '');
-            if (!env.GEMINI_API_KEY) {
+            const apiKey = env.GEMINI_API_KEY || env.VITE_GEMINI_API_KEY || env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+            if (!apiKey) {
               res.statusCode = 500;
               res.end(JSON.stringify({ error: 'GEMINI_API_KEY não configurada no ambiente local (.env).' }));
               return;
             }
-            const ai = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
+            const ai = new GoogleGenAI({ apiKey });
             
             let promptText = '';
             if (tipo === 'justificativa') {
@@ -132,11 +133,29 @@ function geminiDevPlugin() {
                 ? dados.pessoas.map((p: any) => (typeof p === 'string' ? p : `${p.name}${p.role ? ` (${p.role})` : ''}`)).join(', ')
                 : 'Equipe do setor responsável';
 
+              const hasComplemento = Boolean(dados.textoComplementar && String(dados.textoComplementar).trim());
+
               promptText = `
                 Você atua como redatora e assessora de comunicação institucional oficial da Prefeitura Municipal de São José do Goiabal - Minas Gerais.
                 
                 SUA MISSÃO:
-                Produzir matérias com linguagem jornalística, positiva, clara, profissional e orientada à valorização dos resultados da gestão municipal e dos serviços prestados à população.
+                ${hasComplemento ? `
+                O usuário já possui uma matéria jornalística gerada e enviou NOVAS INFORMAÇÕES / DETALHES COMPLEMENTARES para serem ACRESCENTADOS e INTEGRADOS ao texto.
+                Sua tarefa é REESCREVER e ENRIQUECER a matéria jornalística existente integrando perfeitamente os novos fatos enviados, mantendo a coesão, fluidez, estilo jornalístico e relevância.
+                
+                MATÉRIA JORNALÍSTICA ATUAL:
+                - Manchete Atual: ${dados.materiaAtual?.manchete || dados.titulo}
+                - Subtítulo Atual: ${dados.materiaAtual?.subtitulo || ''}
+                - Corpo Atual da Matéria:
+                """
+                ${dados.materiaAtual?.corpo || ''}
+                """
+                
+                NOVAS INFORMAÇÕES / FATOS A SEREM ACRESCENTADOS À MATÉRIA:
+                """
+                ${dados.textoComplementar}
+                """
+                ` : `Produzir matérias com linguagem jornalística, positiva, clara, profissional e orientada à valorização dos resultados da gestão municipal e dos serviços prestados à população.`}
                 
                 DADOS OFICIAIS DO EVENTO / AÇÃO:
                 - Título do Registro: ${dados.titulo}
@@ -146,7 +165,7 @@ function geminiDevPlugin() {
                 - Data Inicial: ${dados.dataInicio}
                 - Data Final: ${dados.dataFim || dados.dataInicio}
                 - Horário: ${dados.horaInicio ? `${dados.horaInicio} às ${dados.horaFim || ''}` : 'Horário Oficial / Dia Inteiro'}
-                - Descrição / Pauta / Detalhes:
+                - Descrição / Pauta / Detalhes Originais:
                 """
                 ${dados.descricao || 'Ação da administração municipal em benefício dos cidadãos e do desenvolvimento de São José do Goiabal.'}
                 """
@@ -176,7 +195,7 @@ function geminiDevPlugin() {
                 ESTRUTURA OBRIGATÓRIA DA RESPOSTA (JSON):
                 - MANCHETE: Marcante, jornalística, institucional e de alto impacto no padrão de grande jornal oficial.
                 - SUBTÍTULO (Lead): Resumo engajador e positivo da ação e dos benefícios para a comunidade.
-                - CORPO DA MATÉRIA: 2 a 3 parágrafos bem articulados e fluidos, contendo obrigatoriamente a menção contextualizada ao Prefeito Ailton Geraldo dos Santos (LIMITE RIGOROSO: máximo de 1180 caracteres).
+                - CORPO DA MATÉRIA: 2 a 3 parágrafos bem articulados e fluidos, integrando perfeitamente todas as informações (incluindo novos acréscimos se fornecidos), contendo obrigatoriamente a menção contextualizada ao Prefeito Ailton Geraldo dos Santos (LIMITE RIGOROSO: máximo de 1180 caracteres).
                 - CATEGORIA: Em letras maiúsculas (ex: 'GOVERNO & GESTÃO', 'SAÚDE PÚBLICA', 'OBRAS & INFRAESTRUTURA', 'EDUCAÇÃO & ENSINO', 'ASSISTÊNCIA SOCIAL', 'MEIO AMBIENTE', 'EVENTOS & CIDADANIA').
                 - FRASE DE DESTAQUE: Aspas ou frase institucional inspiradora refletindo dedicação e compromisso com o município.
               `;
@@ -606,6 +625,25 @@ INSTRUÇÕES:
                   }
                 }
               });
+            } else if (tipo === 'materia_jornal') {
+              response = await ai.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: promptText,
+                config: {
+                  responseMimeType: 'application/json',
+                  responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                      manchete: { type: Type.STRING },
+                      subtitulo: { type: Type.STRING },
+                      corpo: { type: Type.STRING },
+                      categoria: { type: Type.STRING },
+                      destaqueFrase: { type: Type.STRING },
+                    },
+                    required: ['manchete', 'subtitulo', 'corpo', 'categoria', 'destaqueFrase'],
+                  }
+                }
+              });
             } else {
               response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
@@ -616,10 +654,10 @@ INSTRUÇÕES:
             res.statusCode = 200;
             res.setHeader('Content-Type', 'application/json');
             res.end(JSON.stringify({ text: response.text }));
-          } catch (error) {
-            console.error('Gemini Dev API Error:', error);
+          } catch (error: any) {
+            console.error('Gemini Dev API Error:', error?.message || error);
             res.statusCode = 500;
-            res.end(JSON.stringify({ error: 'Failed' }));
+            res.end(JSON.stringify({ error: error?.message || 'Falha ao processar com IA' }));
           }
         });
       });

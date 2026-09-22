@@ -31,6 +31,7 @@ import {
     History
 } from 'lucide-react';
 import * as db from '../../services/consultasService';
+import { formatProcedimentoLabel, isSlotPast } from '../../services/consultasService';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import { ConsultaPdfGenerator } from './ConsultaPdfGenerator';
@@ -172,15 +173,118 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
         return nextWeek.getMonth() !== currentMonth;
     };
 
+    const matchTime = (t1: string | undefined, t2: string) => {
+        if (!t1 || !t2) return false;
+        return t1.substring(0, 5) === t2.substring(0, 5);
+    };
+
+    const slotAssignments = React.useMemo(() => {
+        const assignments = new Map<string, ConsultaAgendamento>();
+        
+        // Group slots by date
+        const slotsByDate: { [date: string]: ConsultaVaga[] } = {};
+        vagas.forEach(v => {
+            if (!slotsByDate[v.data]) {
+                slotsByDate[v.data] = [];
+            }
+            slotsByDate[v.data].push(v);
+        });
+
+        // Group bookings by date (excluding cancelados/não realizados)
+        const bookingsByDate: { [date: string]: ConsultaAgendamento[] } = {};
+        procedureBookings.forEach(b => {
+            if (b.status === 'Cancelado' || b.status === 'Não Realizado' || !b.appointment_date) return;
+            if (!bookingsByDate[b.appointment_date]) {
+                bookingsByDate[b.appointment_date] = [];
+            }
+            bookingsByDate[b.appointment_date].push(b);
+        });
+
+        // Match for each date
+        Object.keys(slotsByDate).forEach(dateStr => {
+            const slots = slotsByDate[dateStr];
+            const bookings = bookingsByDate[dateStr] || [];
+            
+            const unmatchedBookings = [...bookings];
+            const matchedBookingIds = new Set<string>();
+
+            // First pass: Match exact times
+            slots.forEach(slot => {
+                const exactMatch = bookings.find(b => 
+                    b.appointment_time && 
+                    matchTime(b.appointment_time, slot.hora) &&
+                    !matchedBookingIds.has(b.id)
+                );
+                if (exactMatch) {
+                    assignments.set(slot.id, exactMatch);
+                    matchedBookingIds.add(exactMatch.id);
+                    const idx = unmatchedBookings.findIndex(b => b.id === exactMatch.id);
+                    if (idx > -1) {
+                        unmatchedBookings.splice(idx, 1);
+                    }
+                }
+            });
+
+            // Second pass: Match remaining bookings to remaining unmatched slots
+            slots.forEach(slot => {
+                if (!assignments.has(slot.id) && unmatchedBookings.length > 0) {
+                    const nextBooking = unmatchedBookings.shift()!;
+                    assignments.set(slot.id, nextBooking);
+                }
+            });
+        });
+
+        return assignments;
+    }, [vagas, procedureBookings]);
+
+    const getSlotBooking = (slot: ConsultaVaga) => {
+        return slotAssignments.get(slot.id);
+    };
+
+    const isSlotVisible = (slot: ConsultaVaga) => {
+        const activeBooking = getSlotBooking(slot);
+        const isConfirmed = activeBooking && ['Agendado', 'Retorno', 'Realizado'].includes(activeBooking.status);
+        return !isConfirmed;
+    };
+
+    const isSlotReallyAvailable = (slot: ConsultaVaga) => {
+        const activeBooking = getSlotBooking(slot);
+        return !activeBooking;
+    };
+
+    // Vagas futuras que estão realmente disponíveis para agendamento com data e hora
+    const futureAvailableSlots = React.useMemo(() => {
+        if (!selectedProcedure || loadingVagas) return [];
+        return vagas.filter(v => {
+            if (v.status !== 'Disponível') return false;
+            if (isSlotPast(v)) return false;
+            const activeBooking = getSlotBooking(v);
+            return !activeBooking;
+        });
+    }, [vagas, loadingVagas, selectedProcedure, slotAssignments]);
+
+    // Total de vagas futuras disponíveis
+    const futureAvailableCount = loadingVagas ? (selectedProcedure?.available_quantity || 0) : futureAvailableSlots.length;
+
     // Get available slots based on priority and date
     const getAvailableSlots = (proc: ConsultaProcedimento, priority: 'Normal' | 'Urgência' | 'Especial', dateStr: string): number => {
         if (!proc) return 0;
+        if (priority === 'Especial') return 0;
+        if (!loadingVagas) {
+            if (dateStr) {
+                return futureAvailableSlots.filter(v => v.data === dateStr).length;
+            }
+            return futureAvailableSlots.length;
+        }
         return Math.max(0, proc.available_quantity);
     };
 
-    // Check if procedure is waitlist-only (0 available vacancies for the selected procedure under chosen priority)
-    const isWaitlistOnly = selectedProcedure !== null && 
-        getAvailableSlots(selectedProcedure, bookingPriority, '') === 0;
+    // Check if procedure is waitlist-only (0 available vacancies or all slots expired or Especial priority)
+    const isWaitlistOnly = selectedProcedure !== null && (
+        bookingPriority === 'Especial' || 
+        (!loadingVagas && futureAvailableCount === 0) ||
+        getAvailableSlots(selectedProcedure, bookingPriority, '') === 0
+    );
 
     const getDaysInMonth = (date: Date) => {
         const year = date.getFullYear();
@@ -208,7 +312,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
     const getDateVagasInfo = (dateStr: string) => {
         const slotsForDate = vagas.filter(v => v.data === dateStr);
         if (slotsForDate.length === 0) return { exists: false, availableCount: 0, totalCount: 0 };
-        const availableCount = slotsForDate.filter(v => v.status === 'Disponível').length;
+        const availableCount = slotsForDate.filter(v => v.status === 'Disponível' && !isSlotPast(v) && isSlotReallyAvailable(v)).length;
         return {
             exists: true,
             availableCount,
@@ -231,7 +335,10 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                     setBookingDate('');
                     setBookingTime('');
                     setActiveDate('');
-                    if (vagasData.length > 0) {
+                    const futureVagas = vagasData.filter(v => !isSlotPast(v));
+                    if (futureVagas.length > 0) {
+                        setCurrentMonth(new Date(futureVagas[0].data + 'T12:00:00'));
+                    } else if (vagasData.length > 0) {
                         setCurrentMonth(new Date(vagasData[0].data + 'T12:00:00'));
                     } else {
                         setCurrentMonth(new Date());
@@ -487,23 +594,24 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
         const targetDate = bookingDate || formatDateToYYYYMMDD(new Date());
         setLoading(true);
         
-        // Determine status based on slot availability
-        const availableSlots = getAvailableSlots(selectedProcedure, bookingPriority, targetDate);
+        // Determina se a data/hora selecionada corresponde a uma vaga futura real e livre
+        const hasValidFutureSlot = Boolean(
+            bookingDate && 
+            futureAvailableSlots.some(v => 
+                v.data === bookingDate && 
+                (!bookingTime || matchTime(v.hora, bookingTime))
+            )
+        );
         
-        // Se for Especial, vai direto para a fila prioritária especial
-        const targetStatus = (bookingPriority === 'Especial')
-            ? ('Fila de espera' as const)
-            : (!canSeeSlots)
-                ? ('Fila de espera' as const)
-                : (bookingDate && availableSlots >= bookingQty)
-                    ? ('Solicitado' as const) 
-                    : ('Fila de espera' as const);
+        // Se for Especial, ou sem vaga futura válida, ou waitlist, vai para a fila de espera
+        const isWaitlist = (bookingPriority === 'Especial') || (!canSeeSlots) || isWaitlistOnly || (!hasValidFutureSlot) || (!bookingDate);
+        const targetStatus = isWaitlist ? ('Fila de espera' as const) : ('Solicitado' as const);
 
         const optimisticBooking: any = {
             patient_id: selectedPatient.id,
             procedimento_id: selectedProcedure.id,
-            appointment_date: (canSeeSlots && bookingDate && targetStatus !== 'Fila de espera' && bookingPriority !== 'Especial') ? targetDate : undefined,
-            appointment_time: (canSeeSlots && bookingDate && !isWaitlistOnly && targetStatus !== 'Fila de espera' && bookingPriority !== 'Especial') ? (bookingTime || undefined) : undefined,
+            appointment_date: (!isWaitlist && bookingDate) ? targetDate : undefined,
+            appointment_time: (!isWaitlist && bookingDate && bookingTime) ? (bookingTime || undefined) : undefined,
             solicitation_date: solicitationDate,
             quantity: bookingQty,
             priority: bookingPriority,
@@ -540,11 +648,17 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
         setIsConflictModalOpen(false);
         setLoading(true);
         try {
-            // Determine target status: check if slots are available on the new date
-            const availableSlots = isWaitlistOnly ? 0 : getAvailableSlots(selectedProcedure, bookingPriority, targetDate);
-            const targetStatus = availableSlots > 0 ? 'Agendado' : 'Fila de espera';
+            const hasValidFutureSlot = Boolean(
+                bookingDate && 
+                futureAvailableSlots.some(v => 
+                    v.data === bookingDate && 
+                    (!bookingTime || matchTime(v.hora, bookingTime))
+                )
+            );
+            const isWaitlist = (bookingPriority === 'Especial') || isWaitlistOnly || (!hasValidFutureSlot) || (!bookingDate);
+            const targetStatus = !isWaitlist ? 'Agendado' : 'Fila de espera';
 
-            const result = await db.updateAgendamentoDateAndStatus(conflictBooking.id, targetDate, targetStatus);
+            const result = await db.updateAgendamentoDateAndStatus(conflictBooking.id, !isWaitlist ? targetDate : undefined as any, targetStatus);
             if (result) {
                 setCreatedBooking(result);
                 setSuccessMessage(
@@ -692,8 +806,9 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
         const queryTerms = cleanQuery.split(/\s+/).filter(Boolean);
         if (queryTerms.length === 0) return true;
 
-        // Palavras da descrição do procedimento
-        const procNameWords = normalizeStr(p.name).split(/[^a-z0-9]+/).filter(Boolean);
+        // Palavras da descrição do procedimento formatado com especialista
+        const formattedLabel = formatProcedimentoLabel(p);
+        const procNameWords = normalizeStr(formattedLabel).split(/[^a-z0-9]+/).filter(Boolean);
 
         // Código do procedimento normalizado
         const rawCode = p.code ? normalizeStr(p.code) : '';
@@ -710,86 +825,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
         });
     });
 
-    // Helper functions and waitlist check defined at top
-
-    const matchTime = (t1: string | undefined, t2: string) => {
-        if (!t1 || !t2) return false;
-        return t1.substring(0, 5) === t2.substring(0, 5);
-    };
-
-    const slotAssignments = React.useMemo(() => {
-        const assignments = new Map<string, ConsultaAgendamento>();
-        
-        // Group slots by date
-        const slotsByDate: { [date: string]: ConsultaVaga[] } = {};
-        vagas.forEach(v => {
-            if (!slotsByDate[v.data]) {
-                slotsByDate[v.data] = [];
-            }
-            slotsByDate[v.data].push(v);
-        });
-
-        // Group bookings by date (excluding cancelados/não realizados)
-        const bookingsByDate: { [date: string]: ConsultaAgendamento[] } = {};
-        procedureBookings.forEach(b => {
-            if (b.status === 'Cancelado' || b.status === 'Não Realizado' || !b.appointment_date) return;
-            if (!bookingsByDate[b.appointment_date]) {
-                bookingsByDate[b.appointment_date] = [];
-            }
-            bookingsByDate[b.appointment_date].push(b);
-        });
-
-        // Match for each date
-        Object.keys(slotsByDate).forEach(dateStr => {
-            const slots = slotsByDate[dateStr];
-            const bookings = bookingsByDate[dateStr] || [];
-            
-            const unmatchedBookings = [...bookings];
-            const matchedBookingIds = new Set<string>();
-
-            // First pass: Match exact times
-            slots.forEach(slot => {
-                const exactMatch = bookings.find(b => 
-                    b.appointment_time && 
-                    matchTime(b.appointment_time, slot.hora) &&
-                    !matchedBookingIds.has(b.id)
-                );
-                if (exactMatch) {
-                    assignments.set(slot.id, exactMatch);
-                    matchedBookingIds.add(exactMatch.id);
-                    const idx = unmatchedBookings.findIndex(b => b.id === exactMatch.id);
-                    if (idx > -1) {
-                        unmatchedBookings.splice(idx, 1);
-                    }
-                }
-            });
-
-            // Second pass: Match remaining bookings to remaining unmatched slots
-            slots.forEach(slot => {
-                if (!assignments.has(slot.id) && unmatchedBookings.length > 0) {
-                    const nextBooking = unmatchedBookings.shift()!;
-                    assignments.set(slot.id, nextBooking);
-                }
-            });
-        });
-
-        return assignments;
-    }, [vagas, procedureBookings]);
-
-    const getSlotBooking = (slot: ConsultaVaga) => {
-        return slotAssignments.get(slot.id);
-    };
-
-    const isSlotVisible = (slot: ConsultaVaga) => {
-        const activeBooking = getSlotBooking(slot);
-        const isConfirmed = activeBooking && ['Agendado', 'Retorno', 'Realizado'].includes(activeBooking.status);
-        return !isConfirmed;
-    };
-
-    const isSlotReallyAvailable = (slot: ConsultaVaga) => {
-        const activeBooking = getSlotBooking(slot);
-        return !activeBooking;
-    };
+    // Handlers de agendamento e submissão
 
     // If booking was confirmed, show custom confirmation/receipt screen
     if (createdBooking) {
@@ -876,7 +912,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                             
                             <div className="space-y-0.5">
                                 <span className="text-[9px] uppercase tracking-wider text-slate-400 block font-extrabold">Procedimento</span>
-                                <span className="text-slate-800 uppercase font-black break-words block">{createdBooking.procedimento?.name || selectedProcedure?.name}</span>
+                                <span className="text-slate-800 uppercase font-black break-words block">{formatProcedimentoLabel(createdBooking.procedimento || selectedProcedure)}</span>
                             </div>
 
                             <div className="space-y-0.5">
@@ -1167,7 +1203,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                             {patientHistory.slice(0, 3).map(h => (
                                                 <div key={h.id} className="p-2 bg-white rounded-lg border border-slate-200/70 flex items-center justify-between text-[11px] hover:border-slate-300 transition-colors shadow-sm">
                                                     <div>
-                                                        <span className="font-extrabold text-slate-800 uppercase block leading-tight">{h.procedimento?.name || 'Procedimento'}</span>
+                                                        <span className="font-extrabold text-slate-800 uppercase block leading-tight">{formatProcedimentoLabel(h.procedimento) || 'Procedimento'}</span>
                                                         <span className="text-[9px] text-slate-400 font-bold">
                                                             Data: {new Date(h.appointment_date + 'T12:00:00').toLocaleDateString('pt-BR')} • Prioridade: {h.priority}
                                                         </span>
@@ -1499,7 +1535,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                                     >
                                                         <div className="space-y-1.5">
                                                             <div className="font-extrabold text-slate-800 text-[11px] uppercase group-hover:text-sky-600 transition-colors leading-snug">
-                                                                 {proc.name}
+                                                                {formatProcedimentoLabel(proc)}
                                                             </div>
                                                             <div className="flex items-center gap-1.5 flex-wrap">
                                                                 <span className={`px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider rounded border ${
@@ -1568,7 +1604,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                                 <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 bg-sky-100 text-sky-700 rounded-full">Tela do Procedimento</span>
                                                 <span className="text-[9px] font-bold text-slate-400 uppercase">CÓD. {selectedProcedure.code || 'N/A'}</span>
                                             </div>
-                                            <h3 className="text-sm sm:text-base font-black text-slate-900 uppercase tracking-tight mt-0.5">{selectedProcedure.name}</h3>
+                                            <h3 className="text-sm sm:text-base font-black text-slate-900 uppercase tracking-tight mt-0.5">{formatProcedimentoLabel(selectedProcedure)}</h3>
                                         </div>
                                     </div>
                                     <button
@@ -1724,13 +1760,17 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                                             onClick={() => setIsCalendarOpen(true)}
                                                             className={`w-full rounded-xl border p-2.5 text-xs font-bold text-left flex items-center justify-between shadow-sm transition-all ${
                                                                 isWaitlistOnly
-                                                                ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed shadow-none'
+                                                                ? 'bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed shadow-none'
                                                                 : 'border-emerald-600 bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-500/10 focus:ring-emerald-500/20 focus:ring-4 outline-none cursor-pointer'
                                                             }`}
                                                         >
                                                             <span>
                                                                 {isWaitlistOnly
-                                                                    ? `Fila de espera (Não há vagas de ${bookingPriority.toLowerCase()} disponíveis)`
+                                                                    ? (bookingPriority === 'Especial'
+                                                                        ? 'Fila de espera (Agendamento Especial)'
+                                                                        : vagas.length > 0 && futureAvailableCount === 0
+                                                                        ? 'Fila de espera (Vagas cadastradas já expiraram)'
+                                                                        : `Fila de espera (Não há vagas de ${bookingPriority.toLowerCase()} disponíveis)`)
                                                                     : bookingDate 
                                                                         ? `${new Date(bookingDate + 'T12:00:00').toLocaleDateString('pt-BR')}${bookingTime ? ` às ${bookingTime}` : ''}`
                                                                         : 'Clique para Selecionar a Data e Horário no Calendário'}
@@ -1768,7 +1808,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                                     </div>
                                                     <div className="flex justify-between items-start gap-3">
                                                         <span className="font-bold text-slate-400 shrink-0">Procedimento:</span>
-                                                        <span className="font-black text-slate-800 uppercase text-right break-words">{selectedProcedure.name}</span>
+                                                        <span className="font-black text-slate-800 uppercase text-right break-words">{formatProcedimentoLabel(selectedProcedure)}</span>
                                                     </div>
                                                     <div className="flex justify-between items-start gap-3">
                                                         <span className="font-bold text-slate-400 shrink-0">Data da Solicitação:</span>
@@ -1779,22 +1819,20 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                                     <div className="flex justify-between items-start gap-3">
                                                         <span className="font-bold text-slate-400 shrink-0">Data e Hora Escolhida:</span>
                                                         <span className="font-black text-slate-800 text-right break-words">
-                                                            {!canSeeSlots || isWaitlistOnly
+                                                            {!canSeeSlots || isWaitlistOnly || !bookingDate
                                                                 ? 'Fila de Espera (Automático)'
-                                                                : bookingDate 
-                                                                    ? `${new Date(bookingDate + 'T12:00:00').toLocaleDateString('pt-BR')}${bookingTime ? ` às ${bookingTime}` : ''}`
-                                                                    : 'Aguardando seleção...'}
+                                                                : `${new Date(bookingDate + 'T12:00:00').toLocaleDateString('pt-BR')}${bookingTime ? ` às ${bookingTime}` : ''}`}
                                                         </span>
                                                     </div>
                                                     {canSeeSlots && (
                                                         <div className="flex justify-between items-center gap-3">
                                                             <span className="font-bold text-slate-400 shrink-0">Vagas Disponíveis:</span>
                                                             <span className={`font-black ${
-                                                                (!isWaitlistOnly && getAvailableSlots(selectedProcedure, bookingPriority, bookingDate) > 0) 
+                                                                (!isWaitlistOnly && futureAvailableCount > 0) 
                                                                 ? 'text-emerald-600' 
                                                                 : 'text-rose-600'
                                                             }`}>
-                                                                {isWaitlistOnly ? 0 : getAvailableSlots(selectedProcedure, bookingPriority, bookingDate)} vagas
+                                                                {isWaitlistOnly ? 0 : futureAvailableCount} vagas
                                                             </span>
                                                         </div>
                                                     )}
@@ -1830,10 +1868,14 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                                              <RotateCcw className="w-4 h-4 shrink-0 text-teal-600" />
                                                              <span><strong>PACIENTE DE RETORNO ({retornoTipo}):</strong> Atendido com prioridade logo após os Agendamentos Especiais, respeitando a ordem cronológica de agendamento.</span>
                                                          </div>
-                                                     ) : canSeeSlots && (isWaitlistOnly || getAvailableSlots(selectedProcedure, bookingPriority, bookingDate) <= 0) ? (
+                                                     ) : canSeeSlots && (isWaitlistOnly || futureAvailableCount <= 0) ? (
                                                          <div className="text-[9.5px] font-bold text-amber-600 bg-amber-50 border border-amber-100 p-2 rounded-xl mt-1.5 flex items-center gap-2 shadow-sm">
                                                              <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-500" />
-                                                             <span>Sem vagas de {bookingPriority.toLowerCase()} disponíveis. Paciente irá para a fila de espera.</span>
+                                                             <span>
+                                                                 {vagas.length > 0 && futureAvailableCount === 0
+                                                                     ? 'As vagas deste procedimento já expiraram (data/hora passada). Paciente irá para a fila de espera.'
+                                                                     : `Sem vagas de ${bookingPriority.toLowerCase()} disponíveis. Paciente irá para a fila de espera.`}
+                                                             </span>
                                                          </div>
                                                      ) : null}
                                                 </div>
@@ -1913,7 +1955,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                     <div className="space-y-3 pt-2">
                                         <div>
                                             <span className="block text-[8px] font-black text-slate-400 uppercase tracking-wider">Procedimento Escolhido</span>
-                                            <span className="text-sm font-black text-slate-800 block uppercase break-words leading-tight">{selectedProcedure?.name}</span>
+                                            <span className="text-sm font-black text-slate-800 block uppercase break-words leading-tight">{formatProcedimentoLabel(selectedProcedure)}</span>
                                         </div>
                                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                                             <div>
@@ -2094,7 +2136,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                         </div>
                         <div className="p-6 space-y-4">
                             <p className="text-xs text-slate-600 font-semibold leading-relaxed">
-                                O paciente já possui um agendamento ativo para **{selectedProcedure?.name}**. 
+                                O paciente já possui um agendamento ativo para **{formatProcedimentoLabel(selectedProcedure)}**. 
                                 Como a nova data proposta é mais próxima, você pode optar por transferir o agendamento existente para a nova data.
                             </p>
                             
@@ -2150,7 +2192,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                         <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 shrink-0">
                             <div>
                                 <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider">Selecione Data e Hora</h3>
-                                <p className="text-[10px] text-sky-600 font-black uppercase tracking-wider mt-0.5">{selectedProcedure.name}</p>
+                                <p className="text-[10px] text-sky-600 font-black uppercase tracking-wider mt-0.5">{formatProcedimentoLabel(selectedProcedure)}</p>
                             </div>
                             <button 
                                 onClick={() => setIsCalendarOpen(false)} 
@@ -2176,29 +2218,50 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                             Não há datas com horários definidos para este procedimento. O agendamento será direcionado automaticamente para a Fila de Espera.
                                         </p>
                                     </div>
-                                    <div className="w-full max-w-sm pt-4">
-                                        <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1.5 text-left ml-1">Escolha uma data para fila de espera</label>
-                                        <input
-                                            type="date"
-                                            min={new Date().toISOString().split('T')[0]}
-                                            className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-slate-900 text-xs font-bold focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all"
-                                            value={bookingDate}
-                                            onChange={(e) => {
-                                                setBookingDate(e.target.value);
-                                                setBookingTime('');
-                                                setIsCalendarOpen(false);
-                                            }}
-                                            required
-                                        />
-                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setBookingDate('');
+                                            setBookingTime('');
+                                            setIsCalendarOpen(false);
+                                        }}
+                                        className="px-6 py-3 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-white font-extrabold rounded-2xl text-xs uppercase tracking-wider active:scale-95 transition-all shadow-md shadow-amber-500/20 cursor-pointer"
+                                    >
+                                        Continuar na Fila de Espera
+                                    </button>
                                 </div>
                             ) : (() => {
-                                const todayStr = new Date().toISOString().split('T')[0];
+                                const todayStr = formatDateToYYYYMMDD(new Date());
                                 const uniqueDates = Array.from(new Set(vagas.map(v => v.data)))
-                                    .filter(d => d >= todayStr)
                                     .filter(d => vagas.filter(v => v.data === d).some(isSlotVisible))
                                     .sort();
-                                const currentActiveDate = activeDate || (uniqueDates.length > 0 ? uniqueDates[0] : '');
+
+                                if (uniqueDates.length === 0) {
+                                    return (
+                                        <div className="flex-1 p-6 flex flex-col items-center justify-center text-center space-y-4 animate-in fade-in duration-300">
+                                            <AlertTriangle className="w-12 h-12 text-amber-500 animate-bounce" />
+                                            <div className="space-y-1">
+                                                <h4 className="text-sm font-black text-slate-800 uppercase">Vagas Expiradas</h4>
+                                                <p className="text-[10px] text-slate-400 font-semibold max-w-xs leading-relaxed">
+                                                    As vagas cadastradas para este procedimento já expiraram. O agendamento será colocado na Fila de Espera.
+                                                </p>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setBookingDate('');
+                                                    setBookingTime('');
+                                                    setIsCalendarOpen(false);
+                                                }}
+                                                className="px-6 py-3 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-white font-extrabold rounded-2xl text-xs uppercase tracking-wider active:scale-95 transition-all shadow-md shadow-amber-500/20 cursor-pointer"
+                                            >
+                                                Prosseguir para Fila de Espera
+                                            </button>
+                                        </div>
+                                    );
+                                }
+
+                                const currentActiveDate = activeDate || uniqueDates[0];
                                 const slotsForActiveDate = vagas.filter(v => v.data === currentActiveDate);
 
                                 return (
@@ -2219,9 +2282,11 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                                     const slotsForThisDate = vagas.filter(v => v.data === d);
                                                     const availableCount = slotsForThisDate.filter(v => 
                                                         v.status === 'Disponível' && 
-                                                        isSlotReallyAvailable(v) && 
-                                                        getAvailableSlots(selectedProcedure, bookingPriority, v.data) > 0
+                                                        !isSlotPast(v) &&
+                                                        isSlotReallyAvailable(v)
                                                     ).length;
+
+                                                    const isDatePast = d < todayStr;
 
                                                     return (
                                                         <button
@@ -2247,7 +2312,9 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                                             <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded ${
                                                                 availableCount > 0
                                                                 ? 'bg-emerald-500/10 text-emerald-700 border border-emerald-500/20'
-                                                                : 'bg-amber-500/10 text-amber-700 border border-amber-500/20 animate-pulse font-extrabold'
+                                                                : isDatePast
+                                                                ? 'bg-slate-100 text-slate-500 border border-slate-200 font-bold'
+                                                                : 'bg-amber-500/10 text-amber-700 border border-amber-500/20 font-extrabold'
                                                             }`}>
                                                                 {availableCount > 0 ? `${availableCount} v` : 'Fila'}
                                                             </span>
@@ -2259,14 +2326,29 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
 
                                         {/* Right Panel: Times */}
                                         <div className="w-[58%] flex flex-col min-h-0">
-                                            <div className="p-3 bg-slate-50/80 border-b border-slate-100 shrink-0 text-center flex items-center justify-center gap-1.5">
-                                                <Clock className="w-3.5 h-3.5 text-slate-400" />
-                                                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-                                                    {currentActiveDate 
-                                                        ? `Horários para ${new Date(currentActiveDate + 'T12:00:00').toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })}`
-                                                        : 'Horários de Atendimento'
-                                                    }
-                                                </span>
+                                            <div className="p-3 bg-slate-50/80 border-b border-slate-100 shrink-0 flex items-center justify-between gap-1.5">
+                                                <div className="flex items-center gap-1.5">
+                                                    <Clock className="w-3.5 h-3.5 text-slate-400" />
+                                                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                                                        {currentActiveDate 
+                                                            ? `Horários para ${new Date(currentActiveDate + 'T12:00:00').toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })}`
+                                                            : 'Horários de Atendimento'
+                                                        }
+                                                    </span>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setBookingDate('');
+                                                        setBookingTime('');
+                                                        setIsCalendarOpen(false);
+                                                    }}
+                                                    className="text-[9px] font-black uppercase px-2 py-0.5 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded-md transition-all active:scale-95 flex items-center gap-1 cursor-pointer"
+                                                    title="Agendar diretamente na Fila de Espera"
+                                                >
+                                                    <AlertTriangle className="w-2.5 h-2.5 text-amber-500" />
+                                                    Fila de Espera
+                                                </button>
                                             </div>
                                             <div className="flex-1 overflow-y-auto p-5 custom-scrollbar">
                                                 {currentActiveDate ? (
@@ -2275,19 +2357,34 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                                             {slotsForActiveDate.map(slot => {
                                                                 if (!isSlotVisible(slot)) return null;
 
-                                                                const isReallyAvailable = slot.status === 'Disponível' && 
-                                                                    isSlotReallyAvailable(slot) &&
-                                                                    getAvailableSlots(selectedProcedure, bookingPriority, slot.data) > 0;
                                                                 const slotTime = slot.hora.substring(0, 5);
-                                                                
+                                                                const isPast = isSlotPast(slot);
                                                                 const activeBooking = getSlotBooking(slot);
 
-                                                                // If there is a confirmed/realized booking, hide/remove the slot completely
+                                                                // Se já houver agendamento confirmado, oculta
                                                                 if (activeBooking && ['Agendado', 'Retorno', 'Realizado'].includes(activeBooking.status)) {
                                                                     return null;
                                                                 }
 
-                                                                // If there is a pending request, block the slot (disable it)
+                                                                // Se o slot for no passado (data anterior ou hora anterior hoje)
+                                                                if (isPast) {
+                                                                    return (
+                                                                        <button
+                                                                            key={slot.id}
+                                                                            type="button"
+                                                                            disabled={true}
+                                                                            className="p-3.5 rounded-2xl border border-slate-200 bg-slate-100/80 text-slate-400 text-center font-black flex flex-col items-center justify-center space-y-1 cursor-not-allowed opacity-60 shadow-none"
+                                                                            title="Horário já ultrapassado"
+                                                                        >
+                                                                            <span className="text-sm tracking-wide line-through">{slotTime}</span>
+                                                                            <span className="text-[8px] font-extrabold uppercase tracking-wider text-slate-500">
+                                                                                Expirado
+                                                                            </span>
+                                                                        </button>
+                                                                    );
+                                                                }
+
+                                                                // Se houver solicitação pendente, bloqueia
                                                                 const isBlocked = activeBooking && ['Solicitado', 'Fila de espera', 'Aguardando Data'].includes(activeBooking.status);
 
                                                                 if (isBlocked) {
@@ -2306,6 +2403,10 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                                                     );
                                                                 }
 
+                                                                const isReallyAvailable = slot.status === 'Disponível' && 
+                                                                    isSlotReallyAvailable(slot) &&
+                                                                    getAvailableSlots(selectedProcedure, bookingPriority, slot.data) > 0;
+
                                                                 return (
                                                                     <button
                                                                         key={slot.id}
@@ -2315,7 +2416,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                                                             setBookingTime(slotTime);
                                                                             setIsCalendarOpen(false);
                                                                         }}
-                                                                        className={`p-3.5 rounded-2xl border text-center font-black transition-all flex flex-col items-center justify-center space-y-1 hover:scale-[1.02] hover:-translate-y-0.5 active:scale-95 shadow-sm duration-200 ${
+                                                                        className={`p-3.5 rounded-2xl border text-center font-black transition-all flex flex-col items-center justify-center space-y-1 hover:scale-[1.02] hover:-translate-y-0.5 active:scale-95 shadow-sm duration-200 cursor-pointer ${
                                                                             isReallyAvailable
                                                                             ? 'bg-emerald-50/50 hover:bg-emerald-500 border-emerald-100 hover:border-emerald-500 text-emerald-800 hover:text-white shadow-emerald-500/5 hover:shadow-md'
                                                                             : 'bg-amber-50/50 hover:bg-amber-500 border-amber-100 hover:border-amber-500 text-amber-800 hover:text-white shadow-amber-500/5 hover:shadow-md'
@@ -2589,7 +2690,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                             </div>
                             <div className="flex justify-between">
                                 <span className="text-slate-400">Procedimento:</span>
-                                <span className="text-sky-600 font-black uppercase">{createdBooking.procedimento?.name || selectedProcedure?.name}</span>
+                                <span className="text-sky-600 font-black uppercase">{formatProcedimentoLabel(createdBooking.procedimento || selectedProcedure)}</span>
                             </div>
                             <div className="flex justify-between">
                                 <span className="text-slate-400">Data da Solicitação:</span>

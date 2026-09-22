@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { User, ConsultaPaciente, ConsultaAgendamento, ConsultaProcedimento, AppState, ConsultaVaga } from '../../types';
-import { ArrowLeft, Search, Filter, Calendar, CheckCircle2, XCircle, Trash2, Loader2, Sparkles, Clock, FileDown, UserX, Repeat, RotateCcw, X, Activity, Check, Edit2, ChevronDown, ChevronLeft, ChevronRight, User as UserIcon, BarChart3, Users, UserCheck, Building2, ShieldCheck, FileText, Phone, MapPin, Lock } from 'lucide-react';
+import { ArrowLeft, Search, Filter, Calendar, CheckCircle2, XCircle, Trash2, Loader2, Sparkles, Clock, FileDown, UserX, Repeat, RotateCcw, X, Activity, Check, Edit2, ChevronDown, ChevronLeft, ChevronRight, User as UserIcon, BarChart3, Users, UserCheck, Building2, ShieldCheck, FileText, Phone, MapPin, Lock, ArrowRightLeft } from 'lucide-react';
 import * as db from '../../services/consultasService';
+import { formatProcedimentoLabel } from '../../services/consultasService';
 import { useAgentesSaude } from '../../services/agentesSaudeService';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -361,7 +362,7 @@ const ModernDatePicker: React.FC<ModernDatePickerProps> = ({
     );
 };
 
-// Componente DataItem no estilo do Abastecimento
+// Componente DataItem Moderno e Legível
 const DataItem = ({ 
     label, 
     value, 
@@ -379,15 +380,15 @@ const DataItem = ({
     truncateValue?: boolean; 
     isBadge?: boolean; 
 }) => (
-    <div className={`flex flex-col gap-0.5 ${flex} min-w-0 overflow-hidden`}>
-        <span className="text-[7.5px] font-black uppercase tracking-wider text-slate-400 ml-0.5 whitespace-nowrap overflow-hidden text-ellipsis flex items-center gap-1 leading-none">
-            {Icon && !isBadge && <Icon className="w-2 h-2 shrink-0" />}
-            <span className="truncate">{label}</span>
+    <div className={`flex flex-col gap-0.5 ${flex} min-w-0`}>
+        <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 whitespace-nowrap flex items-center gap-1 leading-none">
+            {Icon && !isBadge && <Icon className="w-2.5 h-2.5 shrink-0 text-slate-400" />}
+            <span className="whitespace-nowrap">{label}</span>
         </span>
-        <div className={`flex items-center text-[11px] sm:text-xs font-bold transition-colors ${colorClass} ${isBadge ? 'px-1.5 py-0.2 rounded-md border text-[8.5px] font-extrabold w-fit max-w-full' : ''}`}>
-            {Icon && isBadge && <Icon className="w-2.5 h-2.5 mr-0.5 shrink-0 opacity-70" />}
+        <div className={`flex items-center text-xs sm:text-[13px] font-bold transition-colors ${colorClass} ${isBadge ? 'px-2.5 py-1 rounded-lg border text-[10px] font-black w-fit max-w-full leading-tight' : ''}`}>
+            {Icon && isBadge && <Icon className="w-3 h-3 mr-1 shrink-0 opacity-70" />}
             {typeof value === 'string' || typeof value === 'number' ? (
-                <span className={truncateValue ? "truncate" : "whitespace-nowrap"} title={String(value)}>{value}</span>
+                <span className={truncateValue ? "truncate" : "whitespace-normal break-words leading-tight"} title={String(value)}>{value}</span>
             ) : (
                 value
             )}
@@ -399,30 +400,30 @@ const DataItem = ({
 const getStatusStyle = (status: string) => {
     switch (status) {
         case 'Solicitado':
-            return 'text-sky-700 bg-sky-500/10 border-sky-300';
+            return 'text-sky-700 bg-sky-50 border-sky-200/80';
         case 'Agendado':
-            return 'text-indigo-700 bg-indigo-500/10 border-indigo-300';
+            return 'text-indigo-700 bg-indigo-50 border-indigo-200/80';
         case 'Realizado':
-            return 'text-emerald-700 bg-emerald-500/10 border-emerald-300';
+            return 'text-emerald-700 bg-emerald-50 border-emerald-200/80';
         case 'Não Realizado':
-            return 'text-slate-700 bg-slate-500/10 border-slate-300';
+            return 'text-slate-700 bg-slate-100 border-slate-200/80';
         case 'Fila de espera':
-            return 'text-amber-800 bg-amber-500/10 border-amber-300';
+            return 'text-amber-800 bg-amber-50 border-amber-200/80';
         case 'Aguardando Data':
-            return 'text-violet-800 bg-violet-500/10 border-violet-300';
+            return 'text-violet-800 bg-violet-50 border-violet-200/80';
         case 'Retorno':
-            return 'text-teal-800 bg-teal-500/10 border-teal-300';
+            return 'text-teal-800 bg-teal-50 border-teal-200/80';
         case 'Cancelado':
         default:
-            return 'text-rose-700 bg-rose-500/10 border-rose-300';
+            return 'text-rose-700 bg-rose-50 border-rose-200/80';
     }
 };
 
 const getPriorityStyle = (priority: string, is_retorno?: boolean) => {
-    if (priority === 'Especial') return 'text-amber-950 bg-amber-200/70 border-amber-400 font-black shadow-2xs';
-    if (is_retorno) return 'text-teal-950 bg-teal-100 border-teal-300 font-black shadow-2xs';
-    if (priority === 'Urgência') return 'text-rose-700 bg-rose-500/10 border-rose-300 font-black';
-    return 'text-slate-600 bg-slate-500/10 border-slate-200 font-semibold';
+    if (priority === 'Especial') return 'text-amber-900 bg-amber-100/80 border-amber-300 font-black shadow-2xs';
+    if (is_retorno) return 'text-teal-900 bg-teal-50 border-teal-200 font-black';
+    if (priority === 'Urgência') return 'text-rose-700 bg-rose-50 border-rose-200 font-black';
+    return 'text-slate-600 bg-slate-50 border-slate-200 font-bold';
 };
 
 interface AgendamentoCardProps {
@@ -440,6 +441,7 @@ interface AgendamentoCardProps {
     canCancel: boolean;
     canDelete: boolean;
     onEdit: (b: ConsultaAgendamento) => void;
+    onTransfer?: (b: ConsultaAgendamento) => void;
     onAgentInfo: (b: ConsultaAgendamento) => void;
     onDownloadPdf: (b: ConsultaAgendamento) => void;
     onStatusUpdate: (id: string, status: any) => void;
@@ -468,6 +470,7 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
     canCancel,
     canDelete,
     onEdit,
+    onTransfer,
     onAgentInfo,
     onDownloadPdf,
     onStatusUpdate,
@@ -497,55 +500,55 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
     const hasAgent = rawAgentName.length > 0;
 
     return (
-        <div className="rounded-xl shadow-2xs mb-1.5">
+        <div className="rounded-2xl shadow-xs hover:shadow-md transition-all duration-300 mb-3">
             <div
                 onClick={() => setIsExpanded(!isExpanded)}
-                className={`group rounded-xl border transition-all duration-200 relative overflow-hidden cursor-pointer ${
+                className={`group bg-white rounded-2xl border transition-all duration-300 relative overflow-hidden cursor-pointer ${
                     isEligibleForVaga
                     ? isNextInQueue
-                        ? 'bg-gradient-to-r from-emerald-50/85 via-emerald-50/40 to-white border-emerald-400 ring-1 ring-emerald-400/30 shadow-xs'
-                        : 'bg-gradient-to-r from-emerald-50/50 via-amber-50/30 to-white border-emerald-300/80 ring-1 ring-emerald-300/30 shadow-2xs'
+                        ? 'bg-gradient-to-r from-emerald-50/40 via-teal-50/15 to-white border-emerald-300/80 hover:border-emerald-400 ring-1 ring-emerald-400/20 shadow-xs'
+                        : 'bg-gradient-to-r from-amber-50/40 via-yellow-50/15 to-white border-amber-200/80 hover:border-amber-300 ring-1 ring-amber-300/20 shadow-2xs'
                     : isExpanded 
-                    ? 'bg-white border-cyan-200 ring-1 ring-cyan-100 shadow-md shadow-cyan-500/5' 
-                    : 'bg-white border-slate-200/60 hover:shadow-xs hover:border-cyan-200/50'
+                    ? 'border-cyan-200 ring-1 ring-cyan-100 shadow-md shadow-cyan-500/5' 
+                    : 'border-slate-200/70 hover:border-cyan-200/60'
                 }`}
             >
-                {/* Faixa lateral indicadora */}
-                <div className={`absolute top-0 left-0 w-1 h-full transition-all ${
+                {/* Faixa lateral indicadora suave */}
+                <div className={`absolute top-0 left-0 w-1.5 h-full transition-all ${
                     isEligibleForVaga 
                     ? isNextInQueue
-                        ? 'bg-emerald-500 shadow-xs shadow-emerald-500/50'
-                        : 'bg-amber-400 shadow-xs shadow-amber-400/40'
+                        ? 'bg-gradient-to-b from-emerald-500 to-teal-500 shadow-xs shadow-emerald-500/30'
+                        : 'bg-gradient-to-b from-amber-400 to-yellow-500 shadow-xs shadow-amber-400/30'
                     : isExpanded ? 'bg-cyan-500' : 'bg-gradient-to-b from-transparent via-cyan-400 to-transparent group-hover:via-cyan-500'
                 }`} />
 
-                <div className="flex flex-col wide:flex-row items-stretch min-h-[46px] sm:min-h-[48px]">
+                <div className="flex flex-col wide:flex-row items-stretch min-h-[72px] sm:min-h-[76px]">
                     {/* CARD DE PRIMEIRA INFORMAÇÃO - POSIÇÃO E DADOS DO PACIENTE */}
-                    <div className={`border-b wide:border-b-0 wide:border-r p-1.5 sm:py-1 sm:px-2.5 flex items-center gap-2 shrink-0 self-stretch wide:w-[280px] transition-all relative ${
+                    <div className={`border-b wide:border-b-0 wide:border-r p-2 sm:p-2.5 sm:px-4 flex items-center gap-3 shrink-0 self-stretch wide:w-[290px] transition-all relative ${
                         isEligibleForVaga 
                         ? isNextInQueue
-                            ? 'bg-emerald-100/50 border-emerald-200/90' 
-                            : 'bg-amber-50/40 border-amber-200/70'
-                        : 'bg-slate-50/90 border-slate-100 group-hover:bg-cyan-50/40 group-hover:border-cyan-100/60'
+                            ? 'bg-emerald-50/60 border-emerald-100' 
+                            : 'bg-amber-50/40 border-amber-100'
+                        : 'bg-slate-50/80 border-slate-100 group-hover:bg-cyan-50/40 group-hover:border-cyan-100/60'
                     }`}>
                         {/* Bloco de Destaque: POSIÇÃO */}
                         <div 
-                            className={`w-10 h-10 sm:w-11 sm:h-11 rounded-lg flex flex-col items-center justify-center shrink-0 border transition-all duration-200 shadow-2xs relative overflow-hidden ${
+                            className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex flex-col items-center justify-center shrink-0 border transition-all duration-300 shadow-xs relative overflow-hidden ${
                                 isEligibleForVaga
                                     ? isNextInQueue
-                                        ? 'bg-gradient-to-br from-emerald-100 via-emerald-200/90 to-teal-200 border-emerald-400 text-emerald-950 ring-1 ring-emerald-400/40'
-                                        : 'bg-gradient-to-br from-emerald-50 via-teal-50/60 to-amber-100/80 border-emerald-300 text-slate-800 ring-1 ring-emerald-300/40'
+                                        ? 'bg-gradient-to-br from-emerald-50 via-emerald-100/90 to-teal-100 border-emerald-300 text-emerald-950 ring-1 ring-emerald-400/20'
+                                        : 'bg-gradient-to-br from-slate-50 via-amber-50/80 to-amber-100/70 border-amber-200 text-slate-800'
                                     : booking.status === 'Fila de espera'
                                     ? booking.priority === 'Especial'
-                                        ? 'bg-gradient-to-br from-amber-100 via-amber-200 to-yellow-200 border-amber-400 text-amber-950 ring-1 ring-amber-400/40'
-                                        : 'bg-gradient-to-br from-amber-50 via-amber-100/90 to-amber-200/70 border-amber-300 text-amber-950 ring-1 ring-amber-400/20'
+                                        ? 'bg-gradient-to-br from-amber-100 via-amber-200 to-yellow-200 border-amber-400 text-amber-950 ring-1 ring-amber-400/30 shadow-xs'
+                                        : 'bg-gradient-to-br from-amber-50 via-amber-100/80 to-yellow-100 border-amber-200 text-amber-950'
                                     : booking.status === 'Agendado'
-                                    ? 'bg-gradient-to-br from-emerald-50 via-teal-50 to-emerald-100/80 border-emerald-300 text-emerald-950'
+                                    ? 'bg-gradient-to-br from-teal-50 via-emerald-50 to-emerald-100 border-emerald-200 text-emerald-950'
                                     : booking.status === 'Realizado'
-                                    ? 'bg-gradient-to-br from-teal-50 to-cyan-100/80 border-teal-300 text-teal-950'
+                                    ? 'bg-gradient-to-br from-cyan-50 to-teal-100 border-teal-200 text-teal-950'
                                     : booking.status === 'Cancelado'
-                                    ? 'bg-gradient-to-br from-rose-50 to-rose-100/80 border-rose-300 text-rose-950'
-                                    : 'bg-gradient-to-br from-slate-100 to-slate-200 border-slate-300 text-slate-800'
+                                    ? 'bg-gradient-to-br from-rose-50 to-rose-100 border-rose-200 text-rose-950'
+                                    : 'bg-gradient-to-br from-slate-50 to-slate-100 border-slate-200 text-slate-800'
                             }`}
                             title={
                                 isEligibleForVaga
@@ -553,70 +556,70 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                         ? `Posição: ${queuePosition || 1}º lugar na fila. Vaga liberada e disponível para agendamento imediato!`
                                         : `Posição: ${queuePosition || 1}º lugar na fila. Bloqueado: Agende o paciente ${blockingPatient?.name || 'anterior'} da colocação ${blockingPatient?.queuePosition || 1}º primeiro.`
                                     : booking.status === 'Fila de espera' && queuePosition 
-                                    ? `Posição: ${queuePosition}º lugar na fila de ${booking.procedimento?.name || 'procedimento'} ${booking.priority === 'Especial' ? '(Agendamento Especial)' : ''}` 
+                                    ? `Posição: ${queuePosition}º lugar na fila de ${formatProcedimentoLabel(booking.procedimento) || 'procedimento'} ${booking.priority === 'Especial' ? '(Agendamento Especial)' : ''}` 
                                     : `Status: ${booking.status}`
                             }
                         >
                             {isEligibleForVaga ? (
                                 isNextInQueue ? (
                                     <>
-                                        <span className="text-[6px] font-black uppercase tracking-wider text-emerald-900 leading-none">
+                                        <span className="text-[7.5px] font-black uppercase tracking-wider text-emerald-700 leading-none">
                                             VAGA LIVRE
                                         </span>
-                                        <span className="text-sm sm:text-base font-black font-mono leading-none tracking-tight text-emerald-950 my-0.5">
+                                        <span className="text-lg sm:text-xl font-black font-mono leading-none tracking-tight text-emerald-950 my-0.5">
                                             {queuePosition ? `${queuePosition}º` : '1º'}
                                         </span>
-                                        <span className="text-[5.5px] font-black uppercase tracking-wider text-emerald-800 leading-none">
+                                        <span className="text-[7px] font-black uppercase tracking-wider text-emerald-600 leading-none">
                                             DEFINIR DATA
                                         </span>
                                     </>
                                 ) : (
                                     <>
-                                        <span className="text-[6px] font-black uppercase tracking-wider text-emerald-900 leading-none">
+                                        <span className="text-[7.5px] font-black uppercase tracking-wider text-emerald-700 leading-none">
                                             VAGA LIVRE
                                         </span>
-                                        <span className="text-sm sm:text-base font-black font-mono leading-none tracking-tight text-slate-800 my-0.5">
+                                        <span className="text-lg sm:text-xl font-black font-mono leading-none tracking-tight text-slate-800 my-0.5">
                                             {queuePosition ? `${queuePosition}º` : (booking.queue_position ? `${booking.queue_position}º` : '2º')}
                                         </span>
-                                        <span className="text-[5px] font-black uppercase tracking-wider text-amber-800 leading-none flex items-center gap-0.5">
-                                            <Lock className="w-1.5 h-1.5 inline shrink-0" /> AGUARDANDO
+                                        <span className="text-[6.5px] font-black uppercase tracking-wider text-amber-800 leading-none flex items-center gap-0.5">
+                                            <Lock className="w-2 h-2 inline shrink-0 text-amber-700" /> AGUARDANDO
                                         </span>
                                     </>
                                 )
                             ) : (!booking.status || booking.status === 'Fila de espera' || booking.status === 'Aguardando Data' || booking.status === 'Solicitado' || booking.status === 'Retorno') ? (
                                 <>
-                                    <span className="text-[6.5px] font-black uppercase tracking-wider text-amber-900 leading-none">
+                                    <span className="text-[7.5px] font-black uppercase tracking-wider text-amber-800 leading-none">
                                         {booking.priority === 'Especial' ? 'ESPECIAL' : 'POSIÇÃO'}
                                     </span>
-                                    <span className="text-base sm:text-lg font-black font-mono leading-none tracking-tight text-amber-950 my-0.5">
+                                    <span className="text-lg sm:text-xl font-black font-mono leading-none tracking-tight text-amber-950 my-0.5">
                                         {queuePosition ? `${queuePosition}º` : (booking.queue_position ? `${booking.queue_position}º` : '1º')}
                                     </span>
-                                    <span className="text-[5.5px] font-black uppercase tracking-widest text-amber-800 leading-none">
+                                    <span className="text-[7px] font-black uppercase tracking-widest text-amber-700 leading-none">
                                         {booking.priority === 'Especial' ? 'PRIORITÁRIO' : 'NA FILA'}
                                     </span>
                                 </>
                             ) : booking.status === 'Agendado' ? (
                                 <>
-                                    <span className="text-[6.5px] font-black uppercase tracking-wider text-emerald-800 leading-none">
+                                    <span className="text-[7.5px] font-black uppercase tracking-wider text-emerald-700 leading-none">
                                         STATUS
                                     </span>
-                                    <span className="text-[9.5px] sm:text-[10px] font-black uppercase tracking-tight text-emerald-950 my-0.5 text-center px-0.5 leading-tight">
+                                    <span className="text-xs sm:text-[13px] font-black uppercase tracking-tight text-emerald-950 my-0.5 text-center px-0.5 leading-tight">
                                         AGENDADO
                                     </span>
-                                    <span className="text-[5.5px] font-bold uppercase tracking-wider text-emerald-700 leading-none">
+                                    <span className="text-[7px] font-bold uppercase tracking-wider text-emerald-600 leading-none">
                                         CONFIRMADO
                                     </span>
                                 </>
                             ) : (
                                 <>
-                                    <span className="text-[6.5px] font-black uppercase tracking-wider text-slate-500 leading-none">
+                                    <span className="text-[7.5px] font-black uppercase tracking-wider text-slate-400 leading-none">
                                         STATUS
                                     </span>
-                                    <span className="text-[8.5px] sm:text-[9.5px] font-black uppercase tracking-tight text-slate-800 my-0.5 text-center px-0.5 leading-tight">
+                                    <span className="text-[11px] sm:text-xs font-black uppercase tracking-tight text-slate-800 my-0.5 text-center px-0.5 leading-tight">
                                         {booking.status}
                                     </span>
                                     {queuePosition ? (
-                                        <span className="text-[6px] font-mono font-bold text-slate-500 leading-none">
+                                        <span className="text-[7px] font-mono font-bold text-slate-500 leading-none">
                                             {queuePosition}º FILA
                                         </span>
                                     ) : null}
@@ -626,75 +629,75 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
 
                         {/* Dados textuais do Paciente */}
                         <div className="flex flex-col min-w-0 justify-center flex-1">
-                            <div className="flex items-center gap-1 mb-0.5 flex-wrap">
-                                <span className="text-[7px] font-black uppercase tracking-wider text-cyan-700 bg-cyan-100/60 px-1 py-0.2 rounded border border-cyan-200/50 w-fit leading-none">
+                            <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                                <span className="text-[8.5px] font-black uppercase tracking-widest text-cyan-700 bg-cyan-100/70 px-2 py-0.5 rounded-md border border-cyan-200/50 w-fit leading-none">
                                     Paciente
                                 </span>
                                 {booking.priority === 'Especial' && (
-                                    <span className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded text-[7px] font-black uppercase tracking-wider text-amber-950 bg-gradient-to-r from-amber-200 via-yellow-100 to-amber-200 border border-amber-400 shadow-2xs leading-none">
-                                        <Sparkles className="w-2 h-2 text-amber-700 fill-amber-500 shrink-0" />
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[8.5px] font-black uppercase tracking-wider text-amber-950 bg-gradient-to-r from-amber-200 via-yellow-100 to-amber-200 border border-amber-300 shadow-2xs leading-none">
+                                        <Sparkles className="w-2.5 h-2.5 text-amber-700 fill-amber-500 shrink-0" />
                                         <span>AGENDAMENTO ESPECIAL</span>
                                         {(specialSequence || booking.special_sequence) ? (
-                                            <span className="ml-0.5 bg-amber-950/15 px-0.8 py-0.2 rounded text-[6.5px] font-black">
+                                            <span className="ml-0.5 bg-amber-950/15 px-1 py-0.2 rounded text-[8px] font-black">
                                                 Nº {specialSequence || booking.special_sequence}
                                             </span>
                                         ) : null}
                                     </span>
                                 )}
                                 {(booking.is_retorno || booking.retorno_tipo || booking.status === 'Retorno') && booking.priority !== 'Especial' && (
-                                    <span className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded text-[7px] font-black uppercase tracking-wider text-teal-950 bg-teal-100 border border-teal-300 shadow-2xs leading-none">
-                                        <RotateCcw className="w-2 h-2 text-teal-700 shrink-0" />
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[8.5px] font-black uppercase tracking-wider text-teal-950 bg-teal-100 border border-teal-300 shadow-2xs leading-none">
+                                        <RotateCcw className="w-2.5 h-2.5 text-teal-700 shrink-0" />
                                         <span>RETORNO — {(booking.retorno_tipo || '1º RETORNO').toUpperCase()}</span>
                                     </span>
                                 )}
                                 {booking.priority === 'Urgência' && (
-                                    <span className="text-[7px] font-black uppercase tracking-wider text-rose-700 bg-rose-100/70 px-1 py-0.2 rounded border border-rose-200 leading-none">
+                                    <span className="text-[8.5px] font-black uppercase tracking-wider text-rose-700 bg-rose-100/80 px-2 py-0.5 rounded-md border border-rose-200 leading-none">
                                         Urgente
                                     </span>
                                 )}
                             </div>
                             <span 
-                                className="text-[11.5px] sm:text-xs font-black text-slate-900 uppercase leading-tight truncate" 
+                                className="text-xs sm:text-[13.5px] font-black text-slate-900 uppercase leading-snug whitespace-normal break-words" 
                                 title={patientName}
                             >
                                 {patientName}
                             </span>
-                            <span className="text-[8.5px] font-bold text-slate-500 font-mono flex items-center gap-1 mt-0.5 leading-none">
-                                <UserIcon className="w-2 h-2 text-slate-400 shrink-0" />
+                            <span className="text-[10px] font-bold text-slate-500 font-mono flex items-center gap-1 mt-0.5">
+                                <UserIcon className="w-3 h-3 text-slate-400 shrink-0" />
                                 {formattedCpf}
                             </span>
                         </div>
                     </div>
 
                     {/* CONTEÚDO PRINCIPAL DO REGISTRO */}
-                    <div className="flex-1 p-1.5 sm:py-1 sm:px-3 flex flex-col justify-center min-w-0">
-                        <div className="flex flex-col wide:flex-row wide:items-center gap-1.5 wide:gap-2.5">
-                            <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 wide:grid-cols-12 gap-2 items-center min-w-0">
+                    <div className="flex-1 p-3 sm:p-4 pl-4 sm:pl-5 flex flex-col justify-center min-w-0">
+                        <div className="flex flex-col wide:flex-row wide:items-center gap-3 wide:gap-4">
+                            <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 wide:flex wide:flex-row wide:items-center wide:justify-between gap-3 items-center min-w-0">
                                 {/* SOLICITADO */}
                                 <DataItem 
                                     label="Solicitado" 
                                     value={solicitationFormatted} 
                                     icon={Calendar} 
-                                    flex="col-span-1 wide:col-span-2" 
+                                    flex="col-span-1 wide:w-auto min-w-[95px] shrink-0" 
                                 />
 
                                 {/* EXAME / PROCEDIMENTO */}
-                                <div className="flex flex-col gap-0.5 col-span-2 sm:col-span-2 wide:col-span-4 min-w-0 overflow-hidden">
-                                    <span className="text-[7.5px] font-black uppercase tracking-wider text-slate-400 ml-0.5 whitespace-nowrap overflow-hidden text-ellipsis flex items-center gap-1 leading-none">
-                                        <Activity className="w-2 h-2 shrink-0" />
-                                        <span className="truncate">Exame / Procedimento</span>
+                                <div className="flex flex-col gap-0.5 col-span-2 sm:col-span-2 wide:flex-1 min-w-[180px]">
+                                    <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1 leading-none">
+                                        <Activity className="w-2.5 h-2.5 shrink-0 text-slate-400" />
+                                        <span>Exame / Procedimento</span>
                                     </span>
-                                    <div className="flex items-center gap-1 flex-wrap min-w-0">
-                                        <span className="text-[11.5px] sm:text-xs font-bold text-slate-900 uppercase truncate" title={booking.procedimento?.name}>
-                                            {booking.procedimento?.name || 'Não informado'}
+                                    <div className="flex items-center gap-1.5 flex-wrap min-w-0 mt-0.5">
+                                        <span className="text-xs sm:text-[13px] font-black text-slate-900 uppercase whitespace-normal break-words leading-tight" title={formatProcedimentoLabel(booking.procedimento)}>
+                                            {formatProcedimentoLabel(booking.procedimento) || 'Não informado'}
                                         </span>
                                         {booking.procedimento?.code && (
-                                            <span className="text-[7.5px] text-slate-500 font-extrabold bg-slate-100 px-1 py-0.2 rounded border border-slate-200 shrink-0 leading-none">
+                                            <span className="text-[9px] text-slate-600 font-mono font-extrabold bg-slate-100 px-1.5 py-0.5 rounded-md border border-slate-200 shrink-0 leading-none">
                                                 {booking.procedimento.code}
                                             </span>
                                         )}
                                         {booking.procedimento?.type && (
-                                            <span className={`px-1 py-0.2 text-[7px] font-black uppercase tracking-wider rounded shrink-0 leading-none ${
+                                            <span className={`px-1.5 py-0.5 text-[8.5px] font-black uppercase tracking-wider rounded-md shrink-0 leading-none ${
                                                 booking.procedimento.type === 'Exame'
                                                 ? 'bg-sky-50 text-sky-700 border border-sky-200'
                                                 : booking.procedimento.type === 'Consulta'
@@ -708,16 +711,16 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                 </div>
 
                                 {/* DATA AGENDADA */}
-                                <div className="flex flex-col gap-0.5 col-span-1 wide:col-span-2 min-w-0 overflow-hidden">
-                                    <span className="text-[7.5px] font-black uppercase tracking-wider text-slate-400 ml-0.5 whitespace-nowrap overflow-hidden text-ellipsis flex items-center gap-1 leading-none">
-                                        <Clock className="w-2 h-2 shrink-0" />
-                                        <span className="truncate">Data Agendada</span>
+                                <div className="flex flex-col gap-0.5 col-span-1 wide:w-auto min-w-[130px] shrink-0">
+                                    <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1 leading-none">
+                                        <Clock className="w-2.5 h-2.5 shrink-0 text-slate-400" />
+                                        <span>Data Agendada</span>
                                     </span>
-                                    <div className="flex items-center text-[11px] sm:text-xs font-bold text-slate-800 whitespace-nowrap">
+                                    <div className="flex items-center text-xs sm:text-[13px] font-bold text-slate-800 whitespace-nowrap mt-0.5">
                                         {appointmentDateFormatted ? (
-                                            <span>{appointmentDateFormatted}</span>
+                                            <span className="text-slate-900 font-extrabold">{appointmentDateFormatted}</span>
                                         ) : (
-                                            <span className="inline-flex px-1.5 py-0.2 rounded text-[7.5px] font-black uppercase text-amber-800 bg-amber-50 border border-amber-300 leading-none">
+                                            <span className="inline-flex px-2 py-0.5 rounded-md text-[9.5px] font-black uppercase text-amber-800 bg-amber-50 border border-amber-300/80 leading-tight">
                                                 Aguardando Vaga
                                             </span>
                                         )}
@@ -738,15 +741,15 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                     } 
                                     colorClass={getPriorityStyle(booking.priority, booking.is_retorno || !!booking.retorno_tipo || booking.status === 'Retorno')} 
                                     isBadge={true} 
-                                    flex="col-span-1 wide:col-span-2" 
+                                    flex="col-span-1 wide:w-auto min-w-[90px] shrink-0" 
                                 />
 
                                 {/* STATUS */}
                                 {isEligibleForVaga ? (
                                     isNextInQueue ? (
-                                        <div className="flex flex-col gap-0.5 col-span-1 wide:col-span-2 min-w-0 overflow-hidden" onClick={(e) => e.stopPropagation()}>
-                                            <span className="text-[7.5px] font-black uppercase tracking-wider text-slate-400 ml-0.5 whitespace-nowrap overflow-hidden text-ellipsis flex items-center gap-1 leading-none">
-                                                <span className="truncate">Status</span>
+                                        <div className="flex flex-col gap-0.5 col-span-1 wide:w-auto min-w-[125px] shrink-0" onClick={(e) => e.stopPropagation()}>
+                                            <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1 leading-none">
+                                                <span>Status</span>
                                             </span>
                                             {canEdit && onOpenDefinirData ? (
                                                 <button
@@ -755,23 +758,23 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                                         e.stopPropagation();
                                                         onOpenDefinirData(booking);
                                                     }}
-                                                    className="inline-flex items-center justify-center gap-1 px-2 py-0.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 active:from-emerald-800 active:to-teal-800 text-white font-black rounded text-[9px] uppercase tracking-wider transition-all shadow-xs active:scale-95 cursor-pointer w-fit leading-none"
+                                                    className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 hover:from-emerald-500 hover:to-teal-500 active:from-emerald-700 active:to-teal-700 text-white font-black rounded-xl text-[10.5px] uppercase tracking-wider transition-all shadow-xs hover:shadow-md hover:scale-[1.02] active:scale-95 cursor-pointer w-fit leading-none mt-0.5"
                                                     title="Clique para Definir Data e Horário para o Paciente"
                                                 >
-                                                    <Calendar className="w-2.5 h-2.5 shrink-0" />
+                                                    <Calendar className="w-3.5 h-3.5 shrink-0" />
                                                     <span className="whitespace-nowrap">Definir Data</span>
                                                 </button>
                                             ) : (
-                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-600 text-white font-black rounded text-[9px] uppercase tracking-wider shadow-2xs w-fit leading-none">
-                                                    <Calendar className="w-2.5 h-2.5 shrink-0" />
+                                                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white font-black rounded-xl text-[10.5px] uppercase tracking-wider shadow-xs w-fit leading-none mt-0.5">
+                                                    <Calendar className="w-3.5 h-3.5 shrink-0" />
                                                     <span className="whitespace-nowrap">Definir Data</span>
                                                 </span>
                                             )}
                                         </div>
                                     ) : (
-                                        <div className="flex flex-col gap-0.5 col-span-1 wide:col-span-2 min-w-0 overflow-hidden" onClick={(e) => e.stopPropagation()}>
-                                            <span className="text-[7.5px] font-black uppercase tracking-wider text-slate-400 ml-0.5 whitespace-nowrap overflow-hidden text-ellipsis flex items-center gap-1 leading-none">
-                                                <span className="truncate">Status</span>
+                                        <div className="flex flex-col gap-0.5 col-span-1 wide:w-auto min-w-[125px] shrink-0" onClick={(e) => e.stopPropagation()}>
+                                            <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1 leading-none">
+                                                <span>Status</span>
                                             </span>
                                             <button
                                                 type="button"
@@ -781,10 +784,10 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                                         onOpenBlockedQueueModal(booking, blockingPatient);
                                                     }
                                                 }}
-                                                className="inline-flex items-center justify-center gap-1 px-2 py-0.5 bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-400/90 font-black rounded text-[9px] uppercase tracking-wider transition-all shadow-2xs active:scale-95 cursor-pointer w-fit leading-none"
+                                                className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-400 font-black rounded-xl text-[10.5px] uppercase tracking-wider transition-all shadow-2xs active:scale-95 cursor-pointer w-fit leading-none mt-0.5"
                                                 title={`Bloqueado: Agende o paciente ${blockingPatient?.name || 'anterior'} da colocação ${blockingPatient?.queuePosition || 1}º primeiro`}
                                             >
-                                                <Lock className="w-2.5 h-2.5 text-amber-700 shrink-0" />
+                                                <Lock className="w-3.5 h-3.5 text-amber-700 shrink-0" />
                                                 <span className="whitespace-nowrap">Definir Data</span>
                                             </button>
                                         </div>
@@ -795,28 +798,38 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                         value={booking.status} 
                                         colorClass={getStatusStyle(booking.status)} 
                                         isBadge={true} 
-                                        flex="col-span-1 wide:col-span-2" 
+                                        flex="col-span-1 wide:w-auto min-w-[110px] shrink-0" 
                                     />
                                 )}
                             </div>
 
                             {/* Ações Rápidas de Linha + Chevron */}
-                            <div className="flex items-center gap-1 self-end wide:self-center shrink-0">
-                                <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center gap-1.5 self-end wide:self-center shrink-0">
+                                <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                                     {canEdit && (
                                         <button
                                             type="button"
                                             onClick={() => onEdit(booking)}
-                                            className="p-1 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded transition-colors cursor-pointer"
+                                            className="w-8 h-8 rounded-xl bg-slate-50 hover:bg-amber-50 border border-slate-200/80 hover:border-amber-300 text-slate-400 hover:text-amber-600 flex items-center justify-center transition-all shadow-2xs hover:shadow-xs active:scale-95 cursor-pointer"
                                             title="Editar Agendamento"
                                         >
-                                            <Edit2 className="w-2.5 h-2.5" />
+                                            <Edit2 className="w-3.5 h-3.5" />
+                                        </button>
+                                    )}
+                                    {canEdit && onTransfer && (
+                                        <button
+                                            type="button"
+                                            onClick={() => onTransfer(booking)}
+                                            className="w-8 h-8 rounded-xl bg-slate-50 hover:bg-indigo-50 border border-slate-200/80 hover:border-indigo-300 text-slate-400 hover:text-indigo-600 flex items-center justify-center transition-all shadow-2xs hover:shadow-xs active:scale-95 cursor-pointer"
+                                            title="Transferir para Outro Procedimento"
+                                        >
+                                            <ArrowRightLeft className="w-3.5 h-3.5" />
                                         </button>
                                     )}
                                     <button
                                         type="button"
                                         onClick={() => onAgentInfo(booking)}
-                                        className="w-4.5 h-4.5 text-teal-700 hover:text-white hover:bg-teal-600 bg-teal-50 rounded border border-teal-200 transition-colors flex items-center justify-center cursor-pointer font-black text-[8px]"
+                                        className="w-8 h-8 rounded-xl bg-teal-50 hover:bg-teal-600 border border-teal-200 text-teal-700 hover:text-white flex items-center justify-center transition-all shadow-2xs hover:shadow-xs active:scale-95 cursor-pointer font-black text-xs"
                                         title="Ver Agente ACS e PSF"
                                     >
                                         A
@@ -825,15 +838,15 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                         type="button"
                                         onClick={() => onDownloadPdf(booking)}
                                         disabled={isGenerating}
-                                        className="p-1 text-slate-400 hover:text-sky-600 hover:bg-sky-50 rounded transition-colors cursor-pointer disabled:opacity-50"
+                                        className="w-8 h-8 rounded-xl bg-slate-50 hover:bg-sky-50 border border-slate-200/80 hover:border-sky-300 text-slate-400 hover:text-sky-600 flex items-center justify-center transition-all shadow-2xs hover:shadow-xs active:scale-95 cursor-pointer disabled:opacity-50"
                                         title="Imprimir Comprovante (PDF)"
                                     >
-                                        <FileDown className="w-2.5 h-2.5" />
+                                        <FileDown className="w-3.5 h-3.5" />
                                     </button>
                                 </div>
 
-                                <div className={`text-slate-300 group-hover:text-cyan-500 transition-transform duration-200 ${isExpanded ? 'rotate-180 text-cyan-500' : ''}`}>
-                                    <ChevronDown className="w-3.5 h-3.5" />
+                                <div className={`text-slate-300 group-hover:text-cyan-500 transition-transform duration-300 shrink-0 ml-1 ${isExpanded ? 'rotate-180 text-cyan-500' : ''}`}>
+                                    <ChevronDown className="w-5 h-5" />
                                 </div>
                             </div>
                         </div>
@@ -955,6 +968,19 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                             >
                                                 <Edit2 className="w-3.5 h-3.5" />
                                                 Editar
+                                            </button>
+                                        )}
+
+                                        {/* Transferir Procedimento */}
+                                        {canEdit && onTransfer && (
+                                            <button
+                                                type="button"
+                                                onClick={(e) => { e.stopPropagation(); onTransfer(booking); }}
+                                                className="flex items-center gap-1.5 px-3 py-1.5 text-indigo-700 hover:text-white bg-indigo-50/90 hover:bg-indigo-600 rounded-lg transition-colors text-xs font-bold border border-indigo-200 cursor-pointer shadow-2xs"
+                                                title="Transferir este agendamento para outro exame ou procedimento"
+                                            >
+                                                <ArrowRightLeft className="w-3.5 h-3.5" />
+                                                Transferir
                                             </button>
                                         )}
 
@@ -1238,6 +1264,19 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     const [editError, setEditError] = useState('');
     const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
 
+    // Transfer modal states
+    const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+    const [transferTarget, setTransferTarget] = useState<ConsultaAgendamento | null>(null);
+    const [transferSelectedProcId, setTransferSelectedProcId] = useState('');
+    const [transferSearchProc, setTransferSearchProc] = useState('');
+    const [transferTypeFilter, setTransferTypeFilter] = useState<'TODOS' | 'Consulta' | 'Exame' | 'Cirurgia'>('TODOS');
+    const [transferPreserveSolicitationDate, setTransferPreserveSolicitationDate] = useState(true);
+    const [transferPreservePriority, setTransferPreservePriority] = useState(true);
+    const [transferReason, setTransferReason] = useState('');
+    const [transferError, setTransferError] = useState('');
+    const [isTransferring, setIsTransferring] = useState(false);
+    const [transferSuccessToast, setTransferSuccessToast] = useState<string | null>(null);
+
 
 
     useEffect(() => {
@@ -1291,7 +1330,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
         const waitlist = allBookings.filter(b => b.status === 'Fila de espera');
         
         waitlist.forEach(b => {
-            const name = b.procedimento?.name || 'PROCEDIMENTO INDEFINIDO';
+            const name = formatProcedimentoLabel(b.procedimento) || 'PROCEDIMENTO INDEFINIDO';
             if (!groups[name]) groups[name] = [];
             groups[name].push(b);
         });
@@ -1438,7 +1477,8 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                     const susClean = a.paciente?.sus_number ? a.paciente.sus_number.replace(/\D/g, '') : '';
                     const susMatch = cleanNumbers.length > 0 && susClean.includes(cleanNumbers);
                     
-                    const procNameMatch = a.procedimento?.name ? a.procedimento.name.toLowerCase().includes(rawSearch) : false;
+                    const procFormatted = formatProcedimentoLabel(a.procedimento).toLowerCase();
+                    const procNameMatch = procFormatted ? procFormatted.includes(rawSearch) : false;
                     const procCodeMatch = a.procedimento?.code ? a.procedimento.code.toLowerCase().includes(rawSearch) : false;
 
                     return nameMatch || nicknameMatch || cpfMatch || susMatch || procNameMatch || procCodeMatch;
@@ -1705,6 +1745,86 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
             setEditError(err.message || 'Ocorreu um erro ao salvar as alterações.');
         } finally {
             setIsSubmittingEdit(false);
+        }
+    };
+
+    // Open and execute procedure transfer
+    const handleOpenTransferModal = (booking: ConsultaAgendamento) => {
+        setTransferTarget(booking);
+        setTransferSelectedProcId('');
+        setTransferSearchProc('');
+        setTransferTypeFilter('TODOS');
+        setTransferPreserveSolicitationDate(true);
+        setTransferPreservePriority(true);
+        setTransferReason('');
+        setTransferError('');
+        setIsTransferModalOpen(true);
+    };
+
+    const handleConfirmTransferProcedimento = async () => {
+        if (!transferTarget) return;
+        if (!transferSelectedProcId) {
+            setTransferError('Por favor, selecione o novo procedimento de destino.');
+            return;
+        }
+
+        const currentProcId = transferTarget.procedimento_id || transferTarget.procedimento?.id;
+        if (transferSelectedProcId === currentProcId) {
+            setTransferError('O procedimento selecionado é o mesmo atual. Escolha um procedimento diferente para realizar a transferência.');
+            return;
+        }
+
+        const newProc = procedures.find(p => p.id === transferSelectedProcId);
+        if (!newProc) {
+            setTransferError('Procedimento selecionado não encontrado.');
+            return;
+        }
+
+        setIsTransferring(true);
+        setTransferError('');
+
+        try {
+            // Se o agendamento original já estava confirmado/agendado ou realizado,
+            // ao transferir de procedimento ele deve retornar à fila de espera do novo procedimento,
+            // limpando data e horário para que a nova equipe possa agendar na nova agenda médica.
+            const willResetToWaitlist = transferTarget.status === 'Agendado' || transferTarget.status === 'Realizado';
+            const newStatus: ConsultaAgendamento['status'] = willResetToWaitlist ? 'Fila de espera' : (transferTarget.status || 'Fila de espera');
+
+            const payloadUpdates: Partial<ConsultaAgendamento> = {
+                procedimento_id: transferSelectedProcId,
+                status: newStatus,
+                appointment_date: willResetToWaitlist ? null : (transferTarget.appointment_date || null),
+                appointment_time: willResetToWaitlist ? null : (transferTarget.appointment_time || null),
+                solicitation_date: transferPreserveSolicitationDate
+                    ? (transferTarget.solicitation_date || (transferTarget.created_at ? transferTarget.created_at.split('T')[0] : new Date().toISOString().split('T')[0]))
+                    : new Date().toISOString().split('T')[0],
+                priority: transferPreservePriority ? (transferTarget.priority || 'Normal') : 'Normal',
+                queue_position: undefined,
+                special_sequence: undefined
+            };
+
+            await db.updateAgendamento(transferTarget.id, payloadUpdates);
+
+            // Recalcular e persistir posições da fila
+            await db.recalculateAndPersistQueuePositions();
+            window.dispatchEvent(new CustomEvent('consultas-agendamentos-changed'));
+            window.dispatchEvent(new CustomEvent('consultas-vagas-changed'));
+
+            // Toast de sucesso
+            const patientName = transferTarget.paciente?.name || 'Paciente';
+            setTransferSuccessToast(`Agendamento de ${patientName} transferido com sucesso para ${formatProcedimentoLabel(newProc)}!`);
+            setTimeout(() => {
+                setTransferSuccessToast(null);
+            }, 4500);
+
+            setIsTransferModalOpen(false);
+            setTransferTarget(null);
+            await loadData(true);
+        } catch (err: any) {
+            console.error('Erro ao transferir procedimento:', err);
+            setTransferError(err.message || 'Ocorreu um erro ao transferir o agendamento.');
+        } finally {
+            setIsTransferring(false);
         }
     };
 
@@ -2016,7 +2136,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
             </div>
 
             {/* List Table Area (Maximizes vertical height) */}
-            <div className="flex-1 overflow-auto bg-slate-50/30 p-2.5 md:p-3 min-h-0">
+            <div className="flex-1 overflow-auto bg-slate-50/40 p-3 sm:p-4 md:p-5 min-h-0 custom-scrollbar">
                 {loading ? (
                     <div className="h-full w-full flex flex-col items-center justify-center gap-2">
                         <Loader2 className="w-8 h-8 text-sky-600 animate-spin" />
@@ -2035,7 +2155,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                         </p>
                     </div>
                 ) : bookings.length > 0 ? (
-                    <div className="space-y-1.5 w-full pb-3">
+                    <div className="space-y-3 w-full pb-6">
                         {visibleBookings.map((booking) => {
                             const eligibility = eligibilityMap.get(booking.id);
                             const cardQueuePos = queuePositions[booking.id] ?? eligibility?.queuePosition ?? booking.queue_position;
@@ -2057,6 +2177,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                     canCancel={canCancel}
                                     canDelete={canDelete}
                                     onEdit={handleOpenEditModal}
+                                    onTransfer={handleOpenTransferModal}
                                     onAgentInfo={handleOpenAgentInfo}
                                     onDownloadPdf={handleDownloadPdf}
                                     onStatusUpdate={handleStatusUpdate}
@@ -2155,7 +2276,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="text-slate-400">Procedimento:</span>
-                                    <span className="text-slate-800 uppercase font-black">{retornoBooking.procedimento?.name}</span>
+                                    <span className="text-slate-800 uppercase font-black">{formatProcedimentoLabel(retornoBooking.procedimento)}</span>
                                 </div>
                             </div>
 
@@ -2297,7 +2418,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                                     <tr key={proc.id} className="hover:bg-slate-50/60 transition-colors">
                                                         <td className="px-4 py-2">
                                                             <div className="font-extrabold text-slate-900 uppercase flex items-center gap-2">
-                                                                <span>{proc.name}</span>
+                                                                <span>{formatProcedimentoLabel(proc)}</span>
                                                                 {proc.code && (
                                                                     <span className="text-[10px] font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
                                                                         {proc.code}
@@ -2392,7 +2513,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                                                 </td>
                                                                 <td className="px-4 py-2">
                                                                     <div className="font-extrabold text-slate-800 leading-tight">
-                                                                        {booking.procedimento?.name || 'Procedimento não informado'}
+                                                                        {formatProcedimentoLabel(booking.procedimento) || 'Procedimento não informado'}
                                                                     </div>
                                                                     {booking.procedimento?.code && (
                                                                         <span className="text-[9px] font-mono text-slate-500 bg-slate-100 px-1 py-0.2 rounded border border-slate-200 inline-block mt-0.5">
@@ -2537,7 +2658,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="text-slate-400">Procedimento:</span>
-                                    <span className="font-extrabold text-sky-600 uppercase">{cancelTarget.procedimento?.name}</span>
+                                    <span className="font-extrabold text-sky-600 uppercase">{formatProcedimentoLabel(cancelTarget.procedimento)}</span>
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="text-slate-400">Data Atual:</span>
@@ -2733,7 +2854,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                             <option value="">Selecione um procedimento</option>
                                             {procedures.map(p => (
                                                 <option key={p.id} value={p.id}>
-                                                    {p.name} {p.code ? `(CÓD: ${p.code})` : ''} - [{p.type}]
+                                                    {formatProcedimentoLabel(p)} {p.code ? `(CÓD: ${p.code})` : ''} - [{p.type}]
                                                 </option>
                                             ))}
                                         </select>
@@ -3104,6 +3225,318 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                     loadData(true);
                 }}
             />
+
+            {/* MODAL: TRANSFERIR PROCEDIMENTO */}
+            {isTransferModalOpen && transferTarget && createPortal(
+                <div className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[92vh] overflow-hidden border border-indigo-100 flex flex-col animate-in zoom-in-95 duration-200">
+                        {/* Header */}
+                        <div className="p-4 sm:p-5 bg-gradient-to-r from-indigo-600 via-indigo-700 to-purple-700 text-white flex justify-between items-center shrink-0 shadow-sm">
+                            <div className="flex items-center gap-3 min-w-0">
+                                <div className="w-10 h-10 rounded-2xl bg-white/20 border border-white/30 flex items-center justify-center text-white shadow-inner shrink-0">
+                                    <ArrowRightLeft className="w-5 h-5" />
+                                </div>
+                                <div className="min-w-0">
+                                    <h3 className="text-sm sm:text-base font-black uppercase tracking-tight truncate">
+                                        Transferir Procedimento
+                                    </h3>
+                                    <p className="text-[11px] text-indigo-100 font-semibold uppercase truncate">
+                                        Migrar agendamento para outro exame ou consulta médica
+                                    </p>
+                                </div>
+                            </div>
+                            <button 
+                                onClick={() => {
+                                    if (!isTransferring) {
+                                        setIsTransferModalOpen(false);
+                                        setTransferTarget(null);
+                                    }
+                                }} 
+                                disabled={isTransferring}
+                                className="p-2 hover:bg-white/20 rounded-xl text-white/80 hover:text-white transition-colors cursor-pointer shrink-0 disabled:opacity-50"
+                                title="Fechar"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        {/* Body com scroll */}
+                        <div className="p-4 sm:p-6 overflow-y-auto space-y-5 bg-slate-50/50 flex-1 min-h-0 custom-scrollbar">
+                            {/* Card de Informações do Paciente & Procedimento Atual */}
+                            <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-2xs space-y-3">
+                                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-7 h-7 rounded-lg bg-sky-50 text-sky-700 flex items-center justify-center border border-sky-200">
+                                            <UserIcon className="w-4 h-4" />
+                                        </div>
+                                        <div>
+                                            <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block leading-none">Paciente</span>
+                                            <span className="text-xs sm:text-sm font-black text-slate-900 uppercase">
+                                                {formatPatientName(transferTarget.paciente)}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div className="text-right">
+                                        <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block leading-none">Cartão SUS</span>
+                                        <span className="text-xs font-mono font-black text-cyan-700 bg-cyan-50 px-2 py-0.5 rounded border border-cyan-200 inline-block mt-0.5">
+                                            {transferTarget.paciente?.sus_number || 'Não informado'}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {/* Procedimento Atual (Origem) */}
+                                <div className="bg-amber-50/70 border border-amber-200/90 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2.5">
+                                        <div className="w-8 h-8 rounded-xl bg-amber-100 border border-amber-300 flex items-center justify-center text-amber-800 shrink-0">
+                                            <Activity className="w-4 h-4" />
+                                        </div>
+                                        <div>
+                                            <span className="text-[9px] font-black uppercase tracking-widest text-amber-800 block leading-none">Procedimento Atual (Origem)</span>
+                                            <span className="text-xs font-black text-amber-950 uppercase block mt-0.5">
+                                                {formatProcedimentoLabel(transferTarget.procedimento) || 'Procedimento não especificado'}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                                        {transferTarget.procedimento?.type && (
+                                            <span className="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider bg-white text-amber-900 border border-amber-200 shadow-2xs">
+                                                {transferTarget.procedimento.type}
+                                            </span>
+                                        )}
+                                        {transferTarget.priority === 'Especial' && (
+                                            <span className="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider bg-gradient-to-r from-amber-200 to-yellow-200 text-amber-950 border border-amber-300 shadow-2xs">
+                                                Especial
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Seleção do Novo Procedimento (Destino) */}
+                            <div className="space-y-3">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                    <label className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                                        <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                                        Selecione o Novo Procedimento (Destino)
+                                    </label>
+                                    <span className="text-[10px] font-bold text-slate-400">
+                                        {procedures.filter(p => {
+                                            const matchesType = transferTypeFilter === 'TODOS' || p.type === transferTypeFilter;
+                                            const matchesSearch = !transferSearchProc.trim() || 
+                                                formatProcedimentoLabel(p).toLowerCase().includes(transferSearchProc.toLowerCase()) || 
+                                                (p.code && p.code.toLowerCase().includes(transferSearchProc.toLowerCase()));
+                                            return matchesType && matchesSearch;
+                                        }).length} procedimentos disponíveis
+                                    </span>
+                                </div>
+
+                                {/* Filtros e Busca de Procedimentos */}
+                                <div className="space-y-2">
+                                    <div className="relative">
+                                        <input
+                                            type="text"
+                                            placeholder="Buscar novo procedimento por nome ou código..."
+                                            className="w-full bg-white border border-slate-200/90 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 rounded-xl pl-9 pr-9 py-2 text-xs font-bold transition-all text-slate-900 placeholder:text-slate-400 shadow-2xs"
+                                            value={transferSearchProc}
+                                            onChange={(e) => setTransferSearchProc(e.target.value)}
+                                        />
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-3.5 h-3.5" />
+                                        {transferSearchProc && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setTransferSearchProc('')}
+                                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-600 p-0.5 rounded-full hover:bg-slate-100 transition-colors"
+                                                title="Limpar busca"
+                                            >
+                                                <X className="w-3.5 h-3.5" />
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {/* Tabs de Tipo */}
+                                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                                        {(['TODOS', 'Consulta', 'Exame', 'Cirurgia'] as const).map(typeOpt => {
+                                            const isSel = transferTypeFilter === typeOpt;
+                                            return (
+                                                <button
+                                                    key={typeOpt}
+                                                    type="button"
+                                                    onClick={() => setTransferTypeFilter(typeOpt)}
+                                                    className={`px-3 py-1 rounded-xl text-[10.5px] font-black uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap ${
+                                                        isSel
+                                                            ? 'bg-indigo-600 text-white shadow-xs'
+                                                            : 'bg-white text-slate-600 border border-slate-200/80 hover:bg-slate-100'
+                                                    }`}
+                                                >
+                                                    {typeOpt === 'TODOS' ? 'Todos os Tipos' : `${typeOpt}s`}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                {/* Lista de Procedimentos em Cards */}
+                                <div className="max-h-56 sm:max-h-64 overflow-y-auto space-y-1.5 p-1 rounded-2xl bg-white border border-slate-200/90 custom-scrollbar">
+                                    {procedures
+                                        .filter(p => {
+                                            const matchesType = transferTypeFilter === 'TODOS' || p.type === transferTypeFilter;
+                                            const matchesSearch = !transferSearchProc.trim() || 
+                                                formatProcedimentoLabel(p).toLowerCase().includes(transferSearchProc.toLowerCase()) || 
+                                                (p.code && p.code.toLowerCase().includes(transferSearchProc.toLowerCase()));
+                                            return matchesType && matchesSearch;
+                                        })
+                                        .map(proc => {
+                                            const isCurrent = proc.id === (transferTarget.procedimento_id || transferTarget.procedimento?.id);
+                                            const isSelected = transferSelectedProcId === proc.id;
+
+                                            return (
+                                                <button
+                                                    key={proc.id}
+                                                    type="button"
+                                                    disabled={isCurrent}
+                                                    onClick={() => {
+                                                        if (!isCurrent) {
+                                                            setTransferSelectedProcId(proc.id);
+                                                            setTransferError('');
+                                                        }
+                                                    }}
+                                                    className={`w-full text-left p-3 rounded-xl border transition-all flex items-center justify-between gap-3 ${
+                                                        isCurrent
+                                                            ? 'opacity-40 bg-slate-50 border-slate-200 cursor-not-allowed'
+                                                            : isSelected
+                                                            ? 'bg-indigo-50/90 border-indigo-500 ring-2 ring-indigo-500/20 text-indigo-950 shadow-xs cursor-pointer'
+                                                            : 'bg-white hover:bg-slate-50/80 border-slate-200/70 hover:border-indigo-200 text-slate-800 cursor-pointer'
+                                                    }`}
+                                                >
+                                                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black shrink-0 ${
+                                                            isSelected ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500'
+                                                        }`}>
+                                                            {isSelected ? <Check className="w-4 h-4" /> : <Activity className="w-3.5 h-3.5" />}
+                                                        </div>
+                                                        <div className="min-w-0 flex-1">
+                                                            <div className="flex items-center gap-2 flex-wrap">
+                                                                <span className="text-xs font-black uppercase text-slate-900 truncate">
+                                                                    {formatProcedimentoLabel(proc)}
+                                                                </span>
+                                                                {proc.code && (
+                                                                    <span className="text-[9px] font-mono font-bold text-slate-400 bg-slate-100 px-1.5 py-0.2 rounded">
+                                                                        #{proc.code}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            <div className="flex items-center gap-1.5 mt-0.5 text-[9.5px] font-semibold text-slate-400">
+                                                                <span>{proc.type}</span>
+                                                                {proc.recurso && (
+                                                                    <>
+                                                                        <span>•</span>
+                                                                        <span>{proc.recurso}</span>
+                                                                    </>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="shrink-0 flex items-center gap-1.5">
+                                                        {isCurrent ? (
+                                                            <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-slate-200 text-slate-600">
+                                                                Atual
+                                                            </span>
+                                                        ) : isSelected ? (
+                                                            <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-indigo-600 text-white shadow-2xs flex items-center gap-1">
+                                                                <Check className="w-3 h-3" /> Selecionado
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-[9.5px] font-bold text-indigo-600 hover:text-indigo-800 uppercase">
+                                                                Selecionar
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </button>
+                                            );
+                                        })}
+                                </div>
+                            </div>
+
+                            {/* Aviso informativo caso o agendamento já possua data marcada */}
+                            {(transferTarget.status === 'Agendado' || transferTarget.status === 'Realizado') && (
+                                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3.5 text-xs text-amber-900 flex items-start gap-2.5 shadow-2xs">
+                                    <Clock className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                                    <div>
+                                        <span className="font-black uppercase text-[10.5px] block">Aviso de Reclassificação na Fila:</span>
+                                        <p className="font-semibold text-[11px] mt-0.5 leading-relaxed">
+                                            Como este agendamento já possuía data marcada, ao transferir para outro procedimento ele será movido para a <strong>Fila de espera</strong> do novo procedimento para definição de data/horário na nova agenda médica. A data de solicitação e a prioridade originais são <strong>preservadas permanentemente</strong>.
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Mensagem de Erro */}
+                            {transferError && (
+                                <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 text-xs text-rose-700 font-bold flex items-center gap-2 animate-in fade-in duration-150">
+                                    <XCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                                    <span>{transferError}</span>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-4 border-t border-slate-100 bg-white flex flex-col sm:flex-row items-center justify-end gap-2.5 shrink-0">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    if (!isTransferring) {
+                                        setIsTransferModalOpen(false);
+                                        setTransferTarget(null);
+                                    }
+                                }}
+                                disabled={isTransferring}
+                                className="w-full sm:w-auto px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold rounded-xl text-xs uppercase tracking-wider transition-all cursor-pointer disabled:opacity-50"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleConfirmTransferProcedimento}
+                                disabled={isTransferring || !transferSelectedProcId}
+                                className="w-full sm:w-auto px-5 py-2.5 bg-gradient-to-r from-indigo-600 via-indigo-700 to-purple-700 hover:from-indigo-500 hover:to-purple-600 text-white font-black rounded-xl text-xs uppercase tracking-wider transition-all shadow-md shadow-indigo-600/25 flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer disabled:opacity-50"
+                            >
+                                {isTransferring ? (
+                                    <>
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        <span>Transferindo...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <ArrowRightLeft className="w-4 h-4" />
+                                        <span>Confirmar Transferência</span>
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
+
+            {/* TOAST DE SUCESSO FLUTUANTE */}
+            {transferSuccessToast && createPortal(
+                <div className="fixed top-5 right-5 z-[999999] bg-emerald-600 text-white px-4 py-3 rounded-2xl shadow-2xl border border-emerald-400 flex items-center gap-3 animate-in slide-in-from-top duration-300">
+                    <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+                        <CheckCircle2 className="w-5 h-5 text-white" />
+                    </div>
+                    <div className="text-xs font-extrabold pr-2">
+                        {transferSuccessToast}
+                    </div>
+                    <button
+                        onClick={() => setTransferSuccessToast(null)}
+                        className="p-1 hover:bg-white/20 rounded-lg text-white/80 hover:text-white transition-colors cursor-pointer"
+                    >
+                        <X className="w-4 h-4" />
+                    </button>
+                </div>,
+                document.body
+            )}
         </div>
     );
 };

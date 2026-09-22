@@ -4,6 +4,7 @@ import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import { ConsultaAgendamento, ConsultaProcedimento, AppState, User } from '../../types';
 import { PageWrapper } from '../PageWrapper';
+import { formatProcedimentoLabel } from '../../services/consultasService';
 import { FileType } from 'lucide-react';
 
 interface ConsultasReportPdfGeneratorProps {
@@ -79,7 +80,7 @@ export const ConsultasReportPdfGenerator: React.FC<ConsultasReportPdfGeneratorPr
 
         filteredBookings.forEach(b => {
             const pId = b.procedimento_id || b.procedimento?.id;
-            const pName = b.procedimento?.name || 'OUTRO PROCEDIMENTO';
+            const pName = formatProcedimentoLabel(b.procedimento) || 'OUTRO PROCEDIMENTO';
             const key = pId ? pId : `name_${pName}`;
 
             if (!map[key]) {
@@ -495,7 +496,7 @@ export const ConsultasReportPdfGenerator: React.FC<ConsultasReportPdfGeneratorPr
                                                         <td className="px-3 py-2 border-r border-slate-100 align-middle">
                                                             <div className="flex flex-col gap-0.5">
                                                                 <div className="font-bold text-slate-900 leading-snug break-words">
-                                                                    {b.procedimento?.name || 'Procedimento não informado'}
+                                                                    {formatProcedimentoLabel(b.procedimento) || 'Procedimento não informado'}
                                                                 </div>
                                                                 {b.procedimento?.code && (
                                                                     <div className="text-[6pt] font-mono font-bold text-slate-500 leading-none">

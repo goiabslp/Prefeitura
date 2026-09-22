@@ -284,7 +284,26 @@ export const getPacienteHistory = async (pacienteId: string): Promise<ConsultaAg
             .order('appointment_date', { ascending: false });
 
         if (error) throw error;
-        return data || [];
+        const history: ConsultaAgendamento[] = data || [];
+        const especialistas = await getEspecialistas();
+        const espMap = new Map<string, ConsultaEspecialista>(especialistas.map(e => [e.id, e]));
+
+        return history.map(item => {
+            let proc = item.procedimento;
+            if (proc) {
+                const espId = proc.especialista_id || getProcEspecialistaMapping(proc.id) || (item.procedimento_id ? getProcEspecialistaMapping(item.procedimento_id) : null);
+                const espObj = (espId ? espMap.get(espId) : null) || proc.especialista || null;
+                proc = {
+                    ...proc,
+                    especialista_id: espId || null,
+                    especialista: espObj
+                };
+            }
+            return {
+                ...item,
+                procedimento: proc
+            };
+        });
     } catch (error) {
         const appError = handleSupabaseError(error);
         console.error('[consultasService] getPacienteHistory Error:', appError.message);
@@ -483,33 +502,72 @@ export const deleteEspecialista = async (id: string): Promise<boolean> => {
     }
 };
 
+// --- MAPEAMENTO LOCAL RESILIENTE: PROCEDIMENTO <-> ESPECIALISTA ---
+const PROC_ESPECIALISTA_STORAGE_KEY = 'consultas_proc_especialista_map';
+
+export const getProcEspecialistaMapping = (procId?: string | null): string | null => {
+    if (!procId || typeof window === 'undefined') return null;
+    try {
+        const raw = localStorage.getItem(PROC_ESPECIALISTA_STORAGE_KEY);
+        const map: Record<string, string> = raw ? JSON.parse(raw) : {};
+        return map[procId] || null;
+    } catch {
+        return null;
+    }
+};
+
+export const saveProcEspecialistaMapping = (procId: string, especialistaId?: string | null) => {
+    if (!procId || typeof window === 'undefined') return;
+    try {
+        const raw = localStorage.getItem(PROC_ESPECIALISTA_STORAGE_KEY);
+        const map: Record<string, string> = raw ? JSON.parse(raw) : {};
+        if (especialistaId) {
+            map[procId] = especialistaId;
+        } else {
+            delete map[procId];
+        }
+        localStorage.setItem(PROC_ESPECIALISTA_STORAGE_KEY, JSON.stringify(map));
+    } catch {}
+};
+
 /**
  * Formata o label do procedimento conforme regra estrita:
- * Com especialista: "Nome do Procedimento - Especialista" (ex: "Consulta em Dermatologia - João da Silva")
- * Sem especialista: "Nome do Procedimento" (ex: "Consulta em Dermatologia")
+ * Com especialista: "Nome do Procedimento - Especialista" (ex: "Consulta em Cardiologia - Dr. Carlos Silva")
+ * Sem especialista: "Nome do Procedimento" (ex: "Consulta em Cardiologia")
  */
 export const formatProcedimentoLabel = (
-    procedimento?: { name: string; especialista?: { nome: string } | null; especialista_id?: string | null } | null,
+    procedimento?: { id?: string; name: string; especialista?: { nome: string } | null; especialista_id?: string | null } | null,
     especialistasList?: ConsultaEspecialista[]
 ): string => {
-    if (!procedimento) return '';
+    if (!procedimento || !procedimento.name) return '';
+    
     let espName = procedimento.especialista?.nome;
-    if (!espName && procedimento.especialista_id) {
-        const list = especialistasList || getCachedEspecialistas();
-        const found = list.find(e => e.id === procedimento.especialista_id);
+    const espId = procedimento.especialista_id || (procedimento.id ? getProcEspecialistaMapping(procedimento.id) : null);
+
+    if (!espName && espId) {
+        const list = (especialistasList && especialistasList.length > 0) ? especialistasList : getCachedEspecialistas();
+        const found = list.find(e => e.id === espId);
         if (found) {
             espName = found.nome;
         }
     }
+
     if (espName && espName.trim()) {
-        return `${procedimento.name} - ${espName.trim()}`;
+        const cleanProcName = procedimento.name.trim();
+        const cleanEspName = espName.trim();
+        // Evita duplicar se o nome já contiver o especialista
+        if (cleanProcName.toUpperCase().includes(cleanEspName.toUpperCase())) {
+            return cleanProcName;
+        }
+        return `${cleanProcName} - ${cleanEspName}`;
     }
-    return procedimento.name;
+
+    return procedimento.name.trim();
 };
 
 // --- PROCEDIMENTOS ---
 
-const PROCEDIMENTO_COLUMNS = 'id, name, code, type, available_quantity, total_quantity, status, recurso, especialista_id, created_at, updated_at';
+const PROCEDIMENTO_COLUMNS = 'id, name, code, type, available_quantity, total_quantity, status, recurso, created_at, updated_at';
 const PROCEDIMENTO_COLUMNS_FALLBACK = 'id, name, code, type, available_quantity, total_quantity, status, recurso, created_at, updated_at';
 
 export const getProcedimentos = async (onlyActive: boolean = false): Promise<ConsultaProcedimento[]> => {
@@ -534,10 +592,15 @@ export const getProcedimentos = async (onlyActive: boolean = false): Promise<Con
         const especialistas = await getEspecialistas();
         const espMap = new Map<string, ConsultaEspecialista>(especialistas.map(e => [e.id, e]));
 
-        return procs.map(p => ({
-            ...p,
-            especialista: p.especialista_id ? espMap.get(p.especialista_id) || null : null
-        }));
+        return procs.map(p => {
+            const espId = p.especialista_id || getProcEspecialistaMapping(p.id);
+            const espObj = (espId ? espMap.get(espId) : null) || p.especialista || null;
+            return {
+                ...p,
+                especialista_id: espId || null,
+                especialista: espObj
+            };
+        });
     } catch (error) {
         const appError = handleSupabaseError(error);
         console.error('[consultasService] getProcedimentos Error:', appError.message);
@@ -547,6 +610,7 @@ export const getProcedimentos = async (onlyActive: boolean = false): Promise<Con
 
 export const createProcedimento = async (procedimento: Omit<ConsultaProcedimento, 'id' | 'created_at' | 'updated_at'>): Promise<ConsultaProcedimento | null> => {
     try {
+        const espIdPayload = procedimento.especialista_id || null;
         let payload: any = { ...procedimento };
         delete payload.especialista;
 
@@ -569,6 +633,21 @@ export const createProcedimento = async (procedimento: Omit<ConsultaProcedimento
         }
 
         if (error) throw error;
+
+        // Salvar vínculo no storage de mapeamento
+        if (data && data.id) {
+            saveProcEspecialistaMapping(data.id, espIdPayload);
+            if (espIdPayload) {
+                const esp = await getEspecialistaById(espIdPayload);
+                data.especialista_id = espIdPayload;
+                data.especialista = esp;
+            }
+        }
+
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('consultas-procedimentos-changed'));
+        }
+
         return data;
     } catch (error) {
         const appError = handleSupabaseError(error);
@@ -579,6 +658,7 @@ export const createProcedimento = async (procedimento: Omit<ConsultaProcedimento
 
 export const updateProcedimento = async (id: string, updates: Partial<ConsultaProcedimento>): Promise<ConsultaProcedimento | null> => {
     try {
+        const espIdPayload = updates.especialista_id !== undefined ? updates.especialista_id : getProcEspecialistaMapping(id);
         let payload: any = { ...updates };
         delete payload.especialista;
 
@@ -603,6 +683,21 @@ export const updateProcedimento = async (id: string, updates: Partial<ConsultaPr
         }
 
         if (error) throw error;
+
+        // Atualizar mapeamento
+        saveProcEspecialistaMapping(id, espIdPayload);
+        if (data) {
+            data.especialista_id = espIdPayload || null;
+            if (espIdPayload) {
+                const esp = await getEspecialistaById(espIdPayload);
+                data.especialista = esp;
+            }
+        }
+
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('consultas-procedimentos-changed'));
+        }
+
         return data;
     } catch (error) {
         const appError = handleSupabaseError(error);
@@ -993,6 +1088,27 @@ export const getAgendamentos = async (filters?: AgendamentoFilters): Promise<Con
 
         let filtered = (allData || []) as unknown as ConsultaAgendamento[];
 
+        // Enriquecer cada procedimento com dados de especialista via mapping e cache
+        const especialistas = await getEspecialistas();
+        const espMap = new Map<string, ConsultaEspecialista>(especialistas.map(e => [e.id, e]));
+
+        filtered = filtered.map(item => {
+            let proc = item.procedimento;
+            if (proc) {
+                const espId = proc.especialista_id || getProcEspecialistaMapping(proc.id) || (item.procedimento_id ? getProcEspecialistaMapping(item.procedimento_id) : null);
+                const espObj = (espId ? espMap.get(espId) : null) || proc.especialista || null;
+                proc = {
+                    ...proc,
+                    especialista_id: espId || null,
+                    especialista: espObj
+                };
+            }
+            return {
+                ...item,
+                procedimento: proc
+            };
+        });
+
         // Garante que a ordem da fila de espera respeite a prioridade Especial e posições calculadas
         const waitlistItems = filtered.filter(a => 
             !a.status || 
@@ -1166,9 +1282,35 @@ export const matchTimeSlot = (timeA?: string | null, timeB?: string | null): boo
 };
 
 /**
- * Retorna as vagas físicas de um procedimento que estão efetivamente livres (não ocupadas por agendamento confirmado)
+ * Verifica se a data e horário de uma vaga já passaram em relação ao momento atual (data/hora local).
  */
-export const getFreeSlotsForProcedure = (vagas: ConsultaVaga[], bookings: ConsultaAgendamento[]): ConsultaVaga[] => {
+export const isSlotPast = (slot: { data: string; hora?: string | null }): boolean => {
+    if (!slot || !slot.data) return false;
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    
+    // Se a data for anterior a hoje, já passou
+    if (slot.data < todayStr) return true;
+    
+    // Se a data for hoje, compara a hora e minuto
+    if (slot.data === todayStr && slot.hora) {
+        const currentHourMin = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        const slotHourMin = slot.hora.substring(0, 5);
+        if (slotHourMin < currentHourMin) return true;
+    }
+    
+    return false;
+};
+
+/**
+ * Retorna as vagas físicas de um procedimento que estão efetivamente livres e válidas para o futuro
+ * (não ocupadas por agendamento confirmado, não pausadas e não expiradas no passado)
+ */
+export const getFreeSlotsForProcedure = (
+    vagas: ConsultaVaga[], 
+    bookings: ConsultaAgendamento[],
+    includePast: boolean = false
+): ConsultaVaga[] => {
     const confirmedBookings = bookings.filter(b => 
         b.status === 'Agendado' && b.appointment_date && b.appointment_time
     );
@@ -1194,7 +1336,11 @@ export const getFreeSlotsForProcedure = (vagas: ConsultaVaga[], bookings: Consul
         }
     });
 
-    return vagas.filter(v => (!v.status || v.status === 'Disponível') && !occupiedSlotIds.has(v.id));
+    return vagas.filter(v => 
+        (!v.status || v.status === 'Disponível') && 
+        !occupiedSlotIds.has(v.id) &&
+        (includePast || !isSlotPast(v))
+    );
 };
 
 export interface QueueEligibilityInfo {

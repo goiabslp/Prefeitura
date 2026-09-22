@@ -7,6 +7,7 @@ import {
     ShieldCheck, Phone, Check, CalendarDays, Sun, Sunset
 } from 'lucide-react';
 import * as db from '../../services/consultasService';
+import { formatProcedimentoLabel } from '../../services/consultasService';
 
 interface DefinirDataModalProps {
     isOpen: boolean;
@@ -138,7 +139,7 @@ export const DefinirDataModal: React.FC<DefinirDataModalProps> = ({
     const rawCpf = booking.paciente?.cpf || '';
     const formattedCpf = rawCpf.length === 11 ? rawCpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4') : rawCpf;
     const susNumber = booking.paciente?.sus_number;
-    const procName = booking.procedimento?.name || 'Procedimento';
+    const procName = formatProcedimentoLabel(booking.procedimento) || 'Procedimento';
     const procType = booking.procedimento?.type || 'Consulta';
 
     const handleConfirm = async () => {

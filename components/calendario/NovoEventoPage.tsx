@@ -29,7 +29,11 @@ import {
   AlertCircle,
   Flag,
   Sun,
-  Sunset
+  Sunset,
+  PlusCircle,
+  Send,
+  MessageSquarePlus,
+  Check
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../../services/supabaseClient';
@@ -384,6 +388,9 @@ export const NovoEventoPage: React.FC<NovoEventoPageProps> = ({
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [aiPreview, setAiPreview] = useState<GeneratedMateriaJornal | null>(null);
   const [showAiPreviewModal, setShowAiPreviewModal] = useState(false);
+  const [additionalAiPrompt, setAdditionalAiPrompt] = useState<string>('');
+  const [isAppendingAI, setIsAppendingAI] = useState<boolean>(false);
+  const [appendFeedback, setAppendFeedback] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Pessoas Envolvidas e Convidados
@@ -574,6 +581,45 @@ export const NovoEventoPage: React.FC<NovoEventoPageProps> = ({
       setErrorMessage(err.message || 'Não foi possível gerar a matéria com IA no momento.');
     } finally {
       setIsGeneratingAI(false);
+    }
+  };
+
+  const handleAppendTextWithAI = async () => {
+    if (!additionalAiPrompt.trim()) return;
+    if (!title.trim()) {
+      setErrorMessage('Informe o título do registro antes de complementar a matéria com IA.');
+      return;
+    }
+
+    setIsAppendingAI(true);
+    setAppendFeedback(null);
+    setErrorMessage(null);
+
+    try {
+      const pessoasParaIA = getPessoasEnvolvidasData();
+      const generated = await generateMateriaJornalWithAI({
+        titulo: title,
+        tipoEvento: type,
+        dataInicio: startDate,
+        dataFim: endDate,
+        horaInicio: isAllDay ? undefined : startTime,
+        horaFim: isAllDay ? undefined : endTime,
+        descricao: description,
+        setor: primarySectorName,
+        pessoas: pessoasParaIA,
+        materiaAtual: aiPreview || undefined,
+        textoComplementar: additionalAiPrompt.trim()
+      });
+
+      setAiPreview(generated);
+      setAdditionalAiPrompt('');
+      setAppendFeedback('✨ Novos fatos incorporados e matéria enriquecida com sucesso!');
+      setTimeout(() => setAppendFeedback(null), 6000);
+    } catch (err: any) {
+      console.warn('Erro ao acrescentar texto com IA:', err);
+      setErrorMessage(err.message || 'Erro ao incorporar novo texto com a IA.');
+    } finally {
+      setIsAppendingAI(false);
     }
   };
 
@@ -1683,20 +1729,40 @@ export const NovoEventoPage: React.FC<NovoEventoPageProps> = ({
 
               {/* Botão de Geração com IA */}
               {publishToNews && (
-                <div className="p-2.5 bg-gradient-to-r from-indigo-50 to-sky-50 rounded-2xl border border-indigo-200 flex items-center justify-between gap-2 shrink-0">
-                  <p className="text-[11px] text-indigo-900 font-bold truncate">
-                    {aiPreview ? '✨ Matéria gerada com sucesso pela IA!' : 'Gere uma prévia da matéria formatada.'}
-                  </p>
+                <div className="p-2.5 bg-gradient-to-r from-indigo-50 via-slate-50 to-sky-50 rounded-2xl border border-indigo-200 flex flex-wrap items-center justify-between gap-2 shrink-0">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                      <Sparkles className="w-3.5 h-3.5" />
+                    </div>
+                    <p className="text-[11px] text-indigo-950 font-bold truncate">
+                      {aiPreview ? '✨ Matéria gerada com sucesso pela IA!' : 'Gere uma prévia da matéria formatada.'}
+                    </p>
+                  </div>
 
-                  <button
-                    type="button"
-                    onClick={handleGeneratePreviewAI}
-                    disabled={isGeneratingAI}
-                    className="px-3.5 py-1.5 bg-gradient-to-r from-indigo-600 to-sky-600 hover:from-indigo-500 hover:to-sky-500 text-white rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer disabled:opacity-50 shrink-0"
-                  >
-                    {isGeneratingAI ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
-                    <span>{aiPreview ? 'Revisar Matéria' : 'Gerar com IA'}</span>
-                  </button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {aiPreview && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowAiPreviewModal(true);
+                        }}
+                        className="px-3 py-1.5 bg-white hover:bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer active:scale-95"
+                      >
+                        <MessageSquarePlus className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>+ Acrescentar Texto</span>
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={handleGeneratePreviewAI}
+                      disabled={isGeneratingAI}
+                      className="px-3.5 py-1.5 bg-gradient-to-r from-indigo-600 to-sky-600 hover:from-indigo-500 hover:to-sky-500 text-white rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer disabled:opacity-50 active:scale-95"
+                    >
+                      {isGeneratingAI ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
+                      <span>{aiPreview ? 'Revisar Matéria' : 'Gerar com IA'}</span>
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -1728,50 +1794,187 @@ export const NovoEventoPage: React.FC<NovoEventoPageProps> = ({
 
       </div>
 
-      {/* Modal de Prévia de Matéria com IA */}
+      {/* Modal de Prévia de Matéria com IA e Acréscimo Inteligente */}
       <AnimatePresence>
         {showAiPreviewModal && aiPreview && (
-          <div className="fixed inset-0 z-[3600] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fade-in font-sans">
-            <div className="bg-white rounded-3xl max-w-2xl w-full p-5 space-y-3 shadow-2xl border border-slate-200">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-indigo-600" />
-                  <h3 className="text-sm sm:text-base font-black text-slate-900">Prévia da Matéria Jornalística</h3>
-                </div>
-                <button onClick={() => setShowAiPreviewModal(false)} className="text-slate-400 hover:text-slate-600 font-black cursor-pointer">✕</button>
-              </div>
-
-              <div className="space-y-2.5 max-h-[60vh] overflow-y-auto custom-scrollbar pr-1">
-                <div>
-                  <span className="text-[10px] font-black uppercase text-slate-400">Título / Manchete</span>
-                  <p className="text-xs sm:text-sm font-black text-slate-900">{aiPreview.manchete}</p>
-                </div>
-
-                {aiPreview.subtitulo && (
+          <div className="fixed inset-0 z-[3600] flex items-center justify-center p-3 sm:p-5 bg-slate-950/75 backdrop-blur-md animate-fade-in font-sans">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 10 }}
+              className="bg-white rounded-3xl max-w-3xl w-full p-5 sm:p-6 space-y-3.5 shadow-2xl border border-slate-200 max-h-[90vh] flex flex-col overflow-hidden"
+            >
+              {/* Header do Modal */}
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100 shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-600 text-white flex items-center justify-center shadow-xs">
+                    <Sparkles className="w-5 h-5" />
+                  </div>
                   <div>
-                    <span className="text-[10px] font-black uppercase text-slate-400">Subtítulo / Lead</span>
-                    <p className="text-xs font-medium text-slate-700 italic">"{aiPreview.subtitulo}"</p>
-                  </div>
-                )}
-
-                <div>
-                  <span className="text-[10px] font-black uppercase text-slate-400">Corpo da Matéria</span>
-                  <div className="text-xs text-slate-800 whitespace-pre-line leading-relaxed font-serif pt-1">
-                    {aiPreview.corpo}
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm sm:text-base font-black text-slate-900 tracking-tight">Prévia da Matéria Jornalística</h3>
+                      <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px] font-black uppercase tracking-wider">
+                        {aiPreview.categoria || 'OFICIAL'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 font-medium">
+                      Redação oficial gerada e contextualizada com inteligência artificial
+                    </p>
                   </div>
                 </div>
-              </div>
 
-              <div className="pt-2 border-t border-slate-100 flex justify-end">
                 <button
                   type="button"
                   onClick={() => setShowAiPreviewModal(false)}
-                  className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors"
+                  className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center font-black cursor-pointer transition-colors"
                 >
-                  Confirmar & Fechar Prévia
+                  ✕
                 </button>
               </div>
-            </div>
+
+              {/* Conteúdo com Scroll */}
+              <div className="space-y-3.5 flex-1 overflow-y-auto custom-scrollbar pr-1.5">
+                
+                {/* Manchete */}
+                <div className="bg-slate-50/70 p-3 rounded-2xl border border-slate-200/80">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-0.5">Título / Manchete Principal</span>
+                  <h2 className="text-sm sm:text-base font-serif font-black text-slate-950 leading-tight">
+                    {aiPreview.manchete}
+                  </h2>
+                </div>
+
+                {/* Subtítulo / Lead */}
+                {aiPreview.subtitulo && (
+                  <div className="bg-indigo-50/40 p-3 rounded-2xl border-l-4 border-indigo-600">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-indigo-500 block mb-0.5">Subtítulo / Lead</span>
+                    <p className="text-xs sm:text-sm font-serif text-slate-700 italic leading-relaxed">
+                      "{aiPreview.subtitulo}"
+                    </p>
+                  </div>
+                )}
+
+                {/* Corpo da Matéria */}
+                <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs space-y-1">
+                  <div className="flex items-center justify-between pb-1 border-b border-slate-100">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Corpo da Matéria Oficial</span>
+                    <span className="text-[10px] font-mono text-slate-400 font-bold">{aiPreview.corpo.length} / 1185 carac.</span>
+                  </div>
+                  <div className="text-xs sm:text-[13px] text-slate-800 whitespace-pre-line leading-relaxed font-serif pt-1">
+                    {aiPreview.corpo}
+                  </div>
+                </div>
+
+                {/* Frase de Destaque se existir */}
+                {aiPreview.destaqueFrase && (
+                  <blockquote className="p-3 bg-amber-50/60 border-l-4 border-amber-500 rounded-r-2xl text-xs font-serif italic text-amber-950">
+                    {aiPreview.destaqueFrase}
+                  </blockquote>
+                )}
+
+                {/* 🪄 SEÇÃO DE ACRÉSCIMO DE TEXTO COM IA */}
+                <div className="bg-gradient-to-br from-indigo-50/80 via-slate-50/70 to-purple-50/50 rounded-2xl p-3.5 border border-indigo-200/90 shadow-2xs space-y-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center shadow-2xs">
+                        <MessageSquarePlus className="w-3.5 h-3.5" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-black text-indigo-950 uppercase tracking-tight">
+                          Acrescentar Mais Informações à Matéria com IA
+                        </h4>
+                        <p className="text-[10px] text-slate-500 font-medium">
+                          Envie novos fatos, declarações ou dados. A IA irá reescrever e integrar tudo perfeitamente à matéria.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Feedback de sucesso */}
+                  {appendFeedback && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="p-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center gap-2 shadow-2xs"
+                    >
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>{appendFeedback}</span>
+                    </motion.div>
+                  )}
+
+                  {/* Textarea para novas informações */}
+                  <div className="space-y-1.5">
+                    <textarea
+                      value={additionalAiPrompt}
+                      onChange={e => setAdditionalAiPrompt(e.target.value)}
+                      placeholder="Ex: O Prefeito Ailton destacou que as obras começam nesta sexta-feira com investimento próprio, atendendo a uma reivindicação histórica da comunidade..."
+                      className="w-full p-2.5 rounded-xl border border-indigo-200/80 bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none text-xs font-medium text-slate-800 placeholder:text-slate-400 transition-all resize-none min-h-[70px] shadow-inner"
+                    />
+
+                    {/* Atalhos Rápidos para inspiração */}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[9px] font-black uppercase text-slate-400">Sugestões rápidas:</span>
+                      {[
+                        'Adicionar declaração de autoridade presente',
+                        'Incluir prazos e datas de entrega',
+                        'Destacar impacto direto para a população'
+                      ].map(sug => (
+                        <button
+                          key={sug}
+                          type="button"
+                          onClick={() => {
+                            setAdditionalAiPrompt(prev => prev ? `${prev} ${sug}: ` : `${sug}: `);
+                          }}
+                          className="px-2 py-0.5 bg-white hover:bg-indigo-100/70 border border-indigo-200 text-indigo-900 rounded-lg text-[9.5px] font-bold transition-all cursor-pointer shadow-2xs"
+                        >
+                          + {sug}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Botão de Ação para Acrescentar */}
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-[10px] text-slate-400">Preserva menções oficiais e o limite de caracteres</span>
+                    <button
+                      type="button"
+                      onClick={handleAppendTextWithAI}
+                      disabled={isAppendingAI || !additionalAiPrompt.trim()}
+                      className="px-4 py-2 bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl text-xs font-black transition-all flex items-center gap-2 shadow-sm shadow-indigo-600/30 cursor-pointer disabled:opacity-50 active:scale-95 shrink-0"
+                    >
+                      {isAppendingAI ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Integrando Novos Fatos com IA...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-3.5 h-3.5" />
+                          <span>Acrescentar à Matéria com IA</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Rodapé do Modal */}
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-between shrink-0">
+                <span className="text-[11px] text-slate-400 font-medium hidden sm:inline-block">
+                  Assessoria de Comunicação Institucional Oficial
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowAiPreviewModal(false)}
+                    className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black cursor-pointer transition-colors shadow-xs"
+                  >
+                    Confirmar & Fechar Prévia
+                  </button>
+                </div>
+              </div>
+
+            </motion.div>
           </div>
         )}
       </AnimatePresence>

@@ -29,7 +29,9 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  CalendarDays
+  CalendarDays,
+  MessageSquarePlus,
+  Send
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../../services/supabaseClient';
@@ -261,6 +263,9 @@ export const EventModal: React.FC<Props> = ({
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [aiPreview, setAiPreview] = useState<GeneratedMateriaJornal | null>(null);
   const [showAiPreviewModal, setShowAiPreviewModal] = useState(false);
+  const [additionalAiPrompt, setAdditionalAiPrompt] = useState<string>('');
+  const [isAppendingAI, setIsAppendingAI] = useState<boolean>(false);
+  const [appendFeedback, setAppendFeedback] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Invites & Pessoas Envolvidas (Admin/Entidades)
@@ -539,6 +544,45 @@ export const EventModal: React.FC<Props> = ({
       setErrorMessage(err.message || 'Erro ao gerar matéria com IA.');
     } finally {
       setIsGeneratingAI(false);
+    }
+  };
+
+  const handleAppendTextWithAI = async () => {
+    if (!additionalAiPrompt.trim()) return;
+    if (!title.trim()) {
+      setErrorMessage('Informe o título do registro antes de complementar a matéria com IA.');
+      return;
+    }
+
+    setIsAppendingAI(true);
+    setAppendFeedback(null);
+    setErrorMessage(null);
+
+    try {
+      const pessoasParaIA = getPessoasEnvolvidasData();
+      const generated = await generateMateriaJornalWithAI({
+        titulo: title,
+        tipoEvento: type,
+        dataInicio: startDate,
+        dataFim: endDate,
+        horaInicio: isAllDay ? undefined : startTime,
+        horaFim: isAllDay ? undefined : endTime,
+        descricao: description,
+        setor: sector,
+        pessoas: pessoasParaIA,
+        materiaAtual: aiPreview || undefined,
+        textoComplementar: additionalAiPrompt.trim()
+      });
+
+      setAiPreview(generated);
+      setAdditionalAiPrompt('');
+      setAppendFeedback('✨ Novos fatos incorporados e matéria enriquecida com sucesso!');
+      setTimeout(() => setAppendFeedback(null), 6000);
+    } catch (err: any) {
+      console.warn('Erro ao acrescentar texto com IA:', err);
+      setErrorMessage(err.message || 'Erro ao incorporar novo texto com a IA.');
+    } finally {
+      setIsAppendingAI(false);
     }
   };
 
@@ -1732,7 +1776,7 @@ export const EventModal: React.FC<Props> = ({
 
         </motion.div>
 
-        {/* Modal de Prévia da Matéria Gerada por IA */}
+        {/* Modal de Prévia da Matéria Gerada por IA com Acréscimo Inteligente */}
         {showAiPreviewModal && aiPreview && (
           <div className="fixed inset-0 z-[2700] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in">
             <div className="bg-white rounded-[2rem] p-6 sm:p-8 max-w-2xl w-full space-y-4 shadow-2xl border border-slate-200 max-h-[85vh] overflow-y-auto custom-scrollbar font-serif">
@@ -1779,6 +1823,60 @@ export const EventModal: React.FC<Props> = ({
                   {aiPreview.destaqueFrase}
                 </blockquote>
               )}
+
+              {/* 🪄 SEÇÃO DE ACRÉSCIMO DE TEXTO COM IA */}
+              <div className="bg-gradient-to-br from-indigo-50/80 via-slate-50/70 to-purple-50/50 rounded-2xl p-4 border border-indigo-200/90 shadow-2xs space-y-2.5 font-sans">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center shadow-2xs">
+                    <MessageSquarePlus className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-black text-indigo-950 uppercase tracking-tight">
+                      Acrescentar Mais Informações à Matéria com IA
+                    </h4>
+                    <p className="text-[10px] text-slate-500 font-medium">
+                      Envie novos fatos ou declarações. A IA irá reescrever e integrar tudo perfeitamente à matéria.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Feedback */}
+                {appendFeedback && (
+                  <div className="p-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>{appendFeedback}</span>
+                  </div>
+                )}
+
+                <textarea
+                  value={additionalAiPrompt}
+                  onChange={e => setAdditionalAiPrompt(e.target.value)}
+                  placeholder="Ex: O Prefeito Ailton destacou a relevância desta conquista para a cidade e ressaltou que novas entregas ocorrerão em breve..."
+                  className="w-full p-2.5 rounded-xl border border-indigo-200 bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none text-xs font-medium text-slate-800 placeholder:text-slate-400 transition-all resize-none min-h-[65px]"
+                />
+
+                <div className="flex items-center justify-between pt-0.5">
+                  <span className="text-[10px] text-slate-400">Preserva menções oficiais e o limite de caracteres</span>
+                  <button
+                    type="button"
+                    onClick={handleAppendTextWithAI}
+                    disabled={isAppendingAI || !additionalAiPrompt.trim()}
+                    className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl text-xs font-black transition-all flex items-center gap-2 shadow-xs cursor-pointer disabled:opacity-50 active:scale-95 shrink-0"
+                  >
+                    {isAppendingAI ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Integrando com IA...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>Acrescentar à Matéria com IA</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
 
               <div className="pt-3 border-t border-slate-100 flex items-center justify-between font-sans">
                 <span className="text-xs text-slate-400 font-semibold">
