@@ -708,6 +708,30 @@ export const updateProcedimento = async (id: string, updates: Partial<ConsultaPr
 
 export const deleteProcedimento = async (id: string): Promise<boolean> => {
     try {
+        // 1. Limpar dependências em cascata (vagas vinculadas ao procedimento)
+        const { error: vagasError } = await supabase
+            .from('consultas_vagas')
+            .delete()
+            .eq('procedimento_id', id);
+
+        if (vagasError) {
+            console.warn('[consultasService] Aviso ao remover vagas vinculadas na exclusão:', vagasError.message);
+        }
+
+        // 2. Limpar dependências em cascata (agendamentos vinculados ao procedimento)
+        const { error: agendamentosError } = await supabase
+            .from('consultas_agendamentos')
+            .delete()
+            .eq('procedimento_id', id);
+
+        if (agendamentosError) {
+            console.warn('[consultasService] Aviso ao remover agendamentos vinculados na exclusão:', agendamentosError.message);
+        }
+
+        // 3. Limpar mapeamento local de especialista
+        saveProcEspecialistaMapping(id, null);
+
+        // 4. Excluir o procedimento da tabela consultas_procedimentos
         const { error, count } = await supabase
             .from('consultas_procedimentos')
             .delete({ count: 'exact' })
@@ -717,13 +741,17 @@ export const deleteProcedimento = async (id: string): Promise<boolean> => {
         if (count === 0) {
             throw new Error('Nenhum registro foi excluído. Verifique se o registro existe.');
         }
+
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('consultas-procedimentos-changed'));
+            window.dispatchEvent(new CustomEvent('consultas-vagas-changed'));
+            window.dispatchEvent(new CustomEvent('consultas-agendamentos-changed'));
+        }
+
         return true;
     } catch (error: any) {
         const appError = handleSupabaseError(error);
         console.error('[consultasService] deleteProcedimento Error:', appError.message);
-        if (error.code === '23503') {
-            throw new Error('Não é possível excluir este procedimento pois existem vagas ou agendamentos vinculados a ele.');
-        }
         throw appError;
     }
 };
