@@ -314,6 +314,9 @@ export const getPacienteHistory = async (pacienteId: string): Promise<ConsultaAg
 // --- PROFISSIONAIS ESPECIALISTAS ---
 
 const ESPECIALISTA_STORAGE_KEY = 'consultas_especialistas_cache';
+const PROC_ESPECIALISTA_STORAGE_KEY = 'consultas_proc_especialista_map';
+
+let memProcEspecialistaMap: Record<string, string> = {};
 
 export const getCachedEspecialistas = (): ConsultaEspecialista[] => {
     if (typeof window === 'undefined') return [];
@@ -334,20 +337,13 @@ export const saveCachedEspecialistas = (list: ConsultaEspecialista[]) => {
 
 export const getEspecialistas = async (onlyActive: boolean = false): Promise<ConsultaEspecialista[]> => {
     try {
+        // 1. Tenta buscar da tabela nativa do Supabase
         let { data, error } = await supabase
             .from('consultas_especialistas')
             .select('*')
             .order('nome', { ascending: true });
 
-        if (error) {
-            let cached = getCachedEspecialistas();
-            if (onlyActive) {
-                cached = cached.filter(e => e.status === 'Ativo');
-            }
-            return cached.sort((a, b) => a.nome.localeCompare(b.nome));
-        }
-
-        if (data) {
+        if (!error && data && data.length > 0) {
             saveCachedEspecialistas(data);
             if (onlyActive) {
                 data = data.filter((e: ConsultaEspecialista) => e.status === 'Ativo');
@@ -355,7 +351,43 @@ export const getEspecialistas = async (onlyActive: boolean = false): Promise<Con
             return data;
         }
 
-        return getCachedEspecialistas();
+        // 2. Se a tabela não existir ou estiver vazia, busca do repositório centralizado de configurações no Supabase
+        const { data: orgData } = await supabase
+            .from('organization_settings')
+            .select('ui_config')
+            .eq('id', 'global_config')
+            .maybeSingle();
+
+        if (orgData?.ui_config) {
+            const orgEspecialistas = orgData.ui_config.consultas_especialistas;
+            const orgMappings = orgData.ui_config.consultas_proc_especialistas;
+
+            if (orgMappings && typeof orgMappings === 'object') {
+                memProcEspecialistaMap = { ...memProcEspecialistaMap, ...orgMappings };
+                if (typeof window !== 'undefined') {
+                    try {
+                        const localRaw = localStorage.getItem(PROC_ESPECIALISTA_STORAGE_KEY);
+                        const localMap = localRaw ? JSON.parse(localRaw) : {};
+                        localStorage.setItem(PROC_ESPECIALISTA_STORAGE_KEY, JSON.stringify({ ...orgMappings, ...localMap }));
+                    } catch {}
+                }
+            }
+
+            if (Array.isArray(orgEspecialistas) && orgEspecialistas.length > 0) {
+                saveCachedEspecialistas(orgEspecialistas);
+                let list = orgEspecialistas;
+                if (onlyActive) {
+                    list = list.filter((e: ConsultaEspecialista) => e.status === 'Ativo');
+                }
+                return list.sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+            }
+        }
+
+        let cached = getCachedEspecialistas();
+        if (onlyActive) {
+            cached = cached.filter(e => e.status === 'Ativo');
+        }
+        return cached.sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
     } catch (error) {
         let cached = getCachedEspecialistas();
         if (onlyActive) {
@@ -391,13 +423,14 @@ export const createEspecialista = async (especialista: Omit<ConsultaEspecialista
             status: especialista.status || 'Ativo'
         };
 
+        let created: ConsultaEspecialista;
+
         let { data, error } = await supabase
             .from('consultas_especialistas')
             .insert([payload])
             .select()
             .single();
 
-        let created: ConsultaEspecialista;
         if (error || !data) {
             created = {
                 id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `esp-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
@@ -405,14 +438,37 @@ export const createEspecialista = async (especialista: Omit<ConsultaEspecialista
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString()
             };
-            const list = getCachedEspecialistas();
-            list.push(created);
-            saveCachedEspecialistas(list);
         } else {
             created = data;
-            const list = getCachedEspecialistas().filter(e => e.id !== created.id);
-            list.push(created);
-            saveCachedEspecialistas(list);
+        }
+
+        const list = getCachedEspecialistas().filter(e => e.id !== created.id);
+        list.push(created);
+        saveCachedEspecialistas(list);
+
+        // Sincroniza no Supabase organization_settings
+        try {
+            const { data: orgData } = await supabase
+                .from('organization_settings')
+                .select('ui_config')
+                .eq('id', 'global_config')
+                .maybeSingle();
+
+            const currentUiConfig = orgData?.ui_config || {};
+            const orgList = (currentUiConfig.consultas_especialistas || []).filter((e: any) => e.id !== created.id);
+            orgList.push(created);
+
+            await supabase
+                .from('organization_settings')
+                .update({
+                    ui_config: {
+                        ...currentUiConfig,
+                        consultas_especialistas: orgList
+                    }
+                })
+                .eq('id', 'global_config');
+        } catch (orgErr) {
+            console.warn('[consultasService] Erro ao sincronizar especialista com organization_settings:', orgErr);
         }
 
         if (typeof window !== 'undefined') {
@@ -434,6 +490,8 @@ export const updateEspecialista = async (id: string, updates: Partial<ConsultaEs
         if (cleanUpdates.especialidade) cleanUpdates.especialidade = cleanUpdates.especialidade.trim().toUpperCase();
         if (cleanUpdates.grupo) cleanUpdates.grupo = cleanUpdates.grupo.trim().toUpperCase();
 
+        let updated: ConsultaEspecialista;
+
         let { data, error } = await supabase
             .from('consultas_especialistas')
             .update(cleanUpdates)
@@ -441,21 +499,44 @@ export const updateEspecialista = async (id: string, updates: Partial<ConsultaEs
             .select()
             .single();
 
-        let updated: ConsultaEspecialista;
         if (error || !data) {
             const list = getCachedEspecialistas();
             const idx = list.findIndex(e => e.id === id);
             if (idx > -1) {
                 list[idx] = { ...list[idx], ...cleanUpdates };
                 updated = list[idx];
-                saveCachedEspecialistas(list);
             } else {
                 updated = { id, ...cleanUpdates } as ConsultaEspecialista;
             }
         } else {
             updated = data;
-            const list = getCachedEspecialistas().map(e => e.id === id ? updated : e);
-            saveCachedEspecialistas(list);
+        }
+
+        const list = getCachedEspecialistas().map(e => e.id === id ? updated : e);
+        saveCachedEspecialistas(list);
+
+        // Sincroniza no Supabase organization_settings
+        try {
+            const { data: orgData } = await supabase
+                .from('organization_settings')
+                .select('ui_config')
+                .eq('id', 'global_config')
+                .maybeSingle();
+
+            const currentUiConfig = orgData?.ui_config || {};
+            const orgList = (currentUiConfig.consultas_especialistas || []).map((e: any) => e.id === id ? { ...e, ...cleanUpdates } : e);
+
+            await supabase
+                .from('organization_settings')
+                .update({
+                    ui_config: {
+                        ...currentUiConfig,
+                        consultas_especialistas: orgList
+                    }
+                })
+                .eq('id', 'global_config');
+        } catch (orgErr) {
+            console.warn('[consultasService] Erro ao sincronizar update de especialista no Supabase:', orgErr);
         }
 
         if (typeof window !== 'undefined') {
@@ -490,6 +571,35 @@ export const deleteEspecialista = async (id: string): Promise<boolean> => {
         const list = getCachedEspecialistas().filter(e => e.id !== id);
         saveCachedEspecialistas(list);
 
+        // Sincroniza no Supabase organization_settings
+        try {
+            const { data: orgData } = await supabase
+                .from('organization_settings')
+                .select('ui_config')
+                .eq('id', 'global_config')
+                .maybeSingle();
+
+            const currentUiConfig = orgData?.ui_config || {};
+            const orgList = (currentUiConfig.consultas_especialistas || []).filter((e: any) => e.id !== id);
+            const orgMap = { ...(currentUiConfig.consultas_proc_especialistas || {}) };
+            Object.keys(orgMap).forEach(procId => {
+                if (orgMap[procId] === id) delete orgMap[procId];
+            });
+
+            await supabase
+                .from('organization_settings')
+                .update({
+                    ui_config: {
+                        ...currentUiConfig,
+                        consultas_especialistas: orgList,
+                        consultas_proc_especialistas: orgMap
+                    }
+                })
+                .eq('id', 'global_config');
+        } catch (orgErr) {
+            console.warn('[consultasService] Erro ao sincronizar delete de especialista no Supabase:', orgErr);
+        }
+
         if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('consultas-especialistas-changed', { detail: { id } }));
         }
@@ -502,32 +612,73 @@ export const deleteEspecialista = async (id: string): Promise<boolean> => {
     }
 };
 
-// --- MAPEAMENTO LOCAL RESILIENTE: PROCEDIMENTO <-> ESPECIALISTA ---
-const PROC_ESPECIALISTA_STORAGE_KEY = 'consultas_proc_especialista_map';
+// --- MAPEAMENTO CENTRALIZADO: PROCEDIMENTO <-> ESPECIALISTA ---
 
 export const getProcEspecialistaMapping = (procId?: string | null): string | null => {
-    if (!procId || typeof window === 'undefined') return null;
-    try {
-        const raw = localStorage.getItem(PROC_ESPECIALISTA_STORAGE_KEY);
-        const map: Record<string, string> = raw ? JSON.parse(raw) : {};
-        return map[procId] || null;
-    } catch {
-        return null;
+    if (!procId) return null;
+    if (memProcEspecialistaMap[procId]) return memProcEspecialistaMap[procId];
+    if (typeof window !== 'undefined') {
+        try {
+            const raw = localStorage.getItem(PROC_ESPECIALISTA_STORAGE_KEY);
+            const map: Record<string, string> = raw ? JSON.parse(raw) : {};
+            return map[procId] || null;
+        } catch {
+            return null;
+        }
     }
+    return null;
 };
 
 export const saveProcEspecialistaMapping = (procId: string, especialistaId?: string | null) => {
-    if (!procId || typeof window === 'undefined') return;
-    try {
-        const raw = localStorage.getItem(PROC_ESPECIALISTA_STORAGE_KEY);
-        const map: Record<string, string> = raw ? JSON.parse(raw) : {};
-        if (especialistaId) {
-            map[procId] = especialistaId;
-        } else {
-            delete map[procId];
+    if (!procId) return;
+    if (especialistaId) {
+        memProcEspecialistaMap[procId] = especialistaId;
+    } else {
+        delete memProcEspecialistaMap[procId];
+    }
+    if (typeof window !== 'undefined') {
+        try {
+            const raw = localStorage.getItem(PROC_ESPECIALISTA_STORAGE_KEY);
+            const map: Record<string, string> = raw ? JSON.parse(raw) : {};
+            if (especialistaId) {
+                map[procId] = especialistaId;
+            } else {
+                delete map[procId];
+            }
+            localStorage.setItem(PROC_ESPECIALISTA_STORAGE_KEY, JSON.stringify(map));
+        } catch {}
+    }
+
+    // Sincroniza assincronamente com o Supabase
+    (async () => {
+        try {
+            const { data: orgData } = await supabase
+                .from('organization_settings')
+                .select('ui_config')
+                .eq('id', 'global_config')
+                .maybeSingle();
+
+            const currentUiConfig = orgData?.ui_config || {};
+            const currentMap = { ...(currentUiConfig.consultas_proc_especialistas || {}) };
+            if (especialistaId) {
+                currentMap[procId] = especialistaId;
+            } else {
+                delete currentMap[procId];
+            }
+
+            await supabase
+                .from('organization_settings')
+                .update({
+                    ui_config: {
+                        ...currentUiConfig,
+                        consultas_proc_especialistas: currentMap
+                    }
+                })
+                .eq('id', 'global_config');
+        } catch (syncErr) {
+            console.warn('[consultasService] Aviso ao salvar mapping no Supabase:', syncErr);
         }
-        localStorage.setItem(PROC_ESPECIALISTA_STORAGE_KEY, JSON.stringify(map));
-    } catch {}
+    })();
 };
 
 /**
