@@ -46,7 +46,8 @@ import {
   Move,
   RotateCcw,
   Check,
-  Plus
+  Plus,
+  Pencil
 } from 'lucide-react';
 
 interface NoticiasModuleProps {
@@ -176,6 +177,7 @@ interface NewsCardItemProps {
   isAdmin: boolean;
   prefeituraLogoUrl?: string;
   onOpen: (mat: JornalMateria) => void;
+  onEditar?: (mat: JornalMateria, e: React.MouseEvent) => void;
   onAprovar: (id: string, e: React.MouseEvent) => void;
   onDownload: (mat: JornalMateria, e: React.MouseEvent) => void;
   onToggleDestaque: (id: string, e: React.MouseEvent) => void;
@@ -190,6 +192,7 @@ const NewsCardItem = React.memo<NewsCardItemProps>(({
   isAdmin,
   prefeituraLogoUrl,
   onOpen,
+  onEditar,
   onAprovar,
   onDownload,
   onToggleDestaque,
@@ -327,9 +330,19 @@ const NewsCardItem = React.memo<NewsCardItemProps>(({
             </button>
           )}
 
-          {/* Ações Exclusivas do Administrador: Destaque, Ocultar e Excluir */}
+          {/* Ações Exclusivas do Administrador: Editar, Destaque, Ocultar e Excluir */}
           {isAdmin && (
             <>
+              {/* Botão Editar Matéria (Título e Texto) */}
+              <button
+                type="button"
+                onClick={(e) => onEditar?.(mat, e)}
+                className="p-2 rounded-xl text-slate-600 bg-white border border-slate-200 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200 transition-all flex items-center justify-center cursor-pointer active:scale-95 shadow-2xs"
+                title="Editar título e texto da matéria (Administrador)"
+              >
+                <Pencil className="w-4 h-4 text-slate-600 hover:text-indigo-600" />
+              </button>
+
               {/* Botão Colocar/Remover Destaque Principal */}
               <button
                 type="button"
@@ -426,6 +439,13 @@ export const NoticiasModule: React.FC<NoticiasModuleProps> = ({
   const [posicaoAjusteX, setPosicaoAjusteX] = useState<number>(50);
   const [posicaoAjusteY, setPosicaoAjusteY] = useState<number>(50);
   const [salvandoPosicao, setSalvandoPosicao] = useState<boolean>(false);
+
+  // Modal de Edição de Matéria (Título, Subtítulo e Texto) - Exclusivo Administrador
+  const [materiaParaEditar, setMateriaParaEditar] = useState<JornalMateria | null>(null);
+  const [editTitulo, setEditTitulo] = useState<string>('');
+  const [editSubtitulo, setEditSubtitulo] = useState<string>('');
+  const [editConteudo, setEditConteudo] = useState<string>('');
+  const [salvandoEdicao, setSalvandoEdicao] = useState<boolean>(false);
   
   // Datas para seleção
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
@@ -656,6 +676,78 @@ export const NoticiasModule: React.FC<NoticiasModuleProps> = ({
       setSalvandoPosicao(false);
     }
   }, [materiaAjusteImagem, posicaoAjusteX, posicaoAjusteY, materiaAberta]);
+
+  // Abrir Edição de Matéria (Exclusivo Administrador)
+  const handleAbrirEdicao = useCallback((mat: JornalMateria, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!isAdmin) {
+      showNotification('Apenas Administradores podem editar matérias.');
+      return;
+    }
+    setMateriaParaEditar(mat);
+    setEditTitulo(mat.titulo || '');
+    setEditSubtitulo(mat.subtitulo || '');
+    setEditConteudo(mat.conteudo || '');
+  }, [isAdmin]);
+
+  // Salvar Edição de Matéria (Título, Subtítulo e Texto)
+  const handleSalvarEdicao = useCallback(async () => {
+    if (!materiaParaEditar) return;
+    if (!editTitulo.trim()) {
+      showNotification('O título da matéria não pode ficar vazio.');
+      return;
+    }
+    if (!editConteudo.trim()) {
+      showNotification('O texto da matéria não pode ficar vazio.');
+      return;
+    }
+
+    setSalvandoEdicao(true);
+    try {
+      const ok = await noticiasService.editarMateria(materiaParaEditar.id, {
+        titulo: editTitulo.trim(),
+        subtitulo: editSubtitulo.trim(),
+        conteudo: editConteudo.trim()
+      });
+
+      if (ok) {
+        const updatedTitulo = editTitulo.trim();
+        const updatedSubtitulo = editSubtitulo.trim();
+        const updatedConteudo = editConteudo.trim();
+
+        setMateriasPublicadas(prev => prev.map(m => {
+          if (m.id === materiaParaEditar.id || (materiaParaEditar.eventoId && m.eventoId === materiaParaEditar.eventoId)) {
+            return {
+              ...m,
+              titulo: updatedTitulo,
+              subtitulo: updatedSubtitulo,
+              conteudo: updatedConteudo
+            };
+          }
+          return m;
+        }));
+
+        if (materiaAberta && (materiaAberta.id === materiaParaEditar.id || materiaAberta.eventoId === materiaParaEditar.eventoId)) {
+          setMateriaAberta(prev => prev ? {
+            ...prev,
+            titulo: updatedTitulo,
+            subtitulo: updatedSubtitulo,
+            conteudo: updatedConteudo
+          } : null);
+        }
+
+        showNotification('✅ Matéria atualizada com sucesso!');
+        setMateriaParaEditar(null);
+      } else {
+        showNotification('Erro ao salvar as alterações da matéria.');
+      }
+    } catch (err) {
+      console.error('Erro ao salvar edição:', err);
+      showNotification('Erro ao processar a atualização da matéria.');
+    } finally {
+      setSalvandoEdicao(false);
+    }
+  }, [materiaParaEditar, editTitulo, editSubtitulo, editConteudo, materiaAberta]);
 
   // Excluir Matéria (Exclusivo Administrador)
   const handleExcluirMateria = useCallback(async (id: string, e: React.MouseEvent) => {
@@ -1068,20 +1160,35 @@ export const NoticiasModule: React.FC<NoticiasModuleProps> = ({
                             </div>
                           )}
 
-                          {/* Botão para Administrador ajustar o enquadramento da foto */}
+                          {/* Botões para Administrador: Ajustar Foto e Editar Matéria */}
                           {isAdmin && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleAbrirAjusteImagem(materiaDestaqueCapa);
-                              }}
-                              className="absolute bottom-3 left-3 z-20 px-3 py-1.5 rounded-xl bg-slate-900/85 hover:bg-slate-950 backdrop-blur-md text-white text-xs font-bold font-sans flex items-center gap-1.5 shadow-md border border-white/20 transition-all active:scale-95 cursor-pointer"
-                              title="Ajustar enquadramento e posição da foto de destaque"
-                            >
-                              <Sliders className="w-3.5 h-3.5 text-amber-400" />
-                              <span>Ajustar Foto</span>
-                            </button>
+                            <div className="absolute bottom-3 left-3 z-20 flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleAbrirAjusteImagem(materiaDestaqueCapa);
+                                }}
+                                className="px-3 py-1.5 rounded-xl bg-slate-900/85 hover:bg-slate-950 backdrop-blur-md text-white text-xs font-bold font-sans flex items-center gap-1.5 shadow-md border border-white/20 transition-all active:scale-95 cursor-pointer"
+                                title="Ajustar enquadramento e posição da foto de destaque"
+                              >
+                                <Sliders className="w-3.5 h-3.5 text-amber-400" />
+                                <span>Ajustar Foto</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleAbrirEdicao(materiaDestaqueCapa, e);
+                                }}
+                                className="px-3 py-1.5 rounded-xl bg-indigo-900/85 hover:bg-indigo-950 backdrop-blur-md text-white text-xs font-bold font-sans flex items-center gap-1.5 shadow-md border border-white/20 transition-all active:scale-95 cursor-pointer"
+                                title="Editar título e texto da matéria de capa"
+                              >
+                                <Pencil className="w-3.5 h-3.5 text-indigo-300" />
+                                <span>Editar Matéria</span>
+                              </button>
+                            </div>
                           )}
                         </div>
                       )}
@@ -1234,6 +1341,7 @@ export const NoticiasModule: React.FC<NoticiasModuleProps> = ({
                         isAdmin={isAdmin}
                         prefeituraLogoUrl={prefeituraLogoUrl}
                         onOpen={handleOpenMateria}
+                        onEditar={handleAbrirEdicao}
                         onAprovar={handleAprovarMateria}
                         onDownload={handleDownloadImediato}
                         onToggleDestaque={handleToggleDestaqueMateria}
@@ -1599,6 +1707,18 @@ export const NoticiasModule: React.FC<NoticiasModuleProps> = ({
                   </button>
                 )}
 
+                {/* Botão de Edição de Matéria no Modal (Exclusivo Administrador) */}
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => handleAbrirEdicao(materiaAberta)}
+                    className="p-2 rounded-xl bg-white text-slate-600 border border-slate-200 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 transition-all flex items-center justify-center cursor-pointer active:scale-95 shadow-2xs"
+                    title="Editar título e texto desta matéria (Administrador)"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                )}
+
                 {/* Botão Baixar Imagem Story 1080x1920 (Apenas para matérias aprovadas e publicadas) */}
                 {materiaAberta.aprovada !== false && materiaAberta.status !== 'pendente' && (
                   <button
@@ -1736,6 +1856,18 @@ export const NoticiasModule: React.FC<NoticiasModuleProps> = ({
                   <span>Imprimir</span>
                 </button>
 
+                {/* Botão Editar Matéria para Administrador */}
+                {isAdmin && (
+                  <button
+                    onClick={() => handleAbrirEdicao(materiaAberta)}
+                    className="px-4 py-2.5 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer shadow-xs border bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100"
+                    title="Editar título e texto da matéria"
+                  >
+                    <Pencil className="w-4 h-4 text-indigo-600" />
+                    <span>Editar Matéria</span>
+                  </button>
+                )}
+
                 {/* Botão Baixar em Formato de Story Vertical PNG 1080x1920 (Apenas se aprovada e publicada) */}
                 {materiaAberta.aprovada !== false && materiaAberta.status !== 'pendente' ? (
                   <button
@@ -1781,6 +1913,166 @@ export const NoticiasModule: React.FC<NoticiasModuleProps> = ({
               >
                 Fechar Leitura
               </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 3.1 MODAL DE EDIÇÃO DE MATÉRIA (TÍTULO E TEXTO) - EXCLUSIVO ADMINISTRADOR */}
+      {/* ========================================================================= */}
+      {materiaParaEditar && isAdmin && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-200 font-sans">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-3xl w-full border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
+            
+            {/* Topo do Modal */}
+            <div className="p-4 sm:p-5 bg-gradient-to-r from-slate-900 to-indigo-950 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center text-indigo-300 border border-white/10 shadow-inner">
+                  <Pencil className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-black tracking-tight flex items-center gap-2">
+                    Editar Matéria Jornalística
+                    <span className="px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[10px] font-black uppercase">
+                      Admin
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-300">
+                    Altere a manchete (título), o subtítulo/lead e o texto completo da matéria oficial
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setMateriaParaEditar(null)}
+                className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer"
+                title="Fechar sem salvar"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Formulário de Edição */}
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-5 custom-scrollbar font-sans">
+              
+              {/* Informações da matéria */}
+              <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-indigo-50/60 rounded-2xl border border-indigo-100 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded bg-indigo-600 text-white font-black text-[10px] uppercase">
+                    {materiaParaEditar.categoria || 'NOTÍCIA OFICIAL'}
+                  </span>
+                  <span className="text-slate-600 font-semibold">
+                    Publicado em {new Date(materiaParaEditar.dataPublicacao).toLocaleDateString('pt-BR')}
+                  </span>
+                </div>
+                <span className="text-slate-500 font-medium text-[11px]">
+                  Autor: <strong>{materiaParaEditar.autor}</strong>
+                </span>
+              </div>
+
+              {/* Campo 1: Título / Manchete Principal */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+                  <label htmlFor="edit-materia-titulo" className="flex items-center gap-1.5">
+                    <Newspaper className="w-4 h-4 text-indigo-600" />
+                    Título da Matéria (Manchete Principal) *
+                  </label>
+                  <span className="text-[11px] text-slate-400 font-mono">
+                    {editTitulo.length} caracteres
+                  </span>
+                </div>
+                <input
+                  id="edit-materia-titulo"
+                  type="text"
+                  value={editTitulo}
+                  onChange={(e) => setEditTitulo(e.target.value)}
+                  placeholder="Digite o título ou manchete da matéria..."
+                  className="w-full px-4 py-3 rounded-2xl bg-white border-2 border-slate-200 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-100 outline-none text-slate-900 font-serif font-black text-base sm:text-lg transition-all"
+                />
+              </div>
+
+              {/* Campo 2: Subtítulo / Lead */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+                  <label htmlFor="edit-materia-subtitulo" className="flex items-center gap-1.5">
+                    <FileText className="w-4 h-4 text-indigo-600" />
+                    Subtítulo / Lead (Linha Fina da Matéria)
+                  </label>
+                  <span className="text-[11px] text-slate-400 font-mono">
+                    {editSubtitulo.length} caracteres
+                  </span>
+                </div>
+                <textarea
+                  id="edit-materia-subtitulo"
+                  rows={2}
+                  value={editSubtitulo}
+                  onChange={(e) => setEditSubtitulo(e.target.value)}
+                  placeholder="Resumo introdutório ou linha fina que sintetiza a matéria..."
+                  className="w-full px-4 py-2.5 rounded-2xl bg-white border-2 border-slate-200 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-100 outline-none text-slate-800 font-serif text-sm italic transition-all resize-none"
+                />
+              </div>
+
+              {/* Campo 3: Texto da Matéria (Corpo Completo) */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+                  <label htmlFor="edit-materia-conteudo" className="flex items-center gap-1.5">
+                    <FileText className="w-4 h-4 text-indigo-600" />
+                    Texto da Matéria (Corpo Completo) *
+                  </label>
+                  <span className="text-[11px] text-slate-400 font-mono">
+                    {editConteudo.trim() ? editConteudo.trim().split(/\s+/).length : 0} palavras • {editConteudo.length} caracteres
+                  </span>
+                </div>
+                <textarea
+                  id="edit-materia-conteudo"
+                  rows={10}
+                  value={editConteudo}
+                  onChange={(e) => setEditConteudo(e.target.value)}
+                  placeholder="Escreva ou edite o texto completo da matéria..."
+                  className="w-full px-4 py-3 rounded-2xl bg-white border-2 border-slate-200 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-100 outline-none text-slate-800 font-serif text-sm leading-relaxed transition-all resize-y custom-scrollbar"
+                />
+              </div>
+
+            </div>
+
+            {/* Rodapé do Modal com Ações */}
+            <div className="p-4 sm:p-5 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3 font-sans">
+              <span className="text-xs text-slate-500 font-medium">
+                * Campos obrigatórios
+              </span>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setMateriaParaEditar(null)}
+                  disabled={salvandoEdicao}
+                  className="px-4 py-2.5 rounded-xl text-xs font-bold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleSalvarEdicao}
+                  disabled={salvandoEdicao}
+                  className="px-6 py-2.5 rounded-xl text-xs font-black bg-indigo-600 hover:bg-indigo-700 text-white shadow-md transition-all active:scale-95 flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  {salvandoEdicao ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Salvando Alterações...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4" />
+                      <span>Salvar Alterações</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
 
           </div>

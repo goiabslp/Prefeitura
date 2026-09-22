@@ -114,6 +114,48 @@ export const getSemanasDoMes = (year: number, monthZeroIndexed: number): SemanaP
 let materiasMemoryCache: { data: import('../types').JornalMateria[]; timestamp: number } | null = null;
 
 const EXCLUDED_MATERIAS_STORAGE_KEY = 'prefeitura_materias_excluidas_v1';
+const EDITED_MATERIAS_STORAGE_KEY = 'prefeitura_materias_edicoes_v1';
+
+export interface MateriaCustomEdit {
+  id: string;
+  titulo?: string;
+  subtitulo?: string;
+  conteudo?: string;
+  updatedAt?: string;
+}
+
+export const getCustomEdits = (): Record<string, MateriaCustomEdit> => {
+  try {
+    const raw = localStorage.getItem(EDITED_MATERIAS_STORAGE_KEY);
+    if (!raw) return {};
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+};
+
+export const saveCustomEdit = (id: string, updates: { titulo?: string; subtitulo?: string; conteudo?: string }, eventId?: string) => {
+  try {
+    const edits = getCustomEdits();
+    const editObj: MateriaCustomEdit = {
+      id,
+      titulo: updates.titulo,
+      subtitulo: updates.subtitulo,
+      conteudo: updates.conteudo,
+      updatedAt: new Date().toISOString()
+    };
+    edits[id] = editObj;
+    if (eventId) {
+      edits[eventId] = { ...editObj, id: eventId };
+      edits[`materia_evt_${eventId}`] = { ...editObj, id: `materia_evt_${eventId}` };
+    }
+    if (id && id.startsWith('materia_evt_')) {
+      const plainId = id.replace('materia_evt_', '');
+      edits[plainId] = { ...editObj, id: plainId };
+    }
+    localStorage.setItem(EDITED_MATERIAS_STORAGE_KEY, JSON.stringify(edits));
+  } catch (e) {}
+};
 
 export const getExcludedMateriaIds = (): Set<string> => {
   try {
@@ -968,6 +1010,98 @@ export const noticiasService = {
   },
 
   /**
+   * Atualiza o título (manchete), subtítulo/lead e o texto completo da matéria (Exclusivo Administrador)
+   */
+  async editarMateria(id: string, updates: { titulo: string; subtitulo?: string; conteudo: string }): Promise<boolean> {
+    try {
+      let eventId = id.startsWith('materia_evt_') ? id.replace('materia_evt_', '') : '';
+      if (!eventId && materiasMemoryCache?.data) {
+        const mat = materiasMemoryCache.data.find(m => m.id === id);
+        if (mat?.eventoId) {
+          eventId = mat.eventoId;
+        }
+      }
+
+      // Aplica menção contextualizada ao Prefeito se necessário
+      const conteudoAjustado = aplicarMencaoObrigatoriaPrefeito(updates.conteudo, {
+        titulo: updates.titulo
+      });
+
+      const finalUpdates = {
+        titulo: updates.titulo.trim(),
+        subtitulo: updates.subtitulo !== undefined ? updates.subtitulo.trim() : undefined,
+        conteudo: conteudoAjustado.trim()
+      };
+
+      // 1. Salva no storage local para sincronização instantânea
+      saveCustomEdit(id, finalUpdates, eventId);
+
+      // 2. Atualiza no cache de memória local imediatamente
+      if (materiasMemoryCache?.data) {
+        const target = materiasMemoryCache.data.find(m => m.id === id || (eventId && m.eventoId === eventId));
+        if (target) {
+          target.titulo = finalUpdates.titulo;
+          if (finalUpdates.subtitulo !== undefined) target.subtitulo = finalUpdates.subtitulo;
+          target.conteudo = finalUpdates.conteudo;
+        }
+      }
+
+      // 3. Persiste no Supabase calendar_events se for vinculado a evento
+      const targetEventId = eventId || (id.startsWith('materia_evt_') ? id.replace('materia_evt_', '') : '');
+      if (targetEventId) {
+        try {
+          const { data: evt } = await supabase
+            .from('calendar_events')
+            .select('id, title, description, start_date, start_time, type')
+            .eq('id', targetEventId)
+            .single();
+
+          if (evt) {
+            const meta = deserializeEventMetadata(evt.description);
+            const currentMateriaData = meta.materia_data || {};
+            const newDesc = serializeEventMetadata(meta.cleanDescription, {
+              ...meta,
+              publish_to_news: true,
+              materia_data: {
+                ...currentMateriaData,
+                manchete: finalUpdates.titulo,
+                subtitulo: finalUpdates.subtitulo ?? currentMateriaData.subtitulo,
+                corpo: finalUpdates.conteudo
+              }
+            });
+
+            // Tenta atualizar title e description no calendar_events
+            await supabase.from('calendar_events').update({
+              title: finalUpdates.titulo,
+              description: newDesc
+            }).eq('id', targetEventId);
+          }
+        } catch (calErr) {
+          console.warn('Erro ao salvar edição em calendar_events:', calErr);
+        }
+      }
+
+      // 4. Persiste na tabela jornal_materias se existir
+      try {
+        await (supabase as any)
+          .from('jornal_materias')
+          .update({
+            titulo: finalUpdates.titulo,
+            subtitulo: finalUpdates.subtitulo,
+            conteudo: finalUpdates.conteudo
+          })
+          .eq('id', id);
+      } catch (tableErr) {}
+
+      invalidateMateriasCache();
+      return true;
+    } catch (err) {
+      console.error('Erro ao editar matéria:', err);
+      return false;
+    }
+  },
+
+  /**
    * Recupera todas as matérias jornalísticas publicadas diretamente do banco de dados (Supabase)
    * Visível e compartilhado para todos os usuários em tempo real com cache em memória
    */
@@ -980,6 +1114,7 @@ export const noticiasService = {
 
       const map = new Map<string, import('../types').JornalMateria>();
       const excludedIds = getExcludedMateriaIds();
+      const customEdits = getCustomEdits();
 
       // 1. Busca todas as matérias cadastradas na tabela jornal_materias do Supabase (se existir)
       const isJornalMateriasEnabled = false;
@@ -1000,11 +1135,16 @@ export const noticiasService = {
                 ? (localStorage.getItem(`noticias_img_pos_${d.id}`) || (d.evento_id ? localStorage.getItem(`noticias_img_pos_${d.evento_id}`) : null))
                 : null;
 
+              const edit = customEdits[d.id] || (d.evento_id ? customEdits[d.evento_id] : undefined);
+              const tit = edit?.titulo || d.titulo;
+              const sub = edit?.subtitulo !== undefined ? edit.subtitulo : d.subtitulo;
+              const con = edit?.conteudo || d.conteudo;
+
               map.set(d.id, {
                 id: d.id,
-                titulo: d.titulo,
-                subtitulo: d.subtitulo,
-                conteudo: d.conteudo,
+                titulo: tit,
+                subtitulo: sub,
+                conteudo: con,
                 categoria: d.categoria,
                 dataPublicacao: d.data_publicacao || d.created_at,
                 dataEvento: d.data_evento,
@@ -1083,11 +1223,19 @@ export const noticiasService = {
               : (existingMat?.aprovada !== undefined ? !!existingMat.aprovada : false);
             const statusFinal = isAprovadaFinal ? 'publicada' : 'pendente';
 
-            const tituloFinal = matData?.manchete || evt.title;
-            const subtituloFinal = matData?.subtitulo || (cleanDesc ? cleanDesc.slice(0, 140) : `Cobertura oficial do evento ${evt.title} realizado no município de São José do Goiabal.`);
-            const conteudoFinal = matData?.corpo || cleanDesc || `A Prefeitura Municipal de São José do Goiabal informa a realização do evento ${evt.title}. As ações contam com ampla participação e acompanhamento público da comunidade.`;
+            let tituloFinal = matData?.manchete || evt.title;
+            let subtituloFinal = matData?.subtitulo || (cleanDesc ? cleanDesc.slice(0, 140) : `Cobertura oficial do evento ${evt.title} realizado no município de São José do Goiabal.`);
+            let conteudoFinal = matData?.corpo || cleanDesc || `A Prefeitura Municipal de São José do Goiabal informa a realização do evento ${evt.title}. As ações contam com ampla participação e acompanhamento público da comunidade.`;
             const destaqueFraseFinal = matData?.destaqueFrase || undefined;
             const categoriaFinal = matData?.categoria || sec || evt.type || 'EVENTO & COMUNIDADE';
+
+            // Aplica custom edits se existirem
+            const edit = customEdits[matId] || customEdits[evt.id];
+            if (edit) {
+              if (edit.titulo) tituloFinal = edit.titulo;
+              if (edit.subtitulo !== undefined) subtituloFinal = edit.subtitulo;
+              if (edit.conteudo) conteudoFinal = edit.conteudo;
+            }
 
             const posLocalEvt = typeof localStorage !== 'undefined'
               ? (localStorage.getItem(`noticias_img_pos_${matId}`) || localStorage.getItem(`noticias_img_pos_${evt.id}`))
@@ -1120,9 +1268,9 @@ export const noticiasService = {
             } else {
               map.set(existingMat.id, {
                 ...existingMat,
-                titulo: existingMat.titulo || tituloFinal,
-                subtitulo: existingMat.subtitulo || subtituloFinal,
-                conteudo: existingMat.conteudo || conteudoFinal,
+                titulo: tituloFinal || existingMat.titulo,
+                subtitulo: subtituloFinal !== undefined ? subtituloFinal : existingMat.subtitulo,
+                conteudo: conteudoFinal || existingMat.conteudo,
                 destaqueFrase: existingMat.destaqueFrase || destaqueFraseFinal,
                 imagemUrl: imagemFinal,
                 imagemPosicao: imagemPosicaoFinal || existingMat.imagemPosicao,
