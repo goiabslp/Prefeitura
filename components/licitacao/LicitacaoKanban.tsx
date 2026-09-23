@@ -1179,7 +1179,37 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, u
         const finalizados = processesByPhase['contrato_ata']?.length || 0;
         const urgentes = filteredProcesses.filter(p => p.prioridade === 'Urgente' || (p.prioridade as string) === 'Alta' || (p.prioridade as string) === 'Urgência').length;
 
-        return { total, urgentes, emAndamento, finalizados };
+        // Processos em andamento (excluindo finalizados 'contrato_ata', cancelados, arquivados, rejeitados)
+        const inProgressProcesses = filteredProcesses.filter(p => {
+            const rawPhase = (p.fase || 'pendente').toLowerCase().trim();
+            const st = (p.status || '').toLowerCase().trim();
+            const isFinalized = rawPhase === 'contrato_ata' || rawPhase === 'finalizado' || rawPhase === 'concluido' || st === 'finalizado' || st === 'concluído' || st === 'rejeitado' || st === 'cancelado' || st === 'arquivado';
+            return !isFinalized;
+        });
+
+        const now = new Date();
+        const tDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+        let sumDays = 0;
+        let count = 0;
+
+        inProgressProcesses.forEach(p => {
+            if (p.criado_em) {
+                const createdDate = new Date(p.criado_em);
+                if (!isNaN(createdDate.getTime())) {
+                    const cDate = new Date(createdDate.getFullYear(), createdDate.getMonth(), createdDate.getDate());
+                    const diffTime = Math.max(0, tDate.getTime() - cDate.getTime());
+                    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+                    sumDays += diffDays;
+                    count++;
+                }
+            }
+        });
+
+        const tempoMedioAtual = count > 0 ? Math.round(sumDays / count) : 0;
+        const tempoIdeal = 45;
+
+        return { total, urgentes, emAndamento, finalizados, tempoMedioAtual, tempoIdeal };
     }, [filteredProcesses, processesByPhase]);
 
     const handleMovePhase = async (processId: string, newPhaseId: string) => {
@@ -1931,6 +1961,18 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, u
                             <div className="bg-emerald-50 border border-emerald-200/80 px-3 py-1 2xl:px-4 2xl:py-2 rounded-xl text-center min-w-[65px]">
                                 <span className="text-[9px] 2xl:text-xs font-extrabold uppercase text-emerald-600/80 block tracking-wider">Finalizados</span>
                                 <span className="text-sm 2xl:text-xl font-black text-emerald-700">{stats.finalizados}</span>
+                            </div>
+
+                            {/* TEMPO MÉDIO ATUAL */}
+                            <div className="bg-indigo-50/80 border border-indigo-200/90 px-3 py-1 2xl:px-4 2xl:py-2 rounded-xl text-center min-w-[85px] shadow-2xs">
+                                <span className="text-[9px] 2xl:text-xs font-extrabold uppercase text-indigo-600/90 block tracking-wider whitespace-nowrap">Tempo Médio Atual</span>
+                                <span className="text-sm 2xl:text-xl font-black text-indigo-900 block whitespace-nowrap">{stats.tempoMedioAtual} {stats.tempoMedioAtual === 1 ? 'dia' : 'dias'}</span>
+                            </div>
+
+                            {/* TEMPO IDEAL */}
+                            <div className="bg-emerald-50/80 border border-emerald-200/90 px-3 py-1 2xl:px-4 2xl:py-2 rounded-xl text-center min-w-[75px] shadow-2xs">
+                                <span className="text-[9px] 2xl:text-xs font-extrabold uppercase text-emerald-600/90 block tracking-wider whitespace-nowrap">Tempo Ideal</span>
+                                <span className="text-sm 2xl:text-xl font-black text-emerald-900 block whitespace-nowrap">{stats.tempoIdeal} dias</span>
                             </div>
 
                             <button

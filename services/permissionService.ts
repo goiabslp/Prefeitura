@@ -459,7 +459,16 @@ export const MODULE_ACCESS_TREE: ModuleItemDefinition[] = [
     legacyKeys: ['frotas'],
     label: 'Frotas',
     description: 'Gestão cadastral de veículos municipais, manutenções e seguros',
-    routes: ['/Frota'],
+    routes: [
+      '/Frota',
+      '/Frota/Novo',
+      '/Frota/Novo/Geral',
+      '/Frota/Novo/Tecnico',
+      '/Frota/Novo/Alocacao',
+      '/Frota/Novo/Manutencao',
+      '/Frota/Novo/Documentos',
+      '/Frota/Cadastrar'
+    ],
     iconName: 'Truck',
     submodules: [
       {
@@ -543,7 +552,7 @@ export const MODULE_ACCESS_TREE: ModuleItemDefinition[] = [
         legacyKeys: ['parent_admin_entidades'],
         label: 'Entidades',
         description: 'Gestão de secretarias, departamentos e órgãos vinculados',
-        routes: ['/Admin/Entidades']
+        routes: ['/Admin/Entidades', '/Admin/Entidades/Pessoas', '/Admin/Entidades/Setores', '/Admin/Entidades/Cargos']
       },
       {
         key: 'sub_admin_assinaturas',

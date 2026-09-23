@@ -7,10 +7,10 @@ import { useSystemSettings } from '../contexts/SystemSettingsContext';
 import {
   Plus, Search, Edit2, Trash2, Save, X,
   Car, Truck, Wrench, CheckCircle2, Trash, Info,
-  MapPin, Hash, Palette, Calendar, Layers, Network, ChevronDown, Check,
+  MapPin, Hash, Palette, Calendar, Layers, Network, ChevronDown, ChevronRight, ChevronLeft, Check,
   PenTool, Upload, FileText, Eye, Download, FileCheck, Camera, Image as ImageIcon,
-  ArrowLeft, Fuel, Gauge, ShieldCheck, Activity, AlertTriangle, Hammer, ClipboardCheck,
-  ShieldAlert, User, Briefcase, Tag, Flame, Droplets, Crop, Scissors
+  ArrowLeft, ArrowRight, Fuel, Gauge, ShieldCheck, Activity, AlertTriangle, Hammer, ClipboardCheck,
+  ShieldAlert, User, Briefcase, Tag, Flame, Droplets, Crop, Scissors, Sparkles, Settings
 } from 'lucide-react';
 import { ImageCropModal } from './common/ImageCropModal';
 
@@ -27,6 +27,24 @@ interface FleetManagementScreenProps {
   onBack: () => void;
   onFetchDetails?: (id: string) => Promise<Vehicle | null>;
 }
+
+export type VehicleFormTab = 'geral' | 'tecnico' | 'alocacao' | 'manutencao' | 'documentos';
+
+export const FORM_TABS: {
+  id: VehicleFormTab;
+  label: string;
+  shortLabel: string;
+  subtitle: string;
+  icon: any;
+  path: string;
+  step: number;
+}[] = [
+  { id: 'geral', label: 'Identificação & Foto', shortLabel: 'Identificação', subtitle: 'Dados Básicos e Fotografia', icon: Car, path: '/Frota/Novo/Geral', step: 1 },
+  { id: 'tecnico', label: 'Técnico & Consumo', shortLabel: 'Técnico', subtitle: 'Combustível, KM/L e Chassi', icon: Fuel, path: '/Frota/Novo/Tecnico', step: 2 },
+  { id: 'alocacao', label: 'Lotação & Gestão', shortLabel: 'Lotação', subtitle: 'Setor, Condutor e Gestores', icon: Network, path: '/Frota/Novo/Alocacao', step: 3 },
+  { id: 'manutencao', label: 'Manutenção Preventiva', shortLabel: 'Manutenção', subtitle: 'Troca de Óleo e Correia', icon: Gauge, path: '/Frota/Novo/Manutencao', step: 4 },
+  { id: 'documentos', label: 'Documentos & Anexos', shortLabel: 'Documentos', subtitle: 'CRLV, Seguros e Anexos', icon: FileText, path: '/Frota/Novo/Documentos', step: 5 },
+];
 
 const Gavel = ({ className }: { className?: string }) => (
   <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m14.5 12.5-8 8a2.11 2.11 0 1 1-3-3l8-8" /><path d="m16 16 2 2" /><path d="m19 13 2 2" /><path d="m5 5 2 2" /><path d="m2 8 2 2" /><path d="m15 7 3 3-4 4-3-3z" /></svg>
@@ -91,6 +109,7 @@ export const FleetManagementScreen: React.FC<FleetManagementScreenProps> = ({
 
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [activeModalTab, setActiveModalTab] = useState<VehicleFormTab>('geral');
   const [isBrandModalOpen, setIsBrandModalOpen] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [viewingVehicleStatus, setViewingVehicleStatus] = useState<Vehicle | null>(null);
@@ -161,8 +180,30 @@ export const FleetManagementScreen: React.FC<FleetManagementScreenProps> = ({
     currentKm: undefined,
     oilLastChange: undefined,
     oilNextChange: undefined,
-    oilCalculationBase: 5000
+    oilCalculationBase: 5000,
+    timingBeltCalculationBase: 50000
   });
+
+  // Alternar abas principais da tela com atualização de URL
+  const handleMainTabChange = (tabId: VehicleType | 'dashboard') => {
+    setActiveTab(tabId);
+    setSearchTerm('');
+    if (!isModalOpen) {
+      if (tabId === 'dashboard') window.history.pushState({}, '', '/Frota/Dashboard');
+      else if (tabId === 'leve') window.history.pushState({}, '', '/Frota/Leve');
+      else if (tabId === 'pesado') window.history.pushState({}, '', '/Frota/Pesada');
+      else if (tabId === 'acessorio') window.history.pushState({}, '', '/Frota/Acessorios');
+    }
+  };
+
+  // Alternar abas do modal com atualização de URL
+  const changeModalTab = (tabId: VehicleFormTab) => {
+    setActiveModalTab(tabId);
+    const tabConfig = FORM_TABS.find(t => t.id === tabId);
+    if (tabConfig && window.location.pathname.toLowerCase().startsWith('/frota')) {
+      window.history.pushState({}, '', tabConfig.path);
+    }
+  };
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -178,19 +219,17 @@ export const FleetManagementScreen: React.FC<FleetManagementScreenProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleOpenModal = async (v?: Vehicle) => {
-    if (v) {
-      if (v.id && (!v.documentUrl || !v.vehicleImageUrl) && isModalOpen === false) {
-        // Lazy load if missing details
-        if (onBack && typeof onBack === 'function') { // Check props existence (dummy check)
-        }
-      }
+  const handleOpenModal = async (v?: Vehicle, initialTab?: VehicleFormTab) => {
+    const targetTab = initialTab || 'geral';
+    setActiveModalTab(targetTab);
+    const tabConfig = FORM_TABS.find(t => t.id === targetTab);
+    if (tabConfig && window.location.pathname.toLowerCase().startsWith('/frota')) {
+      window.history.pushState({}, '', tabConfig.path);
+    }
 
-      // Check if we need to fetch details
+    if (v) {
       let fullVehicle = v;
       if (onFetchDetails && (!v.documentUrl || !v.vehicleImageUrl)) {
-        // Show loading or something?
-        // For now, let's just await. Ideally we'd have a loading state.
         const fetched = await onFetchDetails(v.id);
         if (fetched) fullVehicle = fetched;
       }
@@ -205,8 +244,17 @@ export const FleetManagementScreen: React.FC<FleetManagementScreenProps> = ({
       });
       setMaxKmlInput(fullVehicle.maxKml ? fullVehicle.maxKml.toString().replace('.', ',') : '');
       setMinKmlInput(fullVehicle.minKml ? fullVehicle.minKml.toString().replace('.', ',') : '');
+
+      try {
+        const docs = await fleetService.getVehicleDocuments(fullVehicle.id);
+        setVehicleDocuments(docs || []);
+      } catch (err) {
+        console.error("Erro ao carregar documentos:", err);
+        setVehicleDocuments([]);
+      }
     } else {
       setEditingVehicle(null);
+      setVehicleDocuments([]);
       setFormData({
         type: activeTab === 'dashboard' ? 'leve' : activeTab,
         model: '',
@@ -230,7 +278,8 @@ export const FleetManagementScreen: React.FC<FleetManagementScreenProps> = ({
         currentKm: undefined,
         oilLastChange: undefined,
         oilNextChange: undefined,
-        oilCalculationBase: 5000
+        oilCalculationBase: 5000,
+        timingBeltCalculationBase: 50000
       });
       setMaxKmlInput('');
       setMinKmlInput('');
@@ -245,6 +294,67 @@ export const FleetManagementScreen: React.FC<FleetManagementScreenProps> = ({
     setIsBrandDropdownOpen(false);
     setIsModalOpen(true);
   };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    if (window.location.pathname.toLowerCase().startsWith('/frota/novo') || window.location.pathname.toLowerCase().startsWith('/frota/cadastrar')) {
+      window.history.pushState({}, '', '/Frota');
+    }
+  };
+
+  // Detecção de Rota Inicial para abrir o modal de cadastro ou selecionar aba principal
+  useEffect(() => {
+    const path = window.location.pathname.toLowerCase();
+    if (path.startsWith('/frota/novo') || path.startsWith('/frota/cadastrar')) {
+      let tab: VehicleFormTab = 'geral';
+      if (path.includes('tecnico')) tab = 'tecnico';
+      else if (path.includes('alocacao') || path.includes('lotacao')) tab = 'alocacao';
+      else if (path.includes('manutencao')) tab = 'manutencao';
+      else if (path.includes('documentos') || path.includes('anexo')) tab = 'documentos';
+
+      if (!isModalOpen) {
+        handleOpenModal(undefined, tab);
+      } else {
+        setActiveModalTab(tab);
+      }
+    } else if (path === '/frota/dashboard' && isDashboardActive) {
+      setActiveTab('dashboard');
+    } else if (path === '/frota/leve' && isLeveActive) {
+      setActiveTab('leve');
+    } else if ((path === '/frota/pesada' || path === '/frota/pesado') && isPesadoActive) {
+      setActiveTab('pesado');
+    } else if ((path === '/frota/acessorios' || path === '/frota/acessorio') && isAcessorioActive) {
+      setActiveTab('acessorio');
+    }
+  }, [isDashboardActive, isLeveActive, isPesadoActive, isAcessorioActive]);
+
+  // Sincronização com Botões de Navegação do Navegador (Voltar / Avançar)
+  useEffect(() => {
+    const handlePopState = () => {
+      const path = window.location.pathname.toLowerCase();
+      if (path.startsWith('/frota/novo') || path.startsWith('/frota/cadastrar')) {
+        let tab: VehicleFormTab = 'geral';
+        if (path.includes('tecnico')) tab = 'tecnico';
+        else if (path.includes('alocacao') || path.includes('lotacao')) tab = 'alocacao';
+        else if (path.includes('manutencao')) tab = 'manutencao';
+        else if (path.includes('documentos') || path.includes('anexo')) tab = 'documentos';
+        setIsModalOpen(true);
+        setActiveModalTab(tab);
+      } else if (isModalOpen && !path.startsWith('/frota/novo') && !path.startsWith('/frota/cadastrar')) {
+        setIsModalOpen(false);
+      } else if (path === '/frota/dashboard' && isDashboardActive) {
+        setActiveTab('dashboard');
+      } else if (path === '/frota/leve' && isLeveActive) {
+        setActiveTab('leve');
+      } else if ((path === '/frota/pesada' || path === '/frota/pesado') && isPesadoActive) {
+        setActiveTab('pesado');
+      } else if ((path === '/frota/acessorios' || path === '/frota/acessorio') && isAcessorioActive) {
+        setActiveTab('acessorio');
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [isModalOpen, isDashboardActive, isLeveActive, isPesadoActive, isAcessorioActive]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -344,8 +454,14 @@ export const FleetManagementScreen: React.FC<FleetManagementScreenProps> = ({
   };
 
   const handleSave = () => {
-    if (!formData.model || !formData.plate || !formData.sectorId) {
-      alert("Por favor, preencha o modelo, a placa e o setor do veículo.");
+    if (!formData.model?.trim() || !formData.plate?.trim()) {
+      changeModalTab('geral');
+      alert("Por favor, preencha o Modelo e a Placa de Identificação do veículo na aba Identificação.");
+      return;
+    }
+    if (!formData.sectorId) {
+      changeModalTab('alocacao');
+      alert("Por favor, selecione o Setor de Lotação do veículo na aba Lotação & Gestão.");
       return;
     }
 
@@ -356,7 +472,7 @@ export const FleetManagementScreen: React.FC<FleetManagementScreenProps> = ({
     } as Vehicle;
 
     editingVehicle ? onUpdateVehicle(vehicleData) : onAddVehicle(vehicleData);
-    setIsModalOpen(false);
+    handleCloseModal();
   };
 
   const filteredVehicles = vehicles.filter(v =>
@@ -483,8 +599,8 @@ export const FleetManagementScreen: React.FC<FleetManagementScreenProps> = ({
   return (
     <>
       <div className="flex-1 bg-slate-50 font-sans flex flex-col overflow-hidden animate-fade-in">
-        {/* Header Full-Width */}
-        <div className="bg-white border-b border-slate-200 px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0 shadow-sm relative z-20">
+        {/* Header Desktop (hidden no mobile) */}
+        <div className="hidden md:flex bg-white border-b border-slate-200 px-6 py-4 flex-row items-center justify-between gap-4 shrink-0 shadow-sm relative z-20">
           <div className="flex items-center gap-6">
             <button
               onClick={onBack}
@@ -518,8 +634,45 @@ export const FleetManagementScreen: React.FC<FleetManagementScreenProps> = ({
           )}
         </div>
 
-        {/* Área de Filtros e Categorias */}
-        <div className="bg-white/50 backdrop-blur-md px-6 py-4 border-b border-slate-200 shrink-0 flex flex-col md:flex-row gap-4 items-center justify-between sticky top-0 z-10">
+        {/* Header Mobile (visível apenas no mobile) */}
+        <div className="flex md:hidden flex-col bg-white border-b border-slate-200 px-4 py-3 shrink-0 shadow-sm relative z-20 gap-3">
+          <div className="flex items-center justify-between gap-3">
+            <button
+              onClick={onBack}
+              className="p-2 -ml-1 text-slate-500 hover:text-indigo-600 rounded-xl bg-slate-50 hover:bg-indigo-50 border border-slate-200/80 flex items-center justify-center transition-all active:scale-95 shrink-0"
+              title="Voltar aos Módulos"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+
+            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+              <div className="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-100/80 text-indigo-600 flex items-center justify-center shrink-0 shadow-xs">
+                <Truck className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-sm font-black text-slate-900 tracking-tight leading-none uppercase truncate">
+                  Gestão de Frotas
+                </h2>
+                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block truncate mt-0.5">
+                  Controle Patrimonial
+                </span>
+              </div>
+            </div>
+
+            {availableTabs.length > 0 && (
+              <button
+                onClick={() => handleOpenModal()}
+                className="px-3.5 py-2 bg-gradient-to-r from-indigo-600 to-indigo-700 active:scale-95 text-white font-black rounded-xl shadow-md shadow-indigo-600/20 flex items-center gap-1.5 uppercase text-[10px] tracking-wider shrink-0 transition-all"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Novo</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Área de Filtros e Categorias Desktop */}
+        <div className="hidden md:flex bg-white/50 backdrop-blur-md px-6 py-4 border-b border-slate-200 shrink-0 flex-row gap-4 items-center justify-between sticky top-0 z-10">
           <div className="flex items-center gap-4">
             <div className="flex bg-white p-1 rounded-2xl border border-slate-200 shadow-sm w-fit gap-1">
               {[
@@ -530,7 +683,7 @@ export const FleetManagementScreen: React.FC<FleetManagementScreenProps> = ({
               ].filter(tab => tab.active).map((tab) => (
                 <button
                   key={tab.id}
-                  onClick={() => { setActiveTab(tab.id as any); setSearchTerm(''); }}
+                  onClick={() => handleMainTabChange(tab.id as any)}
                   className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${activeTab === tab.id ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}
                 >
                   <tab.icon className="w-3.5 h-3.5" /> {tab.label}
@@ -552,13 +705,12 @@ export const FleetManagementScreen: React.FC<FleetManagementScreenProps> = ({
                   <ShieldAlert className="w-3.5 h-3.5" />
                   <span className="text-[10px] font-black uppercase tracking-widest">{oilStats.expired} VENCIDO</span>
                 </div>
-
               </div>
             )}
           </div>
 
-          <div className="flex items-center gap-3 w-full md:w-auto">
-            <div className="relative flex-1 md:w-96 group">
+          <div className="flex items-center gap-3 w-auto">
+            <div className="relative w-96 group">
               <input
                 type="text"
                 placeholder="Placa, Modelo ou Marca..."
@@ -571,7 +723,75 @@ export const FleetManagementScreen: React.FC<FleetManagementScreenProps> = ({
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto custom-scrollbar p-6 md:p-8 bg-slate-50">
+        {/* Área de Filtros e Categorias Mobile */}
+        <div className="flex md:hidden flex-col gap-2.5 px-4 py-2.5 bg-slate-50/95 backdrop-blur-md border-b border-slate-200 shrink-0 sticky top-0 z-10">
+          {/* Carrossel de Abas */}
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 -mx-1 px-1">
+            {[
+              { id: 'dashboard', label: 'Dashboard', icon: Activity, active: isDashboardActive },
+              { id: 'leve', label: 'Leves', icon: Car, active: isLeveActive },
+              { id: 'pesado', label: 'Pesados', icon: Truck, active: isPesadoActive },
+              { id: 'acessorio', label: 'Acessórios', icon: Wrench, active: isAcessorioActive },
+            ].filter(tab => tab.active).map((tab) => {
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => handleMainTabChange(tab.id as any)}
+                  className={`px-3.5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shrink-0 active:scale-95 ${
+                    isActive
+                      ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
+                      : 'bg-white text-slate-600 border border-slate-200/90 hover:bg-slate-50'
+                  }`}
+                >
+                  <tab.icon className={`w-3.5 h-3.5 ${isActive ? 'text-white' : 'text-slate-400'}`} />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Barra de Busca Mobile */}
+          <div className="relative group w-full">
+            <input
+              type="text"
+              placeholder="Placa, modelo, marca ou setor..."
+              className="w-full pl-9 pr-8 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-xs"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 rounded-full"
+                title="Limpar busca"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Badges de Status de Manutenção (Dashboard no Mobile) */}
+          {activeTab === 'dashboard' && (
+            <div className="grid grid-cols-3 gap-1.5 pt-0.5 animate-fade-in">
+              <div className="flex items-center justify-center gap-1 px-2 py-1.5 bg-emerald-50 text-emerald-700 rounded-xl border border-emerald-200/80 shadow-xs">
+                <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+                <span className="text-[9px] font-black uppercase tracking-wider">{oilStats.inDay} EM DIA</span>
+              </div>
+              <div className="flex items-center justify-center gap-1 px-2 py-1.5 bg-amber-50 text-amber-700 rounded-xl border border-amber-200/80 shadow-xs">
+                <AlertTriangle className="w-3 h-3 text-amber-600 shrink-0" />
+                <span className="text-[9px] font-black uppercase tracking-wider">{oilStats.near} PRÓX</span>
+              </div>
+              <div className="flex items-center justify-center gap-1 px-2 py-1.5 bg-rose-50 text-rose-700 rounded-xl border border-rose-200/80 shadow-xs">
+                <ShieldAlert className="w-3 h-3 text-rose-600 shrink-0" />
+                <span className="text-[9px] font-black uppercase tracking-wider">{oilStats.expired} VENC</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-3.5 md:p-8 bg-slate-50">
           <div className="max-w-[1920px] mx-auto">
             {availableTabs.length === 0 ? (
               <div className="py-24 flex flex-col items-center justify-center text-center bg-white rounded-[3rem] border-2 border-dashed border-slate-200/80 max-w-4xl mx-auto shadow-sm">
@@ -583,9 +803,10 @@ export const FleetManagementScreen: React.FC<FleetManagementScreenProps> = ({
               </div>
             ) : activeTab === 'dashboard' ? (
               <div className="animate-fade-in">
-                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
+                {/* Dashboard Desktop Grid (hidden no mobile) */}
+                <div className="hidden md:grid md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
                   {vehicles
-                    .filter(v => v.model.toLowerCase().includes(searchTerm.toLowerCase()) || v.plate.toLowerCase().includes(searchTerm.toLowerCase()))
+                    .filter(v => v.model.toLowerCase().includes(searchTerm.toLowerCase()) || v.plate.toLowerCase().includes(searchTerm.toLowerCase()) || (v.brand && v.brand.toLowerCase().includes(searchTerm.toLowerCase())))
                     .sort((a, b) => {
                       const getDiff = (v: Vehicle) => {
                         const oilDiff = (v.oilNextChange && v.currentKm) ? (v.oilNextChange - v.currentKm) : 1000000;
@@ -602,28 +823,17 @@ export const FleetManagementScreen: React.FC<FleetManagementScreenProps> = ({
                       const getStatus = (remaining: number | null) => {
                         if (remaining === null) return 'slate';
                         if (remaining <= 0) return 'rose';
-                        if (remaining <= 1000) return 'amber'; // Stricter for dashboard visual
+                        if (remaining <= 1000) return 'amber';
                         return 'emerald';
                       };
 
                       const oilStatus = getStatus(oilRemaining);
                       const beltStatus = getStatus(beltRemaining);
 
-                      // Overall card color based on worst status
                       let alertColor = 'emerald';
                       if (oilStatus === 'slate' && beltStatus === 'slate') alertColor = 'slate';
                       else if (oilStatus === 'rose' || beltStatus === 'rose') alertColor = 'rose';
                       else if (oilStatus === 'amber' || beltStatus === 'amber') alertColor = 'amber';
-
-                      // Progress for visual bar (taking the one closest to expiry)
-                      const getProgress = (remaining: number | null, base: number = 5000) => {
-                        if (remaining === null) return 0;
-                        return Math.max(0, Math.min(100, (remaining / base) * 100)); // This logic is inverted visually usually? remaining/base * 100 decreases as we drive. 
-                        // Actually let's just show a simple bar for the worst one.
-                      };
-
-                      // Better visualization: Two mini bars or just the most critical one text?
-                      // Let's list both in the card body.
 
                       return (
                         <div key={v.id}
@@ -685,111 +895,410 @@ export const FleetManagementScreen: React.FC<FleetManagementScreenProps> = ({
                       );
                     })}
                 </div>
+
+                {/* Dashboard Mobile Cards List (md:hidden) */}
+                <div className="flex md:hidden flex-col gap-3">
+                  {vehicles
+                    .filter(v => v.model.toLowerCase().includes(searchTerm.toLowerCase()) || v.plate.toLowerCase().includes(searchTerm.toLowerCase()) || (v.brand && v.brand.toLowerCase().includes(searchTerm.toLowerCase())))
+                    .sort((a, b) => {
+                      const getDiff = (v: Vehicle) => {
+                        const oilDiff = (v.oilNextChange && v.currentKm) ? (v.oilNextChange - v.currentKm) : 1000000;
+                        const beltDiff = (v.timingBeltNextChange && v.currentKm) ? (v.timingBeltNextChange - v.currentKm) : 1000000;
+                        return Math.min(oilDiff, beltDiff);
+                      };
+                      return getDiff(a) - getDiff(b);
+                    })
+                    .map(v => {
+                      const oilRemaining = (v.oilNextChange && v.currentKm) ? (v.oilNextChange - v.currentKm) : null;
+                      const beltRemaining = (v.timingBeltNextChange && v.currentKm) ? (v.timingBeltNextChange - v.currentKm) : null;
+
+                      const getStatus = (remaining: number | null) => {
+                        if (remaining === null) return 'slate';
+                        if (remaining <= 0) return 'rose';
+                        if (remaining <= 1000) return 'amber';
+                        return 'emerald';
+                      };
+
+                      const oilStatus = getStatus(oilRemaining);
+                      const beltStatus = getStatus(beltRemaining);
+
+                      let alertColor = 'emerald';
+                      if (oilStatus === 'slate' && beltStatus === 'slate') alertColor = 'slate';
+                      else if (oilStatus === 'rose' || beltStatus === 'rose') alertColor = 'rose';
+                      else if (oilStatus === 'amber' || beltStatus === 'amber') alertColor = 'amber';
+
+                      const borderColorClass =
+                        alertColor === 'rose' ? 'border-rose-200 ring-1 ring-rose-500/10' :
+                        alertColor === 'amber' ? 'border-amber-200 ring-1 ring-amber-500/10' :
+                        alertColor === 'emerald' ? 'border-emerald-200/90' : 'border-slate-200';
+
+                      const headerBgClass =
+                        alertColor === 'rose' ? 'bg-rose-50/60' :
+                        alertColor === 'amber' ? 'bg-amber-50/60' :
+                        alertColor === 'emerald' ? 'bg-emerald-50/40' : 'bg-slate-50/60';
+
+                      return (
+                        <div
+                          key={v.id}
+                          onClick={() => setViewingVehicleStatus(v)}
+                          className={`bg-white rounded-2xl border ${borderColorClass} shadow-xs overflow-hidden flex flex-col cursor-pointer active:scale-[0.99] transition-all`}
+                        >
+                          {/* Cabeçalho do Card Mobile */}
+                          <div className={`p-3.5 flex items-center justify-between border-b border-slate-100 ${headerBgClass}`}>
+                            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                              <div className={`w-9 h-9 rounded-xl bg-white border border-slate-200/80 text-${alertColor === 'slate' ? 'slate-500' : alertColor + '-600'} flex items-center justify-center shadow-xs shrink-0`}>
+                                {v.type === 'pesado' ? <Truck className="w-4 h-4" /> : v.type === 'acessorio' ? <Wrench className="w-4 h-4" /> : <Car className="w-4 h-4" />}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <h3 className="text-xs font-black text-slate-900 uppercase tracking-tight truncate leading-tight">
+                                  {v.model}
+                                </h3>
+                                <div className="flex items-center gap-1.5 mt-0.5">
+                                  <span className="bg-slate-900 text-white font-mono text-[9px] px-1.5 py-0.5 rounded font-bold tracking-wider shrink-0">
+                                    {v.plate}
+                                  </span>
+                                  {(v.brand || v.year) && (
+                                    <span className="text-[9px] font-bold text-slate-400 uppercase truncate">
+                                      {v.brand} {v.year ? `• ${v.year}` : ''}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleOpenModal(v); }}
+                              className="p-2 text-slate-400 hover:text-indigo-600 bg-white/80 hover:bg-white rounded-xl border border-slate-200/60 transition-all shrink-0 ml-2 shadow-xs active:scale-95"
+                              title="Editar Veículo"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
+                          {/* Corpo do Card Mobile */}
+                          <div className="p-3.5 flex flex-col gap-2.5">
+                            {/* KM Atual */}
+                            <div className="flex justify-between items-center text-[10px] font-bold uppercase tracking-wider pb-2 border-b border-slate-100">
+                              <span className="text-slate-400 flex items-center gap-1">
+                                <Gauge className="w-3.5 h-3.5 text-slate-400" /> KM Atual
+                              </span>
+                              <span className="text-slate-900 font-black text-xs">
+                                {v.currentKm ? `${v.currentKm.toLocaleString('pt-BR')} km` : '---'}
+                              </span>
+                            </div>
+
+                            {/* Status de Óleo */}
+                            <div className="space-y-1">
+                              <div className="flex justify-between items-center text-[9px] font-bold uppercase tracking-wider">
+                                <span className="text-slate-500 flex items-center gap-1">
+                                  <Droplets className="w-3 h-3 text-amber-500" /> Óleo
+                                </span>
+                                <span className={`font-black px-1.5 py-0.5 rounded ${
+                                  oilStatus === 'rose' ? 'bg-rose-100 text-rose-700' :
+                                  oilStatus === 'amber' ? 'bg-amber-100 text-amber-800' :
+                                  oilStatus === 'emerald' ? 'bg-emerald-100 text-emerald-700' :
+                                  'bg-slate-100 text-slate-500'
+                                }`}>
+                                  {oilRemaining !== null ? (oilRemaining <= 0 ? 'VENCIDO' : `${oilRemaining.toLocaleString('pt-BR')} km`) : 'N/A'}
+                                </span>
+                              </div>
+                              <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full transition-all ${
+                                    oilStatus === 'rose' ? 'bg-rose-500' :
+                                    oilStatus === 'amber' ? 'bg-amber-500' :
+                                    oilStatus === 'emerald' ? 'bg-emerald-500' : 'bg-slate-300'
+                                  }`}
+                                  style={{ width: `${oilRemaining !== null ? Math.max(0, Math.min(100, (oilRemaining / (v.oilCalculationBase || 5000)) * 100)) : 0}%` }}
+                                />
+                              </div>
+                            </div>
+
+                            {/* Status de Correia */}
+                            <div className="space-y-1">
+                              <div className="flex justify-between items-center text-[9px] font-bold uppercase tracking-wider">
+                                <span className="text-slate-500 flex items-center gap-1">
+                                  <Activity className="w-3 h-3 text-indigo-500" /> Correia
+                                </span>
+                                <span className={`font-black px-1.5 py-0.5 rounded ${
+                                  beltStatus === 'rose' ? 'bg-rose-100 text-rose-700' :
+                                  beltStatus === 'amber' ? 'bg-amber-100 text-amber-800' :
+                                  beltStatus === 'emerald' ? 'bg-emerald-100 text-emerald-700' :
+                                  'bg-slate-100 text-slate-500'
+                                }`}>
+                                  {beltRemaining !== null ? (beltRemaining <= 0 ? 'VENCIDO' : `${beltRemaining.toLocaleString('pt-BR')} km`) : 'N/A'}
+                                </span>
+                              </div>
+                              <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full transition-all ${
+                                    beltStatus === 'rose' ? 'bg-rose-500' :
+                                    beltStatus === 'amber' ? 'bg-amber-500' :
+                                    beltStatus === 'emerald' ? 'bg-emerald-500' : 'bg-slate-300'
+                                  }`}
+                                  style={{ width: `${beltRemaining !== null ? Math.max(0, Math.min(100, (beltRemaining / (v.timingBeltCalculationBase || 50000)) * 100)) : 0}%` }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6">
-                {filteredVehicles.map(v => {
-                  const statusCfg = getStatusConfig(v.status || 'operacional');
-                  const responsibleName = persons.find(p => p.id === v.responsiblePersonId)?.name || 'Responsável não definido';
-                  return (
-                    <div key={v.id} className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm hover:shadow-xl hover:border-indigo-200 transition-all flex flex-col group overflow-hidden animate-fade-in">
-                      <div className="relative h-48 w-full bg-slate-100 overflow-hidden">
-                        {v.vehicleImageUrl ? (
-                          <img src={v.vehicleImageUrl} alt={v.model} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
-                        ) : (
-                          <div className="w-full h-full flex flex-col items-center justify-center text-slate-300">
-                            {v.type === 'leve' ? <Car className="w-16 h-16 mb-2" /> : v.type === 'pesado' ? <Truck className="w-16 h-16 mb-2" /> : <Wrench className="w-16 h-16 mb-2" />}
-                            <span className="text-[10px] font-black uppercase tracking-widest">Sem Foto</span>
+              <div>
+                {/* Listagem Desktop Grid (hidden no mobile) */}
+                <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6">
+                  {filteredVehicles.map(v => {
+                    const statusCfg = getStatusConfig(v.status || 'operacional');
+                    const responsibleName = persons.find(p => p.id === v.responsiblePersonId)?.name || 'Responsável não definido';
+                    return (
+                      <div key={v.id} className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm hover:shadow-xl hover:border-indigo-200 transition-all flex flex-col group overflow-hidden animate-fade-in">
+                        <div className="relative h-48 w-full bg-slate-100 overflow-hidden">
+                          {v.vehicleImageUrl ? (
+                            <img src={v.vehicleImageUrl} alt={v.model} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
+                          ) : (
+                            <div className="w-full h-full flex flex-col items-center justify-center text-slate-300">
+                              {v.type === 'leve' ? <Car className="w-16 h-16 mb-2" /> : v.type === 'pesado' ? <Truck className="w-16 h-16 mb-2" /> : <Wrench className="w-16 h-16 mb-2" />}
+                              <span className="text-[10px] font-black uppercase tracking-widest">Sem Foto</span>
+                            </div>
+                          )}
+
+                          <div className={`absolute top-4 left-4 flex items-center gap-1.5 px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest border backdrop-blur-md bg-white/90 text-${statusCfg.color}-700 border-${statusCfg.color}-200 shadow-lg`}>
+                            <statusCfg.icon className="w-3 h-3" />
+                            {statusCfg.label}
                           </div>
-                        )}
 
-                        <div className={`absolute top-4 left-4 flex items-center gap-1.5 px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest border backdrop-blur-md bg-white/90 text-${statusCfg.color}-700 border-${statusCfg.color}-200 shadow-lg`}>
-                          <statusCfg.icon className="w-3 h-3" />
-                          {statusCfg.label}
+                          <div className="absolute top-4 right-4 flex items-center gap-2">
+                            <button
+                              onClick={() => handleOpenModal(v)}
+                              className="p-2.5 bg-white/90 backdrop-blur-sm text-slate-600 hover:text-indigo-600 rounded-xl shadow-lg transition-all active:scale-90"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                          </div>
+
+                          {v.documentUrl && (
+                            <button
+                              onClick={() => setViewingDocumentUrl({ url: v.documentUrl!, name: v.documentName || 'documento', type: 'doc' })}
+                              className="absolute bottom-4 right-4 p-2.5 bg-emerald-600 text-white rounded-xl shadow-lg transition-all active:scale-90 hover:bg-emerald-500"
+                              title="Ver Documento"
+                            >
+                              <FileText className="w-4 h-4" />
+                            </button>
+                          )}
+
+                          {v.vehicleImageUrl && (
+                            <button
+                              onClick={() => setViewingDocumentUrl({ url: v.vehicleImageUrl!, name: v.model, type: 'photo' })}
+                              className="absolute bottom-4 left-4 p-2.5 bg-indigo-600/90 backdrop-blur-sm text-white rounded-xl shadow-lg transition-all active:scale-90 hover:bg-indigo-500"
+                              title="Ampliar Foto"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
 
-                        <div className="absolute top-4 right-4 flex items-center gap-2">
+                        <div className="p-6 flex flex-col gap-4">
+                          <div className="min-w-0">
+                            <h3 className="text-lg font-black text-slate-900 leading-tight uppercase tracking-tight truncate">{v.model}</h3>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="bg-slate-900 text-white font-mono text-[9px] px-2 py-0.5 rounded border border-white/10 shadow-sm tracking-[0.15em] shrink-0">{v.plate}</span>
+                              <span className="text-slate-400 text-[10px] font-black uppercase tracking-widest truncate">{v.brand} • {v.year}</span>
+                            </div>
+                            {v.fuelTypes && v.fuelTypes.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-2">
+                                {v.fuelTypes.map(f => (
+                                  <span key={f} className="text-[8px] font-black text-indigo-600 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded uppercase tracking-tighter">{f}</span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="pt-4 border-t border-slate-50 space-y-3">
+                            <div className="flex items-center gap-3">
+                              <div className="p-1.5 bg-slate-50 rounded-lg text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors">
+                                <Network className="w-3.5 h-3.5" />
+                              </div>
+                              <span className="text-[10px] font-black text-slate-600 uppercase tracking-wider leading-tight">
+                                {sectors.find(s => s.id === v.sectorId)?.name || 'Sem Setor'}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <div className="p-1.5 bg-slate-50 rounded-lg text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors">
+                                <User className="w-3.5 h-3.5" />
+                              </div>
+                              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider leading-tight truncate">
+                                {responsibleName}
+                              </span>
+                            </div>
+                          </div>
+
                           <button
-                            onClick={() => handleOpenModal(v)}
-                            className="p-2.5 bg-white/90 backdrop-blur-sm text-slate-600 hover:text-indigo-600 rounded-xl shadow-lg transition-all active:scale-90"
+                            onClick={() => setConfirmModal({
+                              isOpen: true,
+                              title: "Remover Registro",
+                              message: `Deseja realmente excluir o veículo ${v.model} (${v.plate})?`,
+                              type: 'destructive',
+                              confirmLabel: 'Sim, Remover Registro',
+                              onConfirm: () => { onDeleteVehicle(v.id); setConfirmModal({ ...confirmModal, isOpen: false }); }
+                            })}
+                            className="mt-2 w-full py-2 bg-slate-50 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-2"
                           >
-                            <Edit2 className="w-4 h-4" />
+                            <Trash2 className="w-3 h-3" /> Excluir
                           </button>
                         </div>
-
-                        {v.documentUrl && (
-                          <button
-                            onClick={() => setViewingDocumentUrl({ url: v.documentUrl!, name: v.documentName || 'documento', type: 'doc' })}
-                            className="absolute bottom-4 right-4 p-2.5 bg-emerald-600 text-white rounded-xl shadow-lg transition-all active:scale-90 hover:bg-emerald-500"
-                            title="Ver Documento"
-                          >
-                            <FileText className="w-4 h-4" />
-                          </button>
-                        )}
-
-                        {v.vehicleImageUrl && (
-                          <button
-                            onClick={() => setViewingDocumentUrl({ url: v.vehicleImageUrl!, name: v.model, type: 'photo' })}
-                            className="absolute bottom-4 left-4 p-2.5 bg-indigo-600/90 backdrop-blur-sm text-white rounded-xl shadow-lg transition-all active:scale-90 hover:bg-indigo-500"
-                            title="Ampliar Foto"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-                        )}
                       </div>
+                    );
+                  })}
+                </div>
 
-                      <div className="p-6 flex flex-col gap-4">
-                        <div className="min-w-0">
-                          <h3 className="text-lg font-black text-slate-900 leading-tight uppercase tracking-tight truncate">{v.model}</h3>
-                          <div className="flex items-center gap-2 mt-1">
-                            <span className="bg-slate-900 text-white font-mono text-[9px] px-2 py-0.5 rounded border border-white/10 shadow-sm tracking-[0.15em] shrink-0">{v.plate}</span>
-                            <span className="text-slate-400 text-[10px] font-black uppercase tracking-widest truncate">{v.brand} • {v.year}</span>
+                {/* Listagem Mobile Cards (md:hidden) */}
+                <div className="flex md:hidden flex-col gap-3">
+                  {filteredVehicles.map(v => {
+                    const statusCfg = getStatusConfig(v.status || 'operacional');
+                    const responsibleName = persons.find(p => p.id === v.responsiblePersonId)?.name || 'Sem motorista';
+                    const sectorName = sectors.find(s => s.id === v.sectorId)?.name || 'Sem Setor';
+
+                    return (
+                      <div
+                        key={v.id}
+                        className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden flex flex-col transition-all"
+                      >
+                        {/* Topo do Card com Foto e Informações Primárias */}
+                        <div className="p-3.5 flex gap-3 items-start border-b border-slate-100">
+                          {/* Thumbnail da Foto */}
+                          <div className="relative w-16 h-16 rounded-xl bg-slate-100 border border-slate-200/80 overflow-hidden shrink-0 flex items-center justify-center">
+                            {v.vehicleImageUrl ? (
+                              <img
+                                src={v.vehicleImageUrl}
+                                alt={v.model}
+                                className="w-full h-full object-cover cursor-pointer"
+                                onClick={() => setViewingDocumentUrl({ url: v.vehicleImageUrl!, name: v.model, type: 'photo' })}
+                              />
+                            ) : (
+                              <div className="w-full h-full flex flex-col items-center justify-center text-slate-300">
+                                {v.type === 'leve' ? <Car className="w-6 h-6" /> : v.type === 'pesado' ? <Truck className="w-6 h-6" /> : <Wrench className="w-6 h-6" />}
+                              </div>
+                            )}
+                            {v.vehicleImageUrl && (
+                              <button
+                                onClick={() => setViewingDocumentUrl({ url: v.vehicleImageUrl!, name: v.model, type: 'photo' })}
+                                className="absolute bottom-1 right-1 p-1 bg-black/60 rounded-md text-white text-[9px]"
+                                title="Ver foto"
+                              >
+                                <Eye className="w-3 h-3" />
+                              </button>
+                            )}
                           </div>
+
+                          {/* Informações Centrais */}
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-1 mb-1">
+                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-wider bg-${statusCfg.color}-50 text-${statusCfg.color}-700 border border-${statusCfg.color}-200`}>
+                                <statusCfg.icon className="w-2.5 h-2.5" />
+                                {statusCfg.label}
+                              </span>
+                            </div>
+
+                            <h3 className="text-xs font-black text-slate-900 uppercase tracking-tight leading-tight truncate">
+                              {v.model}
+                            </h3>
+
+                            <div className="flex items-center gap-1.5 mt-1">
+                              <span className="bg-slate-900 text-white font-mono text-[9px] px-1.5 py-0.5 rounded font-bold tracking-wider shrink-0">
+                                {v.plate}
+                              </span>
+                              {(v.brand || v.year) && (
+                                <span className="text-[9px] font-bold text-slate-400 uppercase truncate">
+                                  {v.brand} {v.year ? `• ${v.year}` : ''}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Detalhes de Lotação e Combustível */}
+                        <div className="px-3.5 py-2.5 bg-slate-50/50 flex flex-col gap-1.5 text-[10px]">
+                          <div className="flex items-center gap-2 text-slate-600 font-bold truncate">
+                            <Network className="w-3 h-3 text-slate-400 shrink-0" />
+                            <span className="truncate">{sectorName}</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-slate-500 font-medium truncate">
+                            <User className="w-3 h-3 text-slate-400 shrink-0" />
+                            <span className="truncate">{responsibleName}</span>
+                          </div>
+
                           {v.fuelTypes && v.fuelTypes.length > 0 && (
-                            <div className="flex flex-wrap gap-1 mt-2">
+                            <div className="flex flex-wrap gap-1 mt-1 pt-1.5 border-t border-slate-100">
                               {v.fuelTypes.map(f => (
-                                <span key={f} className="text-[8px] font-black text-indigo-600 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded uppercase tracking-tighter">{f}</span>
+                                <span key={f} className="text-[8px] font-black text-indigo-600 bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 rounded uppercase tracking-tighter">
+                                  {f}
+                                </span>
                               ))}
                             </div>
                           )}
                         </div>
 
-                        <div className="pt-4 border-t border-slate-50 space-y-3">
-                          <div className="flex items-center gap-3">
-                            <div className="p-1.5 bg-slate-50 rounded-lg text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors">
-                              <Network className="w-3.5 h-3.5" />
-                            </div>
-                            <span className="text-[10px] font-black text-slate-600 uppercase tracking-wider leading-tight">
-                              {sectors.find(s => s.id === v.sectorId)?.name || 'Sem Setor'}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <div className="p-1.5 bg-slate-50 rounded-lg text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors">
-                              <User className="w-3.5 h-3.5" />
-                            </div>
-                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider leading-tight truncate">
-                              {responsibleName}
-                            </span>
-                          </div>
+                        {/* Rodapé de Ações Mobile */}
+                        <div className="p-2 bg-white border-t border-slate-100 grid grid-cols-12 gap-1.5">
+                          {v.documentUrl ? (
+                            <>
+                              <button
+                                onClick={() => setViewingDocumentUrl({ url: v.documentUrl!, name: v.documentName || 'documento', type: 'doc' })}
+                                className="col-span-3 py-2 px-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-xl font-bold text-[9px] uppercase tracking-wider flex items-center justify-center gap-1 border border-emerald-200 active:scale-95 transition-all"
+                              >
+                                <FileText className="w-3 h-3" /> Doc
+                              </button>
+                              <button
+                                onClick={() => handleOpenModal(v)}
+                                className="col-span-6 py-2 px-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-xl font-bold text-[9px] uppercase tracking-wider flex items-center justify-center gap-1 border border-indigo-200 active:scale-95 transition-all"
+                              >
+                                <Edit2 className="w-3 h-3" /> Editar
+                              </button>
+                              <button
+                                onClick={() => setConfirmModal({
+                                  isOpen: true,
+                                  title: "Remover Registro",
+                                  message: `Deseja realmente excluir o veículo ${v.model} (${v.plate})?`,
+                                  type: 'destructive',
+                                  confirmLabel: 'Sim, Remover Registro',
+                                  onConfirm: () => { onDeleteVehicle(v.id); setConfirmModal({ ...confirmModal, isOpen: false }); }
+                                })}
+                                className="col-span-3 py-2 px-2 bg-rose-50 text-rose-700 hover:bg-rose-100 rounded-xl font-bold text-[9px] uppercase tracking-wider flex items-center justify-center gap-1 border border-rose-200 active:scale-95 transition-all"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => handleOpenModal(v)}
+                                className="col-span-9 py-2 px-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-xl font-bold text-[9px] uppercase tracking-wider flex items-center justify-center gap-1.5 border border-indigo-200 active:scale-95 transition-all"
+                              >
+                                <Edit2 className="w-3 h-3" /> Editar Veículo
+                              </button>
+                              <button
+                                onClick={() => setConfirmModal({
+                                  isOpen: true,
+                                  title: "Remover Registro",
+                                  message: `Deseja realmente excluir o veículo ${v.model} (${v.plate})?`,
+                                  type: 'destructive',
+                                  confirmLabel: 'Sim, Remover Registro',
+                                  onConfirm: () => { onDeleteVehicle(v.id); setConfirmModal({ ...confirmModal, isOpen: false }); }
+                                })}
+                                className="col-span-3 py-2 px-2 bg-rose-50 text-rose-700 hover:bg-rose-100 rounded-xl font-bold text-[9px] uppercase tracking-wider flex items-center justify-center gap-1 border border-rose-200 active:scale-95 transition-all"
+                              >
+                                <Trash2 className="w-3 h-3" /> Excluir
+                              </button>
+                            </>
+                          )}
                         </div>
-
-                        <button
-                          onClick={() => setConfirmModal({
-                            isOpen: true,
-                            title: "Remover Registro",
-                            message: `Deseja realmente excluir o veículo ${v.model} (${v.plate})?`,
-                            type: 'destructive',
-                            confirmLabel: 'Sim, Remover Registro',
-                            onConfirm: () => { onDeleteVehicle(v.id); setConfirmModal({ ...confirmModal, isOpen: false }); }
-                          })}
-                          className="mt-2 w-full py-2 bg-slate-50 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-2"
-                        >
-                          <Trash2 className="w-3 h-3" /> Excluir
-                        </button>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
             )}
 
@@ -807,168 +1316,592 @@ export const FleetManagementScreen: React.FC<FleetManagementScreenProps> = ({
           </div>
         </div>
 
-        {/* MODAL DE CADASTRO/EDIÇÃO */}
+        {/* MODAL DE CADASTRO/EDIÇÃO 100% VIEWPORT COM ABAS CATEGORIZADAS */}
         {
           isModalOpen && createPortal(
-            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-xl animate-fade-in">
-              <div className="bg-white rounded-[3.5rem] shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)] w-full max-w-6xl overflow-hidden flex flex-col animate-slide-up max-h-[95vh] border border-white/20">
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-0 md:p-4 bg-slate-950/80 backdrop-blur-2xl animate-fade-in">
+              <div className="bg-white md:rounded-[2.5rem] shadow-2xl w-full h-full md:max-w-6xl md:max-h-[94vh] overflow-hidden flex flex-col animate-slide-up border border-slate-100 relative">
 
-                <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-white/50 backdrop-blur-sm shrink-0">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-xl shadow-indigo-600/20 rotate-[-4deg]">
-                      {activeTab === 'leve' ? <Car className="w-5 h-5" /> : activeTab === 'pesado' ? <Truck className="w-5 h-5" /> : <Wrench className="w-5 h-5" />}
+                {/* CABEÇALHO MODERNO FIXO */}
+                <div className="px-5 sm:px-8 py-4 border-b border-slate-100 flex justify-between items-center bg-white shrink-0 z-10">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-11 h-11 bg-gradient-to-tr from-indigo-600 to-indigo-500 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-indigo-600/25 shrink-0">
+                      {activeTab === 'leve' ? <Car className="w-6 h-6" /> : activeTab === 'pesado' ? <Truck className="w-6 h-6" /> : <Wrench className="w-6 h-6" />}
                     </div>
                     <div>
-                      <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight leading-none">
-                        {editingVehicle ? 'Perfil do Veículo' : 'Cadastro de Veículo'}
-                      </h3>
-                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.1em] mt-1 flex items-center gap-2">
-                        <Activity className="w-3 h-3 text-indigo-500" /> Detalhamento Técnico
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-lg sm:text-xl font-black text-slate-900 uppercase tracking-tight leading-none">
+                          {editingVehicle ? `Perfil: ${editingVehicle.model}` : 'Cadastro de Veículo'}
+                        </h3>
+                        <span className="hidden sm:inline-flex px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-100">
+                          {FORM_TABS.find(t => t.id === activeModalTab)?.path}
+                        </span>
+                      </div>
+                      <p className="text-[10px] sm:text-[11px] text-slate-500 font-bold uppercase tracking-[0.1em] mt-1 flex items-center gap-1.5">
+                        <Sparkles className="w-3 h-3 text-indigo-500" />
+                        Etapa {FORM_TABS.find(t => t.id === activeModalTab)?.step} de 5 • {FORM_TABS.find(t => t.id === activeModalTab)?.subtitle}
                       </p>
                     </div>
                   </div>
-                  <button onClick={() => setIsModalOpen(false)} className="p-2 bg-slate-50 hover:bg-rose-50 rounded-xl text-slate-400 hover:text-rose-600 transition-all active:scale-90 border border-slate-100"><X className="w-5 h-5" /></button>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleCloseModal}
+                      className="p-2.5 bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-2xl transition-all active:scale-95 border border-slate-100"
+                      title="Fechar"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto custom-scrollbar bg-slate-50/30">
-                  <div className="grid grid-cols-1 lg:grid-cols-12 h-full">
+                {/* BARRA DE NAVEGAÇÃO ENTRE ABAS */}
+                <div className="bg-slate-50/80 border-b border-slate-200/60 px-3 sm:px-8 py-2 flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar shrink-0">
+                  {FORM_TABS.map((tab, idx) => {
+                    const isActive = activeModalTab === tab.id;
+                    const currentIdx = FORM_TABS.findIndex(t => t.id === activeModalTab);
+                    const isDone = idx < currentIdx;
 
-                    <div className="lg:col-span-5 p-6 border-r border-slate-100 bg-white flex flex-col gap-6">
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <label className={labelClass}><Camera className="w-3.5 h-3.5 inline mr-2" /> Fotografia do Veículo</label>
-                          {formData.vehicleImageUrl && (
-                            <div className="flex items-center gap-1.5">
-                              <button
-                                type="button"
-                                onClick={handleOpenCropForCurrentPhoto}
-                                className="text-[10px] font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-1 transition-all active:scale-95 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-lg border border-emerald-200"
-                                title="Recortar Imagem"
-                              >
-                                <Crop className="w-3 h-3" /> Recortar
-                              </button>
-                              <button
-                                type="button"
-                                onClick={handleRemovePhoto}
-                                className="text-[10px] font-bold text-rose-600 hover:text-rose-700 flex items-center gap-1 transition-all active:scale-95 bg-rose-50 hover:bg-rose-100 px-2.5 py-1 rounded-lg border border-rose-200"
-                                title="Excluir Fotografia"
-                              >
-                                <Trash2 className="w-3 h-3" /> Excluir
-                              </button>
-                            </div>
-                          )}
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => changeModalTab(tab.id)}
+                        className={`py-2.5 px-3 sm:px-4 rounded-2xl transition-all duration-200 flex items-center gap-2.5 shrink-0 border text-left ${
+                          isActive
+                            ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/25 border-indigo-600 font-black'
+                            : 'bg-white hover:bg-slate-100/80 text-slate-600 border-slate-200/70 font-bold'
+                        }`}
+                      >
+                        <div className={`w-7 h-7 rounded-xl flex items-center justify-center shrink-0 text-xs font-black transition-colors ${
+                          isActive
+                            ? 'bg-white/20 text-white'
+                            : isDone
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : 'bg-slate-100 text-slate-500'
+                        }`}>
+                          {isDone && !isActive ? <Check className="w-3.5 h-3.5" /> : <tab.icon className="w-3.5 h-3.5" />}
                         </div>
-                        <div
-                          onClick={() => photoInputRef.current?.click()}
-                          className={`relative aspect-[4/3] rounded-[2rem] border-4 border-dashed transition-all cursor-pointer group flex flex-col items-center justify-center overflow-hidden shadow-inner
-                               ${formData.vehicleImageUrl ? 'border-indigo-600 bg-indigo-50/5' : 'border-slate-100 bg-slate-50 hover:border-indigo-400 hover:bg-white'}
-                             `}
-                        >
-                          <input type="file" ref={photoInputRef} onChange={handlePhotoUpload} accept="image/*" className="hidden" />
-                          {formData.vehicleImageUrl ? (
-                            <>
-                              <img src={formData.vehicleImageUrl} alt="Preview" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
-                              <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-3 backdrop-blur-sm p-4">
-                                <div className="flex items-center gap-2 flex-wrap justify-center">
-                                  <button
-                                    type="button"
-                                    onClick={handleOpenCropForCurrentPhoto}
-                                    className="text-white text-xs font-black uppercase tracking-[0.15em] bg-emerald-600 hover:bg-emerald-500 px-3.5 py-2 rounded-xl shadow-xl flex items-center gap-2 transition-all active:scale-95 border border-emerald-400/30"
-                                  >
-                                    <Crop className="w-4 h-4" /> Recortar
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      photoInputRef.current?.click();
-                                    }}
-                                    className="text-white text-xs font-black uppercase tracking-[0.15em] bg-indigo-600 hover:bg-indigo-500 px-3.5 py-2 rounded-xl shadow-xl flex items-center gap-2 transition-all active:scale-95 border border-indigo-400/30"
-                                  >
-                                    <Upload className="w-4 h-4" /> Alterar
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={handleRemovePhoto}
-                                    className="text-white text-xs font-black uppercase tracking-[0.15em] bg-rose-600 hover:bg-rose-500 px-3.5 py-2 rounded-xl shadow-xl flex items-center gap-2 transition-all active:scale-95 border border-rose-400/30"
-                                  >
-                                    <Trash2 className="w-4 h-4" /> Excluir
-                                  </button>
-                                </div>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={handleRemovePhoto}
-                                className="absolute top-3 right-3 p-2.5 bg-rose-600/90 hover:bg-rose-600 text-white rounded-xl shadow-xl backdrop-blur-md transition-all active:scale-90 z-10 border border-rose-400/40"
-                                title="Excluir Foto"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </>
-                          ) : (
-                            <div className="flex flex-col items-center gap-4 text-slate-300 group-hover:text-indigo-400 transition-all">
-                              <div className="p-8 bg-white rounded-[2rem] shadow-xl group-hover:shadow-indigo-500/10 border border-slate-100 transition-all group-hover:scale-110"><ImageIcon className="w-12 h-12" /></div>
-                              <div className="text-center">
-                                <p className="text-[10px] font-black uppercase tracking-[0.3em]">Carregar Imagem</p>
-                                <p className="text-[9px] font-bold mt-1 opacity-50">Resolução recomendada: 1200x900px</p>
-                              </div>
-                            </div>
-                          )}
+                        <div className="hidden lg:block min-w-0">
+                          <p className={`text-[9px] uppercase tracking-wider leading-none mb-0.5 ${isActive ? 'text-indigo-200' : 'text-slate-400'}`}>
+                            Passo {tab.step}
+                          </p>
+                          <p className="text-xs truncate leading-tight">
+                            {tab.label}
+                          </p>
                         </div>
-                      </div>
+                        <span className="block lg:hidden text-xs truncate">
+                          {tab.shortLabel}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
 
-                      <div className="bg-slate-50 border border-slate-100 rounded-[2rem] p-6 space-y-6">
-                        <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] flex items-center gap-2">
-                          <Activity className="w-3.5 h-3.5" /> Indicadores Operacionais
-                        </h4>
+                {/* CORPO DO FORMULÁRIO (SCROLL 100% VIEWPORT) */}
+                <div className="flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-6 md:p-8 bg-slate-50/60">
+                  <div className="max-w-5xl mx-auto space-y-6">
 
-                        <div className="space-y-4">
-                          <div className="relative" ref={statusDropdownRef}>
-                            <label className={labelClass}>Status de Disponibilidade</label>
-                            <button
-                              onClick={() => setIsStatusDropdownOpen(!isStatusDropdownOpen)}
-                              className="w-full bg-white border-2 border-slate-200 rounded-xl p-3 flex items-center justify-between shadow-sm hover:border-indigo-400 transition-all group/sel"
-                            >
-                              <div className="flex items-center gap-3">
-                                <div className={`p-1.5 rounded-lg bg-${getStatusConfig(formData.status || 'operacional').color}-600 text-white shadow-md`}>
-                                  {React.createElement(getStatusConfig(formData.status || 'operacional').icon, { className: "w-3.5 h-3.5" })}
-                                </div>
-                                <span className="text-xs font-bold text-slate-900">{getStatusConfig(formData.status || 'operacional').label}</span>
-                              </div>
-                              <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-300 ${isStatusDropdownOpen ? 'rotate-180' : ''}`} />
-                            </button>
-
-                            {isStatusDropdownOpen && (
-                              <div className="absolute z-50 left-0 right-0 mt-2 bg-white border border-slate-200 rounded-[2rem] shadow-2xl overflow-hidden animate-slide-up py-2 max-h-72 overflow-y-auto custom-scrollbar">
-                                {STATUS_OPTIONS.map((opt) => (
-                                  <button
-                                    key={opt.value}
-                                    onClick={() => {
-                                      setFormData({ ...formData, status: opt.value });
-                                      setIsStatusDropdownOpen(false);
-                                    }}
-                                    className={`w-full px-4 py-3 flex items-center justify-between hover:bg-slate-50 transition-colors group ${formData.status === opt.value ? 'bg-indigo-50/50' : ''}`}
-                                  >
-                                    <div className="flex items-center gap-3">
-                                      <div className={`p-2 rounded-lg bg-${opt.color}-100 text-${opt.color}-600 group-hover:bg-${opt.color}-600 group-hover:text-white transition-all`}>
-                                        <opt.icon className="w-4 h-4" />
-                                      </div>
-                                      <span className={`text-xs font-bold ${formData.status === opt.value ? 'text-indigo-900' : 'text-slate-700'}`}>{opt.label}</span>
-                                    </div>
-                                    {formData.status === opt.value && <Check className="w-4 h-4 text-indigo-600" />}
-                                  </button>
-                                ))}
+                    {/* ABA 1: IDENTIFICAÇÃO & FOTO */}
+                    {activeModalTab === 'geral' && (
+                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 animate-fade-in">
+                        {/* Coluna da Imagem */}
+                        <div className="lg:col-span-5 bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm flex flex-col gap-4">
+                          <div className="flex items-center justify-between">
+                            <label className={labelClass}><Camera className="w-3.5 h-3.5 inline mr-1.5 text-indigo-500" /> Fotografia do Veículo</label>
+                            {formData.vehicleImageUrl && (
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={handleOpenCropForCurrentPhoto}
+                                  className="text-[10px] font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-1 transition-all active:scale-95 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-xl border border-emerald-200"
+                                  title="Recortar Imagem"
+                                >
+                                  <Crop className="w-3 h-3" /> Recortar
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleRemovePhoto}
+                                  className="text-[10px] font-bold text-rose-600 hover:text-rose-700 flex items-center gap-1 transition-all active:scale-95 bg-rose-50 hover:bg-rose-100 px-2.5 py-1 rounded-xl border border-rose-200"
+                                  title="Excluir Fotografia"
+                                >
+                                  <Trash2 className="w-3 h-3" /> Excluir
+                                </button>
                               </div>
                             )}
                           </div>
 
-                          <div className="relative" ref={maintDropdownRef}>
-                            <label className={labelClass}>Condição de Manutenção</label>
+                          <div
+                            onClick={() => photoInputRef.current?.click()}
+                            className={`relative aspect-[4/3] rounded-3xl border-2 border-dashed transition-all cursor-pointer group flex flex-col items-center justify-center overflow-hidden shadow-inner
+                              ${formData.vehicleImageUrl ? 'border-indigo-500 bg-indigo-50/10' : 'border-slate-200 bg-slate-50 hover:border-indigo-400 hover:bg-white'}
+                            `}
+                          >
+                            <input type="file" ref={photoInputRef} onChange={handlePhotoUpload} accept="image/*" className="hidden" />
+                            {formData.vehicleImageUrl ? (
+                              <>
+                                <img src={formData.vehicleImageUrl} alt="Preview" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                                <div className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-3 backdrop-blur-sm p-4">
+                                  <div className="flex items-center gap-2 flex-wrap justify-center">
+                                    <button
+                                      type="button"
+                                      onClick={handleOpenCropForCurrentPhoto}
+                                      className="text-white text-xs font-black uppercase tracking-wider bg-emerald-600 hover:bg-emerald-500 px-3.5 py-2 rounded-xl shadow-xl flex items-center gap-2 transition-all active:scale-95"
+                                    >
+                                      <Crop className="w-4 h-4" /> Recortar
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        photoInputRef.current?.click();
+                                      }}
+                                      className="text-white text-xs font-black uppercase tracking-wider bg-indigo-600 hover:bg-indigo-500 px-3.5 py-2 rounded-xl shadow-xl flex items-center gap-2 transition-all active:scale-95"
+                                    >
+                                      <Upload className="w-4 h-4" /> Alterar
+                                    </button>
+                                  </div>
+                                </div>
+                              </>
+                            ) : (
+                              <div className="flex flex-col items-center gap-3 text-slate-400 group-hover:text-indigo-500 transition-all p-4 text-center">
+                                <div className="p-4 bg-white rounded-2xl shadow-sm border border-slate-100 group-hover:scale-110 transition-transform">
+                                  <ImageIcon className="w-8 h-8" />
+                                </div>
+                                <div>
+                                  <p className="text-xs font-black uppercase tracking-wider text-slate-700">Clique para carregar foto</p>
+                                  <p className="text-[10px] text-slate-400 font-medium mt-0.5">PNG, JPG ou WEBP (Recomendado 1200x900px)</p>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="bg-slate-50 rounded-2xl p-3 border border-slate-100 text-slate-500 text-[11px] leading-relaxed flex items-center gap-2.5">
+                            <Info className="w-4 h-4 text-indigo-500 shrink-0" />
+                            <span>A fotografia principal será exibida nos relatórios e cartões de agendamento de frotas.</span>
+                          </div>
+                        </div>
+
+                        {/* Coluna dos Campos de Identificação */}
+                        <div className="lg:col-span-7 bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm space-y-4">
+                          <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-2 pb-2 border-b border-slate-100">
+                            <Layers className="w-4 h-4 text-indigo-600" /> Identificação Cadastral
+                          </h4>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="md:col-span-2">
+                              <label className={labelClass}><Layers className="w-3.5 h-3.5 inline mr-1.5 text-indigo-500" /> Identificação do Modelo *</label>
+                              <input
+                                value={formData.model}
+                                onChange={e => setFormData({ ...formData, model: e.target.value.toUpperCase() })}
+                                className={inputClass}
+                                placeholder="Ex: CRONOS DRIVE 1.3 AT"
+                              />
+                            </div>
+
+                            <div>
+                              <label className={labelClass}><Hash className="w-3.5 h-3.5 inline mr-1.5 text-indigo-500" /> Placa de Identificação *</label>
+                              <input
+                                value={formData.plate}
+                                onChange={e => setFormData({ ...formData, plate: e.target.value.toUpperCase() })}
+                                className={`${inputClass} font-mono uppercase tracking-widest`}
+                                placeholder="ABC-1234 ou BRA2E19"
+                              />
+                            </div>
+
+                            <div className="relative" ref={brandDropdownRef}>
+                              <label className={labelClass}><Tag className="w-3.5 h-3.5 inline mr-1.5 text-indigo-500" /> Marca / Fabricante</label>
+                              <div
+                                onClick={() => setIsBrandDropdownOpen(!isBrandDropdownOpen)}
+                                className={`${inputClass} flex items-center justify-between cursor-pointer group/select ${isBrandDropdownOpen ? 'border-indigo-500 ring-4 ring-indigo-500/5 bg-white' : ''}`}
+                              >
+                                <div className="flex items-center gap-2.5 truncate">
+                                  <div className={`p-1.5 rounded-lg transition-colors shrink-0 ${formData.brand ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                                    <Tag className="w-3.5 h-3.5" />
+                                  </div>
+                                  <span className={`text-sm font-bold truncate ${formData.brand ? 'text-slate-900' : 'text-slate-400 font-normal'}`}>
+                                    {formData.brand || 'Selecione a Marca'}
+                                  </span>
+                                </div>
+                                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-300 shrink-0 ${isBrandDropdownOpen ? 'rotate-180' : ''}`} />
+                              </div>
+
+                              {isBrandDropdownOpen && (
+                                <div className="absolute z-50 left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden animate-slide-up flex flex-col">
+                                  <div className="p-3 bg-slate-50 border-b border-slate-100 flex items-center gap-2.5">
+                                    <Search className="w-4 h-4 text-indigo-500" />
+                                    <input
+                                      type="text"
+                                      autoFocus
+                                      placeholder="Pesquisar fabricante..."
+                                      className="bg-transparent border-none outline-none text-xs font-bold text-slate-700 w-full"
+                                      value={brandSearch}
+                                      onChange={(e) => setBrandSearch(e.target.value)}
+                                      onClick={(e) => e.stopPropagation()}
+                                    />
+                                  </div>
+                                  <div className="max-h-56 overflow-y-auto custom-scrollbar p-2">
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); setIsBrandModalOpen(true); setIsBrandDropdownOpen(false); }}
+                                      className="w-full mb-1.5 p-2.5 bg-indigo-50 text-indigo-700 font-bold uppercase text-[10px] tracking-widest rounded-xl hover:bg-indigo-100 transition-all flex items-center justify-center gap-2 border border-indigo-100"
+                                    >
+                                      <Plus className="w-3.5 h-3.5" /> Nova Marca
+                                    </button>
+                                    {filteredBrands.length > 0 ? (
+                                      filteredBrands.map((brand) => (
+                                        <button
+                                          key={brand.id}
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setFormData({ ...formData, brand: brand.name });
+                                            setIsBrandDropdownOpen(false);
+                                            setBrandSearch('');
+                                          }}
+                                          className={`w-full flex items-center justify-between p-3 rounded-xl transition-all ${formData.brand === brand.name ? 'bg-indigo-50 text-indigo-700 font-bold' : 'hover:bg-slate-50 text-slate-700'}`}
+                                        >
+                                          <span className="text-xs font-bold text-left">{brand.name}</span>
+                                          {formData.brand === brand.name && <Check className="w-4 h-4 text-indigo-600 shrink-0" />}
+                                        </button>
+                                      ))
+                                    ) : (
+                                      <div className="p-4 text-center">
+                                        <p className="text-xs text-slate-400 font-medium">Nenhuma marca localizada.</p>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+
+                            <div>
+                              <label className={labelClass}><Calendar className="w-3.5 h-3.5 inline mr-1.5 text-indigo-500" /> Ano Fabricação / Modelo</label>
+                              <input
+                                value={formData.year}
+                                onChange={e => setFormData({ ...formData, year: e.target.value })}
+                                className={inputClass}
+                                placeholder="Ex: 2023/2024"
+                              />
+                            </div>
+
+                            <div>
+                              <label className={labelClass}><Palette className="w-3.5 h-3.5 inline mr-1.5 text-indigo-500" /> Cor Predominante</label>
+                              <input
+                                value={formData.color}
+                                onChange={e => setFormData({ ...formData, color: e.target.value.toUpperCase() })}
+                                className={inputClass}
+                                placeholder="Ex: BRANCA"
+                              />
+                            </div>
+
+                            <div className="md:col-span-2">
+                              <label className={labelClass}><Car className="w-3.5 h-3.5 inline mr-1.5 text-indigo-500" /> Tipo / Categoria do Veículo</label>
+                              <div className="relative">
+                                <select
+                                  value={formData.vehicleCategory || ''}
+                                  onChange={e => setFormData({ ...formData, vehicleCategory: e.target.value as any })}
+                                  className={`${inputClass} appearance-none pr-10`}
+                                >
+                                  <option value="">Selecione uma categoria...</option>
+                                  <option value="Carro">Carro (Passeio / SUV / Hatch / Sedan)</option>
+                                  <option value="Moto">Moto / Motocicleta</option>
+                                  <option value="Van">Van / Furgão</option>
+                                  <option value="Ônibus">Ônibus / Micro-ônibus</option>
+                                  <option value="Máquina Pesada">Máquina Pesada / Trator</option>
+                                  <option value="Caminhão">Caminhão / Caçamba</option>
+                                  <option value="Acessórios">Acessórios / Implementos</option>
+                                </select>
+                                <ChevronDown className="w-4 h-4 text-slate-400 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ABA 2: TÉCNICO & CONSUMO */}
+                    {activeModalTab === 'tecnico' && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in">
+                        {/* Card Combustível */}
+                        <div className="md:col-span-2 bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm space-y-4">
+                          <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-2 pb-2 border-b border-slate-100">
+                            <Flame className="w-4 h-4 text-indigo-600" /> Tipo de Combustível (Multiseleção)
+                          </h4>
+                          <p className="text-xs text-slate-500">Selecione todos os tipos de combustível suportados pelo veículo:</p>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            {FUEL_OPTIONS.map(fuel => {
+                              const isSelected = formData.fuelTypes?.includes(fuel);
+                              return (
+                                <button
+                                  key={fuel}
+                                  type="button"
+                                  onClick={() => toggleFuel(fuel)}
+                                  className={`p-4 rounded-2xl border-2 flex items-center justify-between transition-all active:scale-95 ${
+                                    isSelected
+                                      ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-600/20'
+                                      : 'bg-slate-50 border-slate-200 text-slate-700 hover:border-indigo-300 hover:bg-white'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <div className={`p-2 rounded-xl ${isSelected ? 'bg-white/20 text-white' : 'bg-white text-slate-500 shadow-sm'}`}>
+                                      <Flame className="w-4 h-4" />
+                                    </div>
+                                    <span className="text-xs font-black tracking-wider uppercase">{fuel}</span>
+                                  </div>
+                                  {isSelected && <CheckCircle2 className="w-5 h-5 text-white shrink-0" />}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Card Consumo Médio */}
+                        <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm space-y-4">
+                          <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-2 pb-2 border-b border-slate-100">
+                            <Gauge className="w-4 h-4 text-indigo-600" /> Eficiência & Consumo
+                          </h4>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                              <label className={labelClass}><Gauge className="w-3.5 h-3.5 inline mr-1.5 text-indigo-500" /> KM/L Mínimo (Referência)</label>
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                value={minKmlInput}
+                                onChange={e => {
+                                  const val = e.target.value;
+                                  if (/^[\d.,]*$/.test(val)) {
+                                    setMinKmlInput(val);
+                                    const numVal = parseFloat(val.replace(',', '.'));
+                                    setFormData({ ...formData, minKml: isNaN(numVal) ? undefined : numVal });
+                                  }
+                                }}
+                                className={inputClass}
+                                placeholder="Ex: 8,0"
+                              />
+                            </div>
+
+                            <div>
+                              <label className={labelClass}><Gauge className="w-3.5 h-3.5 inline mr-1.5 text-indigo-500" /> KM/L Máximo (Teto)</label>
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                value={maxKmlInput}
+                                onChange={e => {
+                                  const val = e.target.value;
+                                  if (/^[\d.,]*$/.test(val)) {
+                                    setMaxKmlInput(val);
+                                    const numVal = parseFloat(val.replace(',', '.'));
+                                    setFormData({ ...formData, maxKml: isNaN(numVal) ? undefined : numVal });
+                                  }
+                                }}
+                                className={inputClass}
+                                placeholder="Ex: 12,5"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="p-3.5 bg-indigo-50/50 rounded-2xl border border-indigo-100/80 text-indigo-900 text-xs font-medium">
+                            {formData.minKml && formData.maxKml ? (
+                              <p className="flex items-center gap-2">
+                                <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0" />
+                                Média estimada de <strong>{((formData.minKml + formData.maxKml) / 2).toFixed(1)} KM/L</strong>
+                              </p>
+                            ) : (
+                              <p className="text-slate-500">Informe os valores de consumo de referência para controle nos agendamentos.</p>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Card Documentação e Registros Oficiais */}
+                        <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm space-y-4">
+                          <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-2 pb-2 border-b border-slate-100">
+                            <ShieldCheck className="w-4 h-4 text-indigo-600" /> Registros Oficiais
+                          </h4>
+
+                          <div className="space-y-4">
+                            <div>
+                              <label className={labelClass}><Fuel className="w-3.5 h-3.5 inline mr-1.5 text-indigo-500" /> Código Renavam</label>
+                              <input
+                                value={formData.renavam}
+                                onChange={e => setFormData({ ...formData, renavam: e.target.value })}
+                                className={`${inputClass} font-mono`}
+                                placeholder="Ex: 01332550344"
+                              />
+                            </div>
+
+                            <div>
+                              <label className={labelClass}><ShieldCheck className="w-3.5 h-3.5 inline mr-1.5 text-indigo-500" /> Número do Chassi (VIN)</label>
+                              <input
+                                value={formData.chassis}
+                                onChange={e => setFormData({ ...formData, chassis: e.target.value.toUpperCase() })}
+                                className={`${inputClass} font-mono uppercase`}
+                                placeholder="Ex: 8AP1234567890..."
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ABA 3: LOTAÇÃO & GESTÃO */}
+                    {activeModalTab === 'alocacao' && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in">
+                        {/* Lotação Setorial */}
+                        <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm space-y-4">
+                          <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-2 pb-2 border-b border-slate-100">
+                            <Network className="w-4 h-4 text-indigo-600" /> Lotação Administrativa
+                          </h4>
+
+                          <div>
+                            <label className={labelClass}><Network className="w-3.5 h-3.5 inline mr-1.5 text-indigo-500" /> Setor de Lotação / Atribuição *</label>
                             <button
-                              onClick={() => setIsMaintDropdownOpen(!isMaintDropdownOpen)}
-                              className="w-full bg-white border-2 border-slate-200 rounded-xl p-3 flex items-center justify-between shadow-sm hover:border-indigo-400 transition-all group/sel"
+                              type="button"
+                              onClick={() => setIsSectorModalOpen(true)}
+                              className={`${inputClass} flex items-center justify-between cursor-pointer group/select h-auto w-full`}
                             >
-                              <div className="flex items-center gap-3">
+                              <div className="flex items-center gap-3 truncate">
+                                <div className={`p-2 rounded-xl transition-colors shrink-0 ${formData.sectorId ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                                  <Network className="w-4 h-4" />
+                                </div>
+                                <span className={`text-sm font-bold truncate ${formData.sectorId ? 'text-slate-900' : 'text-slate-400 font-normal'}`}>
+                                  {selectedSectorName}
+                                </span>
+                              </div>
+                              <Search className="w-4 h-4 text-slate-400 shrink-0" />
+                            </button>
+                          </div>
+
+                          <div>
+                            <label className={labelClass}><User className="w-3.5 h-3.5 inline mr-1.5 text-indigo-500" /> Responsável pelo Veículo (Condutor Principal)</label>
+                            <button
+                              type="button"
+                              onClick={() => setIsResponsibleModalOpen(true)}
+                              className={`${inputClass} flex items-center justify-between cursor-pointer group/select h-auto w-full`}
+                            >
+                              <div className="flex items-center gap-3 truncate">
+                                <div className={`p-2 rounded-xl transition-colors shrink-0 ${formData.responsiblePersonId ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                                  <User className="w-4 h-4" />
+                                </div>
+                                <span className={`text-sm font-bold truncate ${formData.responsiblePersonId ? 'text-slate-900' : 'text-slate-400 font-normal'}`}>
+                                  {selectedResponsibleName}
+                                </span>
+                              </div>
+                              <Search className="w-4 h-4 text-slate-400 shrink-0" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Gestores de Solicitações */}
+                        <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm space-y-4">
+                          <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-2 pb-2 border-b border-slate-100">
+                            <ShieldCheck className="w-4 h-4 text-indigo-600" /> Aprovação de Viagens
+                          </h4>
+
+                          <div>
+                            <label className={labelClass}><ShieldCheck className="w-3.5 h-3.5 inline mr-1.5 text-indigo-500" /> Gestores de Solicitações (Podem aprovar saídas)</label>
+                            <button
+                              type="button"
+                              onClick={() => setIsRequestManagerModalOpen(true)}
+                              className={`${inputClass} flex items-center justify-between cursor-pointer group/select h-auto w-full group/mgr`}
+                            >
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className={`p-2 rounded-xl transition-colors shrink-0 ${formData.requestManagerIds?.length ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                                  <ShieldCheck className="w-4 h-4" />
+                                </div>
+                                <span className={`text-sm font-bold truncate ${formData.requestManagerIds?.length ? 'text-slate-900' : 'text-slate-400 font-normal'}`}>
+                                  {selectedManagersNames}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                {formData.requestManagerIds?.length ? (
+                                  <span className="bg-indigo-100 text-indigo-700 text-[10px] font-black px-2 py-0.5 rounded-lg whitespace-nowrap">{formData.requestManagerIds.length} selecionados</span>
+                                ) : null}
+                                <Plus className="w-4 h-4 text-slate-400 group-hover/mgr:text-indigo-600 transition-colors" />
+                              </div>
+                            </button>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                            <div>
+                              <label className={labelClass}><Calendar className="w-3.5 h-3.5 inline mr-1.5 text-indigo-500" /> Disponível para Agendamento?</label>
+                              <div className="relative">
+                                <select
+                                  value={formData.availableForScheduling || 'Não'}
+                                  onChange={e => setFormData({ ...formData, availableForScheduling: e.target.value as any })}
+                                  className={`${inputClass} appearance-none pr-10`}
+                                >
+                                  <option value="Sim">Sim (Liberado)</option>
+                                  <option value="Não">Não (Bloqueado)</option>
+                                </select>
+                                <ChevronDown className="w-4 h-4 text-slate-400 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+                              </div>
+                            </div>
+
+                            <div className="relative" ref={statusDropdownRef}>
+                              <label className={labelClass}>Status Operacional</label>
+                              <button
+                                type="button"
+                                onClick={() => setIsStatusDropdownOpen(!isStatusDropdownOpen)}
+                                className="w-full bg-slate-50/50 border border-slate-200 rounded-2xl p-3 flex items-center justify-between shadow-sm hover:border-indigo-400 transition-all"
+                              >
+                                <div className="flex items-center gap-2.5 truncate">
+                                  <div className={`p-1.5 rounded-lg bg-${getStatusConfig(formData.status || 'operacional').color}-600 text-white shadow-md shrink-0`}>
+                                    {React.createElement(getStatusConfig(formData.status || 'operacional').icon, { className: "w-3.5 h-3.5" })}
+                                  </div>
+                                  <span className="text-xs font-bold text-slate-900 truncate">{getStatusConfig(formData.status || 'operacional').label}</span>
+                                </div>
+                                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-300 shrink-0 ${isStatusDropdownOpen ? 'rotate-180' : ''}`} />
+                              </button>
+
+                              {isStatusDropdownOpen && (
+                                <div className="absolute z-50 left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden animate-slide-up py-2 max-h-60 overflow-y-auto custom-scrollbar">
+                                  {STATUS_OPTIONS.map((opt) => (
+                                    <button
+                                      key={opt.value}
+                                      type="button"
+                                      onClick={() => {
+                                        setFormData({ ...formData, status: opt.value });
+                                        setIsStatusDropdownOpen(false);
+                                      }}
+                                      className={`w-full px-4 py-2.5 flex items-center justify-between hover:bg-slate-50 transition-colors ${formData.status === opt.value ? 'bg-indigo-50/50' : ''}`}
+                                    >
+                                      <div className="flex items-center gap-2.5">
+                                        <div className={`p-1.5 rounded-lg bg-${opt.color}-100 text-${opt.color}-600`}>
+                                          <opt.icon className="w-3.5 h-3.5" />
+                                        </div>
+                                        <span className={`text-xs font-bold ${formData.status === opt.value ? 'text-indigo-900' : 'text-slate-700'}`}>{opt.label}</span>
+                                      </div>
+                                      {formData.status === opt.value && <Check className="w-4 h-4 text-indigo-600" />}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ABA 4: MANUTENÇÃO PREVENTIVA */}
+                    {activeModalTab === 'manutencao' && (
+                      <div className="space-y-6 animate-fade-in">
+                        {/* Status Geral de Manutenção */}
+                        <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                          <div>
+                            <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
+                              <Gauge className="w-4 h-4 text-indigo-600" /> Condição Geral de Manutenção
+                            </h4>
+                            <p className="text-xs text-slate-500 mt-1">Situação preventiva atual do veículo para controle de revisões.</p>
+                          </div>
+
+                          <div className="relative w-full sm:w-64" ref={maintDropdownRef}>
+                            <button
+                              type="button"
+                              onClick={() => setIsMaintDropdownOpen(!isMaintDropdownOpen)}
+                              className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-3 flex items-center justify-between shadow-sm hover:border-indigo-400 transition-all"
+                            >
+                              <div className="flex items-center gap-2.5">
                                 <div className={`p-1.5 rounded-lg bg-${getMaintConfig(formData.maintenanceStatus || 'em_dia').color}-600 text-white shadow-md`}>
                                   <Gauge className="w-3.5 h-3.5" />
                                 </div>
@@ -978,19 +1911,20 @@ export const FleetManagementScreen: React.FC<FleetManagementScreenProps> = ({
                             </button>
 
                             {isMaintDropdownOpen && (
-                              <div className="absolute z-50 left-0 right-0 mt-2 bg-white border border-slate-200 rounded-[2rem] shadow-2xl overflow-hidden animate-slide-up py-2">
+                              <div className="absolute z-50 left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden animate-slide-up py-2">
                                 {MAINTENANCE_OPTIONS.map((opt) => (
                                   <button
                                     key={opt.value}
+                                    type="button"
                                     onClick={() => {
                                       setFormData({ ...formData, maintenanceStatus: opt.value });
                                       setIsMaintDropdownOpen(false);
                                     }}
-                                    className={`w-full px-4 py-3 flex items-center justify-between hover:bg-slate-50 transition-colors group ${formData.maintenanceStatus === opt.value ? 'bg-indigo-50/50' : ''}`}
+                                    className={`w-full px-4 py-2.5 flex items-center justify-between hover:bg-slate-50 transition-colors ${formData.maintenanceStatus === opt.value ? 'bg-indigo-50/50' : ''}`}
                                   >
-                                    <div className="flex items-center gap-3">
-                                      <div className={`p-2 rounded-lg bg-${opt.color}-100 text-${opt.color}-600 group-hover:bg-${opt.color}-600 group-hover:text-white transition-all`}>
-                                        <Gauge className="w-4 h-4" />
+                                    <div className="flex items-center gap-2.5">
+                                      <div className={`p-1.5 rounded-lg bg-${opt.color}-100 text-${opt.color}-600`}>
+                                        <Gauge className="w-3.5 h-3.5" />
                                       </div>
                                       <span className={`text-xs font-bold ${formData.maintenanceStatus === opt.value ? 'text-indigo-900' : 'text-slate-700'}`}>{opt.label}</span>
                                     </div>
@@ -1001,276 +1935,28 @@ export const FleetManagementScreen: React.FC<FleetManagementScreenProps> = ({
                             )}
                           </div>
                         </div>
-                      </div>
-                    </div>
 
-                    <div className="lg:col-span-7 p-8 space-y-8">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">
-                        <div className="md:col-span-2">
-                          <label className={labelClass}><Layers className="w-4 h-4 inline mr-2 text-indigo-500" /> Identificação do Modelo</label>
-                          <input value={formData.model} onChange={e => setFormData({ ...formData, model: e.target.value.toUpperCase() })} className={inputClass} placeholder="Ex: CRONOS" />
-                        </div>
-
-                        <div>
-                          <label className={labelClass}><Hash className="w-4 h-4 inline mr-2 text-indigo-500" /> Placa de Identificação</label>
-                          <input value={formData.plate} onChange={e => setFormData({ ...formData, plate: e.target.value.toUpperCase() })} className={`${inputClass} font-mono uppercase tracking-[0.1em]`} placeholder="ABC-1234" />
-                        </div>
-
-                        <div className="relative" ref={brandDropdownRef}>
-                          <label className={labelClass}><Tag className="w-4 h-4 inline mr-2 text-indigo-500" /> Marca / Fabricante</label>
-                          <div
-                            onClick={() => setIsBrandDropdownOpen(!isBrandDropdownOpen)}
-                            className={`${inputClass} flex items-center justify-between cursor-pointer group/select h-auto ${isBrandDropdownOpen ? 'border-indigo-500 ring-4 ring-indigo-500/5 bg-white' : ''}`}
-                          >
-                            <div className="flex items-center gap-3">
-                              <div className={`p-2 rounded-xl transition-colors shrink-0 ${formData.brand ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
-                                <Tag className="w-4 h-4" />
-                              </div>
-                              <span className={`${formData.brand ? 'text-slate-900 font-bold' : 'text-slate-400'} leading-tight text-left`}>
-                                {formData.brand || 'Selecione a Marca'}
-                              </span>
-                            </div>
-                            <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-300 shrink-0 ${isBrandDropdownOpen ? 'rotate-180' : ''}`} />
-                          </div>
-
-                          {isBrandDropdownOpen && (
-                            <div className="absolute z-50 left-0 right-0 mt-3 bg-white border border-slate-200 rounded-[2rem] shadow-[0_25px_50px_-12px_rgba(0,0,0,0.25)] overflow-hidden animate-slide-up flex flex-col border-indigo-100">
-                              <div className="p-4 bg-slate-50 border-b border-slate-100 flex items-center gap-3">
-                                <Search className="w-4 h-4 text-indigo-400" />
-                                <input
-                                  type="text"
-                                  autoFocus
-                                  placeholder="Pesquisar fabricante..."
-                                  className="bg-transparent border-none outline-none text-sm font-bold text-slate-700 w-full"
-                                  value={brandSearch}
-                                  onChange={(e) => setBrandSearch(e.target.value)}
-                                  onClick={(e) => e.stopPropagation()}
-                                />
-                              </div>
-                              <div className="max-h-60 overflow-y-auto custom-scrollbar p-2">
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); setIsBrandModalOpen(true); setIsBrandDropdownOpen(false); }}
-                                  className="w-full mb-2 p-3 bg-indigo-50 text-indigo-700 font-bold uppercase text-[10px] tracking-widest rounded-xl hover:bg-indigo-100 transition-all flex items-center justify-center gap-2 border border-indigo-100"
-                                >
-                                  <Plus className="w-3 h-3" /> Nova Marca
-                                </button>
-                                {filteredBrands.length > 0 ? (
-                                  filteredBrands.map((brand) => (
-                                    <button
-                                      key={brand.id}
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setFormData({ ...formData, brand: brand.name });
-                                        setIsBrandDropdownOpen(false);
-                                        setBrandSearch('');
-                                      }}
-                                      className={`w-full flex items-center justify-between p-4 rounded-2xl transition-all group/item ${formData.brand === brand.name ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-slate-50 text-slate-600'}`}
-                                    >
-                                      <span className="text-sm font-bold text-left">{brand.name}</span>
-                                      {formData.brand === brand.name && <Check className="w-4 h-4 text-indigo-600 shrink-0" />}
-                                    </button>
-                                  ))
-                                ) : (
-                                  <div className="p-8 text-center">
-                                    <Tag className="w-8 h-8 text-slate-200 mx-auto mb-2" />
-                                    <p className="text-xs text-slate-400 font-medium">Nenhuma marca localizada.</p>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-
-                        <div>
-                          <label className={labelClass}><Calendar className="w-4 h-4 inline mr-2 text-indigo-500" /> Ano Fabricação/Modelo</label>
-                          <input value={formData.year} onChange={e => setFormData({ ...formData, year: e.target.value })} className={inputClass} placeholder="2023/2024" />
-                        </div>
-
-                        <div className="flex gap-4">
-                          <div className="flex-1">
-                            <label className={labelClass}><Gauge className="w-4 h-4 inline mr-2 text-indigo-500" /> KM/L Mínimo (Referência)</label>
-                            <input
-                              type="text"
-                              inputMode="decimal"
-                              value={minKmlInput}
-                              onChange={e => {
-                                const val = e.target.value;
-                                if (/^[\d.,]*$/.test(val)) {
-                                  setMinKmlInput(val);
-                                  const numVal = parseFloat(val.replace(',', '.'));
-                                  setFormData({ ...formData, minKml: isNaN(numVal) ? undefined : numVal });
-                                }
-                              }}
-                              className={inputClass}
-                              placeholder="Ex: 8,0"
-                            />
-                          </div>
-                          <div className="flex-1">
-                            <label className={labelClass}><Gauge className="w-4 h-4 inline mr-2 text-indigo-500" /> KM/L Máximo (Teto)</label>
-                            <input
-                              type="text"
-                              inputMode="decimal"
-                              value={maxKmlInput}
-                              onChange={e => {
-                                const val = e.target.value;
-                                if (/^[\d.,]*$/.test(val)) {
-                                  setMaxKmlInput(val);
-                                  const numVal = parseFloat(val.replace(',', '.'));
-                                  setFormData({ ...formData, maxKml: isNaN(numVal) ? undefined : numVal });
-                                }
-                              }}
-                              className={inputClass}
-                              placeholder="Ex: 12,5"
-                            />
-                          </div>
-                        </div>
-
-                        <div>
-                          <label className={labelClass}><Palette className="w-4 h-4 inline mr-2 text-indigo-500" /> Cor Predominante</label>
-                          <input value={formData.color} onChange={e => setFormData({ ...formData, color: e.target.value.toUpperCase() })} className={inputClass} placeholder="Ex: BRANCA" />
-                        </div>
-
-                        <div>
-                          <label className={labelClass}><Car className="w-4 h-4 inline mr-2 text-indigo-500" /> Tipo de Veículo</label>
-                          <div className="relative">
-                            <select
-                              value={formData.vehicleCategory || ''}
-                              onChange={e => setFormData({ ...formData, vehicleCategory: e.target.value as any })}
-                              className={`${inputClass} appearance-none pr-10`}
-                            >
-                              <option value="">Selecione...</option>
-                              <option value="Carro">Carro</option>
-                              <option value="Moto">Moto</option>
-                              <option value="Van">Van</option>
-                              <option value="Ônibus">Ônibus</option>
-                              <option value="Máquina Pesada">Máquina Pesada</option>
-                              <option value="Caminhão">Caminhão</option>
-                              <option value="Acessórios">Acessórios</option>
-                            </select>
-                            <ChevronDown className="w-5 h-5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                          </div>
-                        </div>
-
-                        <div>
-                          <label className={labelClass}><Calendar className="w-4 h-4 inline mr-2 text-indigo-500" /> Disponível para Agendamento?</label>
-                          <div className="relative">
-                            <select
-                              value={formData.availableForScheduling || 'Não'}
-                              onChange={e => setFormData({ ...formData, availableForScheduling: e.target.value as any })}
-                              className={`${inputClass} appearance-none pr-10`}
-                            >
-                              <option value="Sim">Sim</option>
-                              <option value="Não">Não</option>
-                            </select>
-                            <ChevronDown className="w-5 h-5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                          </div>
-                        </div>
-
-                        {/* CAMPO DE COMBUSTÍVEL - MULTISELEÇÃO MODERNA */}
-                        <div className="md:col-span-2">
-                          <label className={labelClass}><Flame className="w-4 h-4 inline mr-2 text-indigo-500" /> Combustível (Multiseleção)</label>
-                          <div className="flex flex-wrap gap-2 p-4 bg-slate-50/50 border border-slate-200 rounded-[2rem]">
-                            {FUEL_OPTIONS.map(fuel => {
-                              const isSelected = formData.fuelTypes?.includes(fuel);
-                              return (
-                                <button
-                                  key={fuel}
-                                  type="button"
-                                  onClick={() => toggleFuel(fuel)}
-                                  className={`px-6 py-2.5 rounded-full text-[11px] font-black uppercase tracking-widest transition-all border-2 flex items-center gap-2 active:scale-95
-                                      ${isSelected
-                                      ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-600/20'
-                                      : 'bg-white border-slate-100 text-slate-400 hover:border-indigo-200 hover:text-indigo-600'}
-                                    `}
-                                >
-                                  {isSelected ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Flame className="w-3.5 h-3.5 opacity-40" />}
-                                  {fuel}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        <div className="md:col-span-2">
-                          <label className={labelClass}><Network className="w-4 h-4 inline mr-2 text-indigo-500" /> Setor de Lotação / Atribuição</label>
-                          <button
-                            onClick={() => setIsSectorModalOpen(true)}
-                            className={`${inputClass} flex items-center justify-between cursor-pointer group/select h-auto w-full`}
-                          >
-                            <div className="flex items-center gap-3">
-                              <div className={`p-2 rounded-xl transition-colors shrink-0 ${formData.sectorId ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
-                                <Network className="w-4 h-4" />
-                              </div>
-                              <span className={`${formData.sectorId ? 'text-slate-900 font-bold' : 'text-slate-400'} leading-tight text-left`}>
-                                {selectedSectorName}
-                              </span>
-                            </div>
-                            <Search className="w-5 h-5 text-slate-400" />
-                          </button>
-                        </div>
-
-                        <div className="md:col-span-2">
-                          <label className={labelClass}><User className="w-4 h-4 inline mr-2 text-indigo-500" /> Responsável pelo Veículo (Condutor)</label>
-                          <button
-                            onClick={() => setIsResponsibleModalOpen(true)}
-                            className={`${inputClass} flex items-center justify-between cursor-pointer group/select h-auto w-full`}
-                          >
-                            <div className="flex items-center gap-3">
-                              <div className={`p-2 rounded-xl transition-colors shrink-0 ${formData.responsiblePersonId ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
-                                <User className="w-4 h-4" />
-                              </div>
-                              <span className={`${formData.responsiblePersonId ? 'text-slate-900 font-bold' : 'text-slate-400'} leading-tight text-left`}>
-                                {selectedResponsibleName}
-                              </span>
-                            </div>
-                            <Search className="w-5 h-5 text-slate-400" />
-                          </button>
-                        </div>
-
-                        <div className="md:col-span-2">
-                          <label className={labelClass}><ShieldCheck className="w-4 h-4 inline mr-2 text-indigo-500" /> Gestor de Solicitações (Pode aprovar saídas)</label>
-                          <button
-                            onClick={() => setIsRequestManagerModalOpen(true)}
-                            className={`${inputClass} flex items-center justify-between cursor-pointer group/select h-auto w-full group/mgr`}
-                          >
-                            <div className="flex items-center gap-3 min-w-0">
-                              <div className={`p-2 rounded-xl transition-colors shrink-0 ${formData.requestManagerIds?.length ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
-                                <ShieldCheck className="w-4 h-4" />
-                              </div>
-                              <span className={`${formData.requestManagerIds?.length ? 'text-slate-900 font-bold' : 'text-slate-400'} leading-tight text-left truncate`}>
-                                {selectedManagersNames}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {formData.requestManagerIds?.length ? (
-                                <span className="bg-indigo-100 text-indigo-700 text-[10px] font-black px-2 py-0.5 rounded-lg whitespace-nowrap">{formData.requestManagerIds.length} selecionados</span>
-                              ) : null}
-                              <Plus className="w-5 h-5 text-slate-400 group-hover/mgr:text-indigo-600 transition-colors" />
-                            </div>
-                          </button>
-                        </div>
-
-                        <div className="md:col-span-2 bg-indigo-50/30 border border-indigo-100 rounded-[2rem] p-6 space-y-6">
-                          <h4 className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em] flex items-center gap-2">
-                            <PenTool className="w-3.5 h-3.5" /> Controle de Troca de Óleo
+                        {/* Card Controle de Troca de Óleo */}
+                        <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm space-y-4">
+                          <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-2 pb-2 border-b border-slate-100">
+                            <PenTool className="w-4 h-4 text-indigo-600" /> Controle de Troca de Óleo de Motor
                           </h4>
 
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                             <div>
-                              <label className={labelClass}>KM Atual</label>
-                              <div className={`${inputClass} bg-slate-100/50 cursor-not-allowed flex items-center gap-2`}>
+                              <label className={labelClass}>KM Atual Registrado</label>
+                              <div className={`${inputClass} bg-slate-100/60 cursor-not-allowed flex items-center gap-2 text-slate-700`}>
                                 <Gauge className="w-4 h-4 text-slate-400" />
                                 {formData.currentKm?.toLocaleString('pt-BR') || '---'} KM
                               </div>
                             </div>
 
                             <div className="relative" ref={oilBaseDropdownRef}>
-                              <label className={labelClass}>Base de Cálculo (KM)</label>
+                              <label className={labelClass}>Intervalo / Base de Cálculo</label>
                               <button
                                 type="button"
                                 onClick={() => setIsOilBaseDropdownOpen(!isOilBaseDropdownOpen)}
-                                className={`${inputClass} flex items-center justify-between cursor-pointer active:scale-95`}
+                                className={`${inputClass} flex items-center justify-between cursor-pointer`}
                               >
                                 <span className="text-sm font-bold text-slate-900">
                                   {formData.oilCalculationBase ? `${formData.oilCalculationBase.toLocaleString('pt-BR')} KM` : '5.000 KM'}
@@ -1279,7 +1965,7 @@ export const FleetManagementScreen: React.FC<FleetManagementScreenProps> = ({
                               </button>
 
                               {isOilBaseDropdownOpen && (
-                                <div className="absolute z-50 left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden animate-slide-up flex flex-col">
+                                <div className="absolute z-50 left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden animate-slide-up flex flex-col">
                                   {[500, 1000, 2000, 3000, 5000, 7000, 10000].map((base) => (
                                     <button
                                       key={base}
@@ -1289,7 +1975,7 @@ export const FleetManagementScreen: React.FC<FleetManagementScreenProps> = ({
                                         setFormData({ ...formData, oilCalculationBase: base as any, oilNextChange: next });
                                         setIsOilBaseDropdownOpen(false);
                                       }}
-                                      className={`w-full px-4 py-3 flex items-center justify-between hover:bg-slate-50 transition-colors group ${formData.oilCalculationBase === base ? 'bg-indigo-50/50' : ''}`}
+                                      className={`w-full px-4 py-2.5 flex items-center justify-between hover:bg-slate-50 transition-colors ${formData.oilCalculationBase === base ? 'bg-indigo-50/50' : ''}`}
                                     >
                                       <span className={`text-xs font-bold ${formData.oilCalculationBase === base ? 'text-indigo-900' : 'text-slate-700'}`}>
                                         {base.toLocaleString('pt-BR')} KM
@@ -1302,90 +1988,83 @@ export const FleetManagementScreen: React.FC<FleetManagementScreenProps> = ({
                             </div>
 
                             <div>
-                              <label className={labelClass}>Próxima Troca (KM)</label>
-                              <div className={`${inputClass} bg-indigo-100/50 font-black text-indigo-700 flex items-center`}>
+                              <label className={labelClass}>Próxima Troca Prevista</label>
+                              <div className={`${inputClass} bg-indigo-50/50 border-indigo-200 font-black text-indigo-700 flex items-center gap-2`}>
+                                <Activity className="w-4 h-4 text-indigo-500" />
                                 {formData.oilNextChange?.toLocaleString('pt-BR') || '---'} KM
                               </div>
                             </div>
+                          </div>
 
-                            <div className="md:col-span-2">
-                              <label className={labelClass}>Última Troca de Óleo (KM)</label>
-                              <div className="flex gap-2">
-                                <input
-                                  type="number"
-                                  value={formData.oilLastChange || ''}
-                                  readOnly
-                                  className={`${inputClass} bg-slate-100/50 cursor-not-allowed`}
-                                  placeholder="KM da última troca"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setConfirmModal({
-                                      isOpen: true,
-                                      title: "Confirmar Troca de Óleo",
-                                      message: `Confirma a troca de óleo do veículo ${formData.model} (Placa: ${formData.plate}) no KM atual de ${formData.currentKm?.toLocaleString('pt-BR') || '0'}?`,
-                                      type: 'positive',
-                                      confirmLabel: 'Sim, Confirmar Troca',
-                                      onConfirm: async () => {
-                                        const last = formData.currentKm || 0;
-                                        const next = last + (formData.oilCalculationBase || 5000);
-
-                                        try {
-                                          if (editingVehicle?.id) {
-                                            await fleetService.addOilChangeRecord(editingVehicle.id, last, undefined, formData.oilCalculationBase);
-
-                                            // Update Parent State to refresh Dashboard immediately
-                                            const updatedVehicle: Vehicle = {
-                                              ...editingVehicle,
-                                              ...formData, // Merge current form state
-                                              oilLastChange: last,
-                                              oilNextChange: next,
-                                              oilCalculationBase: formData.oilCalculationBase,
-                                              currentKm: last // Sync KM
-                                            } as Vehicle;
-                                            onUpdateVehicle(updatedVehicle);
-                                          }
-
-                                          setFormData(prev => ({ ...prev, oilLastChange: last, oilNextChange: next }));
-                                          setConfirmModal(prev => ({ ...prev, isOpen: false }));
-                                          alert("Troca de óleo registrada com sucesso!");
-                                        } catch (error) {
-                                          console.error("Erro ao registrar troca de óleo", error);
-                                          alert("Erro ao registrar troca de óleo. Verifique o console.");
-                                        }
-                                      }
-                                    });
-                                  }}
-                                  className="px-6 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-700 transition-all active:scale-95 shrink-0 shadow-lg shadow-indigo-600/20"
-                                >
-                                  Óleo Trocado
-                                </button>
-                              </div>
+                          <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                            <div>
+                              <p className="text-xs font-bold text-slate-700">Última troca realizada no KM: {formData.oilLastChange ? `${formData.oilLastChange.toLocaleString('pt-BR')} KM` : 'Nenhum registro'}</p>
+                              <p className="text-[11px] text-slate-400">Clique ao lado para registrar uma nova troca com o KM atual do veículo.</p>
                             </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setConfirmModal({
+                                  isOpen: true,
+                                  title: "Confirmar Troca de Óleo",
+                                  message: `Confirma a troca de óleo do veículo ${formData.model} (Placa: ${formData.plate}) no KM atual de ${formData.currentKm?.toLocaleString('pt-BR') || '0'}?`,
+                                  type: 'positive',
+                                  confirmLabel: 'Sim, Confirmar Troca',
+                                  onConfirm: async () => {
+                                    const last = formData.currentKm || 0;
+                                    const next = last + (formData.oilCalculationBase || 5000);
+
+                                    try {
+                                      if (editingVehicle?.id) {
+                                        await fleetService.addOilChangeRecord(editingVehicle.id, last, undefined, formData.oilCalculationBase);
+                                        const updatedVehicle: Vehicle = {
+                                          ...editingVehicle,
+                                          ...formData,
+                                          oilLastChange: last,
+                                          oilNextChange: next,
+                                          oilCalculationBase: formData.oilCalculationBase,
+                                          currentKm: last
+                                        } as Vehicle;
+                                        onUpdateVehicle(updatedVehicle);
+                                      }
+                                      setFormData(prev => ({ ...prev, oilLastChange: last, oilNextChange: next }));
+                                      setConfirmModal(prev => ({ ...prev, isOpen: false }));
+                                      alert("Troca de óleo registrada com sucesso!");
+                                    } catch (error) {
+                                      console.error("Erro ao registrar troca de óleo", error);
+                                      alert("Erro ao registrar troca de óleo.");
+                                    }
+                                  }
+                                });
+                              }}
+                              className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl font-black text-xs uppercase tracking-wider hover:bg-indigo-700 transition-all active:scale-95 shadow-md shrink-0 flex items-center justify-center gap-2"
+                            >
+                              <PenTool className="w-3.5 h-3.5" /> Registrar Troca de Óleo
+                            </button>
                           </div>
                         </div>
 
-                        <div className="md:col-span-2 bg-slate-50 border border-slate-200 rounded-[2rem] p-6 space-y-6">
-                          <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] flex items-center gap-2">
-                            <Activity className="w-3.5 h-3.5" /> Controle de Correia Dentada
+                        {/* Card Controle de Correia Dentada */}
+                        <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm space-y-4">
+                          <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-2 pb-2 border-b border-slate-100">
+                            <Activity className="w-4 h-4 text-indigo-600" /> Controle de Correia Dentada
                           </h4>
 
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                             <div>
-                              <label className={labelClass}>KM Atual</label>
-                              <div className={`${inputClass} bg-slate-100/50 cursor-not-allowed flex items-center gap-2`}>
+                              <label className={labelClass}>KM Atual Registrado</label>
+                              <div className={`${inputClass} bg-slate-100/60 cursor-not-allowed flex items-center gap-2 text-slate-700`}>
                                 <Gauge className="w-4 h-4 text-slate-400" />
                                 {formData.currentKm?.toLocaleString('pt-BR') || '---'} KM
                               </div>
                             </div>
 
                             <div className="relative" ref={timingBeltBaseDropdownRef}>
-                              <label className={labelClass}>Base de Cálculo (KM)</label>
+                              <label className={labelClass}>Intervalo / Base de Cálculo</label>
                               <button
                                 type="button"
                                 onClick={() => setIsTimingBeltBaseDropdownOpen(!isTimingBeltBaseDropdownOpen)}
-                                className={`${inputClass} flex items-center justify-between cursor-pointer active:scale-95`}
+                                className={`${inputClass} flex items-center justify-between cursor-pointer`}
                               >
                                 <span className="text-sm font-bold text-slate-900">
                                   {formData.timingBeltCalculationBase ? `${formData.timingBeltCalculationBase.toLocaleString('pt-BR')} KM` : '50.000 KM'}
@@ -1394,7 +2073,7 @@ export const FleetManagementScreen: React.FC<FleetManagementScreenProps> = ({
                               </button>
 
                               {isTimingBeltBaseDropdownOpen && (
-                                <div className="absolute z-50 left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden animate-slide-up flex flex-col max-h-60 overflow-y-auto custom-scrollbar">
+                                <div className="absolute z-50 left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden animate-slide-up flex flex-col max-h-56 overflow-y-auto custom-scrollbar">
                                   {[10000, 20000, 40000, 50000, 60000, 80000, 100000].map((base) => (
                                     <button
                                       key={base}
@@ -1404,7 +2083,7 @@ export const FleetManagementScreen: React.FC<FleetManagementScreenProps> = ({
                                         setFormData({ ...formData, timingBeltCalculationBase: base as any, timingBeltNextChange: next });
                                         setIsTimingBeltBaseDropdownOpen(false);
                                       }}
-                                      className={`w-full px-4 py-3 flex items-center justify-between hover:bg-slate-50 transition-colors group ${formData.timingBeltCalculationBase === base ? 'bg-indigo-50/50' : ''}`}
+                                      className={`w-full px-4 py-2.5 flex items-center justify-between hover:bg-slate-50 transition-colors ${formData.timingBeltCalculationBase === base ? 'bg-indigo-50/50' : ''}`}
                                     >
                                       <span className={`text-xs font-bold ${formData.timingBeltCalculationBase === base ? 'text-indigo-900' : 'text-slate-700'}`}>
                                         {base.toLocaleString('pt-BR')} KM
@@ -1417,98 +2096,92 @@ export const FleetManagementScreen: React.FC<FleetManagementScreenProps> = ({
                             </div>
 
                             <div>
-                              <label className={labelClass}>Próxima Troca (KM)</label>
-                              <div className={`${inputClass} bg-indigo-100/50 font-black text-indigo-700 flex items-center`}>
+                              <label className={labelClass}>Próxima Troca Prevista</label>
+                              <div className={`${inputClass} bg-indigo-50/50 border-indigo-200 font-black text-indigo-700 flex items-center gap-2`}>
+                                <Activity className="w-4 h-4 text-indigo-500" />
                                 {formData.timingBeltNextChange?.toLocaleString('pt-BR') || '---'} KM
                               </div>
                             </div>
+                          </div>
 
-                            <div className="md:col-span-2">
-                              <label className={labelClass}>Última Troca de Correia (KM)</label>
-                              <div className="flex gap-2">
-                                <input
-                                  type="number"
-                                  value={formData.timingBeltLastChange || ''}
-                                  readOnly
-                                  className={`${inputClass} bg-slate-100/50 cursor-not-allowed`}
-                                  placeholder="KM da última troca"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setConfirmModal({
-                                      isOpen: true,
-                                      title: "Confirmar Troca de Correia",
-                                      message: `Confirma a troca de correia dentada do veículo ${formData.model} (Placa: ${formData.plate}) no KM atual de ${formData.currentKm?.toLocaleString('pt-BR') || '0'}?`,
-                                      type: 'positive',
-                                      confirmLabel: 'Sim, Confirmar Troca',
-                                      onConfirm: async () => {
-                                        const last = formData.currentKm || 0;
-                                        const next = last + (formData.timingBeltCalculationBase || 50000);
-
-                                        try {
-                                          if (editingVehicle?.id) {
-                                            await fleetService.addTimingBeltRecord(editingVehicle.id, last);
-
-                                            // Update Parent State
-                                            const updatedVehicle: Vehicle = {
-                                              ...editingVehicle,
-                                              ...formData, // Merge current form state
-                                              timingBeltLastChange: last,
-                                              timingBeltNextChange: next,
-                                              timingBeltCalculationBase: formData.timingBeltCalculationBase,
-                                              currentKm: last // Sync KM
-                                            } as Vehicle;
-                                            onUpdateVehicle(updatedVehicle);
-                                          }
-
-                                          setFormData(prev => ({ ...prev, timingBeltLastChange: last, timingBeltNextChange: next }));
-                                          setConfirmModal(prev => ({ ...prev, isOpen: false }));
-                                          alert("Troca de correia registrada com sucesso!");
-                                        } catch (error) {
-                                          console.error("Erro ao registrar troca de correia", error);
-                                          alert("Erro ao registrar troca de correia. Verifique o console.");
-                                        }
-                                      }
-                                    });
-                                  }}
-                                  className="px-6 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-600 transition-all active:scale-95 shrink-0 shadow-lg"
-                                >
-                                  Correia Trocada
-                                </button>
-                              </div>
+                          <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                            <div>
+                              <p className="text-xs font-bold text-slate-700">Última troca realizada no KM: {formData.timingBeltLastChange ? `${formData.timingBeltLastChange.toLocaleString('pt-BR')} KM` : 'Nenhum registro'}</p>
+                              <p className="text-[11px] text-slate-400">Clique ao lado para registrar uma nova troca de correia dentada.</p>
                             </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setConfirmModal({
+                                  isOpen: true,
+                                  title: "Confirmar Troca de Correia",
+                                  message: `Confirma a troca de correia dentada do veículo ${formData.model} (Placa: ${formData.plate}) no KM atual de ${formData.currentKm?.toLocaleString('pt-BR') || '0'}?`,
+                                  type: 'positive',
+                                  confirmLabel: 'Sim, Confirmar Troca',
+                                  onConfirm: async () => {
+                                    const last = formData.currentKm || 0;
+                                    const next = last + (formData.timingBeltCalculationBase || 50000);
+
+                                    try {
+                                      if (editingVehicle?.id) {
+                                        await fleetService.addTimingBeltRecord(editingVehicle.id, last);
+                                        const updatedVehicle: Vehicle = {
+                                          ...editingVehicle,
+                                          ...formData,
+                                          timingBeltLastChange: last,
+                                          timingBeltNextChange: next,
+                                          timingBeltCalculationBase: formData.timingBeltCalculationBase,
+                                          currentKm: last
+                                        } as Vehicle;
+                                        onUpdateVehicle(updatedVehicle);
+                                      }
+                                      setFormData(prev => ({ ...prev, timingBeltLastChange: last, timingBeltNextChange: next }));
+                                      setConfirmModal(prev => ({ ...prev, isOpen: false }));
+                                      alert("Troca de correia registrada com sucesso!");
+                                    } catch (error) {
+                                      console.error("Erro ao registrar troca de correia", error);
+                                      alert("Erro ao registrar troca de correia.");
+                                    }
+                                  }
+                                });
+                              }}
+                              className="px-5 py-2.5 bg-slate-900 text-white rounded-xl font-black text-xs uppercase tracking-wider hover:bg-indigo-600 transition-all active:scale-95 shadow-md shrink-0 flex items-center justify-center gap-2"
+                            >
+                              <Activity className="w-3.5 h-3.5" /> Registrar Troca de Correia
+                            </button>
                           </div>
                         </div>
+                      </div>
+                    )}
 
-                        <div>
-                          <label className={labelClass}><Fuel className="w-4 h-4 inline mr-2 text-indigo-500" /> Código Renavam</label>
-                          <input value={formData.renavam} onChange={e => setFormData({ ...formData, renavam: e.target.value })} className={`${inputClass} font-mono`} placeholder="01332550344" />
+                    {/* ABA 5: DOCUMENTOS & ANEXOS */}
+                    {activeModalTab === 'documentos' && (
+                      <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm space-y-6 animate-fade-in">
+                        <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                          <div>
+                            <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
+                              <FileText className="w-4 h-4 text-indigo-600" /> Documentos & Anexos do Veículo
+                            </h4>
+                            <p className="text-xs text-slate-500 mt-0.5">Gerencie os arquivos digitais como CRLV, Seguro Obrigatório, Manuais e Vistorias.</p>
+                          </div>
+                          <span className="px-3 py-1 bg-indigo-50 text-indigo-700 text-xs font-black rounded-xl border border-indigo-100">
+                            {vehicleDocuments.length} Anexos
+                          </span>
                         </div>
-                      </div>
-                      <div>
-                        <label className={labelClass}><ShieldCheck className="w-4 h-4 inline mr-2 text-indigo-500" /> Número do Chassi (VIN)</label>
-                        <input value={formData.chassis} onChange={e => setFormData({ ...formData, chassis: e.target.value.toUpperCase() })} className={`${inputClass} font-mono uppercase`} placeholder="8AP..." />
-                      </div>
-
-                      <div className="md:col-span-2 bg-slate-50 border border-slate-200 rounded-[2rem] p-6 space-y-6">
-                        <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] flex items-center gap-2">
-                          <FileText className="w-3.5 h-3.5" /> Documentos do Veículo
-                        </h4>
 
                         {/* Upload Section */}
-                        <div className="flex flex-col gap-4 bg-white p-4 rounded-xl border border-dashed border-slate-300">
-                          <div className="flex flex-col md:flex-row gap-4 items-end">
-                            <div className="flex-1 w-full">
+                        <div className="flex flex-col gap-4 bg-slate-50 p-4 sm:p-6 rounded-2xl border border-dashed border-slate-300">
+                          <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+                            <div className="md:col-span-5">
                               <label className={labelClass}>Descrição do Documento</label>
                               <input
                                 value={newDocumentDescription}
                                 onChange={(e) => setNewDocumentDescription(e.target.value)}
                                 className={inputClass}
-                                placeholder="Ex: CRLV 2024, Seguro, Manual..."
+                                placeholder="Ex: CRLV 2024, Apólice Seguro, Manual..."
                               />
                             </div>
-                            <div className="flex-1 w-full">
+                            <div className="md:col-span-4">
                               <label className={labelClass}>Arquivo</label>
                               <div className="relative">
                                 <input
@@ -1518,51 +2191,62 @@ export const FleetManagementScreen: React.FC<FleetManagementScreenProps> = ({
                                   className="hidden"
                                   id="doc-upload"
                                 />
-                                <label htmlFor="doc-upload" className={`${inputClass} cursor-pointer flex items-center gap-2 text-slate-500 hover:bg-slate-50`}>
-                                  <Upload className="w-4 h-4" />
-                                  <span className="truncate">{newDocumentFile ? newDocumentFile.name : 'Selectionar arquivo...'}</span>
+                                <label htmlFor="doc-upload" className={`${inputClass} cursor-pointer flex items-center gap-2 text-slate-600 hover:bg-white`}>
+                                  <Upload className="w-4 h-4 text-indigo-500 shrink-0" />
+                                  <span className="truncate">{newDocumentFile ? newDocumentFile.name : 'Selecionar arquivo...'}</span>
                                 </label>
                               </div>
                             </div>
-                            <button
-                              onClick={handleDocumentUpload}
-                              disabled={isUploadingDocument || !newDocumentFile || !newDocumentDescription}
-                              className="h-[50px] px-6 bg-slate-900 text-white rounded-xl font-bold text-xs uppercase tracking-wider hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
-                            >
-                              {isUploadingDocument ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Plus className="w-4 h-4" />}
-                              Anexar
-                            </button>
+                            <div className="md:col-span-3">
+                              <button
+                                type="button"
+                                onClick={handleDocumentUpload}
+                                disabled={isUploadingDocument || !newDocumentFile || !newDocumentDescription || !editingVehicle?.id}
+                                className="w-full h-[48px] px-6 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-wider hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 shadow-lg"
+                              >
+                                {isUploadingDocument ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Plus className="w-4 h-4" />}
+                                Anexar
+                              </button>
+                            </div>
                           </div>
+
+                          {!editingVehicle?.id && (
+                            <p className="text-[11px] text-amber-600 font-medium bg-amber-50 p-2.5 rounded-xl border border-amber-200">
+                              ℹ️ Salve o cadastro do veículo para habilitar o anexo de múltiplos documentos no banco de dados.
+                            </p>
+                          )}
                         </div>
 
                         {/* Documents List */}
-                        <div className="space-y-2">
+                        <div className="space-y-2.5">
                           {vehicleDocuments.length > 0 ? (
                             vehicleDocuments.map((doc) => (
-                              <div key={doc.id} className="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-xl hover:shadow-sm transition-all group">
-                                <div className="flex items-center gap-3 overflow-hidden">
-                                  <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-lg flex items-center justify-center shrink-0">
+                              <div key={doc.id} className="flex items-center justify-between p-3.5 bg-slate-50 border border-slate-200/70 rounded-2xl hover:bg-white hover:shadow-sm transition-all group">
+                                <div className="flex items-center gap-3 min-w-0">
+                                  <div className="w-10 h-10 bg-indigo-100 text-indigo-600 rounded-xl flex items-center justify-center shrink-0">
                                     <FileText className="w-5 h-5" />
                                   </div>
                                   <div className="min-w-0">
-                                    <p className="text-sm font-bold text-slate-700 truncate">{doc.description || doc.name}</p>
-                                    <p className="text-[10px] text-slate-400 truncate">{doc.name} • {new Date(doc.created_at || '').toLocaleDateString('pt-BR')}</p>
+                                    <p className="text-xs font-bold text-slate-800 truncate">{doc.description || doc.name}</p>
+                                    <p className="text-[10px] text-slate-400 truncate">{doc.name} • {doc.created_at ? new Date(doc.created_at).toLocaleDateString('pt-BR') : 'Sem data'}</p>
                                   </div>
                                 </div>
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1.5 shrink-0">
                                   <a
                                     href={doc.file_url}
                                     target="_blank"
+                                    rel="noreferrer"
                                     download
-                                    className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
-                                    title="Baixar"
+                                    className="p-2 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
+                                    title="Baixar Documento"
                                   >
                                     <Download className="w-4 h-4" />
                                   </a>
                                   <button
+                                    type="button"
                                     onClick={() => handleDocumentDelete(doc)}
-                                    className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
-                                    title="Excluir"
+                                    className="p-2 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
+                                    title="Excluir Documento"
                                   >
                                     <Trash2 className="w-4 h-4" />
                                   </button>
@@ -1570,22 +2254,71 @@ export const FleetManagementScreen: React.FC<FleetManagementScreenProps> = ({
                               </div>
                             ))
                           ) : (
-                            <div className="text-center py-8 text-slate-400 text-xs font-medium bg-slate-100/50 rounded-xl border border-dashed border-slate-200">
-                              Nenhum documento anexado.
+                            <div className="text-center py-10 text-slate-400 text-xs font-medium bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                              <FileText className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+                              Nenhum documento anexado até o momento.
                             </div>
                           )}
                         </div>
                       </div>
-                    </div>
+                    )}
+
                   </div>
                 </div>
 
-                <div className="px-6 py-4 border-t border-slate-100 bg-white flex justify-between items-center shrink-0">
-                  <button onClick={() => setIsModalOpen(false)} className="px-6 py-3 font-black text-slate-400 hover:text-rose-600 transition-all uppercase text-[10px] tracking-[0.2em]">Descartar</button>
-                  <button onClick={handleSave} className="px-8 py-3 bg-slate-900 text-white font-black rounded-2xl hover:bg-indigo-600 shadow-xl flex items-center gap-3 transition-all uppercase text-[10px] tracking-[0.2em] active:scale-95">
-                    <Save className="w-4 h-4" /> Salvar Veículo
+                {/* RODAPÉ INTELIGENTE COM NAVEGAÇÃO ENTRE ABAS E SALVAMENTO */}
+                <div className="px-4 sm:px-8 py-3.5 bg-white border-t border-slate-100 flex items-center justify-between gap-3 shrink-0 shadow-lg z-10">
+                  <button
+                    type="button"
+                    onClick={handleCloseModal}
+                    className="px-4 sm:px-6 py-2.5 font-bold text-slate-400 hover:text-rose-600 transition-all uppercase text-[11px] tracking-wider"
+                  >
+                    Descartar
                   </button>
+
+                  <div className="flex items-center gap-2">
+                    {/* Botão Anterior */}
+                    {FORM_TABS.findIndex(t => t.id === activeModalTab) > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const idx = FORM_TABS.findIndex(t => t.id === activeModalTab);
+                          if (idx > 0) changeModalTab(FORM_TABS[idx - 1].id);
+                        }}
+                        className="px-4 sm:px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-2xl transition-all uppercase text-[11px] tracking-wider flex items-center gap-1.5 active:scale-95"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                        <span className="hidden sm:inline">Anterior</span>
+                      </button>
+                    )}
+
+                    {/* Botão Próximo */}
+                    {FORM_TABS.findIndex(t => t.id === activeModalTab) < FORM_TABS.length - 1 ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const idx = FORM_TABS.findIndex(t => t.id === activeModalTab);
+                          if (idx < FORM_TABS.length - 1) changeModalTab(FORM_TABS[idx + 1].id);
+                        }}
+                        className="px-4 sm:px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-2xl transition-all uppercase text-[11px] tracking-wider flex items-center gap-1.5 active:scale-95 shadow-md"
+                      >
+                        <span className="hidden sm:inline">Próximo</span>
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    ) : null}
+
+                    {/* Botão Salvar Veículo */}
+                    <button
+                      type="button"
+                      onClick={handleSave}
+                      className="px-5 sm:px-7 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl shadow-xl shadow-indigo-600/20 flex items-center gap-2 transition-all uppercase text-[11px] tracking-wider active:scale-95"
+                    >
+                      <Save className="w-4 h-4" />
+                      <span>Salvar Veículo</span>
+                    </button>
+                  </div>
                 </div>
+
               </div>
             </div>,
             document.body
@@ -1940,53 +2673,53 @@ export const FleetManagementScreen: React.FC<FleetManagementScreenProps> = ({
       {/* MODAL DE STATUS DO VEÍCULO */}
       {
         viewingVehicleStatus && createPortal(
-          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-fade-in">
-            <div className="w-full max-w-2xl bg-white rounded-[3rem] shadow-2xl overflow-hidden animate-slide-up border border-white/20">
-              <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-                <div className="flex items-center gap-4">
-                  <div className={`w-14 h-14 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-500/10`}>
-                    <Car className="w-7 h-7" />
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-3 md:p-4 bg-slate-900/60 backdrop-blur-md animate-fade-in">
+            <div className="w-full max-w-2xl max-h-[92vh] flex flex-col bg-white rounded-3xl md:rounded-[3rem] shadow-2xl overflow-hidden animate-slide-up border border-white/20">
+              <div className="p-5 md:p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 shrink-0">
+                <div className="flex items-center gap-3 md:gap-4 min-w-0">
+                  <div className={`w-11 h-11 md:w-14 md:h-14 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-500/10 shrink-0`}>
+                    <Car className="w-5 h-5 md:w-7 md:h-7" />
                   </div>
-                  <div>
-                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">{viewingVehicleStatus.model}</h3>
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-[0.2em]">{viewingVehicleStatus.plate}</p>
+                  <div className="min-w-0">
+                    <h3 className="text-base md:text-xl font-black text-slate-900 uppercase tracking-tight truncate">{viewingVehicleStatus.model}</h3>
+                    <p className="text-[10px] md:text-xs font-bold text-slate-400 uppercase tracking-[0.2em]">{viewingVehicleStatus.plate}</p>
                   </div>
                 </div>
-                <button onClick={() => setViewingVehicleStatus(null)} className="p-3 bg-white text-slate-400 rounded-xl hover:bg-rose-50 hover:text-rose-600 transition-all shadow-sm">
+                <button onClick={() => setViewingVehicleStatus(null)} className="p-2 md:p-3 bg-white text-slate-400 rounded-xl hover:bg-rose-50 hover:text-rose-600 transition-all shadow-xs shrink-0 ml-2">
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              <div className="p-8 space-y-8">
+              <div className="p-5 md:p-8 space-y-5 md:space-y-8 overflow-y-auto custom-scrollbar flex-1">
                 {/* Status Geral */}
-                <div className="flex items-center justify-between bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
+                <div className="flex items-center justify-between bg-slate-50 p-4 md:p-6 rounded-2xl md:rounded-[2rem] border border-slate-100">
                   <div className="flex items-center gap-3">
-                    <Gauge className="w-6 h-6 text-slate-400" />
+                    <Gauge className="w-5 h-5 md:w-6 md:h-6 text-slate-400" />
                     <div>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">KM Atual</p>
-                      <p className="text-2xl font-black text-slate-900">{viewingVehicleStatus.currentKm?.toLocaleString('pt-BR') || '---'} KM</p>
+                      <p className="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest">KM Atual</p>
+                      <p className="text-xl md:text-2xl font-black text-slate-900">{viewingVehicleStatus.currentKm?.toLocaleString('pt-BR') || '---'} KM</p>
                     </div>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
                   {/* Bloco Óleo */}
-                  <div className="bg-amber-50/50 p-6 rounded-[2.5rem] border border-amber-100 relative overflow-hidden group hover:border-amber-200 transition-all">
+                  <div className="bg-amber-50/50 p-5 md:p-6 rounded-2xl md:rounded-[2.5rem] border border-amber-100 relative overflow-hidden group hover:border-amber-200 transition-all">
                     <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
                       <Droplets className="w-24 h-24 text-amber-500" />
                     </div>
 
-                    <h4 className="text-[10px] font-black text-amber-600 uppercase tracking-[0.2em] mb-6 flex items-center gap-2 relative z-10">
+                    <h4 className="text-[10px] font-black text-amber-600 uppercase tracking-[0.2em] mb-4 md:mb-6 flex items-center gap-2 relative z-10">
                       <Droplets className="w-3.5 h-3.5" /> Troca de Óleo
                     </h4>
 
-                    <div className="space-y-4 relative z-10">
-                      <div className="bg-white/60 backdrop-blur-sm p-4 rounded-2xl border border-amber-100/50">
+                    <div className="space-y-3 md:space-y-4 relative z-10">
+                      <div className="bg-white/60 backdrop-blur-sm p-3.5 md:p-4 rounded-xl md:rounded-2xl border border-amber-100/50">
                         <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Última Troca</p>
                         <p className="text-sm font-black text-slate-700">{viewingVehicleStatus.oilLastChange?.toLocaleString('pt-BR') || '---'} KM</p>
                       </div>
 
-                      <div className="bg-white/60 backdrop-blur-sm p-4 rounded-2xl border border-amber-100/50">
+                      <div className="bg-white/60 backdrop-blur-sm p-3.5 md:p-4 rounded-xl md:rounded-2xl border border-amber-100/50">
                         <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Próxima Troca</p>
                         {(() => {
                           const diff = (viewingVehicleStatus.oilNextChange || 0) - (viewingVehicleStatus.currentKm || 0);
@@ -1997,10 +2730,10 @@ export const FleetManagementScreen: React.FC<FleetManagementScreenProps> = ({
 
                           return (
                             <div className="flex justify-between items-end">
-                              <p className={`text-lg font-black ${statusColor}`}>
+                              <p className={`text-base md:text-lg font-black ${statusColor}`}>
                                 {viewingVehicleStatus.oilNextChange?.toLocaleString('pt-BR') || '---'} KM
                               </p>
-                              <span className={`text-[9px] font-black px-2 py-1 rounded-lg bg-white ${statusColor} border border-current opacity-80`}>
+                              <span className={`text-[8px] md:text-[9px] font-black px-2 py-0.5 md:py-1 rounded-lg bg-white ${statusColor} border border-current opacity-80`}>
                                 {statusText}
                               </span>
                             </div>
@@ -2008,7 +2741,7 @@ export const FleetManagementScreen: React.FC<FleetManagementScreenProps> = ({
                         })()}
                       </div>
 
-                      <div className="flex justify-between items-center px-2">
+                      <div className="flex justify-between items-center px-1 md:px-2">
                         <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Base de Cálculo</span>
                         <span className="text-[10px] font-black text-slate-600">{viewingVehicleStatus.oilCalculationBase?.toLocaleString('pt-BR') || 5000} KM</span>
                       </div>
@@ -2016,22 +2749,22 @@ export const FleetManagementScreen: React.FC<FleetManagementScreenProps> = ({
                   </div>
 
                   {/* Bloco Correia */}
-                  <div className="bg-indigo-50/50 p-6 rounded-[2.5rem] border border-indigo-100 relative overflow-hidden group hover:border-indigo-200 transition-all">
+                  <div className="bg-indigo-50/50 p-5 md:p-6 rounded-2xl md:rounded-[2.5rem] border border-indigo-100 relative overflow-hidden group hover:border-indigo-200 transition-all">
                     <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
                       <Activity className="w-24 h-24 text-indigo-500" />
                     </div>
 
-                    <h4 className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em] mb-6 flex items-center gap-2 relative z-10">
+                    <h4 className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em] mb-4 md:mb-6 flex items-center gap-2 relative z-10">
                       <Activity className="w-3.5 h-3.5" /> Correia Dentada
                     </h4>
 
-                    <div className="space-y-4 relative z-10">
-                      <div className="bg-white/60 backdrop-blur-sm p-4 rounded-2xl border border-indigo-100/50">
+                    <div className="space-y-3 md:space-y-4 relative z-10">
+                      <div className="bg-white/60 backdrop-blur-sm p-3.5 md:p-4 rounded-xl md:rounded-2xl border border-indigo-100/50">
                         <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Última Troca</p>
                         <p className="text-sm font-black text-slate-700">{viewingVehicleStatus.timingBeltLastChange?.toLocaleString('pt-BR') || '---'} KM</p>
                       </div>
 
-                      <div className="bg-white/60 backdrop-blur-sm p-4 rounded-2xl border border-indigo-100/50">
+                      <div className="bg-white/60 backdrop-blur-sm p-3.5 md:p-4 rounded-xl md:rounded-2xl border border-indigo-100/50">
                         <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Próxima Troca</p>
                         {(() => {
                           const diff = (viewingVehicleStatus.timingBeltNextChange || 0) - (viewingVehicleStatus.currentKm || 0);
@@ -2042,10 +2775,10 @@ export const FleetManagementScreen: React.FC<FleetManagementScreenProps> = ({
 
                           return (
                             <div className="flex justify-between items-end">
-                              <p className={`text-lg font-black ${statusColor}`}>
+                              <p className={`text-base md:text-lg font-black ${statusColor}`}>
                                 {viewingVehicleStatus.timingBeltNextChange?.toLocaleString('pt-BR') || '---'} KM
                               </p>
-                              <span className={`text-[9px] font-black px-2 py-1 rounded-lg bg-white ${statusColor} border border-current opacity-80`}>
+                              <span className={`text-[8px] md:text-[9px] font-black px-2 py-0.5 md:py-1 rounded-lg bg-white ${statusColor} border border-current opacity-80`}>
                                 {statusText}
                               </span>
                             </div>
@@ -2053,7 +2786,7 @@ export const FleetManagementScreen: React.FC<FleetManagementScreenProps> = ({
                         })()}
                       </div>
 
-                      <div className="flex justify-between items-center px-2">
+                      <div className="flex justify-between items-center px-1 md:px-2">
                         <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Base de Cálculo</span>
                         <span className="text-[10px] font-black text-slate-600">{viewingVehicleStatus.timingBeltCalculationBase?.toLocaleString('pt-BR') || 50000} KM</span>
                       </div>

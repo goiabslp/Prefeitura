@@ -247,6 +247,13 @@ const VIEW_TO_PATH: Record<string, string> = {
   'admin:fleet:leve': '/Frota/Leve',
   'admin:fleet:pesada': '/Frota/Pesada',
   'admin:fleet:acessorios': '/Frota/Acessorios',
+  'admin:fleet:novo': '/Frota/Novo',
+  'admin:fleet:novo:geral': '/Frota/Novo/Geral',
+  'admin:fleet:novo:tecnico': '/Frota/Novo/Tecnico',
+  'admin:fleet:novo:alocacao': '/Frota/Novo/Alocacao',
+  'admin:fleet:novo:manutencao': '/Frota/Novo/Manutencao',
+  'admin:fleet:novo:documentos': '/Frota/Novo/Documentos',
+  'admin:fleet:cadastrar': '/Frota/Cadastrar',
   'politica-privacidade': '/PoliticaPrivacidade',
   'politica-privacidade-app': '/PoliticaPrivacidadeApp',
   'assistente-ia': '/AssistenteIA',
@@ -256,7 +263,10 @@ const VIEW_TO_PATH: Record<string, string> = {
   'art:logos': '/Art/Logos',
   'art:referencias': '/Art/Referencias',
   'art:historico': '/Art/Historico',
-  'art:editor': '/Art/Editor'
+  'art:editor': '/Art/Editor',
+  'admin:entities:persons': '/Admin/Entidades/Pessoas',
+  'admin:entities:sectors': '/Admin/Entidades/Setores',
+  'admin:entities:jobs': '/Admin/Entidades/Cargos'
 };
 
 const PATH_TO_STATE: Record<string, any> = Object.fromEntries(
@@ -1378,6 +1388,16 @@ const App: React.FC = () => {
       } else if (path.startsWith('/admin/usuarios')) {
         setCurrentView('admin');
         setAdminTab('users');
+        return;
+      } else if (path.startsWith('/admin/entidades')) {
+        setCurrentView('admin');
+        setAdminTab('entities');
+        setIsAdminSidebarOpen(false);
+        return;
+      } else if (path.startsWith('/frota')) {
+        setCurrentView('admin');
+        setAdminTab('fleet');
+        setIsAdminSidebarOpen(false);
         return;
       } else if (path === '/abastecimento') {
         setCurrentView('home');

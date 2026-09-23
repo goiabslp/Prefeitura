@@ -28,10 +28,17 @@ export const NoticiasAnnouncementModal: React.FC<NoticiasAnnouncementModalProps>
 
   useEffect(() => {
     try {
+      // Não exibir em dispositivos móveis
+      if (typeof window !== 'undefined' && window.innerWidth < 768) {
+        return;
+      }
+
       const alreadySeen = localStorage.getItem(storageKey);
       if (!alreadySeen) {
         const timer = setTimeout(() => {
-          setIsOpen(true);
+          if (typeof window !== 'undefined' && window.innerWidth >= 768) {
+            setIsOpen(true);
+          }
         }, 400);
         return () => clearTimeout(timer);
       }
@@ -69,7 +76,7 @@ export const NoticiasAnnouncementModal: React.FC<NoticiasAnnouncementModalProps>
 
   return createPortal(
     <div 
-      className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-6 bg-slate-950/15 backdrop-blur-[2px] animate-in fade-in duration-300 select-none"
+      className="fixed inset-0 z-[99999] hidden md:flex items-center justify-center p-3 sm:p-6 bg-slate-950/15 backdrop-blur-[2px] animate-in fade-in duration-300 select-none"
       onClick={handleDismiss}
     >
       
