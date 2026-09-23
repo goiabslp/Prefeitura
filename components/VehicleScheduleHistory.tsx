@@ -200,8 +200,8 @@ export const VehicleScheduleHistory: React.FC<VehicleScheduleHistoryProps> = ({
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden animate-fade-in bg-slate-50">
-      {/* Header Compacto */}
-      <div className="bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between gap-4 shrink-0 shadow-sm relative z-20">
+      {/* Header Desktop (Web) */}
+      <div className="hidden md:flex bg-white border-b border-slate-100 px-6 py-4 items-center justify-between gap-4 shrink-0 shadow-sm relative z-20">
         <div className="flex items-center gap-4 flex-1">
           {onBack && (
             <button
@@ -217,7 +217,7 @@ export const VehicleScheduleHistory: React.FC<VehicleScheduleHistoryProps> = ({
             <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-600/20 shrink-0">
               <History className="w-5 h-5 text-white" />
             </div>
-            <div className="hidden sm:block">
+            <div>
               <h2 className="text-lg font-bold text-slate-900 tracking-tight leading-none">
                 Agendamentos
               </h2>
@@ -242,7 +242,7 @@ export const VehicleScheduleHistory: React.FC<VehicleScheduleHistoryProps> = ({
                 title="Filtrar por Status"
               >
                 <Filter className="w-4 h-4 text-indigo-500" />
-                <span className="hidden sm:inline">
+                <span>
                   {activeTab === 'all' ? 'Status: Todos' : STATUS_MAP[activeTab]?.label}
                 </span>
                 <ChevronDown className="w-3.5 h-3.5 opacity-60" />
@@ -353,193 +353,539 @@ export const VehicleScheduleHistory: React.FC<VehicleScheduleHistoryProps> = ({
         </div>
       </div>
 
+      {/* Header Mobile Otimizado */}
+      <div className="md:hidden bg-white border-b border-slate-100 px-3.5 py-3 shrink-0 shadow-xs relative z-20 space-y-2.5">
+        {/* Linha 1: Voltar + Título + Contador + Alternador Lista/Cards */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            {onBack && (
+              <button
+                onClick={onBack}
+                className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
+                title="Voltar ao Menu"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+            )}
+            <div className="w-8 h-8 bg-indigo-600 rounded-xl flex items-center justify-center shadow-md shadow-indigo-600/20 shrink-0 text-white">
+              <History className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-sm font-black text-slate-900 tracking-tight leading-none truncate">
+                Histórico
+              </h2>
+              <span className="text-[9px] font-black text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded-md border border-indigo-100 uppercase tracking-wider inline-block mt-0.5">
+                {filtered.length} agendamentos
+              </span>
+            </div>
+          </div>
+
+          {/* Alternador Lista / Cards Mobile */}
+          <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200/60 shrink-0">
+            <button
+              onClick={() => setViewMode('list')}
+              className={`p-1.5 rounded-lg text-xs font-bold transition-all ${viewMode === 'list' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-500'}`}
+              title="Lista"
+            >
+              <LayoutList className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setViewMode('cards')}
+              className={`p-1.5 rounded-lg text-xs font-bold transition-all ${viewMode === 'cards' ? 'bg-white text-indigo-600 shadow-xs' : 'text-slate-500'}`}
+              title="Cards"
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Linha 2: Barra de Busca Mobile */}
+        <div className="relative w-full">
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Buscar veículo, motorista, destino..."
+            className="w-full pl-8 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-inner"
+          />
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+          {searchTerm && (
+            <button
+              onClick={() => setSearchTerm('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+
+        {/* Linha 3: Filtros de Status e Setor Mobile */}
+        <div className="grid grid-cols-2 gap-2 pt-0.5">
+          {/* Botão de Filtro de Status Mobile */}
+          <div className="relative">
+            <button
+              onClick={() => setIsFilterPopoverOpen(!isFilterPopoverOpen)}
+              className={`w-full px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center justify-between border shadow-xs ${
+                activeTab !== 'all'
+                  ? 'bg-indigo-600 text-white border-indigo-600'
+                  : 'bg-slate-50 border-slate-200 text-slate-700'
+              }`}
+            >
+              <div className="flex items-center gap-1.5 min-w-0">
+                <Filter className={`w-3.5 h-3.5 shrink-0 ${activeTab !== 'all' ? 'text-white' : 'text-indigo-500'}`} />
+                <span className="truncate text-[11px]">
+                  {activeTab === 'all' ? 'Status: Todos' : STATUS_MAP[activeTab]?.label}
+                </span>
+              </div>
+              <ChevronDown className="w-3 h-3 opacity-60 shrink-0" />
+            </button>
+
+            {isFilterPopoverOpen && (
+              <div className="absolute left-0 top-full mt-1.5 w-60 bg-white rounded-2xl shadow-2xl border border-slate-100 p-2 z-[100] animate-slide-up">
+                <div className="px-3 py-1 text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 mb-1">
+                  Filtrar Status
+                </div>
+                {[
+                  { id: 'all', label: 'Todos os Status' },
+                  { id: 'pendente', label: STATUS_MAP['pendente'].label },
+                  { id: 'confirmado', label: STATUS_MAP['confirmado'].label },
+                  { id: 'em_curso', label: STATUS_MAP['em_curso'].label },
+                  { id: 'concluido', label: STATUS_MAP['concluido'].label },
+                  { id: 'cancelado', label: STATUS_MAP['cancelado'].label },
+                ].map((tab) => {
+                  const count = tab.id === 'all'
+                    ? baseSchedules.filter(s => selectedSectorId === 'all' || s.serviceSectorId === selectedSectorId).length
+                    : baseSchedules.filter(s => (selectedSectorId === 'all' || s.serviceSectorId === selectedSectorId) && s.status === tab.id).length;
+                  const isActive = activeTab === tab.id;
+
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => {
+                        setActiveTab(tab.id as any);
+                        setIsFilterPopoverOpen(false);
+                      }}
+                      className={`w-full flex items-center justify-between px-2.5 py-1.5 text-xs font-bold rounded-xl transition-all ${
+                        isActive ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      <span className="truncate">{tab.label}</span>
+                      <span className={`px-1.5 py-0.5 rounded-md text-[9px] font-black ${
+                        isActive ? 'bg-indigo-200/80 text-indigo-900' : 'bg-slate-100 text-slate-500'
+                      }`}>
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {isFilterPopoverOpen && <div className="fixed inset-0 z-[90]" onClick={() => setIsFilterPopoverOpen(false)} />}
+          </div>
+
+          {/* Filtro por Setor Mobile */}
+          {userRole === 'admin' ? (
+            <div className="relative">
+              <select
+                value={selectedSectorId}
+                onChange={(e) => setSelectedSectorId(e.target.value)}
+                className="w-full pl-7 pr-6 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-[11px] font-bold text-slate-700 appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-inner truncate cursor-pointer"
+                title="Filtrar por Setor"
+              >
+                <option value="all">Todos os Setores</option>
+                {sectors.map(sec => (
+                  <option key={sec.id} value={sec.id}>{sec.name}</option>
+                ))}
+              </select>
+              <Building2 className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+              <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
+            </div>
+          ) : (
+            <div className="flex items-center gap-1 px-2 py-1.5 bg-indigo-50 border border-indigo-100/80 rounded-xl text-[11px] font-bold text-indigo-700 truncate shadow-xs">
+              <Building2 className="w-3 h-3 text-indigo-500 shrink-0" />
+              <span className="truncate">
+                {sectors.find(s => s.id === userSectorId)?.name || currentUserSector || 'Meu Setor'}
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Lista de Registros */}
       <div className="flex-1 overflow-y-auto custom-scrollbar p-3 md:p-5 w-full">
         <div className="w-full space-y-4 pb-8">
           {filtered.length > 0 ? (
             viewMode === 'list' ? (
-              <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden w-full">
-                <div className="w-full overflow-x-auto custom-scrollbar">
-                  <table className="w-full text-left border-collapse table-fixed">
-                    <thead>
-                      <tr className="bg-slate-50/90 border-b border-slate-200/80 text-[10px] font-black text-slate-500 uppercase tracking-wider">
-                        <th className="py-3 px-3 w-[18%]">Veículo / OS</th>
-                        <th className="py-3 px-3 w-[14%]">Saída / Retorno</th>
-                        <th className="py-3 px-3 w-[16%]">Solicitante & Setor</th>
-                        <th className="py-3 px-3 w-[14%]">Motorista</th>
-                        <th className="py-3 px-3 w-[12%]">Destino</th>
-                        <th className="py-3 px-3 w-[6%] text-center">Ocup.</th>
-                        <th className="py-3 px-3 w-[12%] text-center">Status</th>
-                        <th className="py-3 px-3 w-[8%] text-right">Ações</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 text-xs font-medium">
-                      {filtered.map(s => {
-                        const v = vehicles.find(veh => veh.id === s.vehicleId);
-                        const d = persons.find(p => p.id === s.driverId);
-                        const requesterPerson = persons.find(p => p.id === s.requesterPersonId);
-                        const sector = sectors.find(sec => sec.id === s.serviceSectorId)
-                          || (requesterPerson?.sectorId ? sectors.find(sec => sec.id === requesterPerson.sectorId) : undefined)
-                          || (v?.sectorId ? sectors.find(sec => sec.id === v.sectorId) : undefined);
-                        const cfg = STATUS_MAP[s.status];
+              <>
+                {/* Visualização Desktop (Tabela Completa Mantida) */}
+                <div className="hidden md:block bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden w-full">
+                  <div className="w-full overflow-x-auto custom-scrollbar">
+                    <table className="w-full text-left border-collapse table-fixed">
+                      <thead>
+                        <tr className="bg-slate-50/90 border-b border-slate-200/80 text-[10px] font-black text-slate-500 uppercase tracking-wider">
+                          <th className="py-3 px-3 w-[18%]">Veículo / OS</th>
+                          <th className="py-3 px-3 w-[14%]">Saída / Retorno</th>
+                          <th className="py-3 px-3 w-[16%]">Solicitante & Setor</th>
+                          <th className="py-3 px-3 w-[14%]">Motorista</th>
+                          <th className="py-3 px-3 w-[12%]">Destino</th>
+                          <th className="py-3 px-3 w-[6%] text-center">Ocup.</th>
+                          <th className="py-3 px-3 w-[12%] text-center">Status</th>
+                          <th className="py-3 px-3 w-[8%] text-right">Ações</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-xs font-medium">
+                        {filtered.map(s => {
+                          const v = vehicles.find(veh => veh.id === s.vehicleId);
+                          const d = persons.find(p => p.id === s.driverId);
+                          const requesterPerson = persons.find(p => p.id === s.requesterPersonId);
+                          const sector = sectors.find(sec => sec.id === s.serviceSectorId)
+                            || (requesterPerson?.sectorId ? sectors.find(sec => sec.id === requesterPerson.sectorId) : undefined)
+                            || (v?.sectorId ? sectors.find(sec => sec.id === v.sectorId) : undefined);
+                          const cfg = STATUS_MAP[s.status];
 
-                        return (
-                          <tr key={s.id} className="hover:bg-indigo-50/40 transition-colors group">
-                            {/* Veículo / OS */}
-                            <td className="py-3 px-3 overflow-hidden">
-                              <div className="flex items-center gap-2.5 min-w-0">
-                                <div className="w-8 h-8 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 shrink-0 font-bold border border-indigo-100">
-                                  <Car className="w-4 h-4" />
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex items-center gap-1.5 flex-wrap leading-tight">
-                                    <span className="font-black text-slate-800 uppercase tracking-tight text-xs truncate">{v?.model || '---'}</span>
-                                    <span className="px-1.5 py-0.5 bg-indigo-600 text-white text-[9px] font-black rounded-md uppercase tracking-wider shrink-0">
-                                      {s.protocol}
-                                    </span>
+                          return (
+                            <tr key={s.id} className="hover:bg-indigo-50/40 transition-colors group">
+                              {/* Veículo / OS */}
+                              <td className="py-3 px-3 overflow-hidden">
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  <div className="w-8 h-8 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 shrink-0 font-bold border border-indigo-100">
+                                    <Car className="w-4 h-4" />
                                   </div>
-                                  <div className="text-[10px] text-slate-400 font-mono font-bold truncate mt-0.5">
-                                    {v?.plate || '---'}
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-1.5 flex-wrap leading-tight">
+                                      <span className="font-black text-slate-800 uppercase tracking-tight text-xs truncate">{v?.model || '---'}</span>
+                                      <span className="px-1.5 py-0.5 bg-indigo-600 text-white text-[9px] font-black rounded-md uppercase tracking-wider shrink-0">
+                                        {s.protocol}
+                                      </span>
+                                    </div>
+                                    <div className="text-[10px] text-slate-400 font-mono font-bold truncate mt-0.5">
+                                      {v?.plate || '---'}
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            </td>
+                              </td>
 
-                            {/* Saída / Retorno */}
-                            <td className="py-3 px-3 whitespace-nowrap overflow-hidden">
-                              <div className="flex flex-col gap-0.5 leading-tight">
-                                <span className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
-                                  {new Date(s.departureDateTime).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                              {/* Saída / Retorno */}
+                              <td className="py-3 px-3 whitespace-nowrap overflow-hidden">
+                                <div className="flex flex-col gap-0.5 leading-tight">
+                                  <span className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
+                                    {new Date(s.departureDateTime).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+                                  <span className="font-medium text-slate-400 text-[10px] flex items-center gap-1.5">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-slate-300 shrink-0"></span>
+                                    {s.returnDateTime ? new Date(s.returnDateTime).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '---'}
+                                  </span>
+                                </div>
+                              </td>
+
+                              {/* Solicitante & Setor */}
+                              <td className="py-3 px-3 overflow-hidden">
+                                <div className="flex flex-col min-w-0 leading-tight">
+                                  <span className="font-bold text-slate-800 truncate text-xs" title={requesterPerson?.name}>{requesterPerson?.name || '---'}</span>
+                                  <span className="text-[10px] text-slate-400 font-semibold truncate mt-0.5" title={sector?.name}>
+                                    {sector?.name || '---'}
+                                  </span>
+                                </div>
+                              </td>
+
+                              {/* Motorista */}
+                              <td className="py-3 px-3 overflow-hidden">
+                                <span className="font-bold text-slate-700 truncate block text-xs" title={d?.name}>{d?.name || '---'}</span>
+                              </td>
+
+                              {/* Destino */}
+                              <td className="py-3 px-3 overflow-hidden">
+                                <span className="font-black text-indigo-600 uppercase text-[11px] truncate block" title={s.destination}>
+                                  {s.destination}
                                 </span>
-                                <span className="font-medium text-slate-400 text-[10px] flex items-center gap-1.5">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-slate-300 shrink-0"></span>
-                                  {s.returnDateTime ? new Date(s.returnDateTime).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '---'}
-                                </span>
-                              </div>
-                            </td>
+                              </td>
 
-                            {/* Solicitante & Setor */}
-                            <td className="py-3 px-3 overflow-hidden">
-                              <div className="flex flex-col min-w-0 leading-tight">
-                                <span className="font-bold text-slate-800 truncate text-xs" title={requesterPerson?.name}>{requesterPerson?.name || '---'}</span>
-                                <span className="text-[10px] text-slate-400 font-semibold truncate mt-0.5" title={sector?.name}>
-                                  {sector?.name || '---'}
-                                </span>
-                              </div>
-                            </td>
+                              {/* Ocupantes */}
+                              <td className="py-3 px-3 text-center whitespace-nowrap overflow-hidden">
+                                <div className="flex items-center justify-center gap-1">
+                                  <button
+                                    onClick={() => setManagingCrew(s)}
+                                    disabled={['cancelado', 'em_curso', 'concluido'].includes(s.status) || (s.requesterId !== currentUserId && userRole !== 'admin')}
+                                    className={`px-2 py-1 border text-[10px] font-extrabold uppercase rounded-lg transition-all flex items-center gap-1 ${(['cancelado', 'em_curso', 'concluido'].includes(s.status) || (s.requesterId !== currentUserId && userRole !== 'admin')) ? 'bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed' : 'bg-indigo-50 border-indigo-100 text-indigo-600 hover:bg-indigo-600 hover:text-white'}`}
+                                    title="Ocupantes"
+                                  >
+                                    <Users className="w-3 h-3" />
+                                    <span>{(s.passengers?.length || 0) + 1}</span>
+                                  </button>
+                                  <button
+                                    onClick={() => setViewingPurpose(s)}
+                                    className="p-1 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-lg border border-slate-200/60"
+                                    title="Motivo"
+                                  >
+                                    <Target className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              </td>
 
-                            {/* Motorista */}
-                            <td className="py-3 px-3 overflow-hidden">
-                              <span className="font-bold text-slate-700 truncate block text-xs" title={d?.name}>{d?.name || '---'}</span>
-                            </td>
+                              {/* Status */}
+                              <td className="py-3 px-3 text-center whitespace-nowrap overflow-hidden">
+                                <div className="relative inline-block">
+                                  <button
+                                    onClick={() => setStatusMenuOpen(statusMenuOpen === s.id ? null : s.id)}
+                                    className={`px-2.5 py-1 rounded-full border text-[9px] font-black uppercase tracking-wider bg-${cfg.color}-50 text-${cfg.color}-700 border-${cfg.color}-200 flex items-center gap-1 hover:shadow-xs transition-all`}
+                                  >
+                                    <cfg.icon className="w-3 h-3" />
+                                    <span>{cfg.label}</span>
+                                    {!['cancelado', 'concluido'].includes(s.status) && <ChevronDown className="w-2.5 h-2.5 opacity-50" />}
+                                  </button>
 
-                            {/* Destino */}
-                            <td className="py-3 px-3 overflow-hidden">
-                              <span className="font-black text-indigo-600 uppercase text-[11px] truncate block" title={s.destination}>
-                                {s.destination}
-                              </span>
-                            </td>
-
-                            {/* Ocupantes */}
-                            <td className="py-3 px-3 text-center whitespace-nowrap overflow-hidden">
-                              <div className="flex items-center justify-center gap-1">
-                                <button
-                                  onClick={() => setManagingCrew(s)}
-                                  disabled={['cancelado', 'em_curso', 'concluido'].includes(s.status) || (s.requesterId !== currentUserId && userRole !== 'admin')}
-                                  className={`px-2 py-1 border text-[10px] font-extrabold uppercase rounded-lg transition-all flex items-center gap-1 ${(['cancelado', 'em_curso', 'concluido'].includes(s.status) || (s.requesterId !== currentUserId && userRole !== 'admin')) ? 'bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed' : 'bg-indigo-50 border-indigo-100 text-indigo-600 hover:bg-indigo-600 hover:text-white'}`}
-                                  title="Ocupantes"
-                                >
-                                  <Users className="w-3 h-3" />
-                                  <span>{(s.passengers?.length || 0) + 1}</span>
-                                </button>
-                                <button
-                                  onClick={() => setViewingPurpose(s)}
-                                  className="p-1 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-lg border border-slate-200/60"
-                                  title="Motivo"
-                                >
-                                  <Target className="w-3 h-3" />
-                                </button>
-                              </div>
-                            </td>
-
-                            {/* Status */}
-                            <td className="py-3 px-3 text-center whitespace-nowrap overflow-hidden">
-                              <div className="relative inline-block">
-                                <button
-                                  onClick={() => setStatusMenuOpen(statusMenuOpen === s.id ? null : s.id)}
-                                  className={`px-2.5 py-1 rounded-full border text-[9px] font-black uppercase tracking-wider bg-${cfg.color}-50 text-${cfg.color}-700 border-${cfg.color}-200 flex items-center gap-1 hover:shadow-xs transition-all`}
-                                >
-                                  <cfg.icon className="w-3 h-3" />
-                                  <span>{cfg.label}</span>
-                                  {!['cancelado', 'concluido'].includes(s.status) && <ChevronDown className="w-2.5 h-2.5 opacity-50" />}
-                                </button>
-
-                                {statusMenuOpen === s.id && !['cancelado', 'concluido'].includes(s.status) && (s.requesterId === currentUserId || userRole === 'admin') && (
-                                  <div className="absolute right-0 top-full mt-1 w-44 bg-white rounded-xl shadow-2xl border border-slate-100 p-1 z-[100] text-left">
-                                    {s.status === 'em_curso' && (
+                                  {statusMenuOpen === s.id && !['cancelado', 'concluido'].includes(s.status) && (s.requesterId === currentUserId || userRole === 'admin') && (
+                                    <div className="absolute right-0 top-full mt-1 w-44 bg-white rounded-xl shadow-2xl border border-slate-100 p-1 z-[100] text-left">
+                                      {s.status === 'em_curso' && (
+                                        <button
+                                          onClick={() => {
+                                            onUpdateStatus(s.id, 'concluido');
+                                            setStatusMenuOpen(null);
+                                          }}
+                                          className="w-full flex items-center gap-2 px-2.5 py-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all text-[9px] font-black uppercase"
+                                        >
+                                          <CheckCircle2 className="w-3 h-3" />
+                                          <span>Concluir Serviço</span>
+                                        </button>
+                                      )}
                                       <button
-                                        onClick={() => {
-                                          onUpdateStatus(s.id, 'concluido');
-                                          setStatusMenuOpen(null);
-                                        }}
-                                        className="w-full flex items-center gap-2 px-2.5 py-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all text-[9px] font-black uppercase"
+                                        onClick={() => handleOpenCancelModal(s)}
+                                        className="w-full flex items-center gap-2 px-2.5 py-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-all text-[9px] font-black uppercase"
                                       >
-                                        <CheckCircle2 className="w-3 h-3" />
-                                        <span>Concluir Serviço</span>
+                                        <XCircle className="w-3 h-3" />
+                                        <span>Cancelar Agendamento</span>
                                       </button>
-                                    )}
-                                    <button
-                                      onClick={() => handleOpenCancelModal(s)}
-                                      className="w-full flex items-center gap-2 px-2.5 py-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-all text-[9px] font-black uppercase"
-                                    >
-                                      <XCircle className="w-3 h-3" />
-                                      <span>Cancelar Agendamento</span>
-                                    </button>
-                                  </div>
-                                )}
-                                {statusMenuOpen === s.id && <div className="fixed inset-0 z-[90]" onClick={() => setStatusMenuOpen(null)} />}
-                              </div>
-                            </td>
+                                    </div>
+                                  )}
+                                  {statusMenuOpen === s.id && <div className="fixed inset-0 z-[90]" onClick={() => setStatusMenuOpen(null)} />}
+                                </div>
+                              </td>
 
-                            {/* Ações */}
-                            <td className="py-3 px-3 text-right whitespace-nowrap overflow-hidden">
-                              <div className="flex items-center justify-end gap-1">
-                                <button
-                                  onClick={() => setPreviewingOS(s)}
-                                  className="px-2 py-1 bg-slate-900 hover:bg-indigo-600 text-white rounded-lg font-black text-[10px] uppercase transition-all shadow-xs"
-                                  title="Ordem de Serviço"
-                                >
-                                  OS
-                                </button>
-                                {(s.requesterId === currentUserId || userRole === 'admin') && (
-                                  <>
-                                    <button
-                                      onClick={() => onEdit(s)}
-                                      disabled={['cancelado', 'em_curso', 'concluido'].includes(s.status)}
-                                      className={`p-1.5 border rounded-lg transition-all ${['cancelado', 'em_curso', 'concluido'].includes(s.status) ? 'bg-slate-50 border-slate-100 text-slate-300 cursor-not-allowed' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-900 hover:text-white'}`}
-                                      title="Editar"
-                                    >
-                                      <Edit3 className="w-3.5 h-3.5" />
-                                    </button>
-                                    <button
-                                      onClick={() => { if (window.confirm('Excluir agendamento?')) onDelete(s.id); }}
-                                      className="p-1.5 bg-white border border-slate-200 text-rose-500 hover:bg-rose-600 hover:text-white rounded-lg transition-all"
-                                      title="Excluir"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  </>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                              {/* Ações */}
+                              <td className="py-3 px-3 text-right whitespace-nowrap overflow-hidden">
+                                <div className="flex items-center justify-end gap-1">
+                                  <button
+                                    onClick={() => setPreviewingOS(s)}
+                                    className="px-2 py-1 bg-slate-900 hover:bg-indigo-600 text-white rounded-lg font-black text-[10px] uppercase transition-all shadow-xs"
+                                    title="Ordem de Serviço"
+                                  >
+                                    OS
+                                  </button>
+                                  {(s.requesterId === currentUserId || userRole === 'admin') && (
+                                    <>
+                                      <button
+                                        onClick={() => onEdit(s)}
+                                        disabled={['cancelado', 'em_curso', 'concluido'].includes(s.status)}
+                                        className={`p-1.5 border rounded-lg transition-all ${['cancelado', 'em_curso', 'concluido'].includes(s.status) ? 'bg-slate-50 border-slate-100 text-slate-300 cursor-not-allowed' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-900 hover:text-white'}`}
+                                        title="Editar"
+                                      >
+                                        <Edit3 className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        onClick={() => { if (window.confirm('Excluir agendamento?')) onDelete(s.id); }}
+                                        className="p-1.5 bg-white border border-slate-200 text-rose-500 hover:bg-rose-600 hover:text-white rounded-lg transition-all"
+                                        title="Excluir"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              </div>
+
+                {/* Visualização Mobile (Cards Dedicados e Otimizados para Celular) */}
+                <div className="md:hidden space-y-3.5">
+                  {filtered.map(s => {
+                    const v = vehicles.find(veh => veh.id === s.vehicleId);
+                    const d = persons.find(p => p.id === s.driverId);
+                    const requesterPerson = persons.find(p => p.id === s.requesterPersonId);
+                    const sector = sectors.find(sec => sec.id === s.serviceSectorId)
+                      || (requesterPerson?.sectorId ? sectors.find(sec => sec.id === requesterPerson.sectorId) : undefined)
+                      || (v?.sectorId ? sectors.find(sec => sec.id === v.sectorId) : undefined);
+                    const cfg = STATUS_MAP[s.status];
+
+                    return (
+                      <div
+                        key={s.id}
+                        className="bg-white rounded-2xl p-3.5 border border-slate-200/80 shadow-xs space-y-3 relative overflow-hidden"
+                      >
+                        {/* Topo do Card Mobile: Veículo + Placa + OS + Status */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="w-9 h-9 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 shrink-0 font-bold border border-indigo-100">
+                              <Car className="w-4 h-4" />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap leading-tight">
+                                <h4 className="font-black text-slate-900 uppercase tracking-tight text-xs truncate">
+                                  {v?.model || 'Desconhecido'}
+                                </h4>
+                                <span className="px-1.5 py-0.5 bg-indigo-600 text-white text-[9px] font-black rounded-md uppercase tracking-wider shrink-0">
+                                  {s.protocol}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <span className="font-mono text-[10px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 uppercase">
+                                  {v?.plate || '---'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Badge de Status Interativo no Mobile */}
+                          <div className="relative shrink-0">
+                            <button
+                              onClick={() => setStatusMenuOpen(statusMenuOpen === s.id ? null : s.id)}
+                              className={`px-2 py-1 rounded-full border text-[9px] font-black uppercase tracking-wider bg-${cfg.color}-50 text-${cfg.color}-700 border-${cfg.color}-200 flex items-center gap-1 shadow-2xs`}
+                            >
+                              <cfg.icon className="w-2.5 h-2.5" />
+                              <span>{cfg.label}</span>
+                              {!['cancelado', 'concluido'].includes(s.status) && (s.requesterId === currentUserId || userRole === 'admin') && (
+                                <ChevronDown className="w-2.5 h-2.5 opacity-50" />
+                              )}
+                            </button>
+
+                            {statusMenuOpen === s.id && !['cancelado', 'concluido'].includes(s.status) && (s.requesterId === currentUserId || userRole === 'admin') && (
+                              <div className="absolute right-0 top-full mt-1 w-44 bg-white rounded-xl shadow-2xl border border-slate-100 p-1 z-[100] text-left animate-slide-up">
+                                {s.status === 'em_curso' && (
+                                  <button
+                                    onClick={() => {
+                                      onUpdateStatus(s.id, 'concluido');
+                                      setStatusMenuOpen(null);
+                                    }}
+                                    className="w-full flex items-center gap-2 px-2.5 py-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all text-[9px] font-black uppercase"
+                                  >
+                                    <CheckCircle2 className="w-3 h-3" />
+                                    <span>Concluir Serviço</span>
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => handleOpenCancelModal(s)}
+                                  className="w-full flex items-center gap-2 px-2.5 py-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-all text-[9px] font-black uppercase"
+                                >
+                                  <XCircle className="w-3 h-3" />
+                                  <span>Cancelar Agendamento</span>
+                                </button>
+                              </div>
+                            )}
+                            {statusMenuOpen === s.id && <div className="fixed inset-0 z-[90]" onClick={() => setStatusMenuOpen(null)} />}
+                          </div>
+                        </div>
+
+                        {/* Bloco de Datas e Horários Mobile */}
+                        <div className="grid grid-cols-2 gap-2 p-2.5 bg-slate-50/90 rounded-xl border border-slate-100 text-xs">
+                          <div>
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Saída
+                            </span>
+                            <p className="text-[11px] font-bold text-slate-800 mt-0.5">
+                              {new Date(s.departureDateTime).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                          </div>
+                          <div>
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-slate-300"></span> Retorno
+                            </span>
+                            <p className="text-[11px] font-bold text-slate-700 mt-0.5">
+                              {s.returnDateTime ? new Date(s.returnDateTime).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '---'}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Destino, Motorista, Solicitante & Setor */}
+                        <div className="space-y-1.5 text-xs">
+                          <div className="flex items-center gap-1.5">
+                            <MapPin className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                            <span className="text-[10px] font-black text-slate-400 uppercase">Destino:</span>
+                            <span className="text-xs font-black text-indigo-700 uppercase truncate">{s.destination}</span>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-100 text-[11px]">
+                            <div className="min-w-0">
+                              <span className="text-[9px] font-black text-slate-400 uppercase block">Motorista:</span>
+                              <span className="font-bold text-slate-700 truncate block">{d?.name || '---'}</span>
+                            </div>
+                            <div className="min-w-0">
+                              <span className="text-[9px] font-black text-slate-400 uppercase block">Solicitante:</span>
+                              <span className="font-bold text-slate-700 truncate block">{requesterPerson?.name || '---'}</span>
+                              <span className="text-[9px] text-slate-400 font-semibold truncate block">{sector?.name || '---'}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Barra de Ações Mobile */}
+                        <div className="flex items-center justify-between gap-1.5 pt-2 border-t border-slate-100">
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              onClick={() => setManagingCrew(s)}
+                              disabled={['cancelado', 'em_curso', 'concluido'].includes(s.status) || (s.requesterId !== currentUserId && userRole !== 'admin')}
+                              className={`px-2.5 py-1.5 border text-[10px] font-extrabold uppercase rounded-lg transition-all flex items-center gap-1 ${
+                                (['cancelado', 'em_curso', 'concluido'].includes(s.status) || (s.requesterId !== currentUserId && userRole !== 'admin'))
+                                  ? 'bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed'
+                                  : 'bg-indigo-50 border-indigo-100 text-indigo-600 hover:bg-indigo-600 hover:text-white'
+                              }`}
+                              title="Ocupantes"
+                            >
+                              <Users className="w-3 h-3" />
+                              <span>{(s.passengers?.length || 0) + 1} Ocup.</span>
+                            </button>
+
+                            <button
+                              onClick={() => setViewingPurpose(s)}
+                              className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg border border-slate-200/60 text-[10px] font-bold uppercase flex items-center gap-1"
+                              title="Motivo"
+                            >
+                              <Target className="w-3 h-3" />
+                              <span>Motivo</span>
+                            </button>
+                          </div>
+
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => setPreviewingOS(s)}
+                              className="px-2.5 py-1.5 bg-slate-900 hover:bg-indigo-600 text-white rounded-lg font-black text-[10px] uppercase transition-all shadow-2xs"
+                              title="Ordem de Serviço"
+                            >
+                              OS
+                            </button>
+                            {(s.requesterId === currentUserId || userRole === 'admin') && (
+                              <>
+                                <button
+                                  onClick={() => onEdit(s)}
+                                  disabled={['cancelado', 'em_curso', 'concluido'].includes(s.status)}
+                                  className={`p-1.5 border rounded-lg transition-all ${
+                                    ['cancelado', 'em_curso', 'concluido'].includes(s.status)
+                                      ? 'bg-slate-50 border-slate-100 text-slate-300 cursor-not-allowed'
+                                      : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-900 hover:text-white'
+                                  }`}
+                                  title="Editar"
+                                >
+                                  <Edit3 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => { if (window.confirm('Excluir agendamento?')) onDelete(s.id); }}
+                                  className="p-1.5 bg-white border border-slate-200 text-rose-500 hover:bg-rose-600 hover:text-white rounded-lg transition-all"
+                                  title="Excluir"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
             ) : (
               /* CARD VIEW */
               filtered.map(s => {
@@ -552,9 +898,9 @@ export const VehicleScheduleHistory: React.FC<VehicleScheduleHistoryProps> = ({
                 const cfg = STATUS_MAP[s.status];
 
                 return (
-                  <div key={s.id} className="bg-white p-4 rounded-[2rem] border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(99,102,241,0.15)] transition-all duration-300 hover:-translate-y-1 flex flex-col gap-3 group relative">
+                  <div key={s.id} className="bg-white p-4 sm:p-5 rounded-2xl md:rounded-[2rem] border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(99,102,241,0.15)] transition-all duration-300 hover:-translate-y-1 flex flex-col gap-3 group relative">
                     {/* Decorative Elements */}
-                    <div className="absolute inset-0 rounded-[2rem] overflow-hidden pointer-events-none">
+                    <div className="absolute inset-0 rounded-2xl md:rounded-[2rem] overflow-hidden pointer-events-none">
                       <div className="absolute top-0 right-0 p-6 opacity-0 group-hover:opacity-10 transition-opacity duration-500">
                         <Car className="w-24 h-24 text-indigo-900 transform rotate-12 translate-x-8 -translate-y-8" />
                       </div>
@@ -569,7 +915,7 @@ export const VehicleScheduleHistory: React.FC<VehicleScheduleHistoryProps> = ({
                           </div>
                           <div className="flex flex-col gap-1 items-start">
                             <div className="flex items-center gap-2">
-                              <h4 className="text-lg font-black text-slate-800 uppercase tracking-tight group-hover:text-indigo-700 transition-colors">{v?.model || 'Desconhecido'}</h4>
+                              <h4 className="text-base sm:text-lg font-black text-slate-800 uppercase tracking-tight group-hover:text-indigo-700 transition-colors">{v?.model || 'Desconhecido'}</h4>
                               <div className="px-2 py-0.5 rounded-lg bg-indigo-600 text-white text-[9px] font-black uppercase tracking-wider shadow-sm">
                                 ID: {s.protocol}
                               </div>
@@ -704,20 +1050,20 @@ export const VehicleScheduleHistory: React.FC<VehicleScheduleHistoryProps> = ({
               })
             )
           ) : (
-            <div className="py-20 text-center bg-white rounded-[3rem] border border-dashed border-slate-200 flex flex-col items-center">
+            <div className="py-20 text-center bg-white rounded-2xl md:rounded-[3rem] border border-dashed border-slate-200 flex flex-col items-center">
               <History className="w-16 h-16 text-slate-200 mb-4" />
-              <p className="text-xl font-black text-slate-400 uppercase tracking-widest">Nenhum registro</p>
+              <p className="text-base sm:text-xl font-black text-slate-400 uppercase tracking-widest">Nenhum registro</p>
             </div>
           )}
         </div>
       </div>
 
-      {/* Footer Info */}
-      <div className="shrink-0 flex justify-between items-center px-8 py-4 bg-white border-t border-slate-100 shadow-sm">
-        <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Total de {filtered.length} agendamentos</span>
-        <div className="flex items-center gap-2">
+      {/* Footer Info Responsivo */}
+      <div className="shrink-0 flex justify-between items-center px-4 md:px-8 py-3 md:py-4 bg-white border-t border-slate-100 shadow-sm">
+        <span className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] md:tracking-[0.2em]">Total de {filtered.length} agendamentos</span>
+        <div className="flex items-center gap-1.5 md:gap-2">
           <Filter className="w-3 h-3 text-indigo-500" />
-          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Histórico Geral</span>
+          <span className="text-[9px] md:text-[10px] font-bold text-slate-500 uppercase tracking-wider">Histórico Geral</span>
         </div>
       </div>
 
