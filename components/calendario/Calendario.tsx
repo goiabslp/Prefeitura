@@ -231,16 +231,68 @@ export const Calendario: React.FC<CalendarioProps> = ({ onBack, userRole, curren
         }
     };
 
+    const [selectedMobileDate, setSelectedMobileDate] = useState<string>(() => getLocalISOData(new Date()).date);
+
+    const prevDay = () => {
+        const parts = selectedMobileDate.split('-').map(Number);
+        const d = new Date(parts[0], parts[1] - 1, parts[2] - 1);
+        const newDateStr = getLocalISOData(d).date;
+        setSelectedMobileDate(newDateStr);
+        if (d.getMonth() !== currentDate.getMonth() || d.getFullYear() !== currentDate.getFullYear()) {
+            setCurrentDate(new Date(d.getFullYear(), d.getMonth(), 1));
+        }
+    };
+
+    const nextDay = () => {
+        const parts = selectedMobileDate.split('-').map(Number);
+        const d = new Date(parts[0], parts[1] - 1, parts[2] + 1);
+        const newDateStr = getLocalISOData(d).date;
+        setSelectedMobileDate(newDateStr);
+        if (d.getMonth() !== currentDate.getMonth() || d.getFullYear() !== currentDate.getFullYear()) {
+            setCurrentDate(new Date(d.getFullYear(), d.getMonth(), 1));
+        }
+    };
+
+    const getDayEvents = (dateStr: string) => {
+        if (!dateStr) return [];
+        return events.filter(e => {
+            const isRecurringType = e.type === 'Aniversário' || e.type === 'Feriado Municipal' || e.is_recurring;
+
+            if (isRecurringType) {
+                let targetDate = e.start_date;
+                if (e.type === 'Aniversário' && e.birth_date) {
+                    targetDate = e.birth_date;
+                }
+
+                const [by, bm, bd] = targetDate.split('-').map(Number);
+                const [sy, sm, sd] = dateStr.split('-').map(Number);
+                return bm === sm && bd === sd;
+            }
+
+            return dateStr >= e.start_date && dateStr <= e.end_date;
+        });
+    };
+
+    const formatSelectedDateHeader = (dateStr: string) => {
+        if (!dateStr) return '';
+        const [y, m, d] = dateStr.split('-').map(Number);
+        const dateObj = new Date(y, m - 1, d, 12, 0, 0);
+        const weekday = dateObj.toLocaleDateString('pt-BR', { weekday: 'long' });
+        const monthName = dateObj.toLocaleDateString('pt-BR', { month: 'long' });
+        const capWeekday = weekday.charAt(0).toUpperCase() + weekday.slice(1);
+        const capMonth = monthName.charAt(0).toUpperCase() + monthName.slice(1);
+        return `${capWeekday}, ${d} de ${capMonth}`;
+    };
+
     return (
         <div className="fixed inset-0 w-full h-full bg-[#FAFAFA] flex flex-col z-[100] font-sans">
 
-            {/* HEADER FIXO */}
-            <div className="h-20 shrink-0 bg-white border-b border-slate-200 shadow-sm flex items-center justify-between px-6 desktop:px-10 z-[110]">
-
+            {/* HEADER FIXO DESKTOP (hidden no mobile) */}
+            <div className="hidden md:flex h-20 shrink-0 bg-white border-b border-slate-200 shadow-sm items-center justify-between px-6 desktop:px-10 z-[110]">
                 <div className="flex items-center gap-6">
                     <button
                         onClick={onBack}
-                        className="group flex items-center justify-center w-10 h-10 rounded-full bg-slate-50 border border-slate-200 hover:bg-white hover:border-slate-300 hover:shadow-md transition-all active:scale-95"
+                        className="group flex items-center justify-center w-10 h-10 rounded-full bg-slate-50 border border-slate-200 hover:bg-white hover:border-slate-300 hover:shadow-md transition-all active:scale-95 cursor-pointer"
                         title="Voltar ao Dashboard"
                     >
                         <ArrowLeft className="w-5 h-5 text-slate-500 group-hover:text-slate-800 transition-colors" />
@@ -295,8 +347,79 @@ export const Calendario: React.FC<CalendarioProps> = ({ onBack, userRole, curren
                 </div>
             </div>
 
-            {/* NAVEGAÇÃO E CONTROLES */}
-            <div className="px-6 desktop:px-10 py-4 flex items-center justify-between bg-white/50 backdrop-blur-sm relative z-[105]">
+            {/* HEADER MOBILE (visível apenas no mobile) */}
+            <div className="flex md:hidden flex-col bg-white border-b border-slate-200 px-4 py-3 shrink-0 shadow-xs z-[110] gap-2.5">
+                <div className="flex items-center justify-between gap-2.5">
+                    <button
+                        onClick={onBack}
+                        className="p-2 -ml-1 text-slate-500 hover:text-rose-600 rounded-xl bg-slate-50 hover:bg-rose-50 border border-slate-200/80 flex items-center justify-center transition-all active:scale-95 shrink-0"
+                        title="Voltar ao Dashboard"
+                    >
+                        <ArrowLeft className="w-4 h-4" />
+                    </button>
+
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                        <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-rose-500 to-rose-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                            <CalendarIcon className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0">
+                            <h1 className="text-sm font-black text-slate-900 tracking-tight leading-none uppercase truncate">
+                                Calendário
+                            </h1>
+                            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block truncate mt-0.5">
+                                Agenda Municipal
+                            </span>
+                        </div>
+                    </div>
+
+                    <button
+                        onClick={() => {
+                            setEventToEdit(null);
+                            setSelectedDate(selectedMobileDate || getLocalISOData(new Date()).date);
+                            setIsEventPageOpen(true);
+                            window.history.pushState({ page: 'novo-evento' }, '', '/Calendario/Novo/Identificacao');
+                        }}
+                        className="px-3 py-2 bg-gradient-to-r from-rose-600 to-rose-700 active:scale-95 text-white font-black rounded-xl shadow-md shadow-rose-600/20 flex items-center gap-1.5 uppercase text-[10px] tracking-wider shrink-0 transition-all cursor-pointer"
+                    >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Novo</span>
+                    </button>
+                </div>
+
+                {/* Barra de Ações Rápidas Mobile */}
+                <div className="grid grid-cols-3 gap-1.5 pt-0.5">
+                    <button
+                        onClick={goToToday}
+                        className={`py-1.5 px-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1 border active:scale-95 ${
+                            isToday(selectedMobileDate)
+                                ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
+                                : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                    >
+                        <CalendarIcon className="w-3 h-3" />
+                        <span>Hoje</span>
+                    </button>
+
+                    <button
+                        onClick={() => setIsMyEventsOpen(true)}
+                        className="py-1.5 px-2 rounded-xl text-[10px] font-black uppercase tracking-wider bg-slate-50 text-slate-700 border border-slate-200 hover:bg-slate-100 transition-all flex items-center justify-center gap-1 active:scale-95"
+                    >
+                        <Star className="w-3 h-3 text-amber-500" />
+                        <span>Meus</span>
+                    </button>
+
+                    <button
+                        onClick={() => setIsMonthEventsOpen(true)}
+                        className="py-1.5 px-2 rounded-xl text-[10px] font-black uppercase tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 transition-all flex items-center justify-center gap-1 active:scale-95"
+                    >
+                        <Repeat className="w-3 h-3 text-indigo-600" />
+                        <span>Mês</span>
+                    </button>
+                </div>
+            </div>
+
+            {/* NAVEGAÇÃO E CONTROLES DESKTOP (hidden no mobile) */}
+            <div className="hidden md:flex px-6 desktop:px-10 py-4 items-center justify-between bg-white/50 backdrop-blur-sm relative z-[105]">
                 <div className="flex items-center gap-2">
                     <button onClick={prevYear} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer" title="Ano Anterior">
                         <ChevronsLeft className="w-5 h-5" />
@@ -355,8 +478,282 @@ export const Calendario: React.FC<CalendarioProps> = ({ onBack, userRole, curren
                 </div>
             </div>
 
-            {/* GRADE DO CALENDÁRIO */}
-            <div className="flex-1 flex flex-col bg-white overflow-hidden p-6 desktop:p-10 pt-2">
+            {/* NAVEGAÇÃO DE MÊS / MINI-CALENDÁRIO MOBILE (visível apenas no mobile) */}
+            <div className="flex md:hidden flex-col bg-white border-b border-slate-200 shrink-0 shadow-xs">
+                {/* Seletor do Mês Mobile */}
+                <div className="flex items-center justify-between px-3 py-2 bg-slate-50/80 border-b border-slate-100">
+                    <div className="flex items-center gap-1">
+                        <button onClick={prevYear} className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-white rounded-lg transition-colors" title="Ano Anterior">
+                            <ChevronsLeft className="w-4 h-4" />
+                        </button>
+                        <button onClick={prevMonth} className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-white rounded-lg transition-colors" title="Mês Anterior">
+                            <ChevronLeft className="w-4 h-4" />
+                        </button>
+                    </div>
+
+                    <div className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1">
+                        <span>{monthNames[currentDate.getMonth()]}</span>
+                        <span className="text-rose-600 font-extrabold">{currentDate.getFullYear()}</span>
+                    </div>
+
+                    <div className="flex items-center gap-1">
+                        <button onClick={nextMonth} className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-white rounded-lg transition-colors" title="Próximo Mês">
+                            <ChevronRight className="w-4 h-4" />
+                        </button>
+                        <button onClick={nextYear} className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-white rounded-lg transition-colors" title="Próximo Ano">
+                            <ChevronsRight className="w-4 h-4" />
+                        </button>
+                    </div>
+                </div>
+
+                {/* Grade Mini-Calendário Mobile */}
+                <div className="p-2.5 pb-2">
+                    {/* Cabeçalho dos dias da semana */}
+                    <div className="grid grid-cols-7 gap-1 mb-1">
+                        {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((day, idx) => (
+                            <div key={idx} className="text-center text-[10px] font-black text-slate-400 uppercase py-0.5">
+                                {day}
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Dias do mês */}
+                    <div className="grid grid-cols-7 gap-1">
+                        {calendarGrid.map((slot, i) => {
+                            if (!slot.isCurrentMonth || !slot.day) {
+                                return <div key={i} className="h-8"></div>;
+                            }
+
+                            const isSelected = selectedMobileDate === slot.dateStr;
+                            const isTodayDate = isToday(slot.dateStr);
+                            const dayEvents = getDayEvents(slot.dateStr);
+
+                            return (
+                                <button
+                                    key={i}
+                                    onClick={() => setSelectedMobileDate(slot.dateStr)}
+                                    className={`h-8.5 rounded-xl flex flex-col items-center justify-center relative transition-all active:scale-95 ${
+                                        isSelected
+                                            ? 'bg-gradient-to-br from-rose-500 to-rose-600 text-white font-black shadow-sm shadow-rose-500/30'
+                                            : isTodayDate
+                                            ? 'border-2 border-rose-500 bg-rose-50/60 text-rose-600 font-black'
+                                            : slot.isWeekend
+                                            ? 'text-indigo-900/60 hover:bg-slate-50'
+                                            : 'text-slate-700 hover:bg-slate-50'
+                                    }`}
+                                >
+                                    <span className="text-[11px] leading-none font-bold">
+                                        {slot.day}
+                                    </span>
+
+                                    {/* Indicadores de Eventos (Dots) */}
+                                    {dayEvents.length > 0 && (
+                                        <div className="flex items-center gap-0.5 mt-0.5">
+                                            {(() => {
+                                                const types = new Set(dayEvents.map(e => e.type));
+                                                const dots = [];
+                                                if (types.has('Feriado') || types.has('Feriado Municipal')) {
+                                                    dots.push('bg-red-500');
+                                                }
+                                                if (types.has('Aniversário')) {
+                                                    dots.push('bg-pink-500');
+                                                }
+                                                if (types.has('Reunião')) {
+                                                    dots.push('bg-indigo-500');
+                                                }
+                                                if (dots.length === 0 || types.has('Evento') || types.has('Oficial') || types.has('Notícia')) {
+                                                    if (dots.length < 3) dots.push('bg-emerald-500');
+                                                }
+
+                                                return dots.slice(0, 3).map((dotClass, dIdx) => (
+                                                    <span
+                                                        key={dIdx}
+                                                        className={`w-1 h-1 rounded-full ${isSelected ? 'bg-white' : dotClass}`}
+                                                    />
+                                                ));
+                                            })()}
+                                        </div>
+                                    )}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+            </div>
+
+            {/* PAINEL DE EVENTOS DO DIA SELECIONADO MOBILE (visível apenas no mobile) */}
+            <div className="flex md:hidden flex-1 flex-col overflow-y-auto custom-scrollbar p-3.5 bg-slate-100 gap-3">
+                {/* Cabeçalho do Dia Selecionado */}
+                <div className="flex items-center justify-between bg-white p-3 rounded-2xl border border-slate-200 shadow-xs">
+                    <button
+                        onClick={prevDay}
+                        className="p-1.5 text-slate-400 hover:text-slate-700 bg-slate-50 rounded-xl border border-slate-200/80 active:scale-95"
+                        title="Dia Anterior"
+                    >
+                        <ChevronLeft className="w-4 h-4" />
+                    </button>
+
+                    <div className="text-center min-w-0 flex-1 px-2">
+                        <div className="flex items-center justify-center gap-1.5">
+                            <span className="text-xs font-black text-slate-900 uppercase truncate">
+                                {formatSelectedDateHeader(selectedMobileDate)}
+                            </span>
+                            {isToday(selectedMobileDate) && (
+                                <span className="bg-rose-100 text-rose-700 text-[8px] font-black px-1.5 py-0.5 rounded-md uppercase tracking-wider shrink-0">
+                                    Hoje
+                                </span>
+                            )}
+                        </div>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">
+                            {getDayEvents(selectedMobileDate).length} compromisso(s)
+                        </p>
+                    </div>
+
+                    <div className="flex items-center gap-1">
+                        <button
+                            onClick={nextDay}
+                            className="p-1.5 text-slate-400 hover:text-slate-700 bg-slate-50 rounded-xl border border-slate-200/80 active:scale-95"
+                            title="Próximo Dia"
+                        >
+                            <ChevronRight className="w-4 h-4" />
+                        </button>
+                    </div>
+                </div>
+
+                {/* Lista de Eventos do Dia */}
+                <div className="flex flex-col gap-2.5">
+                    {(() => {
+                        const dayEvents = getDayEvents(selectedMobileDate);
+
+                        if (dayEvents.length === 0) {
+                            return (
+                                <div className="p-8 bg-white rounded-2xl border border-dashed border-slate-200 text-center flex flex-col items-center justify-center space-y-3">
+                                    <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-300">
+                                        <CalendarIcon className="w-6 h-6" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-xs font-black text-slate-700 uppercase">Nenhum compromisso agendado</h3>
+                                        <p className="text-[11px] text-slate-400 mt-0.5">Não há eventos cadastrados para esta data.</p>
+                                    </div>
+                                    <button
+                                        onClick={() => {
+                                            setEventToEdit(null);
+                                            setSelectedDate(selectedMobileDate);
+                                            setIsEventPageOpen(true);
+                                            window.history.pushState({ page: 'novo-evento' }, '', '/Calendario/Novo/Identificacao');
+                                        }}
+                                        className="px-4 py-2 bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition-all active:scale-95"
+                                    >
+                                        <Plus className="w-3.5 h-3.5" />
+                                        <span>Adicionar Evento</span>
+                                    </button>
+                                </div>
+                            );
+                        }
+
+                        return dayEvents.map(event => {
+                            const isHoliday = event.type === 'Feriado' || event.type === 'Feriado Municipal';
+                            const isBirthday = event.type === 'Aniversário';
+                            const isMeeting = event.type === 'Reunião';
+
+                            let borderColor = 'border-l-emerald-500 border-emerald-100';
+                            let iconBg = 'bg-emerald-50 text-emerald-600 border-emerald-200';
+                            let IconComponent = Star;
+                            let badgeBg = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+
+                            if (isHoliday) {
+                                borderColor = 'border-l-rose-500 border-rose-100';
+                                iconBg = 'bg-rose-50 text-rose-600 border-rose-200';
+                                IconComponent = Flag;
+                                badgeBg = 'bg-rose-50 text-rose-700 border-rose-200';
+                            } else if (isBirthday) {
+                                borderColor = 'border-l-pink-500 border-pink-100';
+                                iconBg = 'bg-pink-50 text-pink-600 border-pink-200';
+                                IconComponent = Gift;
+                                badgeBg = 'bg-pink-50 text-pink-700 border-pink-200';
+                            } else if (isMeeting) {
+                                borderColor = 'border-l-indigo-500 border-indigo-100';
+                                iconBg = 'bg-indigo-50 text-indigo-600 border-indigo-200';
+                                IconComponent = Users;
+                                badgeBg = 'bg-indigo-50 text-indigo-700 border-indigo-200';
+                            }
+
+                            return (
+                                <div
+                                    key={event.id}
+                                    onClick={() => {
+                                        setEventDetailsEvent(event);
+                                        setIsEventDetailsOpen(true);
+                                    }}
+                                    className={`bg-white rounded-2xl border border-l-4 ${borderColor} p-3.5 shadow-xs flex flex-col gap-2 cursor-pointer active:scale-[0.99] transition-all`}
+                                >
+                                    <div className="flex items-start justify-between gap-2.5">
+                                        <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                                            <div className={`w-8 h-8 rounded-xl flex items-center justify-center border shrink-0 mt-0.5 ${iconBg}`}>
+                                                <IconComponent className="w-4 h-4" />
+                                            </div>
+
+                                            <div className="min-w-0 flex-1">
+                                                <div className="flex items-center gap-1.5 flex-wrap">
+                                                    <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-md border ${badgeBg}`}>
+                                                        {event.type}
+                                                    </span>
+                                                    {(event.start_time || event.end_time) ? (
+                                                        <span className="text-[10px] font-bold text-slate-500 flex items-center gap-1">
+                                                            {event.start_time?.slice(0, 5)} {event.end_time ? `às ${event.end_time.slice(0, 5)}` : ''}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-[10px] font-bold text-slate-400">
+                                                            Dia inteiro
+                                                        </span>
+                                                    )}
+                                                </div>
+
+                                                <h4 className="text-xs font-black text-slate-900 uppercase tracking-tight mt-1 leading-snug">
+                                                    {event.title}
+                                                </h4>
+
+                                                {event.description && (
+                                                    <p className="text-[11px] text-slate-500 line-clamp-2 mt-0.5 font-medium">
+                                                        {event.description}
+                                                    </p>
+                                                )}
+
+                                                {event.location && (
+                                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1 flex items-center gap-1 truncate">
+                                                        <span>📍 {event.location}</span>
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-center gap-1 shrink-0">
+                                            {(isAdmin || event.created_by === currentUserId) && (
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setEventToEdit(event);
+                                                        setSelectedDate(event.start_date || selectedMobileDate);
+                                                        setIsEventPageOpen(true);
+                                                        window.history.pushState({ page: 'editar-evento' }, '', `/Calendario/Editar/${event.id}/Identificacao`);
+                                                    }}
+                                                    className="p-1.5 text-slate-400 hover:text-rose-600 bg-slate-50 hover:bg-rose-50 rounded-lg border border-slate-200/80 transition-all active:scale-90"
+                                                    title="Editar Evento"
+                                                >
+                                                    <Plus className="w-3.5 h-3.5 rotate-45" />
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        });
+                    })()}
+                </div>
+            </div>
+
+            {/* GRADE DO CALENDÁRIO DESKTOP (hidden no mobile) */}
+            <div className="hidden md:flex flex-1 flex-col bg-white overflow-hidden p-6 desktop:p-10 pt-2">
                 {/* Cabeçalho dos dias da semana */}
                 <div className="grid grid-cols-7 gap-2 mb-2 shrink-0">
                     {weekDays.map(day => (
@@ -429,7 +826,7 @@ export const Calendario: React.FC<CalendarioProps> = ({ onBack, userRole, curren
                                     <span className={`text-sm font-bold ${textClass}`}>
                                         {slot.day === 1 && slot.dateStr
                                             ? new Date(slot.dateStr + 'T12:00:00')
-                                                .toLocaleDateString('pt-BR', { month: 'short', day: 'numeric' })
+                                                 .toLocaleDateString('pt-BR', { month: 'short', day: 'numeric' })
                                                 .replace('.', '')
                                             : slot.day}
                                     </span>

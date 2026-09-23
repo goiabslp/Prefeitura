@@ -1984,8 +1984,8 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
 
     return (
         <div className="w-full mx-auto flex flex-col flex-1 h-full max-h-full min-h-0 bg-white rounded-3xl border border-slate-200/80 shadow-2xl shadow-slate-100 overflow-hidden">
-            {/* Mobile Header (Limpa, igual FarmaciaPopular/Consultar, apenas 1 campo de busca) */}
-            <div className="block md:hidden bg-white border-b border-slate-200/80 p-3.5 space-y-3 shrink-0">
+            {/* Mobile Header (Limpa e otimizada para mobile) */}
+            <div className="block md:hidden bg-white border-b border-slate-200/80 p-3.5 space-y-2.5 shrink-0">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2.5">
                         <button 
@@ -2007,29 +2007,41 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                             </span>
                         </div>
                     </div>
+
+                    {/* Botão de Relatório Rápido no Mobile */}
+                    <button
+                        type="button"
+                        onClick={() => setIsReportModalOpen(true)}
+                        className="p-2 text-slate-500 hover:text-sky-600 hover:bg-sky-50 rounded-2xl border border-slate-200/80 transition-all cursor-pointer"
+                        title="Relatórios"
+                    >
+                        <FileDown className="w-4.5 h-4.5" />
+                    </button>
                 </div>
 
-                {/* 1 Único Campo de Busca Limpo no Mobile */}
-                <div className="relative w-full">
-                    <input
-                        type="text"
-                        placeholder="Buscar por nome, CPF, SUS ou exame..."
-                        className="w-full bg-slate-50 border border-slate-200/90 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 rounded-2xl pl-9 pr-9 py-2 text-xs font-bold transition-all text-slate-900 placeholder:text-slate-400 shadow-2xs"
-                        value={globalSearch}
-                        onChange={(e) => setGlobalSearch(e.target.value)}
-                    />
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-3.5 h-3.5" />
-                    {globalSearch && (
-                        <button
-                            type="button"
-                            onClick={() => setGlobalSearch('')}
-                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-600 p-0.5 rounded-full hover:bg-slate-200/60 transition-colors"
-                            title="Limpar busca"
-                        >
-                            <X className="w-3.5 h-3.5" />
-                        </button>
-                    )}
-                </div>
+                {/* Barra de Busca Superior quando houver busca ou filtros ativos no Mobile */}
+                {(globalSearch.trim() || filterDate || filterStatus) && (
+                    <div className="relative w-full animate-in fade-in duration-200">
+                        <input
+                            type="text"
+                            placeholder="Buscar por nome, CPF, SUS ou exame..."
+                            className="w-full bg-slate-50 border border-slate-200/90 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 rounded-2xl pl-9 pr-9 py-2 text-xs font-bold transition-all text-slate-900 placeholder:text-slate-400 shadow-2xs"
+                            value={globalSearch}
+                            onChange={(e) => setGlobalSearch(e.target.value)}
+                        />
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-3.5 h-3.5" />
+                        {globalSearch && (
+                            <button
+                                type="button"
+                                onClick={() => setGlobalSearch('')}
+                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-600 p-0.5 rounded-full hover:bg-slate-200/60 transition-colors"
+                                title="Limpar busca"
+                            >
+                                <X className="w-3.5 h-3.5" />
+                            </button>
+                        )}
+                    </div>
+                )}
             </div>
 
             {/* Desktop Integrated Single-Line Header */}
@@ -2143,16 +2155,82 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                         <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Carregando agendamentos...</span>
                     </div>
                 ) : isMobile && !globalSearch.trim() && !filterDate && !filterStatus ? (
-                    <div className="h-full w-full flex flex-col items-center justify-center p-8 text-center bg-slate-50/20 animate-in fade-in duration-300">
-                        <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-sky-50 via-sky-100/60 to-blue-100 border border-sky-200/80 flex items-center justify-center text-sky-600 shadow-inner mb-4">
-                            <Search className="w-8 h-8" />
+                    <div className="h-full w-full flex flex-col items-center justify-center p-4 sm:p-8 text-center bg-gradient-to-b from-transparent via-sky-50/20 to-slate-50/40 animate-in fade-in duration-300">
+                        <div className="w-full max-w-md flex flex-col items-center">
+                            {/* Ícone de Busca em Destaque */}
+                            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-3xl bg-gradient-to-br from-sky-50 via-sky-100/70 to-blue-100 border border-sky-200/90 flex items-center justify-center text-sky-600 shadow-lg shadow-sky-500/10 mb-4 ring-8 ring-sky-50/50">
+                                <Search className="w-8 h-8 sm:w-10 sm:h-10 text-sky-600" />
+                            </div>
+
+                            <h3 className="text-xl sm:text-2xl font-black bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 bg-clip-text text-transparent uppercase tracking-tight mb-1.5">
+                                Qual agendamento você procura?
+                            </h3>
+                            <p className="text-xs sm:text-sm font-semibold text-slate-500 max-w-sm mb-5 leading-relaxed">
+                                Digite o nome do paciente, apelido, CPF, Cartão SUS ou procedimento no campo abaixo para consultar.
+                            </p>
+
+                            {/* Campo de Pesquisa Maior no Centro da Tela Mobile */}
+                            <div className="relative w-full shadow-lg shadow-sky-900/5 rounded-2xl mb-4">
+                                <input
+                                    type="text"
+                                    autoFocus
+                                    placeholder="Buscar por nome, CPF, SUS ou exame..."
+                                    className="w-full bg-white border-2 border-slate-200/90 hover:border-sky-300 focus:border-sky-500 focus:ring-4 focus:ring-sky-500/15 rounded-2xl pl-12 pr-11 py-3.5 sm:py-4 text-sm font-extrabold text-slate-900 placeholder:text-slate-400 placeholder:font-medium transition-all shadow-xs"
+                                    value={globalSearch}
+                                    onChange={(e) => setGlobalSearch(e.target.value)}
+                                />
+                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-sky-500 w-5 h-5 pointer-events-none" />
+                                {globalSearch && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setGlobalSearch('')}
+                                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-600 p-1 rounded-full hover:bg-slate-100 transition-colors"
+                                        title="Limpar busca"
+                                    >
+                                        <X className="w-4 h-4" />
+                                    </button>
+                                )}
+                            </div>
+
+                            {/* Atalhos Rápidos para Mobile */}
+                            <div className="w-full flex flex-wrap items-center justify-center gap-2 pt-1">
+                                <span className="text-[10px] font-black uppercase text-slate-400 w-full mb-0.5">
+                                    Acessar rapidamente:
+                                </span>
+                                <button
+                                    type="button"
+                                    onClick={() => setFilterStatus('Fila de espera')}
+                                    className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100/80 border border-amber-200 text-amber-800 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all shadow-2xs flex items-center gap-1.5 active:scale-95 cursor-pointer"
+                                >
+                                    <Clock className="w-3.5 h-3.5 text-amber-600" />
+                                    <span>Fila de Espera</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setFilterStatus('Definir Data')}
+                                    className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100/80 border border-emerald-200 text-emerald-800 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all shadow-2xs flex items-center gap-1.5 active:scale-95 cursor-pointer"
+                                >
+                                    <Calendar className="w-3.5 h-3.5 text-emerald-600" />
+                                    <span>Definir Data</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setFilterStatus('Agendado')}
+                                    className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100/80 border border-indigo-200 text-indigo-800 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all shadow-2xs flex items-center gap-1.5 active:scale-95 cursor-pointer"
+                                >
+                                    <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600" />
+                                    <span>Agendados</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setGlobalSearch(' ')}
+                                    className="px-3 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all shadow-2xs flex items-center gap-1.5 active:scale-95 cursor-pointer"
+                                >
+                                    <Users className="w-3.5 h-3.5 text-slate-500" />
+                                    <span>Ver Todos</span>
+                                </button>
+                            </div>
                         </div>
-                        <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight mb-1">
-                            Qual agendamento você procura?
-                        </h3>
-                        <p className="text-xs font-semibold text-slate-500 max-w-md">
-                            Digite o nome do paciente, apelido, CPF, Cartão SUS ou procedimento no campo de busca para consultar.
-                        </p>
                     </div>
                 ) : bookings.length > 0 ? (
                     <div className="space-y-3 w-full pb-6">
