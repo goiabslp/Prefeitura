@@ -55,8 +55,7 @@ import { DocumentPreview } from './components/DocumentPreview';
 import { AdminDocumentPreview } from './components/AdminDocumentPreview';
 import { UserManagementScreen } from './components/UserManagementScreen';
 import { EntityManagementScreen } from './components/EntityManagementScreen';
-import { SignatureManagementScreen } from './components/SignatureManagementScreen';
-import { FleetManagementScreen } from './components/FleetManagementScreen';
+import { FleetModule } from './components/fleet/FleetModule';
 import { VehicleSchedulingScreen } from './components/VehicleSchedulingScreen';
 import { UIPreviewScreen } from './components/UIPreviewScreen';
 import { AppHeader } from './components/AppHeader';
@@ -244,6 +243,15 @@ const VIEW_TO_PATH: Record<string, string> = {
   'upload:anexar': '/Upload/Anexar',
   'upload:transferir': '/Upload/Transferir',
   'admin:fleet:dashboard': '/Frota/Dashboard',
+  'admin:fleet:veiculos': '/Frota/Veiculos',
+  'admin:fleet:manutencoes': '/Frota/Manutencoes',
+  'admin:fleet:pecas': '/Frota/Pecas',
+  'admin:fleet:estoque': '/Frota/Estoque',
+  'admin:fleet:compras': '/Frota/Compras',
+  'admin:fleet:fornecedores': '/Frota/Fornecedores',
+  'admin:fleet:historico': '/Frota/Historico',
+  'admin:fleet:relatorios': '/Frota/Relatorios',
+  'admin:fleet:configuracoes': '/Frota/Configuracoes',
   'admin:fleet:leve': '/Frota/Leve',
   'admin:fleet:pesada': '/Frota/Pesada',
   'admin:fleet:acessorios': '/Frota/Acessorios',
@@ -4655,7 +4663,7 @@ const App: React.FC = () => {
                       />
 
                     ) : currentView === 'admin' && adminTab === 'fleet' ? (
-                      <FleetManagementScreen
+                      <FleetModule
                         vehicles={vehicles}
                         sectors={sectors}
                         persons={persons}
@@ -4666,29 +4674,27 @@ const App: React.FC = () => {
                           if (newV) {
                             const updatedList = await entityService.getVehicles();
                             setVehicles(updatedList);
+                          } else {
+                            alert("Erro ao criar veículo");
                           }
-                          else alert("Erro ao criar veículo");
                         }}
                         onUpdateVehicle={async v => {
                           const updated = await entityService.updateVehicle(v);
                           if (updated) {
                             const updatedList = await entityService.getVehicles();
                             setVehicles(updatedList);
+                          } else {
+                            alert("Erro ao atualizar veículo");
                           }
-                          else alert("Erro ao atualizar veículo");
                         }}
                         onDeleteVehicle={async id => {
                           const success = await entityService.deleteVehicle(id);
                           if (success) {
                             const updatedList = await entityService.getVehicles();
                             setVehicles(updatedList);
+                          } else {
+                            alert("Erro ao deletar veículo");
                           }
-                          else alert("Erro ao deletar veículo");
-                        }}
-                        onAddBrand={async b => {
-                          const newB = await entityService.createBrand(b);
-                          if (newB) setBrands(p => [...p, newB]);
-                          else alert("Erro ao criar marca");
                         }}
                         onBack={handleGoHome}
                       />

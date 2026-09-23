@@ -458,9 +458,19 @@ export const MODULE_ACCESS_TREE: ModuleItemDefinition[] = [
     key: 'parent_frotas',
     legacyKeys: ['frotas'],
     label: 'Frotas',
-    description: 'Gestão cadastral de veículos municipais, manutenções e seguros',
+    description: 'Central Completa de Gestão da Frota Municipal, veículos, manutenções, peças, estoque e custos',
     routes: [
       '/Frota',
+      '/Frota/Dashboard',
+      '/Frota/Veiculos',
+      '/Frota/Manutencoes',
+      '/Frota/Pecas',
+      '/Frota/Estoque',
+      '/Frota/Compras',
+      '/Frota/Fornecedores',
+      '/Frota/Historico',
+      '/Frota/Relatorios',
+      '/Frota/Configuracoes',
       '/Frota/Novo',
       '/Frota/Novo/Geral',
       '/Frota/Novo/Tecnico',
@@ -474,30 +484,44 @@ export const MODULE_ACCESS_TREE: ModuleItemDefinition[] = [
       {
         key: 'sub_frotas_dashboard',
         legacyKeys: ['parent_frotas_dashboard'],
-        label: 'Dashboard de Frota',
-        description: 'Visão consolidada de manutenção e disponibilidade',
-        routes: ['/Frota/Dashboard']
+        label: 'Dashboard & Saúde da Frota',
+        description: 'Visão consolidada de manutenção, odômetros e disponibilidade',
+        routes: ['/Frota/Dashboard', '/Frota']
       },
       {
-        key: 'sub_frotas_leve',
-        legacyKeys: ['parent_frotas_leve'],
-        label: 'Frota Leve',
-        description: 'Automóveis de passeio, utilitários e vans',
-        routes: ['/Frota/Leve']
+        key: 'sub_frotas_veiculos',
+        legacyKeys: ['parent_frotas_leve', 'parent_frotas_pesado', 'parent_frotas_acessorio'],
+        label: 'Veículos & Prontuários',
+        description: 'Catálogo de veículos leves, pesados, máquinas e prontuário individual',
+        routes: ['/Frota/Veiculos', '/Frota/Leve', '/Frota/Pesada', '/Frota/Acessorios']
       },
       {
-        key: 'sub_frotas_pesado',
-        legacyKeys: ['parent_frotas_pesado'],
-        label: 'Frota Pesada & Máquinas',
-        description: 'Caminhões, tratores, motoniveladoras e retroescavadeiras',
-        routes: ['/Frota/Pesada']
+        key: 'sub_frotas_manutencoes',
+        legacyKeys: [],
+        label: 'Manutenções & Peças Utilizadas',
+        description: 'Ordens de serviço mecânicas preventivas e corretivas',
+        routes: ['/Frota/Manutencoes']
       },
       {
-        key: 'sub_frotas_acessorio',
-        legacyKeys: ['parent_frotas_acessorio'],
-        label: 'Acessórios & Equipamentos',
-        description: 'Implementos agrícolas, carretas e ferramentas',
-        routes: ['/Frota/Acessorios']
+        key: 'sub_frotas_estoque',
+        legacyKeys: [],
+        label: 'Peças & Almoxarifado',
+        description: 'Catálogo de peças, controle de estoque e compras',
+        routes: ['/Frota/Pecas', '/Frota/Estoque', '/Frota/Compras']
+      },
+      {
+        key: 'sub_frotas_fornecedores',
+        legacyKeys: [],
+        label: 'Fornecedores & Oficinas',
+        description: 'Oficinas credenciadas, autopeças e prestadores',
+        routes: ['/Frota/Fornecedores']
+      },
+      {
+        key: 'sub_frotas_relatorios',
+        legacyKeys: [],
+        label: 'Histórico & Relatórios',
+        description: 'Auditoria cronológica da frota e emissão de relatórios em PDF',
+        routes: ['/Frota/Historico', '/Frota/Relatorios', '/Frota/Configuracoes']
       }
     ]
   },
