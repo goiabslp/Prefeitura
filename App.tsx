@@ -144,6 +144,7 @@ const VIEW_TO_PATH: Record<string, string> = {
   'tracking:compras': '/Historico/Compras',
   'tracking:diarias': '/Historico/Diarias',
   'diarias-novo-evento': '/Diarias/NovoEvento',
+  'diarias-editar-evento': '/Diarias/Editar',
   'diarias-lancamentos': '/Diarias/Lancamentos',
   'diarias-gestores': '/Diarias/Gestores',
   'diarias-viajar': '/Diarias/Viajar',
@@ -325,7 +326,7 @@ const mapLicitacaoProcessToOrder = (process: any): Order => {
 
 const App: React.FC = () => {
   // State controlling the active module view
-  const [currentView, setCurrentView] = useState<'login' | 'home' | 'admin' | 'tracking' | 'editor' | 'vehicle-scheduling' | 'abastecimento' | 'order-details' | 'purchase-inventory' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'diarias-novo-evento' | 'diarias-lancamentos' | 'diarias-gestores' | 'diarias-viajar' | 'diarias-adiantamento' | 'diarias-adiantamento-servidor' | 'diarias-adiantamento-viagem' | 'diarias-adiantamento-valores' | 'diarias-adiantamento-bancario' | 'diarias-adiantamento-justificativa' | 'licitacao' | 'licitacao:new' | 'licitacao:view' | 'licitacao:details' | 'licitacao:kanban' | 'licitacao:kanban-view' | 'licitacao-all' | 'licitacao-screening' | 'consultas' | 'farmacia' | 'noticias' | 'upload' | 'politica-privacidade' | 'politica-privacidade-app' | 'assistente-ia' | 'chat' | 'art'>(() => {
+  const [currentView, setCurrentView] = useState<'login' | 'home' | 'admin' | 'tracking' | 'editor' | 'vehicle-scheduling' | 'abastecimento' | 'order-details' | 'purchase-inventory' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'diarias-novo-evento' | 'diarias-editar-evento' | 'diarias-lancamentos' | 'diarias-gestores' | 'diarias-viajar' | 'diarias-adiantamento' | 'diarias-adiantamento-servidor' | 'diarias-adiantamento-viagem' | 'diarias-adiantamento-valores' | 'diarias-adiantamento-bancario' | 'diarias-adiantamento-justificativa' | 'licitacao' | 'licitacao:new' | 'licitacao:view' | 'licitacao:details' | 'licitacao:kanban' | 'licitacao:kanban-view' | 'licitacao-all' | 'licitacao-screening' | 'consultas' | 'farmacia' | 'noticias' | 'upload' | 'politica-privacidade' | 'politica-privacidade-app' | 'assistente-ia' | 'chat' | 'art'>(() => {
     if (typeof window !== 'undefined') {
       let rawPath = window.location.pathname;
       try { rawPath = decodeURIComponent(rawPath); } catch (e) {}
@@ -339,8 +340,20 @@ const App: React.FC = () => {
       if (path.startsWith('/art')) {
         return 'art';
       }
+      if (path.startsWith('/diarias/editar')) {
+        return 'diarias-editar-evento';
+      }
     }
     return 'login';
+  });
+  const [editingDiariaEventoId, setEditingDiariaEventoId] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      let rawPath = window.location.pathname;
+      try { rawPath = decodeURIComponent(rawPath); } catch (e) {}
+      const urlId = new URLSearchParams(window.location.search).get('id') || rawPath.match(/\/diarias\/editar\/([^/?]+)/i)?.[1] || null;
+      return urlId;
+    }
+    return null;
   });
   const [remoteAccessState, setRemoteAccessState] = useState<any>(null);
   const [isEgressModalOpen, setIsEgressModalOpen] = useState(false);
@@ -1342,6 +1355,11 @@ const App: React.FC = () => {
       if (path.startsWith('/diarias/viajar')) {
         setCurrentView('diarias-viajar');
         return;
+      } else if (path.startsWith('/diarias/editar')) {
+        const urlId = new URLSearchParams(window.location.search).get('id') || rawPath.match(/\/diarias\/editar\/([^/?]+)/i)?.[1] || null;
+        setEditingDiariaEventoId(urlId);
+        setCurrentView('diarias-editar-evento');
+        return;
       } else if (path.startsWith('/diarias/lancamentos')) {
         setCurrentView('diarias-lancamentos');
         return;
@@ -1638,6 +1656,8 @@ const App: React.FC = () => {
 
       if (stateKey === 'admin:users' && currentPath.toLowerCase().startsWith('/admin/usuarios/')) {
         // Preserva a URL individual do usuário em edição (/Admin/Usuarios/Editar/:id ou /Admin/Usuarios/Novo)
+      } else if (stateKey === 'diarias-editar-evento' && currentPath.toLowerCase().startsWith('/diarias/editar')) {
+        // Preserva a URL individual do evento em edição (/Diarias/Editar/:id ou /Diarias/Editar?id=:id)
       } else if (currentPath.replace(/\/$/, '').toLowerCase() !== targetPath.replace(/\/$/, '').toLowerCase()) {
         window.history.pushState(null, '', expectedPath);
       }
@@ -5668,14 +5688,21 @@ const App: React.FC = () => {
               />
             )}
 
-            {currentView === 'diarias-novo-evento' && currentUser && (
+            {(currentView === 'diarias-novo-evento' || currentView === 'diarias-editar-evento') && currentUser && (
               <NovoEventoScreen
                 currentUser={currentUser}
                 persons={persons}
                 sectors={sectors}
                 jobs={jobs}
+                editingEventoId={currentView === 'diarias-editar-evento' ? editingDiariaEventoId : null}
                 onBack={() => {
-                  window.history.pushState({}, '', '/Diarias');
+                  setEditingDiariaEventoId(null);
+                  window.history.pushState({}, '', currentView === 'diarias-editar-evento' ? '/Diarias/Lancamentos' : '/Diarias');
+                  window.dispatchEvent(new Event('popstate'));
+                }}
+                onFinish={() => {
+                  setEditingDiariaEventoId(null);
+                  window.history.pushState({}, '', '/Diarias/Lancamentos');
                   window.dispatchEvent(new Event('popstate'));
                 }}
               />

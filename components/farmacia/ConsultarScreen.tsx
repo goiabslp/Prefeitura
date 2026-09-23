@@ -62,22 +62,35 @@ export const ConsultarScreen: React.FC<ConsultarScreenProps> = ({
         }, 50);
     };
 
-    // Determine search activation status dynamically
-    const hasSearched = searchQuery.trim().length > 0;
+    // Função utilitária para normalizar texto (sem acentos, minúsculo)
+    const normalizeText = (text: string | undefined | null): string => {
+        if (!text) return '';
+        return text
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase()
+            .trim();
+    };
+
+    const trimmedQuery = searchQuery.trim();
+    const hasMinChars = trimmedQuery.length >= 3;
+    const hasSearched = hasMinChars;
 
     // Group matching lotes by medicine name dynamically in real-time
     const searchResults = useMemo(() => {
-        const term = searchQuery.trim().toLowerCase();
+        if (!hasMinChars) return [];
+        const term = normalizeText(trimmedQuery);
         if (!term) return [];
 
-        // Filter medicamentos matching query (name or lote or principio_ativo)
+        // Filtra medicamentos matching query (início do nome ou princípio ativo)
         const matched = medicamentos.filter(med => {
             // Não deve retornar medicamentos inativos ou com estoque zerado
             if (med.quantidade === 0) return false;
 
             const matchAtStart = (str: string | undefined | null) => {
                 if (!str) return false;
-                return str.toLowerCase().startsWith(term);
+                const normalizedStr = normalizeText(str);
+                return normalizedStr.startsWith(term);
             };
 
             return matchAtStart(med.nome) || 
@@ -111,7 +124,7 @@ export const ConsultarScreen: React.FC<ConsultarScreenProps> = ({
         });
 
         return Object.values(groups);
-    }, [medicamentos, searchQuery]);
+    }, [medicamentos, trimmedQuery, hasMinChars]);
 
     const getStockStatus = (quantidade: number, limiteMinimo: number) => {
         if (quantidade === 0) {
@@ -181,13 +194,13 @@ export const ConsultarScreen: React.FC<ConsultarScreenProps> = ({
             {/* Central Search Area */}
             <div className={`flex flex-col items-center justify-center transition-all duration-500 bg-slate-50/40 shrink-0 ${hasSearched ? 'py-6 border-b border-slate-100' : 'flex-1 py-16'}`}>
                 <div className="w-full max-w-2xl px-6 text-center">
-                    {!hasSearched && (
+                    {!hasSearched && trimmedQuery.length === 0 && (
                         <div className="mb-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
                             <div className="mx-auto w-16 h-16 bg-pink-50 text-pink-600 rounded-3xl flex items-center justify-center shadow-inner mb-4">
                                 <Search className="w-8 h-8" />
                             </div>
                             <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Qual medicamento você procura?</h2>
-                            <p className="text-xs text-slate-500 mt-1 font-semibold">Digite o nome ou lote do medicamento para verificar a disponibilidade de estoque.</p>
+                            <p className="text-xs text-slate-500 mt-1 font-semibold">Digite as iniciais do medicamento ou princípio ativo (mínimo de 3 letras) para verificar a disponibilidade.</p>
                         </div>
                     )}
                     
@@ -196,7 +209,7 @@ export const ConsultarScreen: React.FC<ConsultarScreenProps> = ({
                             <input
                                 ref={inputRef}
                                 type="text"
-                                placeholder="Digite o nome do medicamento (Ex: Paracetamol, Amoxicilina...)"
+                                placeholder="Digite o nome ou princípio ativo (Ex: DIP, AMO, PAR...)"
                                 className="w-full bg-white border border-slate-200/90 rounded-2xl pl-12 pr-12 py-4 text-sm font-bold focus:bg-white focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 outline-none transition-all text-slate-900 placeholder:text-slate-400 shadow-sm uppercase"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value.toUpperCase())}
@@ -222,6 +235,19 @@ export const ConsultarScreen: React.FC<ConsultarScreenProps> = ({
                     <div className="h-full w-full flex flex-col items-center justify-center gap-2">
                         <div className="w-8 h-8 rounded-full border-4 border-pink-100 border-t-pink-500 animate-spin"></div>
                         <span className="text-xs font-bold text-slate-500 mt-2">Carregando medicamentos...</span>
+                    </div>
+                ) : trimmedQuery.length > 0 && !hasMinChars ? (
+                    <div className="h-full flex flex-col items-center justify-center text-slate-400 p-8 animate-in fade-in duration-200">
+                        <div className="w-14 h-14 bg-amber-50 text-amber-600 rounded-3xl flex items-center justify-center mb-4 border border-amber-200/60 shadow-xs">
+                            <Info className="w-7 h-7" />
+                        </div>
+                        <h4 className="text-base font-extrabold text-slate-800 uppercase tracking-tight">Digite no mínimo 3 caracteres</h4>
+                        <p className="text-xs text-slate-500 mt-1 font-semibold text-center max-w-[320px]">
+                            A busca por iniciais só é realizada com 3 letras ou mais para garantir resultados precisos.
+                        </p>
+                        <div className="mt-4 inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-50 text-amber-700 rounded-full border border-amber-200 text-xs font-black tracking-wider uppercase">
+                            Falta {3 - trimmedQuery.length} caractere{3 - trimmedQuery.length > 1 ? 's' : ''} para iniciar a pesquisa
+                        </div>
                     </div>
                 ) : !hasSearched ? null : searchResults.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 animate-in fade-in duration-300">
@@ -360,10 +386,12 @@ export const ConsultarScreen: React.FC<ConsultarScreenProps> = ({
                         })}
                     </div>
                 ) : (
-                    <div className="h-full flex flex-col items-center justify-center text-slate-400 p-8">
+                    <div className="h-full flex flex-col items-center justify-center text-slate-400 p-8 animate-in fade-in duration-200">
                         <XCircle className="w-12 h-12 mb-3 opacity-25 text-rose-500" />
                         <h4 className="text-sm font-extrabold text-slate-800 uppercase tracking-tight">Nenhum medicamento encontrado</h4>
-                        <p className="text-xs text-slate-500 mt-1 font-semibold text-center max-w-[280px]">Não encontramos nenhum medicamento disponível com o termo "{searchQuery}".</p>
+                        <p className="text-xs text-slate-500 mt-1 font-semibold text-center max-w-[320px]">
+                            Não encontramos nenhum medicamento disponível com as iniciais <strong className="text-slate-700 font-bold">"{trimmedQuery}"</strong> no nome ou princípio ativo.
+                        </p>
                     </div>
                 )}
             </div>

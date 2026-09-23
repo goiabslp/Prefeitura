@@ -8,7 +8,7 @@ import {
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, parseISO, addMinutes, addHours } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Person, User, Sector, Job, Vehicle, DiariaEvento } from '../../types';
-import { createDiariaEvento, getDiariasGestores, getAllDiariaEventos } from '../../services/diariasEventosService';
+import { createDiariaEvento, updateDiariaEvento, getDiariasGestores, getAllDiariaEventos } from '../../services/diariasEventosService';
 import { useCachedVehicles } from '../../hooks/useCachedVehicles';
 import { supabase } from '../../services/supabaseClient';
 import { polishMotivoWithAI } from '../../services/geminiService';
@@ -257,6 +257,8 @@ interface NovoEventoScreenProps {
   jobs: Job[];
   onBack: () => void;
   onFinish?: () => void;
+  editingEventoId?: string | null;
+  editingEvento?: DiariaEvento | null;
 }
 
 interface IBGECity {
@@ -283,13 +285,50 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
   sectors,
   jobs,
   onBack,
-  onFinish
+  onFinish,
+  editingEventoId,
+  editingEvento
 }) => {
   const normalizeName = (n: string) => {
     return n.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   };
 
+  // Carregamento de Evento para Edição
+  const [loadedEditingEvento, setLoadedEditingEvento] = useState<DiariaEvento | null>(editingEvento || null);
+  const [isLoadingEvento, setIsLoadingEvento] = useState(false);
+
+  useEffect(() => {
+    if (editingEvento) {
+      setLoadedEditingEvento(editingEvento);
+      return;
+    }
+    const targetId = editingEventoId || (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('id') || window.location.pathname.match(/\/diarias\/editar\/([^/]+)/i)?.[1] : null);
+    if (targetId && !loadedEditingEvento) {
+      setIsLoadingEvento(true);
+      const loadEvento = async () => {
+        try {
+          const all = await getAllDiariaEventos();
+          const found = all.find(e => String(e.id) === String(targetId));
+          if (found) {
+            setLoadedEditingEvento(found);
+          } else {
+            const { data } = await supabase.from('diarias_eventos').select('*').eq('id', targetId).single();
+            if (data) setLoadedEditingEvento(data as DiariaEvento);
+          }
+        } catch (e) {
+          console.warn('Erro ao buscar evento para edição:', e);
+        } finally {
+          setIsLoadingEvento(false);
+        }
+      };
+      loadEvento();
+    }
+  }, [editingEventoId, editingEvento]);
+
   const [selectedPersons, setSelectedPersons] = useState<{ id: string; name: string }[]>(() => {
+    if (editingEvento && editingEvento.pessoas && editingEvento.pessoas.length > 0) {
+      return editingEvento.pessoas;
+    }
     if (currentUser) {
       const match = persons.find(p => normalizeName(p.name) === normalizeName(currentUser.name));
       if (match) return [{ id: match.id, name: match.name }];
@@ -299,13 +338,39 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
   });
   const [editingPersonIndex, setEditingPersonIndex] = useState<number | null>(null);
   const [overrideVehicleConflict, setOverrideVehicleConflict] = useState<string | null>(null);
-  const [destination, setDestination] = useState('');
-  const [departureDateTime, setDepartureDateTime] = useState('');
-  const [returnDateTime, setReturnDateTime] = useState('');
-  const [reason, setReason] = useState('');
+  const [destination, setDestination] = useState(editingEvento?.destino || '');
+  const [departureDateTime, setDepartureDateTime] = useState(editingEvento?.data_saida || '');
+  const [returnDateTime, setReturnDateTime] = useState(
+    editingEvento?.data_retorno && !editingEvento.data_retorno.startsWith('2099-12-31') 
+      ? editingEvento.data_retorno 
+      : ''
+  );
+  const [reason, setReason] = useState(editingEvento?.motivo || '');
   const [isRecording, setIsRecording] = useState(false);
   const [isPolishingAI, setIsPolishingAI] = useState(false);
   const recognitionRef = useRef<any>(null);
+
+  // Efeito para preencher estados quando loadedEditingEvento for carregado assincronamente
+  useEffect(() => {
+    if (loadedEditingEvento) {
+      if (loadedEditingEvento.pessoas && Array.isArray(loadedEditingEvento.pessoas) && loadedEditingEvento.pessoas.length > 0) {
+        setSelectedPersons(loadedEditingEvento.pessoas);
+      }
+      setDestination(loadedEditingEvento.destino || '');
+      setDepartureDateTime(loadedEditingEvento.data_saida || '');
+      if (loadedEditingEvento.data_retorno && !loadedEditingEvento.data_retorno.startsWith('2099-12-31')) {
+        setReturnDateTime(loadedEditingEvento.data_retorno);
+      } else {
+        setReturnDateTime('');
+      }
+      setSelectedVehicle(loadedEditingEvento.veiculo || '');
+      setCustomVehicle(loadedEditingEvento.veiculo_outro || '');
+      setDistancia(loadedEditingEvento.distancia !== undefined && loadedEditingEvento.distancia !== null ? loadedEditingEvento.distancia : '');
+      setHospedagem(!!loadedEditingEvento.hospedagem);
+      setHospedagemDias(loadedEditingEvento.hospedagem_dias || 1);
+      setReason(loadedEditingEvento.motivo || '');
+    }
+  }, [loadedEditingEvento]);
   
   const isLastActionPolishRef = useRef(false);
   const lastPolishedTextRef = useRef('');
@@ -663,6 +728,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
     }
 
     const isAdmin = currentUser && currentUser.role === 'admin';
+    const isEditMode = !!loadedEditingEvento;
     const selectedDateTime = parseISO(val);
 
     // 1. Regra absoluta: Validar se a data de saída é posterior à data de retorno (se o retorno já estiver definido)
@@ -678,8 +744,8 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
       }
     }
 
-    // 2. Regras restritas para usuários comuns (Administradores têm permissão exclusiva para retroativos):
-    if (!isAdmin) {
+    // 2. Regras restritas para novos cadastros de usuários comuns (Administradores ou Edições têm permissão):
+    if (!isAdmin && !isEditMode) {
       const now = new Date();
       now.setSeconds(0, 0);
       const minAllowed = addMinutes(now, 30);
@@ -704,6 +770,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
     }
 
     const isAdmin = currentUser && currentUser.role === 'admin';
+    const isEditMode = !!loadedEditingEvento;
     const selectedReturnDateTime = parseISO(val);
 
     // 1. Regra absoluta: Validar se o retorno é anterior à saída (se a saída já estiver definida)
@@ -719,8 +786,8 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
       }
     }
 
-    // 2. Regras restritas para usuários comuns (Administradores têm permissão exclusiva para retroativos):
-    if (!isAdmin) {
+    // 2. Regras restritas para usuários comuns (Administradores ou Edições têm permissão):
+    if (!isAdmin && !isEditMode) {
       const now = new Date();
       if (selectedReturnDateTime.getTime() < now.getTime()) {
         setDateValidationError({
@@ -1055,7 +1122,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
   const isFormValid = isStep1Valid && reason.trim().length >= 50;
 
   const handleSubmit = async () => {
-    if (returnDateTime && isDateExpired(returnDateTime) && !isGestorOrAdmin) {
+    if (returnDateTime && isDateExpired(returnDateTime) && !isGestorOrAdmin && !loadedEditingEvento) {
       setIsExpiredModalOpen(true);
       return;
     }
@@ -1066,38 +1133,66 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
     const initialStatus = 'aguardando_gestor';
 
     try {
-      // Cria uma viagem individualizada para cada servidor selecionado
-      for (const p of selectedPersons) {
-        await createDiariaEvento({
-          pessoas: [p],
+      if (loadedEditingEvento) {
+        // MODO EDIÇÃO: Atualiza a viagem permanentemente no banco de dados
+        await updateDiariaEvento(loadedEditingEvento.id, {
+          pessoas: selectedPersons,
           destino: destination,
           data_saida: departureDateTime,
-          // Se o campo RETORNO for preenchido por gestor/admin, salva a data; caso contrário, salva sentinela para o fluxo Viajar
-          data_retorno: hasReturn ? returnDateTime : '2099-12-31T00:00:00.000Z',
+          data_retorno: hasReturn ? returnDateTime : (loadedEditingEvento.data_retorno || '2099-12-31T00:00:00.000Z'),
           motivo: reason.trim(),
-          setor_id: currentUser.sectorId,
-          user_id: currentUser.id,
-          user_name: currentUser.name,
-          status: initialStatus,
-          hospedagem,
-          hospedagem_dias: hospedagem ? hospedagemDias : 0,
           veiculo: selectedVehicle,
           veiculo_outro: selectedVehicle === 'OUTRO' ? customVehicle : '',
-          distancia: Number(distancia) || 0
+          distancia: Number(distancia) || 0,
+          hospedagem,
+          hospedagem_dias: hospedagem ? hospedagemDias : 0
         });
-      }
-      
-      setIsSuccess(true);
-      setTimeout(() => {
-        setIsSuccess(false);
-        if (onFinish) {
-          onFinish();
-        } else {
-          window.history.pushState({}, '', '/Diarias');
-          window.dispatchEvent(new Event('popstate'));
+        
+        setIsSuccess(true);
+        setTimeout(() => {
+          setIsSuccess(false);
+          if (onFinish) {
+            onFinish();
+          } else {
+            window.history.pushState({}, '', '/Diarias/Lancamentos');
+            window.dispatchEvent(new Event('popstate'));
+          }
+        }, 1800);
+      } else {
+        // MODO CRIAÇÃO: Cria uma viagem individualizada para cada servidor selecionado
+        for (const p of selectedPersons) {
+          await createDiariaEvento({
+            pessoas: [p],
+            destino: destination,
+            data_saida: departureDateTime,
+            // Se o campo RETORNO for preenchido por gestor/admin, salva a data; caso contrário, salva sentinela para o fluxo Viajar
+            data_retorno: hasReturn ? returnDateTime : '2099-12-31T00:00:00.000Z',
+            motivo: reason.trim(),
+            setor_id: currentUser.sectorId,
+            user_id: currentUser.id,
+            user_name: currentUser.name,
+            status: initialStatus,
+            hospedagem,
+            hospedagem_dias: hospedagem ? hospedagemDias : 0,
+            veiculo: selectedVehicle,
+            veiculo_outro: selectedVehicle === 'OUTRO' ? customVehicle : '',
+            distancia: Number(distancia) || 0
+          });
         }
-      }, 2500);
+        
+        setIsSuccess(true);
+        setTimeout(() => {
+          setIsSuccess(false);
+          if (onFinish) {
+            onFinish();
+          } else {
+            window.history.pushState({}, '', '/Diarias');
+            window.dispatchEvent(new Event('popstate'));
+          }
+        }, 2500);
+      }
     } catch (error) {
+      console.error("Erro ao salvar o evento:", error);
       alert("Erro ao salvar o evento. Tente novamente.");
     } finally {
       setIsLoading(false);
@@ -1786,10 +1881,10 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
               type="button"
               onClick={handleSubmit}
               disabled={!isFormValid || isLoading || isSuccess}
-              className="flex-1 flex items-center justify-center gap-1.5 py-3 px-6 bg-emerald-600 text-white font-bold uppercase tracking-widest text-[10px] rounded-xl active:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-emerald-600/20"
+              className="flex-1 flex items-center justify-center gap-1.5 py-3 px-6 bg-emerald-600 text-white font-bold uppercase tracking-widest text-[10px] rounded-xl active:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-emerald-600/20 whitespace-nowrap"
             >
               {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-              <span>{isLoading ? 'Enviando...' : 'Finalizar'}</span>
+              <span>{isLoading ? 'Salvando...' : (loadedEditingEvento ? 'Salvar Alterações' : 'Finalizar')}</span>
             </button>
           )}
         </div>
@@ -2030,7 +2125,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
           onSelect={handleDepartureSelect}
           initialValue={departureDateTime}
           title="Data e Hora de Saída"
-          isAdmin={currentUser?.role === 'admin'}
+          isAdmin={currentUser?.role === 'admin' || !!loadedEditingEvento}
         />
         
         <DateTimePickerModal
@@ -2039,7 +2134,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
           onSelect={handleReturnSelect}
           initialValue={returnDateTime}
           title="Data e Hora de Retorno"
-          isAdmin={currentUser?.role === 'admin'}
+          isAdmin={currentUser?.role === 'admin' || !!loadedEditingEvento}
         />
 
         {isExpiredModalOpen && (
@@ -2088,11 +2183,15 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
                 <div className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center mb-4 border border-white/30 shadow-inner animate-bounce">
                   <CheckCircle2 className="w-10 h-10 text-white" />
                 </div>
-                <h3 className="text-xl font-black tracking-tight uppercase">Solicitação Finalizada!</h3>
-                <p className="text-xs text-emerald-100 font-semibold mt-2">Sua viagem foi registrada com sucesso.</p>
+                <h3 className="text-xl font-black tracking-tight uppercase">
+                  {loadedEditingEvento ? 'Viagem Atualizada!' : 'Solicitação Finalizada!'}
+                </h3>
+                <p className="text-xs text-emerald-100 font-semibold mt-2">
+                  {loadedEditingEvento ? 'Todas as informações da viagem foram salvas permanentemente.' : 'Sua viagem foi registrada com sucesso.'}
+                </p>
               </div>
               <div className="p-6">
-                <p className="text-sm font-semibold text-slate-500 mb-2">Redirecionando você para o Módulo de Diárias...</p>
+                <p className="text-sm font-semibold text-slate-500 mb-2">Redirecionando você...</p>
                 <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mt-4"></div>
               </div>
             </div>
@@ -2258,10 +2357,10 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
                   <button
                       onClick={handleSubmit}
                       disabled={!isFormValid || isLoading || isSuccess}
-                      className="flex items-center gap-1 sm:gap-2 px-3 sm:px-6 py-2 sm:py-2.5 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 shadow-lg shadow-emerald-600/20 active:scale-95 transition-all text-xs sm:text-sm animate-pulse disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="flex items-center gap-1 sm:gap-2 px-3 sm:px-6 py-2 sm:py-2.5 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 shadow-lg shadow-emerald-600/20 active:scale-95 transition-all text-xs sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
                   >
                       {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                      <span>{isLoading ? 'Salvando...' : 'Finalizar'}</span>
+                      <span>{isLoading ? 'Salvando...' : (loadedEditingEvento ? 'Salvar Alterações' : 'Finalizar')}</span>
                   </button>
               )}
           </div>
@@ -2272,8 +2371,21 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
         <div className="w-full max-w-4xl mx-auto space-y-6">
           
           <div className="space-y-3 mb-6">
-            <h1 className="text-3xl font-black text-slate-900 tracking-tight">Registrar Nova Viagem</h1>
-            <p className="text-slate-500 font-medium text-sm">Preencha os detalhes abaixo para solicitar a autorização do evento e viagem oficial.</p>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                {loadedEditingEvento ? 'Editar Cadastro da Viagem' : 'Registrar Nova Viagem'}
+              </h1>
+              {loadedEditingEvento && (
+                <span className="font-mono text-xs font-black text-amber-800 bg-amber-100 px-3 py-1 rounded-full border border-amber-300 shadow-xs">
+                  EVT-{String(loadedEditingEvento.id).slice(0, 6).toUpperCase()}
+                </span>
+              )}
+            </div>
+            <p className="text-slate-500 font-medium text-sm">
+              {loadedEditingEvento 
+                ? 'Atualize os dados e parâmetros da viagem permanentemente (Servidores, Destino, Datas/Horários, Veículo, Motivo).' 
+                : 'Preencha os detalhes abaixo para solicitar a autorização do evento e viagem oficial.'}
+            </p>
           </div>
 
           <div className="w-full bg-white p-6 md:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-6">
@@ -2873,7 +2985,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
         onSelect={handleDepartureSelect}
         initialValue={departureDateTime}
         title="Data e Hora de Saída"
-        isAdmin={currentUser?.role === 'admin'}
+        isAdmin={currentUser?.role === 'admin' || !!loadedEditingEvento}
       />
       
       <DateTimePickerModal
@@ -2882,7 +2994,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
         onSelect={handleReturnSelect}
         initialValue={returnDateTime}
         title="Data e Hora de Retorno"
-        isAdmin={currentUser?.role === 'admin'}
+        isAdmin={currentUser?.role === 'admin' || !!loadedEditingEvento}
       />
 
       {/* Modal - Data da Diária Expirada (Regra dos 10 Dias) */}
@@ -2932,11 +3044,15 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
               <div className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center mb-4 border border-white/30 shadow-inner animate-bounce">
                 <CheckCircle2 className="w-10 h-10 text-white" />
               </div>
-              <h3 className="text-xl font-black tracking-tight uppercase">Solicitação Finalizada!</h3>
-              <p className="text-xs text-emerald-100 font-semibold mt-2">Sua viagem foi registrada com sucesso.</p>
+              <h3 className="text-xl font-black tracking-tight uppercase">
+                {loadedEditingEvento ? 'Viagem Atualizada!' : 'Solicitação Finalizada!'}
+              </h3>
+              <p className="text-xs text-emerald-100 font-semibold mt-2">
+                {loadedEditingEvento ? 'Todas as informações da viagem foram salvas permanentemente.' : 'Sua viagem foi registrada com sucesso.'}
+              </p>
             </div>
             <div className="p-6">
-              <p className="text-sm font-semibold text-slate-500 mb-2">Redirecionando você para o Módulo de Diárias...</p>
+              <p className="text-sm font-semibold text-slate-500 mb-2">Redirecionando você...</p>
               <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mt-4"></div>
             </div>
           </div>

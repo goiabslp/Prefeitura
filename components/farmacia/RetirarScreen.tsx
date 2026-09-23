@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { User, FarmaciaMedicamento, FarmaciaMovimentacao, ConsultaPaciente, AppState, AGENTES_DE_SAUDE } from '../../types';
-import { ArrowLeft, User as UserIcon, Calendar, ClipboardList, CheckCircle2, AlertTriangle, Search, Loader2, History, X, FileDown, Pill, ShieldCheck, FileText, Plus, Trash2, Minus, UserPlus, ChevronDown } from 'lucide-react';
+import { ArrowLeft, User as UserIcon, Calendar, ClipboardList, CheckCircle2, AlertTriangle, Search, Loader2, History, X, FileDown, Pill, ShieldCheck, FileText, Plus, Trash2, Minus, UserPlus, ChevronDown, Sparkles, Check, Stethoscope } from 'lucide-react';
 import * as db from '../../services/farmaciaService';
 import { getPacientes, createPaciente } from '../../services/consultasService';
 import { useAgentesSaude } from '../../services/agentesSaudeService';
@@ -588,301 +588,377 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
     };
 
     return (
-        <div className="w-full max-w-none mx-auto min-h-0 overflow-hidden flex flex-col flex-1">
-            {/* Ficha de liberação */}
-            <div className="bg-white border border-slate-200/80 rounded-3xl p-5 shadow-md flex flex-col w-full min-h-0 overflow-hidden flex-1 justify-between">
-                <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3 shrink-0">
-                    <div className="flex items-center gap-2">
-                        <ClipboardList className="w-5 h-5 text-pink-600" />
-                        <h3 className="font-extrabold text-slate-800 text-xs uppercase tracking-tight">Nova Dispensação de Medicamentos</h3>
+        <div className="w-full max-w-none mx-auto h-full min-h-0 overflow-hidden flex flex-col flex-1 gap-2.5">
+            {/* Top Bar / Header Moderno */}
+            <div className="bg-white border-2 border-slate-200/90 rounded-2xl px-4 py-2 shadow-xs flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-pink-500 to-rose-600 text-white flex items-center justify-center shadow-xs">
+                        <Pill className="w-4 h-4" />
                     </div>
-                    <div className="flex items-center gap-2">
-                        <button
-                            type="button"
-                            onClick={() => {
-                                setPendingCpf('');
-                                setNewPatientName('');
-                                setNewPatientBirthDate('');
-                                setNewPatientNickname('');
-                                setNewPatientPhone('');
-                                setNewPatientNeighborhood('');
-                                setNewPatientStreet('');
-                                setNewPatientCity('SÃO JOSÉ DO GOIABAL -MG');
-                                setNewPatientSusNumber('');
-                                setNewPatientAgenteSaude('');
-                                setIsRegModalOpen(true);
-                            }}
-                            className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-black text-[9px] uppercase tracking-wider rounded-xl transition-all flex items-center gap-1.5 border border-emerald-200/50 shadow-sm cursor-pointer"
-                        >
-                            <UserPlus className="w-3.5 h-3.5" />
-                            Cadastrar Paciente
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setIsHistoryModalOpen(true)}
-                            className="px-3.5 py-2 bg-pink-50 hover:bg-pink-100 text-pink-700 font-black text-[9px] uppercase tracking-wider rounded-xl transition-all flex items-center gap-1.5 border border-pink-200/40 shadow-sm cursor-pointer"
-                        >
-                            <History className="w-3.5 h-3.5" />
-                            Ver Histórico
-                        </button>
+                    <div>
+                        <div className="flex items-center gap-2">
+                            <h3 className="font-black text-slate-900 text-xs md:text-sm uppercase tracking-tight">Dispensação de Medicamentos</h3>
+                            <span className="px-2 py-0.5 rounded-full bg-pink-100 text-pink-700 text-[9px] font-black uppercase tracking-wider">
+                                Atendimento
+                            </span>
+                        </div>
+                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Preencha os dados da receita e selecione os itens para dispensação</p>
                     </div>
                 </div>
+                <div className="flex items-center gap-2">
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setPendingCpf('');
+                            setNewPatientName('');
+                            setNewPatientBirthDate('');
+                            setNewPatientNickname('');
+                            setNewPatientPhone('');
+                            setNewPatientNeighborhood('');
+                            setNewPatientStreet('');
+                            setNewPatientCity('SÃO JOSÉ DO GOIABAL -MG');
+                            setNewPatientSusNumber('');
+                            setNewPatientAgenteSaude('');
+                            setIsRegModalOpen(true);
+                        }}
+                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] uppercase tracking-wider rounded-xl transition-all flex items-center gap-1.5 shadow-xs hover:shadow-sm active:scale-95 cursor-pointer border border-emerald-700"
+                    >
+                        <UserPlus className="w-3.5 h-3.5" />
+                        Cadastrar Paciente
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setIsHistoryModalOpen(true)}
+                        className="px-3 py-1.5 bg-pink-50 hover:bg-pink-100 text-pink-700 font-black text-[10px] uppercase tracking-wider rounded-xl transition-all flex items-center gap-1.5 border-2 border-pink-200 shadow-xs hover:shadow-sm active:scale-95 cursor-pointer"
+                    >
+                        <History className="w-3.5 h-3.5" />
+                        Ver Histórico
+                    </button>
+                </div>
+            </div>
 
-                <form onSubmit={handlePreSubmit} className="flex-1 flex flex-col justify-between gap-4 min-h-0 overflow-hidden">
-                    <div className="space-y-4 min-h-0 overflow-y-auto pr-1 custom-scrollbar">
-                        {/* Linha 1: CPF do Paciente e Paciente */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">CPF ou Cartão SUS do Paciente *</label>
-                                <input
-                                    type="text"
-                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm text-slate-900 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-mono font-bold"
-                                    placeholder="CPF (000.000.000-00) ou N° SUS"
-                                    value={patientCpf}
-                                    onChange={(e) => handleCpfChange(e.target.value)}
-                                    required
-                                />
+            {/* Split Form: 2 Colunas Modernas (Esquerda: Paciente + Prescritor + Obs | Direita: Medicamentos + Ação) */}
+            <form onSubmit={handlePreSubmit} className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-2.5 overflow-hidden">
+                {/* COLUNA ESQUERDA: Paciente, Médico e Observações */}
+                <div className="lg:col-span-5 flex flex-col gap-2.5 h-full min-h-0 overflow-hidden">
+                    {/* Card 1: Paciente e Prescritor */}
+                    <div className="bg-white rounded-2xl border-2 border-slate-200/90 p-3 shadow-xs flex flex-col gap-2 shrink-0">
+                        <div className="flex items-center justify-between pb-1 border-b border-slate-100">
+                            <div className="flex items-center gap-2">
+                                <div className="p-1 rounded-lg bg-pink-100 text-pink-700">
+                                    <UserIcon className="w-3.5 h-3.5" />
+                                </div>
+                                <span className="text-[10px] font-black uppercase tracking-wider text-slate-800">
+                                    1. Paciente & Prescritor
+                                </span>
                             </div>
-
-                            <div className="relative">
-                                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Nome do Paciente *</label>
-                                <input
-                                    type="text"
-                                    className={`w-full rounded-xl border border-slate-200 py-3 px-4 text-sm text-slate-900 outline-none transition-all font-semibold uppercase ${
-                                        !isPatientUnlocked 
-                                            ? 'bg-slate-100 opacity-60 cursor-not-allowed' 
-                                            : 'bg-slate-50 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10'
-                                    }`}
-                                    placeholder={!isPatientUnlocked ? "Digite o CPF ou SUS primeiro" : "Nome Completo do Paciente"}
-                                    value={patientName}
-                                    onChange={(e) => {
-                                        setPatientName(e.target.value.toUpperCase());
-                                        setPatientSearchQuery(e.target.value.toUpperCase());
-                                        setShowPatientDropdown(true);
-                                    }}
-                                    onFocus={() => setShowPatientDropdown(true)}
-                                    onBlur={() => setTimeout(() => setShowPatientDropdown(false), 200)}
-                                    disabled={!isPatientUnlocked}
-                                    required
-                                />
-
-                                {/* Autocomplete suggestion box */}
-                                {showPatientDropdown && patientSuggestions.length > 0 && (
-                                    <div className="absolute left-0 top-full mt-1 w-full bg-white rounded-xl shadow-xl border border-slate-100 max-h-48 overflow-y-auto z-50 custom-scrollbar">
-                                        {patientSuggestions.map(p => (
-                                            <button
-                                                key={p.id}
-                                                type="button"
-                                                onMouseDown={() => {
-                                                    const displayName = p.nickname ? `${p.name} (${p.nickname})` : p.name;
-                                                    setPatientName(displayName);
-                                                    handleCpfChange(p.cpf || p.sus_number || '');
-                                                    setShowPatientDropdown(false);
-                                                }}
-                                                className="w-full text-left px-4 py-2.5 hover:bg-pink-50 text-slate-700 text-xs font-semibold border-b border-slate-50 last:border-0 flex items-center justify-between"
-                                            >
-                                                <span>{p.name}</span>
-                                                <span className="text-[10px] text-slate-400 font-mono">
-                                                    {p.cpf ? `CPF: ${p.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}` : ''}
-                                                    {p.sus_number ? ` • SUS: ${p.sus_number}` : ''}
-                                                </span>
-                                            </button>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
+                            {isPatientUnlocked && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[8px] font-black uppercase">
+                                    <Check className="w-3 h-3 text-emerald-600" /> Identificado
+                                </span>
+                            )}
                         </div>
 
-                        {/* Linha 2: CRM do Médico e UF (Compacto) */}
-                        <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-                            <div className="md:col-span-6 max-w-sm">
-                                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">
-                                    CRM & UF do Médico *
-                                </label>
-                                <div className="flex gap-2 items-center">
-                                    <div className="relative flex-1 flex items-center">
-                                        <input
-                                            type="text"
-                                            pattern="[0-9]*"
-                                            className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-3.5 pr-3 text-sm font-mono font-bold text-slate-900 outline-none focus:bg-white focus:border-purple-500 focus:ring-2 focus:ring-purple-500/10 transition-all"
-                                            placeholder="Ex: 12345"
-                                            value={medicoCrm}
-                                            onChange={(e) => {
-                                                const clean = e.target.value.replace(/\D/g, '');
-                                                setMedicoCrm(clean);
+                        {/* CPF ou SUS */}
+                        <div>
+                            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-700 mb-0.5 ml-0.5">
+                                CPF / Cartão SUS *
+                            </label>
+                            <input
+                                type="text"
+                                className="w-full rounded-xl border-2 border-slate-300 bg-white py-1.5 px-3 text-xs text-slate-900 focus:border-pink-600 focus:ring-4 focus:ring-pink-500/10 outline-none transition-all font-mono font-black placeholder:text-slate-400 shadow-inner"
+                                placeholder="000.000.000-00 ou N° SUS"
+                                value={patientCpf}
+                                onChange={(e) => handleCpfChange(e.target.value)}
+                                required
+                            />
+                        </div>
+
+                        {/* Nome do Paciente com autocomplete */}
+                        <div className="relative">
+                            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-700 mb-0.5 ml-0.5">
+                                Nome do Paciente *
+                            </label>
+                            <input
+                                type="text"
+                                className={`w-full rounded-xl border-2 py-1.5 px-3 text-xs outline-none transition-all font-black uppercase shadow-inner ${
+                                    !isPatientUnlocked 
+                                        ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed placeholder:text-slate-400' 
+                                        : 'bg-white border-slate-300 text-slate-900 focus:border-pink-600 focus:ring-4 focus:ring-pink-500/10 placeholder:text-slate-400'
+                                }`}
+                                placeholder={!isPatientUnlocked ? "DIGITE O CPF OU SUS PRIMEIRO" : "Nome Completo do Paciente"}
+                                value={patientName}
+                                onChange={(e) => {
+                                    setPatientName(e.target.value.toUpperCase());
+                                    setPatientSearchQuery(e.target.value.toUpperCase());
+                                    setShowPatientDropdown(true);
+                                }}
+                                onFocus={() => setShowPatientDropdown(true)}
+                                onBlur={() => setTimeout(() => setShowPatientDropdown(false), 200)}
+                                disabled={!isPatientUnlocked}
+                                required
+                            />
+
+                            {/* Autocomplete suggestion box */}
+                            {showPatientDropdown && patientSuggestions.length > 0 && (
+                                <div className="absolute left-0 top-full mt-1 w-full bg-white rounded-xl shadow-2xl border-2 border-slate-200 max-h-40 overflow-y-auto z-50 custom-scrollbar">
+                                    {patientSuggestions.map(p => (
+                                        <button
+                                            key={p.id}
+                                            type="button"
+                                            onMouseDown={() => {
+                                                const displayName = p.nickname ? `${p.name} (${p.nickname})` : p.name;
+                                                setPatientName(displayName);
+                                                handleCpfChange(p.cpf || p.sus_number || '');
+                                                setShowPatientDropdown(false);
                                             }}
-                                            required
-                                        />
-                                    </div>
-                                    <select
-                                        className="w-24 rounded-xl border border-slate-200 bg-slate-50 py-2.5 px-2 text-sm font-bold text-slate-800 outline-none focus:bg-white focus:border-purple-500 focus:ring-2 focus:ring-purple-500/10 transition-all uppercase cursor-pointer"
-                                        value={medicoUf}
-                                        onChange={(e) => setMedicoUf(e.target.value)}
-                                    >
-                                        {['AC', 'AL', 'AM', 'AP', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MG', 'MS', 'MT', 'PA', 'PB', 'PE', 'PI', 'PR', 'RJ', 'RN', 'RO', 'RR', 'RS', 'SC', 'SE', 'SP', 'TO'].map(uf => (
-                                            <option key={uf} value={uf}>{uf}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Linha 3: Lista de Medicamentos a Dispensar (Multi-Item Selection) */}
-                        <div className="space-y-2">
-                            <div className="flex justify-between items-center px-1">
-                                <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500">
-                                    Medicamentos a Dispensar ({selectedItems.length}) *
-                                </label>
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setMedModalSearch('');
-                                        setMedModalCategory('TODOS');
-                                        setIsMedModalOpen(true);
-                                    }}
-                                    className="px-3 py-1.5 bg-pink-50 hover:bg-pink-100 text-pink-700 font-extrabold text-[10px] uppercase tracking-wider rounded-xl transition-all border border-pink-200/50 flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer"
-                                >
-                                    <Plus className="w-3.5 h-3.5" />
-                                    Adicionar Medicamento
-                                </button>
-                            </div>
-
-                            {selectedItems.length === 0 ? (
-                                <div
-                                    onClick={() => {
-                                        setMedModalSearch('');
-                                        setMedModalCategory('TODOS');
-                                        setIsMedModalOpen(true);
-                                    }}
-                                    className="border-2 border-dashed border-slate-200 hover:border-pink-300 bg-slate-50/50 hover:bg-pink-50/10 rounded-2xl p-6 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-2 group"
-                                >
-                                    <div className="w-10 h-10 rounded-2xl bg-pink-50 text-pink-600 flex items-center justify-center group-hover:scale-110 transition-transform">
-                                        <Pill className="w-5 h-5" />
-                                    </div>
-                                    <div>
-                                        <span className="block text-xs font-black text-slate-700 uppercase tracking-wider">
-                                            Nenhum medicamento selecionado
-                                        </span>
-                                        <span className="block text-[10px] text-slate-400 font-medium mt-0.5">
-                                            Clique aqui para abrir o catálogo e selecionar medicamentos para este atendimento
-                                        </span>
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="space-y-2.5">
-                                    {selectedItems.map((item, idx) => (
-                                        <div
-                                            key={item.med.id}
-                                            className="bg-slate-50/70 border border-slate-200/90 hover:border-pink-200 p-3.5 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 transition-all shadow-sm"
+                                            className="w-full text-left px-3 py-2 hover:bg-pink-50 text-slate-800 text-xs font-bold border-b border-slate-100 last:border-0 flex items-center justify-between transition-colors"
                                         >
-                                            <div className="flex items-start gap-3 min-w-0 flex-1">
-                                                <div className="w-8 h-8 rounded-xl bg-pink-100/70 text-pink-700 flex items-center justify-center shrink-0 font-bold text-xs mt-0.5">
-                                                    #{idx + 1}
-                                                </div>
-                                                <div className="min-w-0 flex-1">
-                                                    <h4 className="font-black text-xs uppercase text-slate-900 truncate">
-                                                        {item.med.nome} {item.med.dosagem ? `(${item.med.dosagem})` : ''}
-                                                    </h4>
-                                                    <div className="flex flex-wrap gap-1.5 mt-1 items-center">
-                                                        <span className="px-1.5 py-0.5 text-[8px] font-extrabold uppercase rounded bg-pink-100/60 text-pink-700">
-                                                            {item.med.categoria}
-                                                        </span>
-                                                        <span className="px-1.5 py-0.5 text-[8px] font-bold uppercase rounded bg-slate-200/60 text-slate-600 font-mono">
-                                                            Lote: {item.med.lote}
-                                                        </span>
-                                                        <span className="text-[10px] font-bold text-slate-400 ml-1">
-                                                            Estoque: <strong className="text-slate-700">{item.med.quantidade} {item.med.unidade}</strong>
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {/* Quantity controls */}
-                                            <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-200/50">
-                                                <div className="flex items-center bg-white border border-slate-200 rounded-xl p-1 shadow-inner">
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleUpdateItemQuantity(item.med.id, item.quantity - 1)}
-                                                        className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition-colors active:scale-95"
-                                                    >
-                                                        <Minus className="w-3.5 h-3.5" />
-                                                    </button>
-                                                    <input
-                                                        type="number"
-                                                        className="w-12 text-center text-xs font-black text-slate-900 bg-transparent outline-none"
-                                                        value={item.quantity}
-                                                        onChange={(e) => handleUpdateItemQuantity(item.med.id, parseInt(e.target.value, 10) || 1)}
-                                                        min="1"
-                                                        max={item.med.quantidade}
-                                                    />
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleUpdateItemQuantity(item.med.id, item.quantity + 1)}
-                                                        className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition-colors active:scale-95"
-                                                    >
-                                                        <Plus className="w-3.5 h-3.5" />
-                                                    </button>
-                                                </div>
-                                                <span className="text-[10px] font-bold text-slate-500 uppercase min-w-[24px]">
-                                                    {item.med.unidade || 'un'}
-                                                </span>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleRemoveItem(item.med.id)}
-                                                    className="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all ml-1"
-                                                    title="Remover medicamento"
-                                                >
-                                                    <Trash2 className="w-4 h-4" />
-                                                </button>
-                                            </div>
-                                        </div>
+                                            <span className="font-extrabold text-slate-900">{p.name}</span>
+                                            <span className="text-[10px] text-slate-500 font-mono font-bold">
+                                                {p.cpf ? `CPF: ${p.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}` : ''}
+                                                {p.sus_number ? ` • SUS: ${p.sus_number}` : ''}
+                                            </span>
+                                        </button>
                                     ))}
-
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            setMedModalSearch('');
-                                            setMedModalCategory('TODOS');
-                                            setIsMedModalOpen(true);
-                                        }}
-                                        className="w-full py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-600 font-extrabold text-[11px] uppercase tracking-wider rounded-2xl border border-dashed border-slate-300 transition-all flex items-center justify-center gap-2 cursor-pointer"
-                                    >
-                                        <Plus className="w-3.5 h-3.5 text-pink-600" />
-                                        Adicionar Outro Medicamento
-                                    </button>
                                 </div>
                             )}
                         </div>
 
-                        {/* Linha 3: Observações / Receita */}
+                        {/* CRM & UF do Médico */}
                         <div>
-                            <label className="block text-[11px] font-black uppercase tracking-wider text-slate-500 mb-1.5 ml-1">Observações / Receita</label>
-                            <textarea
-                                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 px-4 text-sm text-slate-900 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold min-h-[70px]"
-                                placeholder="Ex: Receita do Dr. João, validade 6 meses..."
-                                value={observacoes}
-                                onChange={(e) => setObservacoes(e.target.value)}
-                            />
+                            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-700 mb-0.5 ml-0.5">
+                                CRM & UF do Médico Prescritor *
+                            </label>
+                            <div className="flex gap-2 items-center">
+                                <div className="relative flex-1">
+                                    <input
+                                        type="text"
+                                        pattern="[0-9]*"
+                                        className="w-full rounded-xl border-2 border-slate-300 bg-white py-1.5 px-3 text-xs font-mono font-black text-slate-900 outline-none focus:border-purple-600 focus:ring-4 focus:ring-purple-500/10 transition-all placeholder:text-slate-400 shadow-inner"
+                                        placeholder="Ex: 12345"
+                                        value={medicoCrm}
+                                        onChange={(e) => {
+                                            const clean = e.target.value.replace(/\D/g, '');
+                                            setMedicoCrm(clean);
+                                        }}
+                                        required
+                                    />
+                                </div>
+                                <select
+                                    className="w-20 rounded-xl border-2 border-slate-300 bg-white py-1.5 px-2 text-xs font-black text-slate-900 outline-none focus:border-purple-600 focus:ring-4 focus:ring-purple-500/10 transition-all uppercase cursor-pointer shadow-inner"
+                                    value={medicoUf}
+                                    onChange={(e) => setMedicoUf(e.target.value)}
+                                >
+                                    {['AC', 'AL', 'AM', 'AP', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MG', 'MS', 'MT', 'PA', 'PB', 'PE', 'PI', 'PR', 'RJ', 'RN', 'RO', 'RR', 'RS', 'SC', 'SE', 'SP', 'TO'].map(uf => (
+                                        <option key={uf} value={uf}>{uf}</option>
+                                    ))}
+                                </select>
+                            </div>
                         </div>
                     </div>
 
-                    {/* Submit Button */}
-                    <button
-                        type="submit"
-                        disabled={saving || selectedItems.length === 0}
-                        className="w-full py-3.5 rounded-xl bg-pink-600 hover:bg-pink-700 disabled:bg-slate-200 disabled:text-slate-400 text-white font-black text-xs uppercase tracking-widest transition-all shadow-md hover:shadow-lg active:scale-98 flex items-center justify-center gap-2 shrink-0 cursor-pointer"
-                    >
-                        {saving ? (
-                            <>
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                                Processando...
-                            </>
-                        ) : (
-                            `Finalizar Atendimento (${selectedItems.length} ${selectedItems.length === 1 ? 'medicamento' : 'medicamentos'})`
-                        )}
-                    </button>
-                </form>
-            </div>
+                    {/* Card 2: Observações / Dados da Receita */}
+                    <div className="flex-1 min-h-0 bg-white rounded-2xl border-2 border-slate-200/90 p-3 shadow-xs flex flex-col justify-between gap-1.5 overflow-hidden">
+                        <div className="flex items-center justify-between pb-1 border-b border-slate-100 shrink-0">
+                            <div className="flex items-center gap-2">
+                                <div className="p-1 rounded-lg bg-pink-100 text-pink-700">
+                                    <FileText className="w-3.5 h-3.5" />
+                                </div>
+                                <span className="text-[10px] font-black uppercase tracking-wider text-slate-800">
+                                    2. Observações / Receita
+                                </span>
+                            </div>
+                            <span className="text-[8px] font-bold text-slate-400 uppercase">
+                                Instruções e posologia
+                            </span>
+                        </div>
+
+                        {/* Atalhos Rápidos */}
+                        <div className="flex flex-wrap gap-1 shrink-0">
+                            {[
+                                'Uso Contínuo',
+                                'Receita Retida',
+                                'Validade 30 Dias',
+                                'Orientado(a)'
+                            ].map(tag => (
+                                <button
+                                    key={tag}
+                                    type="button"
+                                    onClick={() => {
+                                        if (!observacoes.includes(tag)) {
+                                            setObservacoes(prev => prev ? `${prev} • ${tag}` : tag);
+                                        }
+                                    }}
+                                    className="px-2 py-0.5 rounded-lg bg-slate-100 hover:bg-pink-100 text-slate-700 hover:text-pink-800 text-[8px] font-black uppercase tracking-wider transition-colors border border-slate-200 hover:border-pink-300 active:scale-95 cursor-pointer"
+                                >
+                                    + {tag}
+                                </button>
+                            ))}
+                        </div>
+
+                        <textarea
+                            className="flex-1 min-h-[50px] w-full rounded-xl border-2 border-slate-300 focus:border-pink-600 bg-slate-50/70 focus:bg-white p-2 text-xs text-slate-900 focus:ring-4 focus:ring-pink-500/10 outline-none transition-all font-semibold placeholder:text-slate-400 resize-none custom-scrollbar shadow-inner"
+                            placeholder="Digite anotações da receita, dosagens prescritas, recomendações repassadas ao paciente..."
+                            value={observacoes}
+                            onChange={(e) => setObservacoes(e.target.value)}
+                        />
+                    </div>
+                </div>
+
+                {/* COLUNA DIREITA: Medicamentos e Finalização */}
+                <div className="lg:col-span-7 flex flex-col h-full min-h-0 bg-white rounded-2xl border-2 border-slate-200/90 p-3 shadow-xs justify-between gap-2 overflow-hidden">
+                    {/* Header da Cesta */}
+                    <div className="flex items-center justify-between pb-1.5 border-b-2 border-slate-100 shrink-0">
+                        <div className="flex items-center gap-2">
+                            <div className="p-1.5 rounded-xl bg-pink-100 text-pink-700 shadow-xs border border-pink-200/60">
+                                <Pill className="w-4 h-4 text-pink-700" />
+                            </div>
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <h4 className="font-black text-slate-900 text-xs md:text-sm uppercase tracking-tight">
+                                        3. Medicamentos a Dispensar
+                                    </h4>
+                                    <span className="px-2 py-0.5 rounded-full bg-pink-600 text-white text-[9px] font-black shadow-xs">
+                                        {selectedItems.length} {selectedItems.length === 1 ? 'item' : 'itens'}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setMedModalSearch('');
+                                setMedModalCategory('TODOS');
+                                setIsMedModalOpen(true);
+                            }}
+                            className="px-3.5 py-1.5 bg-gradient-to-r from-pink-600 via-rose-600 to-pink-600 hover:from-pink-700 hover:to-rose-700 text-white font-black text-[10px] uppercase tracking-wider rounded-xl transition-all shadow-md shadow-pink-600/20 active:scale-95 flex items-center gap-1.5 cursor-pointer border border-pink-700"
+                        >
+                            <Plus className="w-3.5 h-3.5" />
+                            Adicionar Medicamento
+                        </button>
+                    </div>
+
+                    {/* Centro: Lista de Medicamentos ou Empty State Moderno */}
+                    {selectedItems.length === 0 ? (
+                        <div
+                            onClick={() => {
+                                setMedModalSearch('');
+                                setMedModalCategory('TODOS');
+                                setIsMedModalOpen(true);
+                            }}
+                            className="flex-1 min-h-0 flex flex-col items-center justify-center border-2 border-dashed border-pink-300 hover:border-pink-500 bg-gradient-to-b from-white to-pink-50/25 hover:bg-pink-50/40 rounded-2xl p-4 text-center cursor-pointer transition-all group shadow-inner"
+                        >
+                            <div className="w-12 h-12 rounded-2xl bg-pink-100 text-pink-600 group-hover:bg-pink-600 group-hover:text-white flex items-center justify-center group-hover:scale-110 transition-all mb-2 shadow-xs border border-pink-200">
+                                <Pill className="w-6 h-6" />
+                            </div>
+                            <h4 className="text-xs font-black text-slate-900 uppercase tracking-tight group-hover:text-pink-700 transition-colors">
+                                Nenhum medicamento selecionado
+                            </h4>
+                            <p className="text-[10px] text-slate-500 font-bold max-w-xs mt-0.5">
+                                Clique para abrir o catálogo e incluir os itens da receita
+                            </p>
+                            <div className="mt-2.5 px-3.5 py-1.5 rounded-xl bg-pink-600 text-white text-[10px] font-black uppercase tracking-wider shadow-xs group-hover:bg-pink-700 transition-colors flex items-center gap-1.5">
+                                <Plus className="w-3 h-3" /> Abrir Catálogo
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-1.5 custom-scrollbar">
+                            <div className="grid grid-cols-1 gap-1.5">
+                                {selectedItems.map((item, idx) => (
+                                    <div
+                                        key={item.med.id}
+                                        className="bg-white border-2 border-slate-200 hover:border-pink-400 p-2 rounded-xl flex items-center justify-between gap-2.5 transition-all shadow-xs"
+                                    >
+                                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                                            <div className="w-6 h-6 rounded-lg bg-pink-600 text-white flex items-center justify-center shrink-0 font-black text-[9px] shadow-xs">
+                                                #{idx + 1}
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                                <h4 className="font-black text-xs uppercase text-slate-950 truncate">
+                                                    {item.med.nome} {item.med.dosagem ? `(${item.med.dosagem})` : ''}
+                                                </h4>
+                                                <div className="flex flex-wrap gap-1 mt-0.5 items-center">
+                                                    <span className="px-1.5 py-0.2 text-[8px] font-black uppercase rounded bg-pink-100 text-pink-800 border border-pink-200">
+                                                        {item.med.categoria}
+                                                    </span>
+                                                    <span className="px-1.5 py-0.2 text-[8px] font-black uppercase rounded bg-slate-100 text-slate-700 font-mono border border-slate-200">
+                                                        Lote: {item.med.lote}
+                                                    </span>
+                                                    <span className="text-[9px] font-extrabold text-emerald-700 ml-1">
+                                                        Estoque: <strong>{item.med.quantidade} {item.med.unidade}</strong>
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Quantity controls */}
+                                        <div className="flex items-center gap-1.5 shrink-0">
+                                            <div className="flex items-center bg-slate-100 border-2 border-slate-200 rounded-lg p-0.5 shadow-inner">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleUpdateItemQuantity(item.med.id, item.quantity - 1)}
+                                                    className="w-5 h-5 rounded bg-white hover:bg-pink-600 hover:text-white text-slate-800 flex items-center justify-center transition-colors active:scale-95 shadow-xs font-bold"
+                                                >
+                                                    <Minus className="w-2.5 h-2.5" />
+                                                </button>
+                                                <input
+                                                    type="number"
+                                                    className="w-9 text-center text-xs font-black text-slate-950 bg-transparent outline-none"
+                                                    value={item.quantity}
+                                                    onChange={(e) => handleUpdateItemQuantity(item.med.id, parseInt(e.target.value, 10) || 1)}
+                                                    min="1"
+                                                    max={item.med.quantidade}
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleUpdateItemQuantity(item.med.id, item.quantity + 1)}
+                                                    className="w-5 h-5 rounded bg-white hover:bg-pink-600 hover:text-white text-slate-800 flex items-center justify-center transition-colors active:scale-95 shadow-xs font-bold"
+                                                >
+                                                    <Plus className="w-2.5 h-2.5" />
+                                                </button>
+                                            </div>
+                                            <span className="text-[10px] font-black text-slate-700 uppercase min-w-[16px]">
+                                                {item.med.unidade || 'un'}
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleRemoveItem(item.med.id)}
+                                                className="p-1 text-rose-500 hover:text-rose-700 hover:bg-rose-100 rounded-lg transition-all"
+                                                title="Remover medicamento"
+                                            >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Rodapé da Coluna Direita: Botão de Finalização */}
+                    <div className="pt-1.5 border-t-2 border-slate-100 shrink-0">
+                        <button
+                            type="submit"
+                            disabled={saving || selectedItems.length === 0}
+                            className="w-full h-10 rounded-xl bg-gradient-to-r from-pink-600 via-rose-600 to-pink-600 hover:from-pink-700 hover:via-rose-700 hover:to-pink-700 disabled:from-slate-200 disabled:to-slate-200 disabled:text-slate-400 text-white font-black text-xs uppercase tracking-wider transition-all shadow-md shadow-pink-600/20 active:scale-98 border-2 border-pink-500 disabled:border-transparent flex items-center justify-center gap-2 cursor-pointer"
+                        >
+                            {saving ? (
+                                <>
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                    Processando Dispensação...
+                                </>
+                            ) : (
+                                <>
+                                    <CheckCircle2 className="w-4 h-4" />
+                                    Finalizar Atendimento ({selectedItems.length} {selectedItems.length === 1 ? 'medicamento' : 'medicamentos'})
+                                </>
+                            )}
+                        </button>
+                    </div>
+                </div>
+            </form>
 
             {/* PATIENT HISTORY MODAL */}
             {isHistoryModalOpen && (

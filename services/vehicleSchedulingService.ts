@@ -299,7 +299,7 @@ export const checkAvailability = async (vehicleId: string, start: string, end: s
         .from('vehicle_schedules')
         .select('id')
         .eq('vehicle_id', vehicleId)
-        .in('status', ['confirmado', 'em_curso']) // Only count confirmed/active trips
+        .not('status', 'in', '("cancelado","rejeitado")')
         .lt('departure_date_time', end)
         .gt('return_date_time', start);
 

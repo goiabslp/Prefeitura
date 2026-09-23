@@ -514,6 +514,7 @@ export interface CrewMember {
   departureLocation: string;
   appointmentTime: string;
   appointmentLocation: string;
+  type?: 'paciente' | 'acompanhante' | 'passageiro' | string;
 }
 
 export type ProjetoStatus = 'Aguardando Admin' | 'Em Andamento' | 'Concluído' | 'Cancelado';

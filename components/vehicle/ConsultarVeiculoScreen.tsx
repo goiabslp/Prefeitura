@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   ArrowLeft, 
   Calendar as CalendarIcon, 
@@ -13,13 +13,15 @@ import {
   Sparkles,
   Info,
   CalendarCheck,
-  Building2
+  Building2,
+  X
 } from 'lucide-react';
 import { DateTimePickerModal } from '../DateTimePickerModal';
 import { supabase } from '../../services/supabaseClient';
 import { Vehicle } from '../../types';
 
 interface ConsultarVeiculoScreenProps {
+  sectors?: { id: string; name: string }[];
   onBack: () => void;
   onSelectVehicleToSchedule?: (vehicleId: string, date: string, startTime: string, endTime: string) => void;
 }
@@ -39,10 +41,26 @@ interface VeiculoDisponivel {
   sector_name?: string;
 }
 
+// Helper para normalização de texto (remove acentos, espaços extras e caixa alta/baixa)
+const normalizeSectorText = (str?: string | null): string => {
+  if (!str) return '';
+  return str
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ');
+};
+
 export const ConsultarVeiculoScreen: React.FC<ConsultarVeiculoScreenProps> = ({
+  sectors: propSectors,
   onBack,
   onSelectVehicleToSchedule
 }) => {
+  // Lista de setores disponíveis
+  const [availableSectors, setAvailableSectors] = useState<{ id: string; name: string }[]>([]);
+  const [selectedSectorId, setSelectedSectorId] = useState<string>('');
+
   // 1. Data da consulta
   const [selectedDate, setSelectedDate] = useState<Date>(() => new Date());
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
@@ -63,7 +81,41 @@ export const ConsultarVeiculoScreen: React.FC<ConsultarVeiculoScreenProps> = ({
     horaFinal: string;
   } | null>(null);
 
-  // Validação dos 3 campos
+  // Carrega setores reais diretamente do Supabase para ter os IDs e nomes atualizados
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchSectors = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('sectors')
+          .select('id, name')
+          .order('name', { ascending: true });
+        
+        if (!error && data && data.length > 0) {
+          if (isMounted) {
+            setAvailableSectors(data);
+          }
+          return;
+        }
+      } catch (err) {
+        console.error('[ConsultarVeiculo] Erro ao carregar setores:', err);
+      }
+
+      // Fallback para propSectors se o banco falhar
+      if (propSectors && propSectors.length > 0 && isMounted) {
+        setAvailableSectors(propSectors);
+      }
+    };
+
+    fetchSectors();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [propSectors]);
+
+  // Validação dos campos
   const validation = useMemo(() => {
     if (!selectedDate) {
       return { isValid: false, message: 'Selecione uma data para a consulta.' };
@@ -109,25 +161,31 @@ export const ConsultarVeiculoScreen: React.FC<ConsultarVeiculoScreenProps> = ({
     };
   }, [selectedDate]);
 
-  // Execução da consulta otimizada no banco de dados (sem localStorage, com proteção de Egress)
+  // Execução da consulta no banco de dados
   const handlePesquisar = async () => {
     if (!validation.isValid) return;
 
     setIsLoading(true);
     try {
       const year = selectedDate.getFullYear();
-      const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
-      const day = String(selectedDate.getDate()).padStart(2, '0');
-      const dateIsoPrefix = `${year}-${month}-${day}`;
+      const month = selectedDate.getMonth();
+      const day = selectedDate.getDate();
 
-      // Monta as timestamps ISO locais para o início e fim da consulta
-      const startDateTimeLocal = new Date(`${dateIsoPrefix}T${horaInicial}:00`);
-      const endDateTimeLocal = new Date(`${dateIsoPrefix}T${horaFinal}:00`);
+      const [hIni, mIni] = horaInicial.split(':').map(Number);
+      const [hFim, mFim] = horaFinal.split(':').map(Number);
+
+      // Timestamps locais precisas com hora e minuto
+      const startDateTimeLocal = new Date(year, month, day, hIni, mIni, 0, 0);
+      const endDateTimeLocal = new Date(year, month, day, hFim, mFim, 0, 0);
+
+      const consultaStartMs = startDateTimeLocal.getTime();
+      const consultaEndMs = endDateTimeLocal.getTime();
 
       const queryStartIso = startDateTimeLocal.toISOString();
       const queryEndIso = endDateTimeLocal.toISOString();
 
       // 1. Busca veículos operacionais, dados de setores e agendamentos conflitantes em paralelo
+      // Considera todos os agendamentos que não estejam cancelados ou rejeitados
       const [
         { data: rawVehicles, error: vErr },
         { data: sectorsData },
@@ -142,8 +200,8 @@ export const ConsultarVeiculoScreen: React.FC<ConsultarVeiculoScreenProps> = ({
           .select('id, name'),
         supabase
           .from('vehicle_schedules')
-          .select('vehicle_id, departure_date_time, return_date_time, status')
-          .in('status', ['pendente', 'confirmado', 'em_curso', 'solicitado', 'aprovado', 'programado'])
+          .select('vehicle_id, departure_date_time, return_date_time, status, protocol')
+          .not('status', 'in', '("cancelado","rejeitado")')
           .lt('departure_date_time', queryEndIso)
           .gt('return_date_time', queryStartIso)
       ]);
@@ -153,9 +211,12 @@ export const ConsultarVeiculoScreen: React.FC<ConsultarVeiculoScreenProps> = ({
 
       // Mapa de setores para exibição rápida e amigável
       const sectorMap = new Map<string, string>();
-      (sectorsData || []).forEach((sec: any) => {
+      const combinedSectors = [...(sectorsData || []), ...availableSectors];
+      combinedSectors.forEach((sec: any) => {
         if (sec.id && sec.name) {
           sectorMap.set(sec.id, sec.name);
+          sectorMap.set(normalizeSectorText(sec.id), sec.name);
+          sectorMap.set(normalizeSectorText(sec.name), sec.name);
         }
       });
 
@@ -167,9 +228,21 @@ export const ConsultarVeiculoScreen: React.FC<ConsultarVeiculoScreenProps> = ({
       });
 
       // Conjunto de IDs de veículos com conflito de horário
+      // Regra de Conflito: inicio_consulta < fim_agendamento E fim_consulta > inicio_agendamento
       const busyVehicleIds = new Set<string>();
       (conflictingSchedules || []).forEach((s: any) => {
-        if (s.vehicle_id) {
+        if (!s.vehicle_id || !s.departure_date_time || !s.return_date_time) return;
+
+        const statusLower = (s.status || '').toLowerCase().trim();
+        if (statusLower === 'cancelado' || statusLower === 'rejeitado') return;
+
+        const schedStartMs = new Date(s.departure_date_time).getTime();
+        const schedEndMs = new Date(s.return_date_time).getTime();
+
+        // Verificação exata de sobreposição temporal minuto a minuto
+        const hasOverlap = (consultaStartMs < schedEndMs) && (consultaEndMs > schedStartMs);
+
+        if (hasOverlap) {
           busyVehicleIds.add(s.vehicle_id);
         }
       });
@@ -177,10 +250,19 @@ export const ConsultarVeiculoScreen: React.FC<ConsultarVeiculoScreenProps> = ({
       // 3. Os veículos livres são aqueles que NÃO possuem agendamento no intervalo
       const livres: VeiculoDisponivel[] = activeVehicles
         .filter((v: any) => !busyVehicleIds.has(v.id))
-        .map((v: any) => ({
-          ...v,
-          sector_name: v.sector_id ? (sectorMap.get(v.sector_id) || 'Geral') : 'Geral'
-        }));
+        .map((v: any) => {
+          let resolvedSectorName = 'Geral';
+          if (v.sector_id) {
+            resolvedSectorName = 
+              sectorMap.get(v.sector_id) || 
+              sectorMap.get(normalizeSectorText(v.sector_id)) || 
+              v.sector_id;
+          }
+          return {
+            ...v,
+            sector_name: resolvedSectorName
+          };
+        });
 
       setVeiculosDisponiveis(livres);
       setUltimaConsulta({
@@ -195,6 +277,52 @@ export const ConsultarVeiculoScreen: React.FC<ConsultarVeiculoScreenProps> = ({
       setIsLoading(false);
     }
   };
+
+  // Objeto do setor selecionado para resolução precisa de ID e Nome
+  const selectedSectorObj = useMemo(() => {
+    if (!selectedSectorId || selectedSectorId === 'TODOS') return null;
+    const targetNorm = normalizeSectorText(selectedSectorId);
+    return (
+      availableSectors.find(s => s.id === selectedSectorId) ||
+      availableSectors.find(s => normalizeSectorText(s.id) === targetNorm) ||
+      availableSectors.find(s => normalizeSectorText(s.name) === targetNorm) ||
+      null
+    );
+  }, [selectedSectorId, availableSectors]);
+
+  // Nome do setor selecionado para exibição visual
+  const selectedSectorName = useMemo(() => {
+    if (!selectedSectorId || selectedSectorId === 'TODOS') return 'Todos os Setores';
+    if (selectedSectorObj) return selectedSectorObj.name;
+    return selectedSectorId;
+  }, [selectedSectorId, selectedSectorObj]);
+
+  // Veículos filtrados por setor selecionado com matching bidirecional (UUID e Nome normalizado)
+  const veiculosFiltrados = useMemo(() => {
+    if (!selectedSectorId || selectedSectorId === 'TODOS') {
+      return veiculosDisponiveis;
+    }
+
+    const targetId = selectedSectorObj ? selectedSectorObj.id : selectedSectorId;
+    const targetNameNorm = selectedSectorObj 
+      ? normalizeSectorText(selectedSectorObj.name) 
+      : normalizeSectorText(selectedSectorId);
+
+    return veiculosDisponiveis.filter(v => {
+      // 1. Comparação direta por ID / UUID
+      if (v.sector_id && targetId && v.sector_id === targetId) return true;
+      
+      // 2. Comparação por Nome de Setor Normalizado
+      const vSectorNameNorm = normalizeSectorText(v.sector_name);
+      if (vSectorNameNorm && targetNameNorm && vSectorNameNorm === targetNameNorm) return true;
+
+      // 3. Comparação se o sector_id do veículo contém o nome ou vice-versa
+      const vSectorIdNorm = normalizeSectorText(v.sector_id);
+      if (vSectorIdNorm && targetNameNorm && vSectorIdNorm === targetNameNorm) return true;
+
+      return false;
+    });
+  }, [veiculosDisponiveis, selectedSectorId, selectedSectorObj]);
 
   return (
     <div className="flex-1 flex flex-col overflow-y-auto h-full bg-slate-50">
@@ -248,7 +376,7 @@ export const ConsultarVeiculoScreen: React.FC<ConsultarVeiculoScreenProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* CAMPO 1: DATA */}
             <div className="flex flex-col space-y-2">
               <label className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
@@ -259,20 +387,21 @@ export const ConsultarVeiculoScreen: React.FC<ConsultarVeiculoScreenProps> = ({
               <button
                 type="button"
                 onClick={() => setIsDatePickerOpen(true)}
-                className="w-full text-left px-4 py-3 bg-slate-50 hover:bg-violet-50/60 border border-slate-200 hover:border-violet-300 rounded-2xl transition-all group flex items-center justify-between shadow-inner"
+                className="w-full text-left px-4 py-3 bg-slate-50 hover:bg-violet-50/60 border border-slate-200 hover:border-violet-300 rounded-2xl transition-all group flex items-center justify-between shadow-inner h-[50px]"
               >
                 <div>
                   <div className="text-sm font-black text-slate-800 group-hover:text-violet-900 tracking-tight">
                     {formattedDateDisplay.dateFormatted}
                   </div>
-                  <div className="text-[11px] font-bold text-violet-600 uppercase tracking-wider">
+                  <div className="text-[10px] font-bold text-violet-600 uppercase tracking-wider">
                     {formattedDateDisplay.weekday}
                   </div>
                 </div>
-                <div className="p-2 bg-white rounded-xl shadow-xs text-slate-400 group-hover:text-violet-600 transition-colors">
+                <div className="p-1.5 bg-white rounded-xl shadow-xs text-slate-400 group-hover:text-violet-600 transition-colors">
                   <CalendarDays className="w-4 h-4" />
                 </div>
               </button>
+              <span className="text-[10px] text-slate-400 font-semibold">Data para verificar</span>
             </div>
 
             {/* CAMPO 2: HORA INICIAL */}
@@ -287,7 +416,7 @@ export const ConsultarVeiculoScreen: React.FC<ConsultarVeiculoScreenProps> = ({
                   type="time"
                   value={horaInicial}
                   onChange={(e) => setHoraInicial(e.target.value)}
-                  className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100/80 focus:bg-white border border-slate-200 focus:border-indigo-500 rounded-2xl text-sm font-black text-slate-800 tracking-wider shadow-inner outline-none transition-all"
+                  className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100/80 focus:bg-white border border-slate-200 focus:border-indigo-500 rounded-2xl text-sm font-black text-slate-800 tracking-wider shadow-inner outline-none transition-all h-[50px]"
                 />
               </div>
               <span className="text-[10px] text-slate-400 font-semibold">Formato 24 horas (HH:mm)</span>
@@ -305,10 +434,34 @@ export const ConsultarVeiculoScreen: React.FC<ConsultarVeiculoScreenProps> = ({
                   type="time"
                   value={horaFinal}
                   onChange={(e) => setHoraFinal(e.target.value)}
-                  className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100/80 focus:bg-white border border-slate-200 focus:border-purple-500 rounded-2xl text-sm font-black text-slate-800 tracking-wider shadow-inner outline-none transition-all"
+                  className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100/80 focus:bg-white border border-slate-200 focus:border-purple-500 rounded-2xl text-sm font-black text-slate-800 tracking-wider shadow-inner outline-none transition-all h-[50px]"
                 />
               </div>
               <span className="text-[10px] text-slate-400 font-semibold">Formato 24 horas (HH:mm)</span>
+            </div>
+
+            {/* CAMPO 4: FILTRAR POR SETOR */}
+            <div className="flex flex-col space-y-2">
+              <label className="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                <Building2 className="w-4 h-4 text-emerald-600" />
+                4. Setor / Lotação
+              </label>
+
+              <div className="relative">
+                <select
+                  value={selectedSectorObj ? selectedSectorObj.id : selectedSectorId}
+                  onChange={(e) => setSelectedSectorId(e.target.value)}
+                  className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100/80 focus:bg-white border border-slate-200 focus:border-emerald-500 rounded-2xl text-xs font-black text-slate-800 tracking-wider shadow-inner outline-none transition-all h-[50px] uppercase cursor-pointer"
+                >
+                  <option value="">TODOS OS SETORES</option>
+                  {availableSectors.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <span className="text-[10px] text-slate-400 font-semibold">Filtre por setor específico ou geral</span>
             </div>
           </div>
 
@@ -354,39 +507,66 @@ export const ConsultarVeiculoScreen: React.FC<ConsultarVeiculoScreenProps> = ({
         {/* ÁREA DE RESULTADOS */}
         {hasSearched && (
           <div className="space-y-4 animate-in fade-in slide-in-from-bottom-3 duration-300">
-            {/* Resumo do Topo */}
-            <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-base shadow-sm ${
-                  veiculosDisponiveis.length > 0 
-                    ? 'bg-emerald-50 text-emerald-600 border border-emerald-200/60' 
-                    : 'bg-amber-50 text-amber-600 border border-amber-200/60'
-                }`}>
-                  {veiculosDisponiveis.length}
+            {/* Resumo do Topo e Filtros Rápidos */}
+            <div className="bg-white rounded-3xl p-5 md:p-6 border border-slate-200/80 shadow-xs space-y-4">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                <div className="flex items-center gap-3.5">
+                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg shadow-sm ${
+                    veiculosFiltrados.length > 0 
+                      ? 'bg-emerald-50 text-emerald-600 border border-emerald-200/60' 
+                      : 'bg-amber-50 text-amber-600 border border-amber-200/60'
+                  }`}>
+                    {veiculosFiltrados.length}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 className="text-base md:text-lg font-black text-slate-900 tracking-tight">
+                        {veiculosFiltrados.length === 1 
+                          ? '1 veículo disponível' 
+                          : `${veiculosFiltrados.length} veículos disponíveis`}
+                      </h4>
+                      {selectedSectorId && selectedSectorId !== 'TODOS' && (
+                        <span className="text-[11px] font-extrabold uppercase px-2.5 py-0.5 bg-emerald-100/70 text-emerald-800 rounded-lg border border-emerald-200">
+                          Setor: {selectedSectorName}
+                        </span>
+                      )}
+                    </div>
+                    {ultimaConsulta && (
+                      <p className="text-xs text-slate-500 font-medium mt-0.5">
+                        Para <span className="font-bold text-slate-700">{ultimaConsulta.dataStr}</span> das <span className="font-bold text-slate-700">{ultimaConsulta.horaInicial}</span> às <span className="font-bold text-slate-700">{ultimaConsulta.horaFinal}</span>
+                        {veiculosDisponiveis.length !== veiculosFiltrados.length && (
+                          <span className="text-slate-400 ml-1">
+                            (Total geral: {veiculosDisponiveis.length})
+                          </span>
+                        )}
+                      </p>
+                    )}
+                  </div>
                 </div>
-                <div>
-                  <h4 className="text-base font-black text-slate-900 tracking-tight">
-                    {veiculosDisponiveis.length === 1 
-                      ? '1 veículo disponível' 
-                      : `${veiculosDisponiveis.length} veículos disponíveis`}
-                  </h4>
-                  {ultimaConsulta && (
-                    <p className="text-xs text-slate-500 font-medium">
-                      Consulta realizada para <span className="font-bold text-slate-700">{ultimaConsulta.dataStr}</span> das <span className="font-bold text-slate-700">{ultimaConsulta.horaInicial}</span> às <span className="font-bold text-slate-700">{ultimaConsulta.horaFinal}</span>
-                    </p>
+
+                <div className="flex items-center gap-2">
+                  {selectedSectorId && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedSectorId('')}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold transition-all cursor-pointer"
+                      title="Remover filtro de setor"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      <span>Limpar Filtro</span>
+                    </button>
+                  )}
+                  {veiculosFiltrados.length > 0 && (
+                    <div className="flex items-center gap-2 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-3.5 py-2 rounded-xl border border-emerald-200/60">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                      <span>Prontos para agendamento</span>
+                    </div>
                   )}
                 </div>
               </div>
-
-              {veiculosDisponiveis.length > 0 && (
-                <div className="flex items-center gap-2 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200/60 self-start sm:self-auto">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                  <span>Prontos para agendamento</span>
-                </div>
-              )}
             </div>
 
-            {/* Quando nenhum veículo estiver disponível */}
+            {/* Caso 1: Nenhum veículo disponível em nenhum setor no período */}
             {veiculosDisponiveis.length === 0 ? (
               <div className="bg-white rounded-3xl p-10 text-center border border-slate-200 shadow-xs max-w-lg mx-auto space-y-3">
                 <div className="w-16 h-16 rounded-3xl bg-amber-50 text-amber-600 border border-amber-200/80 flex items-center justify-center mx-auto shadow-sm">
@@ -399,10 +579,32 @@ export const ConsultarVeiculoScreen: React.FC<ConsultarVeiculoScreenProps> = ({
                   Todos os veículos operacionais possuem viagens agendadas ou conflitantes para este mesmo horário. Experimente consultar outro intervalo de horas ou outra data.
                 </p>
               </div>
+            ) : veiculosFiltrados.length === 0 ? (
+              /* Caso 2: Existem veículos no geral, mas nenhum para o setor selecionado */
+              <div className="bg-white rounded-3xl p-10 text-center border border-slate-200 shadow-xs max-w-lg mx-auto space-y-4">
+                <div className="w-16 h-16 rounded-3xl bg-indigo-50 text-indigo-600 border border-indigo-200/80 flex items-center justify-center mx-auto shadow-sm">
+                  <Building2 className="w-8 h-8" />
+                </div>
+                <div>
+                  <h4 className="text-lg font-black text-slate-800 tracking-tight">
+                    Nenhum veículo do setor &ldquo;{selectedSectorName}&rdquo; disponível.
+                  </h4>
+                  <p className="text-xs text-slate-500 leading-relaxed mt-1">
+                    Existem {veiculosDisponiveis.length} veículo(s) livre(s) em outros setores para este horário.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedSectorId('')}
+                  className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl text-xs font-black uppercase tracking-wider transition-all shadow-md active:scale-95 cursor-pointer"
+                >
+                  Exibir Todos os Setores ({veiculosDisponiveis.length})
+                </button>
+              </div>
             ) : (
-              /* Grade de Cards dos Veículos Livres */
+              /* Grade de Cards dos Veículos Livres Filtrados */
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {veiculosDisponiveis.map((v) => (
+                {veiculosFiltrados.map((v) => (
                   <div
                     key={v.id}
                     className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-sm hover:shadow-md hover:border-violet-300 transition-all flex flex-col justify-between group relative overflow-hidden"

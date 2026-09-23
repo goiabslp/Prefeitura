@@ -4337,19 +4337,19 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
 
             <div className="p-6 space-y-4 bg-slate-50/50">
               <p className="text-xs text-slate-700 font-medium leading-relaxed">
-                Ao editar esta solicitação, ela retornará automaticamente e o fluxo de aprovação será reiniciado a partir do status:
+                Você será redirecionado para o cadastro completo da viagem, onde poderá alterar permanentemente datas, horários, destino, veículo, servidores e detalhes da solicitação:
               </p>
 
               <div className="bg-amber-50 border border-amber-200/80 p-4 rounded-2xl flex items-center gap-3 text-amber-900 shadow-sm">
                 <RefreshCw className="w-5 h-5 text-amber-600 shrink-0" />
                 <div>
-                  <span className="text-[9px] font-black uppercase tracking-wider text-amber-600 block">Novo Status Inicial</span>
-                  <span className="text-sm font-black tracking-tight text-amber-900 uppercase">AGUARDANDO GESTOR</span>
+                  <span className="text-[9px] font-black uppercase tracking-wider text-amber-600 block">Fluxo de Aprovação</span>
+                  <span className="text-sm font-black tracking-tight text-amber-900 uppercase">EDIÇÃO DE CADASTRO OFICIAL</span>
                 </div>
               </div>
 
               <p className="text-[11px] text-slate-500 italic">
-                Deseja realmente prosseguir para a edição dos dados e arquivos da solicitação?
+                Deseja realmente prosseguir para a edição dos dados da viagem?
               </p>
             </div>
 
@@ -4366,7 +4366,10 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
                 onClick={() => {
                   const ev = confirmEditEventoModal;
                   setConfirmEditEventoModal(null);
-                  handleOpenReview(ev, true);
+                  if (ev) {
+                    window.history.pushState({}, '', `/Diarias/Editar/${ev.id}`);
+                    window.dispatchEvent(new Event('popstate'));
+                  }
                 }}
                 className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-md shadow-amber-600/30 active:scale-95 flex items-center gap-2"
               >

@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Vehicle, Person, VehicleSchedule, ScheduleStatus, Sector, AppState, UserRole, AppPermission } from '../types';
+import { Vehicle, Person, VehicleSchedule, ScheduleStatus, Sector, AppState, UserRole, AppPermission, CrewMember } from '../types';
 import {
   ArrowLeft, Plus, Search, Calendar, Clock, MapPin,
   User as UserIcon, Car, Info, Trash2, Edit3, CheckCircle2,
@@ -10,7 +10,8 @@ import {
   ArrowDown, TrendingUp, CalendarDays, Lock, Eye, FileText, Network,
   UserCheck, ShieldCheck, XCircle, ChevronRight as ChevronRightIcon,
   PackageCheck, Sparkles, Truck, CheckCircle, Activity, Flame,
-  Building2, ArrowRightLeft, UserCircle, Landmark, Users, Briefcase
+  Building2, ArrowRightLeft, UserCircle, Landmark, Users, Briefcase,
+  HeartPulse, ShieldAlert, UserPlus, Unlock, HelpCircle
 } from 'lucide-react';
 import { DateTimePickerModal } from './DateTimePickerModal';
 import { VehicleScheduleHistory } from './VehicleScheduleHistory';
@@ -391,23 +392,156 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
     name: '', departureLocation: '', appointmentTime: '', appointmentLocation: ''
   });
 
-  const handleAddPassenger = () => {
-    if (!newPassenger.name || !newPassenger.departureLocation || !newPassenger.appointmentTime || !newPassenger.appointmentLocation) {
-      showToast("Preencha todos os campos da tripulação.", "warning");
+  // Estados de controle da Aba Tripulação
+  const [isTripulacaoUnlocked, setIsTripulacaoUnlocked] = useState(false);
+  const [isSpecialTreatmentTrip, setIsSpecialTreatmentTrip] = useState<boolean | null>(null);
+  const [isTripulacaoModalOpen, setIsTripulacaoModalOpen] = useState(false);
+  const [tripulacaoModalStep, setTripulacaoModalStep] = useState<1 | 2>(1);
+  const [selectedSpecialOption, setSelectedSpecialOption] = useState<'sim' | 'nao' | ''>('');
+  const [newPassengerType, setNewPassengerType] = useState<'paciente' | 'acompanhante' | 'passageiro'>('paciente');
+
+  // Cálculos de limites da tripulação
+  const patientCount = useMemo(() => {
+    return (formData.passengers || []).filter(p => p.type === 'paciente').length;
+  }, [formData.passengers]);
+
+  const companionCount = useMemo(() => {
+    return (formData.passengers || []).filter(p => p.type === 'acompanhante').length;
+  }, [formData.passengers]);
+
+  const totalCrewCount = useMemo(() => {
+    return (formData.passengers || []).length;
+  }, [formData.passengers]);
+
+  const isSpecialLimitReached = useMemo(() => {
+    if (!isSpecialTreatmentTrip) return false;
+    return totalCrewCount >= 3 || (patientCount >= 1 && companionCount >= 2);
+  }, [isSpecialTreatmentTrip, totalCrewCount, patientCount, companionCount]);
+
+  const handleOpenTripulacaoModal = () => {
+    setSelectedSpecialOption(isSpecialTreatmentTrip === true ? 'sim' : isSpecialTreatmentTrip === false ? 'nao' : '');
+    setTripulacaoModalStep(1);
+    setIsTripulacaoModalOpen(true);
+  };
+
+  const handleConfirmSpecialQuestion = () => {
+    if (!selectedSpecialOption) {
+      showToast("Por favor, selecione 'Sim' ou 'Não' para continuar.", "warning");
       return;
     }
-    setFormData(prev => ({
-      ...prev,
-      passengers: [...(prev.passengers || []), newPassenger]
-    }));
-    setNewPassenger({ name: '', departureLocation: '', appointmentTime: '', appointmentLocation: '' });
+    if (selectedSpecialOption === 'sim') {
+      setTripulacaoModalStep(2);
+    } else {
+      setIsTripulacaoUnlocked(true);
+      setIsSpecialTreatmentTrip(false);
+      setNewPassengerType('passageiro');
+      setIsTripulacaoModalOpen(false);
+      showToast("Tripulação desbloqueada para viagem convencional.", "success");
+    }
+  };
+
+  const handleConfirmSpecialWarning = () => {
+    setIsTripulacaoUnlocked(true);
+    setIsSpecialTreatmentTrip(true);
+    if (patientCount === 0) {
+      setNewPassengerType('paciente');
+    } else if (companionCount < 2) {
+      setNewPassengerType('acompanhante');
+    }
+    setIsTripulacaoModalOpen(false);
+    showToast("Tripulação liberada para paciente oncológico/hemodiálise com veículo de uso exclusivo.", "success");
+  };
+
+  const handleAddPassenger = () => {
+    if (!isTripulacaoUnlocked) {
+      showToast("Clique no botão ADICIONAR TRIPULAÇÃO para liberar os campos.", "warning");
+      return;
+    }
+
+    if (!newPassenger.name?.trim() || !newPassenger.departureLocation?.trim() || !newPassenger.appointmentTime?.trim() || !newPassenger.appointmentLocation?.trim()) {
+      showToast("Preencha todos os campos do integrante da tripulação.", "warning");
+      return;
+    }
+
+    if (isSpecialTreatmentTrip) {
+      const targetType = newPassengerType || (patientCount === 0 ? 'paciente' : 'acompanhante');
+
+      if (totalCrewCount >= 3) {
+        showToast("Limite máximo de 03 pessoas atingido nesta viagem exclusiva.", "warning");
+        return;
+      }
+
+      if (targetType === 'paciente' && patientCount >= 1) {
+        showToast("Não é permitido adicionar um segundo paciente (máximo 01 paciente).", "error");
+        return;
+      }
+
+      if (targetType === 'acompanhante' && companionCount >= 2) {
+        showToast("Não é permitido adicionar mais de 02 acompanhantes (máximo 02).", "error");
+        return;
+      }
+
+      const memberToAdd: CrewMember = {
+        name: newPassenger.name.trim(),
+        departureLocation: newPassenger.departureLocation.trim(),
+        appointmentTime: newPassenger.appointmentTime.trim(),
+        appointmentLocation: newPassenger.appointmentLocation.trim(),
+        type: targetType
+      };
+
+      const nextPassengers = [...(formData.passengers || []), memberToAdd];
+      const nextPCount = nextPassengers.filter(p => p.type === 'paciente').length;
+      const nextCCount = nextPassengers.filter(p => p.type === 'acompanhante').length;
+
+      setFormData(prev => ({
+        ...prev,
+        passengers: nextPassengers,
+        patientCount: nextPCount,
+        companionCount: nextCCount
+      }));
+
+      setNewPassenger({ name: '', departureLocation: '', appointmentTime: '', appointmentLocation: '' });
+      if (targetType === 'paciente' && nextCCount < 2) {
+        setNewPassengerType('acompanhante');
+      }
+      showToast(`${targetType === 'paciente' ? 'Paciente' : 'Acompanhante'} adicionado à tripulação!`, "success");
+    } else {
+      const memberToAdd: CrewMember = {
+        name: newPassenger.name.trim(),
+        departureLocation: newPassenger.departureLocation.trim(),
+        appointmentTime: newPassenger.appointmentTime.trim(),
+        appointmentLocation: newPassenger.appointmentLocation.trim(),
+        type: 'passageiro'
+      };
+
+      const nextPassengers = [...(formData.passengers || []), memberToAdd];
+      setFormData(prev => ({
+        ...prev,
+        passengers: nextPassengers,
+        patientCount: 0,
+        companionCount: 0
+      }));
+
+      setNewPassenger({ name: '', departureLocation: '', appointmentTime: '', appointmentLocation: '' });
+      showToast("Passageiro adicionado à tripulação.", "success");
+    }
   };
 
   const handleRemovePassenger = (index: number) => {
+    const nextPassengers = (formData.passengers || []).filter((_, i) => i !== index);
+    const nextPCount = nextPassengers.filter(p => p.type === 'paciente').length;
+    const nextCCount = nextPassengers.filter(p => p.type === 'acompanhante').length;
+
     setFormData(prev => ({
       ...prev,
-      passengers: (prev.passengers || []).filter((_, i) => i !== index)
+      passengers: nextPassengers,
+      patientCount: nextPCount,
+      companionCount: nextCCount
     }));
+
+    if (isSpecialTreatmentTrip && nextPCount === 0) {
+      setNewPassengerType('paciente');
+    }
   };
 
   const showToast = (message: string, type: 'error' | 'success' | 'warning' = 'error') => {
@@ -573,8 +707,25 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
         }
       }
       setFormData({ ...s, serviceSectorId: validSectorId });
+      const hasCrew = !!(s.passengers && s.passengers.length > 0);
+      setIsTripulacaoUnlocked(hasCrew);
+      const isSpec = hasCrew && (s.passengers!.some(p => p.type === 'paciente' || p.type === 'acompanhante') || (s.patientCount || 0) > 0);
+      setIsSpecialTreatmentTrip(hasCrew ? isSpec : null);
+      if (isSpec) {
+        const pCount = s.passengers!.filter(p => p.type === 'paciente').length;
+        setNewPassengerType(pCount >= 1 ? 'acompanhante' : 'paciente');
+      } else {
+        setNewPassengerType('passageiro');
+      }
     } else {
       setEditingSchedule(null);
+      setIsTripulacaoUnlocked(false);
+      setIsSpecialTreatmentTrip(null);
+      setIsTripulacaoModalOpen(false);
+      setTripulacaoModalStep(1);
+      setSelectedSpecialOption('');
+      setNewPassengerType('paciente');
+
       const now = new Date();
       let departure = initialDate ? new Date(initialDate) : now;
       if (departure < now) departure = now;
@@ -656,6 +807,24 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
       showToast("A lista detalhada de Passageiros / Tripulação também é obrigatória.", "warning");
       return;
     }
+
+    if (isSpecialTreatmentTrip) {
+      const pCount = (formData.passengers || []).filter(p => p.type === 'paciente').length;
+      const cCount = (formData.passengers || []).filter(p => p.type === 'acompanhante').length;
+      if (pCount > 1) {
+        showToast("Viagem exclusiva permite no máximo 01 paciente.", "error");
+        return;
+      }
+      if (cCount > 2) {
+        showToast("Viagem exclusiva permite no máximo 02 acompanhantes.", "error");
+        return;
+      }
+      if (pCount + cCount > 3) {
+        showToast("Viagem exclusiva permite no máximo 03 pessoas na tripulação.", "error");
+        return;
+      }
+    }
+
     const now = Date.now();
     const depTime = new Date(formData.departureDateTime!).getTime();
     const retTime = new Date(formData.returnDateTime!).getTime();
@@ -693,6 +862,13 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
       const utcDeparture = new Date(formData.departureDateTime!).toISOString();
       const utcReturn = new Date(formData.returnDateTime!).toISOString();
 
+      const finalPatientCount = isSpecialTreatmentTrip
+        ? (formData.passengers || []).filter(p => p.type === 'paciente').length
+        : (formData.passengers?.length || 0);
+      const finalCompanionCount = isSpecialTreatmentTrip
+        ? (formData.passengers || []).filter(p => p.type === 'acompanhante').length
+        : 0;
+
       if (editingSchedule) {
         // Update
         const data = {
@@ -701,8 +877,8 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
           authorizedByName: authorizedBy,
           departureDateTime: utcDeparture,
           returnDateTime: utcReturn,
-          patientCount: formData.passengers?.length || 0,
-          companionCount: 0,
+          patientCount: finalPatientCount,
+          companionCount: finalCompanionCount,
           id: editingSchedule.id,
           createdAt: editingSchedule.createdAt,
           requesterId: editingSchedule.requesterId
@@ -717,8 +893,8 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
           authorizedByName: authorizedBy || undefined,
           departureDateTime: utcDeparture,
           returnDateTime: utcReturn,
-          patientCount: formData.passengers?.length || 0,
-          companionCount: 0,
+          patientCount: finalPatientCount,
+          companionCount: finalCompanionCount,
           requesterId: currentUserId,
           // id and createdAt will be generated by backend
         } as any; // Cast to any or strict omit type 
@@ -1333,64 +1509,85 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
 
     return (
       <div className="flex-1 flex flex-col overflow-hidden animate-fade-in h-full bg-slate-100/60">
-        {/* Header da Nova Página */}
-        <div className="bg-white border-b border-slate-200/80 px-4 md:px-6 py-3.5 flex items-center justify-between shrink-0 z-20 shadow-xs">
-          <div className="flex items-center gap-3">
+        {/* Header Compacto com Ações Integradas */}
+        <div className="bg-white border-b border-slate-200/80 px-4 md:px-6 py-2 flex flex-row items-center justify-between gap-3 shrink-0 z-20 shadow-xs">
+          <div className="flex items-center gap-2.5 min-w-0">
             <button 
+              type="button"
               onClick={() => handleSubViewChange('calendar')} 
-              className="w-10 h-10 md:w-11 md:h-11 bg-white rounded-2xl flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 border border-slate-200/80 shadow-xs transition-all active:scale-95 group shrink-0 cursor-pointer"
+              className="w-8 h-8 md:w-9 md:h-9 bg-white rounded-xl flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 border border-slate-200/80 shadow-xs transition-all active:scale-95 group shrink-0 cursor-pointer"
               title="Voltar para o Calendário"
             >
-              <ArrowLeft className="w-5 h-5 group-hover:-translate-x-0.5 transition-transform" />
+              <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
             </button>
-            <div>
-              <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded-xl bg-indigo-50 text-indigo-600">
-                  <Car className="w-5 h-5" />
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <div className="p-1 rounded-lg bg-indigo-50 text-indigo-600 shrink-0">
+                  <Car className="w-4 h-4" />
                 </div>
-                <h2 className="text-xl md:text-2xl font-black text-slate-900 uppercase tracking-tight leading-none">
+                <h2 className="text-base md:text-lg font-black text-slate-900 uppercase tracking-tight leading-none truncate">
                   {editingSchedule ? 'Editar Agendamento' : 'Novo Agendamento'}
                 </h2>
               </div>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1 ml-0.5">
+              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5 ml-0.5 truncate hidden sm:block">
                 Preenchimento dos dados da nova viagem
               </p>
             </div>
           </div>
+
+          {/* Botões Cancelar e Salvar no Topo Compactos */}
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => handleSubViewChange('calendar')}
+              className="px-3 py-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer border border-transparent hover:border-rose-100"
+              disabled={isSaving}
+            >
+              Cancelar
+            </button>
+
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={isSaving}
+              className="px-4 py-2 bg-gradient-to-r from-indigo-600 via-indigo-700 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-black rounded-xl shadow-md shadow-indigo-600/25 transition-all hover:-translate-y-0.5 active:scale-95 flex items-center justify-center gap-1.5 uppercase text-xs tracking-wider disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
+            >
+              {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+              <span>{isSaving ? 'Salvando...' : (editingSchedule ? 'Atualizar Dados' : 'Salvar Agendamento')}</span>
+            </button>
+          </div>
         </div>
 
-        {/* Form Container */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar p-3 md:p-6">
-          <div className="max-w-4xl mx-auto space-y-4">
+        {/* Form Container Expandido em Tela Cheia */}
+        <div className="flex-1 flex flex-col p-2 md:p-4 overflow-hidden">
+          {/* Form Tabs Card */}
+          <div className="flex-1 flex flex-col bg-white rounded-2xl md:rounded-3xl border border-slate-200/90 shadow-sm overflow-hidden h-full">
             
-            {/* Form Tabs Card */}
-            <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm overflow-hidden flex flex-col">
-              
-              {/* Tab Navigation */}
-              <div className="px-4 md:px-6 pt-3 bg-slate-50/50 border-b border-slate-200/80 flex overflow-x-auto custom-scrollbar gap-2 shrink-0">
-                {tabs.map((tab) => {
-                  const TabIcon = tab.icon;
-                  const isActive = modalActiveTab === tab.id;
-                  return (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      onClick={() => setModalActiveTab(tab.id)}
-                      className={`flex items-center gap-2 px-4 py-3 rounded-t-2xl text-xs font-black uppercase tracking-wider transition-all border-b-2 shrink-0 cursor-pointer ${
-                        isActive
-                          ? 'border-indigo-600 text-indigo-600 bg-white shadow-xs'
-                          : 'border-transparent text-slate-400 hover:text-slate-700 bg-transparent'
-                      }`}
-                    >
-                      <TabIcon className="w-4 h-4" />
-                      <span>{tab.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
+            {/* Tab Navigation */}
+            <div className="px-4 md:px-6 pt-2 bg-slate-50/70 border-b border-slate-200/80 flex overflow-x-auto custom-scrollbar gap-2 shrink-0">
+              {tabs.map((tab) => {
+                const TabIcon = tab.icon;
+                const isActive = modalActiveTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setModalActiveTab(tab.id)}
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-t-xl text-xs font-black uppercase tracking-wider transition-all border-b-2 shrink-0 cursor-pointer ${
+                      isActive
+                        ? 'border-indigo-600 text-indigo-600 bg-white shadow-xs'
+                        : 'border-transparent text-slate-400 hover:text-slate-700 bg-transparent'
+                    }`}
+                  >
+                    <TabIcon className="w-4 h-4" />
+                    <span>{tab.label}</span>
+                  </button>
+                );
+              })}
+            </div>
 
-              {/* Tab Bodies */}
-              <div className="p-4 md:p-8 flex-1">
+            {/* Tab Bodies com Rolagem Suave */}
+            <div className={`p-4 md:p-6 lg:p-8 flex-1 ${modalActiveTab === 'tripulacao' && !isTripulacaoUnlocked ? 'overflow-hidden flex flex-col' : 'overflow-y-auto custom-scrollbar'}`}>
                 {modalActiveTab === 'dados_gerais' && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5 animate-fade-in">
                     <div>
@@ -1529,99 +1726,257 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
                 )}
 
                 {modalActiveTab === 'tripulacao' && (
-                  <div className="space-y-5 animate-fade-in">
-                    <div>
-                      <label className={labelClass}><Users className="w-3.5 h-3.5 inline mr-1.5 text-indigo-500" /> Adicionar Passageiro / Tripulante</label>
-                      <div className="bg-slate-50/80 p-4 rounded-2xl border border-slate-200/80 space-y-3">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <input
-                            type="text"
-                            value={newPassenger.name}
-                            onChange={e => setNewPassenger({ ...newPassenger, name: e.target.value })}
-                            placeholder="Nome completo..."
-                            className={inputClass}
-                          />
-                          <input
-                            type="text"
-                            value={newPassenger.departureLocation}
-                            onChange={e => setNewPassenger({ ...newPassenger, departureLocation: e.target.value })}
-                            placeholder="Local de embarque / partida..."
-                            className={inputClass}
-                          />
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <input
-                            type="time"
-                            value={newPassenger.appointmentTime}
-                            onChange={e => setNewPassenger({ ...newPassenger, appointmentTime: e.target.value })}
-                            className={inputClass}
-                          />
-                          <input
-                            type="text"
-                            value={newPassenger.appointmentLocation}
-                            onChange={e => setNewPassenger({ ...newPassenger, appointmentLocation: e.target.value })}
-                            placeholder="Local do compromisso / consulta..."
-                            className={inputClass}
-                          />
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={handleAddPassenger}
-                          className="w-full py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-black rounded-xl text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 border border-indigo-200 cursor-pointer"
-                        >
-                          <Plus className="w-4 h-4" /> Adicionar à Tripulação
-                        </button>
-                      </div>
+                  !isTripulacaoUnlocked ? (
+                    /* ESTADO INICIAL: APENAS 1 BOTÃO CENTRALIZADO SEM NENHUMA ROLAGEM */
+                    <div className="flex-1 flex flex-col items-center justify-center text-center w-full h-full my-auto animate-fade-in p-4 select-none">
+                      <button
+                        type="button"
+                        onClick={handleOpenTripulacaoModal}
+                        className="px-8 md:px-12 py-4 md:py-5 bg-gradient-to-r from-indigo-600 via-indigo-700 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-black rounded-2xl shadow-xl shadow-indigo-600/25 text-xs md:text-sm uppercase tracking-wider flex items-center justify-center gap-2.5 transition-all hover:scale-[1.03] active:scale-95 cursor-pointer border border-indigo-400/30"
+                      >
+                        <Plus className="w-5 h-5" />
+                        <span>ADICIONAR TRIPULAÇÃO</span>
+                      </button>
                     </div>
-
-                    {/* Passengers List */}
-                    {formData.passengers && formData.passengers.length > 0 ? (
-                      <div className="space-y-2">
-                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-                          Passageiros Confirmados ({formData.passengers.length}):
-                        </span>
-                        <div className="divide-y divide-slate-100 rounded-2xl border border-slate-200 overflow-hidden bg-white">
-                          {formData.passengers.map((p, idx) => (
-                            <div key={idx} className="p-3.5 flex items-center justify-between gap-3 text-xs">
-                              <div className="min-w-0 flex-1">
-                                <p className="font-black text-slate-900 truncate">{p.name}</p>
-                                <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">
-                                  Partida: {p.departureLocation} | Horário: {p.appointmentTime} | Local: {p.appointmentLocation}
-                                </p>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => handleRemovePassenger(idx)}
-                                className="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
-                                title="Remover passageiro"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
+                  ) : (
+                    /* ESTADO LIBERADO DA TRIPULAÇÃO */
+                    <div className="space-y-5 animate-fade-in">
+                      {/* Banner Informativo do Tipo de Viagem */}
+                      {isSpecialTreatmentTrip ? (
+                        <div className="p-4 md:p-5 rounded-2xl bg-gradient-to-r from-amber-500/10 via-indigo-500/10 to-purple-500/10 border border-amber-500/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-700 flex items-center justify-center shrink-0 border border-amber-500/30">
+                              <HeartPulse className="w-5 h-5 text-amber-600" />
                             </div>
-                          ))}
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h4 className="text-xs md:text-sm font-black text-slate-900 uppercase tracking-tight">Viagem Exclusiva: Oncológico / Hemodiálise</h4>
+                                <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 font-black text-[9px] uppercase tracking-wider border border-amber-200">Uso Exclusivo</span>
+                              </div>
+                              <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                                Veículo restrito ao paciente e acompanhantes autorizados.
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Contadores da Viagem Especial */}
+                          <div className="flex items-center gap-2 flex-wrap self-stretch md:self-auto justify-end">
+                            <div className={`px-2.5 py-1 rounded-xl border text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 ${
+                              patientCount >= 1 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-50 text-slate-600 border-slate-200'
+                            }`}>
+                              <UserIcon className="w-3 h-3" /> Paciente: {patientCount}/1
+                            </div>
+                            <div className={`px-2.5 py-1 rounded-xl border text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 ${
+                              companionCount >= 2 ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-slate-50 text-slate-600 border-slate-200'
+                            }`}>
+                              <Users className="w-3 h-3" /> Acompanhantes: {companionCount}/2
+                            </div>
+                            <div className={`px-2.5 py-1 rounded-xl border text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 ${
+                              isSpecialLimitReached ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-slate-100 text-slate-700 border-slate-300'
+                            }`}>
+                              Total: {totalCrewCount}/3
+                            </div>
+                            <button
+                              type="button"
+                              onClick={handleOpenTripulacaoModal}
+                              className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 underline uppercase tracking-wider ml-1 cursor-pointer"
+                              title="Reabrir triagem de tripulação"
+                            >
+                              Alterar Modo
+                            </button>
+                          </div>
                         </div>
+                      ) : (
+                        <div className="p-3.5 px-4 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
+                              <Users className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <span className="text-xs font-black text-slate-800 uppercase tracking-tight">Viagem Convencional</span>
+                              <p className="text-[10px] text-slate-400 font-medium">Sem restrição oncológica/hemodiálise aplicada.</p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleOpenTripulacaoModal}
+                            className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 underline uppercase tracking-wider cursor-pointer"
+                          >
+                            Alterar Modo
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Formulário de Inclusão de Integrante */}
+                      <div>
+                        <label className={labelClass}><Users className="w-3.5 h-3.5 inline mr-1.5 text-indigo-500" /> Adicionar Passageiro / Tripulante</label>
+                        
+                        {/* Seletor de Categoria se for Viagem Especial */}
+                        {isSpecialTreatmentTrip && (
+                          <div className="mb-3 flex items-center gap-2">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 mr-1">Tipo de Integrante:</span>
+                            
+                            <button
+                              type="button"
+                              disabled={patientCount >= 1}
+                              onClick={() => setNewPassengerType('paciente')}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer border ${
+                                newPassengerType === 'paciente'
+                                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                                  : patientCount >= 1
+                                    ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-60'
+                                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                              }`}
+                            >
+                              <HeartPulse className="w-3.5 h-3.5" />
+                              <span>Paciente {patientCount >= 1 ? '(Limite 1/1 atingido)' : '(Máx. 1)'}</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              disabled={companionCount >= 2}
+                              onClick={() => setNewPassengerType('acompanhante')}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer border ${
+                                newPassengerType === 'acompanhante'
+                                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                                  : companionCount >= 2
+                                    ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-60'
+                                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                              }`}
+                            >
+                              <Users className="w-3.5 h-3.5" />
+                              <span>Acompanhante {companionCount >= 2 ? '(Limite 2/2 atingido)' : `(${companionCount}/2)`}</span>
+                            </button>
+                          </div>
+                        )}
+
+                        {isSpecialLimitReached ? (
+                          <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200 text-center space-y-1">
+                            <p className="text-xs font-black text-amber-800 uppercase tracking-tight flex items-center justify-center gap-1.5">
+                              <ShieldCheck className="w-4 h-4 text-amber-600" /> Limite Máximo da Tripulação Atingido (03 Pessoas)
+                            </p>
+                            <p className="text-[11px] text-amber-700/80 font-medium">
+                              Esta viagem oncológica/hemodiálise já atingiu a lotação permitida (01 paciente e até 02 acompanhantes). Para adicionar um novo integrante, remova um da lista abaixo.
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="bg-slate-50/80 p-4 rounded-2xl border border-slate-200/80 space-y-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <input
+                                type="text"
+                                value={newPassenger.name}
+                                onChange={e => setNewPassenger({ ...newPassenger, name: e.target.value })}
+                                placeholder={isSpecialTreatmentTrip ? (newPassengerType === 'paciente' ? "Nome completo do paciente..." : "Nome do acompanhante...") : "Nome completo..."}
+                                className={inputClass}
+                              />
+                              <input
+                                type="text"
+                                value={newPassenger.departureLocation}
+                                onChange={e => setNewPassenger({ ...newPassenger, departureLocation: e.target.value })}
+                                placeholder="Local de embarque / partida..."
+                                className={inputClass}
+                              />
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <input
+                                type="time"
+                                value={newPassenger.appointmentTime}
+                                onChange={e => setNewPassenger({ ...newPassenger, appointmentTime: e.target.value })}
+                                className={inputClass}
+                              />
+                              <input
+                                type="text"
+                                value={newPassenger.appointmentLocation}
+                                onChange={e => setNewPassenger({ ...newPassenger, appointmentLocation: e.target.value })}
+                                placeholder={isSpecialTreatmentTrip ? "Hospital / Clínica / Destino do compromisso..." : "Local do compromisso / consulta..."}
+                                className={inputClass}
+                              />
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={handleAddPassenger}
+                              className="w-full py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-black rounded-xl text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 border border-indigo-200 cursor-pointer shadow-2xs hover:shadow-xs"
+                            >
+                              <Plus className="w-4 h-4" /> Adicionar à Tripulação {isSpecialTreatmentTrip && `(${newPassengerType === 'paciente' ? 'Paciente' : 'Acompanhante'})`}
+                            </button>
+                          </div>
+                        )}
                       </div>
-                    ) : (
-                      <div className="text-center py-6 border-2 border-dashed border-slate-200 rounded-2xl">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Nenhum passageiro adicionado ainda</p>
-                      </div>
-                    )}
-                  </div>
+
+                      {/* Passengers List */}
+                      {formData.passengers && formData.passengers.length > 0 ? (
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                              Passageiros Confirmados ({formData.passengers.length}):
+                            </span>
+                            {isSpecialTreatmentTrip && (
+                              <span className="text-[10px] font-black uppercase tracking-wider text-indigo-600">
+                                Lotação: {formData.passengers.length} de 3 máx.
+                              </span>
+                            )}
+                          </div>
+                          <div className="divide-y divide-slate-100 rounded-2xl border border-slate-200 overflow-hidden bg-white shadow-xs">
+                            {formData.passengers.map((p, idx) => (
+                              <div key={idx} className="p-3.5 flex items-center justify-between gap-3 text-xs hover:bg-slate-50/50 transition-colors">
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <p className="font-black text-slate-900 truncate">{p.name}</p>
+                                    {p.type === 'paciente' && (
+                                      <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-black text-[9px] uppercase tracking-wider border border-emerald-200 inline-flex items-center gap-1">
+                                        <HeartPulse className="w-2.5 h-2.5" /> Paciente
+                                      </span>
+                                    )}
+                                    {p.type === 'acompanhante' && (
+                                      <span className="px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800 font-black text-[9px] uppercase tracking-wider border border-indigo-200 inline-flex items-center gap-1">
+                                        <Users className="w-2.5 h-2.5" /> Acompanhante
+                                      </span>
+                                    )}
+                                    {(p.type === 'passageiro' || !p.type) && (
+                                      <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-black text-[9px] uppercase tracking-wider border border-slate-200">
+                                        Passageiro
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5 truncate">
+                                    Partida: {p.departureLocation} | Horário: {p.appointmentTime} | Local: {p.appointmentLocation}
+                                  </p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemovePassenger(idx)}
+                                  className="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer shrink-0"
+                                  title="Remover passageiro"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-center py-6 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
+                          <Users className="w-6 h-6 text-slate-300 mx-auto mb-1.5" />
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Nenhum passageiro adicionado ainda</p>
+                        </div>
+                      )}
+                    </div>
+                  )
                 )}
               </div>
 
-              {/* Form Navigation */}
-              <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-between items-center gap-3">
+              {/* Form Navigation Discreta */}
+              <div className="px-4 md:px-6 py-2.5 bg-slate-50/80 border-t border-slate-100 flex justify-between items-center gap-3 shrink-0">
                 <div>
                   {currentTabIndex > 0 && (
                     <button
                       type="button"
                       onClick={() => setModalActiveTab(tabs[currentTabIndex - 1].id)}
-                      className="px-4 py-2.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 font-bold rounded-xl text-xs uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer"
+                      className="px-3.5 py-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 font-bold rounded-xl text-xs uppercase tracking-wider transition-all flex items-center gap-1 cursor-pointer shadow-2xs"
                     >
-                      <ChevronLeft className="w-4 h-4" /> Anterior
+                      <ChevronLeft className="w-3.5 h-3.5" /> Anterior
                     </button>
                   )}
                 </div>
@@ -1631,43 +1986,17 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
                     <button
                       type="button"
                       onClick={() => setModalActiveTab(tabs[currentTabIndex + 1].id)}
-                      className="px-4 py-2.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 font-bold rounded-xl text-xs uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer"
+                      className="px-3.5 py-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 font-bold rounded-xl text-xs uppercase tracking-wider transition-all flex items-center gap-1 cursor-pointer shadow-2xs"
                     >
-                      Próximo <ChevronRight className="w-4 h-4" />
+                      Próximo <ChevronRight className="w-3.5 h-3.5" />
                     </button>
                   )}
                 </div>
               </div>
 
             </div>
-
           </div>
         </div>
-
-        {/* Fixed Responsive Bottom Action Bar */}
-        <div className="bg-white/95 backdrop-blur-md border-t border-slate-200/90 px-4 md:px-8 py-3.5 shrink-0 shadow-lg z-30">
-          <div className="max-w-4xl mx-auto flex items-center justify-between gap-3">
-            <button
-              type="button"
-              onClick={() => handleSubViewChange('calendar')}
-              className="px-4 md:px-6 py-2.5 text-slate-500 hover:text-rose-600 font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
-              disabled={isSaving}
-            >
-              Cancelar
-            </button>
-
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={isSaving}
-              className="px-6 md:px-8 py-3 bg-gradient-to-r from-indigo-600 via-indigo-700 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-black rounded-2xl shadow-md shadow-indigo-600/25 transition-all hover:-translate-y-0.5 active:scale-95 flex items-center justify-center gap-2 uppercase text-xs tracking-wider disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
-            >
-              {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              <span>{isSaving ? 'Salvando...' : (editingSchedule ? 'Atualizar Dados' : 'Salvar Agendamento')}</span>
-            </button>
-          </div>
-        </div>
-      </div>
     );
   };
 
@@ -1726,6 +2055,7 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
       ) : renderAccessDenied())}
       {activeSubView === 'consultar' && (canAccessConsultar ? (
         <ConsultarVeiculoScreen
+          sectors={sectors}
           onBack={() => handleSubViewChange('menu')}
           onSelectVehicleToSchedule={(vehicleId, dateStr, startTime, endTime) => {
             try {
@@ -2070,10 +2400,225 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
         onSelect={(date) => setFormData({ ...formData, returnDateTime: getLocalISOString(date) })}
         shouldDisableDate={isDateBlocked}
       />
+
+      {/* MODAL DE TRIAGEM DA TRIPULAÇÃO (PASSOS 1 E 2) */}
+      {isTripulacaoModalOpen && createPortal(
+        <div className="fixed inset-0 z-[310] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md animate-fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200/80 w-full max-w-lg overflow-hidden animate-scale-in transition-all">
+            
+            {/* ETAPA 1: PERGUNTA DE TRIAGEM COM SELECT MODERNO */}
+            {tripulacaoModalStep === 1 && (
+              <div className="flex flex-col animate-fade-in">
+                {/* Header */}
+                <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-600/30">
+                      <HeartPulse className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-black text-slate-900 uppercase tracking-tight">Triagem da Tripulação</h3>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Identificação do perfil da viagem</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsTripulacaoModalOpen(false)}
+                    className="p-2 text-slate-400 hover:text-slate-600 hover:bg-white rounded-xl transition-colors cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Conteúdo */}
+                <div className="p-6 space-y-6">
+                  <div className="text-center space-y-2">
+                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-black uppercase tracking-widest border border-indigo-200">
+                      <ShieldCheck className="w-3 h-3" /> Pergunta Obrigatória
+                    </span>
+                    <h4 className="text-base md:text-lg font-black text-slate-900 leading-snug">
+                      Existe paciente <span className="text-indigo-600 bg-indigo-50/90 px-2 py-0.5 rounded-lg border border-indigo-200/80 font-black shadow-2xs">ONCOLÓGICO</span> ou de <span className="text-indigo-600 bg-indigo-50/90 px-2 py-0.5 rounded-lg border border-indigo-200/80 font-black shadow-2xs">HEMODIÁLISE</span> nesta viagem?
+                    </h4>
+                    <p className="text-xs text-slate-500 font-medium max-w-md mx-auto">
+                      Selecione abaixo para aplicarmos as normas e limites corretos de capacidade do veículo.
+                    </p>
+                  </div>
+
+                  {/* Cards de Escolha Interativa (Sim / Não) */}
+                  <div className="grid grid-cols-2 gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedSpecialOption('sim')}
+                      className={`p-4 rounded-2xl border-2 text-left transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between ${
+                        selectedSpecialOption === 'sim'
+                          ? 'border-indigo-600 bg-indigo-50/60 shadow-md shadow-indigo-600/10 ring-2 ring-indigo-600/20'
+                          : 'border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50/50'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-black text-xs">
+                          <HeartPulse className="w-4 h-4" />
+                        </span>
+                        {selectedSpecialOption === 'sim' && (
+                          <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center">
+                            <Check className="w-3 h-3" />
+                          </span>
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-sm font-black text-slate-900 uppercase">Sim</p>
+                        <p className="text-[10px] text-slate-500 font-medium leading-tight mt-0.5">Paciente oncológico ou hemodiálise</p>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setSelectedSpecialOption('nao')}
+                      className={`p-4 rounded-2xl border-2 text-left transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between ${
+                        selectedSpecialOption === 'nao'
+                          ? 'border-indigo-600 bg-indigo-50/60 shadow-md shadow-indigo-600/10 ring-2 ring-indigo-600/20'
+                          : 'border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50/50'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="w-8 h-8 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center font-black text-xs">
+                          <Users className="w-4 h-4" />
+                        </span>
+                        {selectedSpecialOption === 'nao' && (
+                          <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center">
+                            <Check className="w-3 h-3" />
+                          </span>
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-sm font-black text-slate-900 uppercase">Não</p>
+                        <p className="text-[10px] text-slate-500 font-medium leading-tight mt-0.5">Viagem convencional comum</p>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Footer com Ações */}
+                <div className="p-4 px-6 bg-slate-50/80 border-t border-slate-100 flex items-center justify-between gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsTripulacaoModalOpen(false)}
+                    className="px-4 py-2.5 text-slate-500 hover:text-slate-700 hover:bg-white font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer border border-transparent"
+                  >
+                    Cancelar
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleConfirmSpecialQuestion}
+                    disabled={!selectedSpecialOption}
+                    className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-xl text-xs uppercase tracking-wider transition-all shadow-md shadow-indigo-600/25 disabled:opacity-40 disabled:pointer-events-none flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <span>Continuar</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* ETAPA 2: AVISO DE USO EXCLUSIVO E LIMITAÇÕES */}
+            {tripulacaoModalStep === 2 && (
+              <div className="flex flex-col animate-fade-in">
+                {/* Header */}
+                <div className="px-6 py-5 border-b border-amber-100 flex items-center justify-between bg-amber-50/60">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white flex items-center justify-center shadow-md shadow-amber-500/30">
+                      <ShieldAlert className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-black text-slate-900 uppercase tracking-tight">Aviso de Uso Exclusivo</h3>
+                      <p className="text-[10px] font-bold text-amber-700 uppercase tracking-widest mt-0.5">Regras de Lotação Especial</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsTripulacaoModalOpen(false)}
+                    className="p-2 text-slate-400 hover:text-slate-600 hover:bg-white rounded-xl transition-colors cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Conteúdo */}
+                <div className="p-6 space-y-5">
+                  {/* Mensagem Oficial em Destaque */}
+                  <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-amber-950 space-y-1.5">
+                    <p className="text-[11px] font-black uppercase tracking-wider text-amber-700 flex items-center gap-1.5">
+                      <Info className="w-3.5 h-3.5" /> Diretriz de Transporte da Saúde
+                    </p>
+                    <p className="text-xs md:text-sm font-bold leading-relaxed">
+                      "Para viagens destinadas a pacientes <span className="text-amber-900 bg-amber-200/60 px-1.5 py-0.5 rounded-md font-black">oncológicos</span> ou em tratamento de <span className="text-amber-900 bg-amber-200/60 px-1.5 py-0.5 rounded-md font-black">hemodiálise</span>, o veículo será de uso exclusivo do paciente e seus acompanhantes."
+                    </p>
+                  </div>
+
+                  {/* Cards Informativos de Limitações Obrigatórias */}
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Limitações Obrigatórias Aplicadas:</p>
+                    
+                    <div className="grid grid-cols-3 gap-2.5">
+                      <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-center space-y-1">
+                        <div className="w-6 h-6 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto text-xs font-black">
+                          <UserIcon className="w-3 h-3" />
+                        </div>
+                        <p className="text-xs font-black text-slate-900">01 Paciente</p>
+                        <p className="text-[9px] text-slate-400 font-bold uppercase">Máximo</p>
+                      </div>
+
+                      <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-center space-y-1">
+                        <div className="w-6 h-6 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center mx-auto text-xs font-black">
+                          <Users className="w-3 h-3" />
+                        </div>
+                        <p className="text-xs font-black text-slate-900">02 Acomp.</p>
+                        <p className="text-[9px] text-slate-400 font-bold uppercase">Máximo</p>
+                      </div>
+
+                      <div className="p-3 rounded-xl bg-purple-50/60 border border-purple-200 text-center space-y-1">
+                        <div className="w-6 h-6 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center mx-auto text-xs font-black">
+                          <Car className="w-3 h-3" />
+                        </div>
+                        <p className="text-xs font-black text-purple-900">03 Pessoas</p>
+                        <p className="text-[9px] text-purple-600 font-bold uppercase">Total Máx.</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-start gap-2.5 text-xs text-slate-600 font-medium">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                    <span>Não será permitido cadastrar um segundo paciente ou mais de dois acompanhantes. Ao atingir o limite de 3 pessoas, o sistema bloqueará novas adições automaticamente.</span>
+                  </div>
+                </div>
+
+                {/* Footer com Botões */}
+                <div className="p-4 px-6 bg-slate-50/80 border-t border-slate-100 flex items-center justify-between gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setTripulacaoModalStep(1)}
+                    className="px-4 py-2.5 text-slate-600 hover:text-slate-800 hover:bg-white font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer border border-slate-200 flex items-center gap-1.5"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                    <span>Voltar</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleConfirmSpecialWarning}
+                    className="px-5 py-2.5 bg-gradient-to-r from-amber-600 via-indigo-600 to-purple-600 hover:from-amber-700 hover:to-purple-700 text-white font-black rounded-xl text-xs uppercase tracking-wider transition-all shadow-md shadow-indigo-600/25 flex items-center gap-2 cursor-pointer"
+                  >
+                    <Check className="w-4 h-4" />
+                    <span>Confirmar e Liberar Tripulação</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 };
-
-const ShieldAlert = ({ className }: { className?: string }) => (
-  <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10" /><path d="M12 8v4" /><path d="M12 16h.01" /></svg>
-);

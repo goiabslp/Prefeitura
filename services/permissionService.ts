@@ -80,7 +80,7 @@ export const MODULE_ACCESS_TREE: ModuleItemDefinition[] = [
         legacyKeys: ['parent_diarias_novo_evento'],
         label: 'Novo Evento',
         description: 'Cadastro de eventos para viagens em grupo',
-        routes: ['/Diarias/NovoEvento']
+        routes: ['/Diarias/NovoEvento', '/Diarias/Editar']
       },
       {
         key: 'sub_diarias_lancamentos',

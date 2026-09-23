@@ -740,20 +740,6 @@ export const EstoqueScreen: React.FC<EstoqueScreenProps> = ({
                             <span>Novo Medicamento</span>
                         </button>
                     )}
-
-                    {lowStockMedicamentos && lowStockMedicamentos.length > 0 && onOpenAlertModal && (
-                        <button
-                            onClick={onOpenAlertModal}
-                            className={`flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r ${
-                                hasCriticalItems 
-                                    ? 'from-rose-500/10 to-red-500/10 border-rose-200/50 text-rose-800 hover:text-rose-950 animate-pulse hover:animate-none' 
-                                    : 'from-amber-500/10 to-orange-500/10 border-amber-200/50 text-amber-800 hover:text-amber-950'
-                            } border rounded-xl text-xs font-black transition-all shadow-xs shrink-0 uppercase tracking-wider cursor-pointer`}
-                        >
-                            <AlertTriangle className={`w-3.5 h-3.5 shrink-0 ${hasCriticalItems ? 'text-rose-500' : 'text-amber-500'}`} />
-                            <span>Alerta ({lowStockMedicamentos.length})</span>
-                        </button>
-                    )}
                 </div>
             </header>
 
