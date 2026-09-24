@@ -174,6 +174,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, uiConfig, onL
           const { data: orgData } = await supabase.from('organization_settings').select('system_update_target').eq('id', 'global_config').single();
           if (orgData?.system_update_target) {
             localStorage.setItem(FORCED_WINDOW_KEY, orgData.system_update_target.toString());
+            localStorage.setItem('system_applied_version', orgData.system_update_target.toString());
+            localStorage.setItem('last_forced_update_target', orgData.system_update_target.toString());
           }
         } catch (e) {
           console.error("Silent cache clear failed", e);

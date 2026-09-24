@@ -208,7 +208,7 @@ export const getVehicles = async (): Promise<Vehicle[]> => {
         let keepFetching = true;
 
         // Fetch in chunks to avoid single massive JSON response failure
-        const vehicleColumns = 'id, type, model, plate, brand, year, color, renavam, chassis, sector_id, responsible_person_id, document_url, document_name, vehicle_image_url, status, maintenance_status, fuel_types, request_manager_ids, max_kml, min_kml, current_km, oil_last_change, oil_next_change, oil_calculation_base, vehicle_category, available_for_scheduling';
+        const vehicleColumns = 'id, type, model, plate, brand, year, color, renavam, chassis, sector_id, responsible_person_id, document_url, document_name, vehicle_image_url, status, maintenance_status, fuel_types, request_manager_ids, max_kml, min_kml, current_km, oil_last_change, oil_next_change, oil_calculation_base, timing_belt_last_change, timing_belt_next_change, timing_belt_calculation_base, passenger_capacity, vehicle_category, available_for_scheduling';
         while (keepFetching) {
             const { data, error } = await supabase
                 .from('vehicles')
@@ -239,53 +239,14 @@ export const getVehicles = async (): Promise<Vehicle[]> => {
             if (from > 5000) break;
         }
 
-        return allVehicles.map(v => ({
-            id: v.id,
-            type: v.type,
-            model: v.model,
-            plate: v.plate,
-            brand: v.brand,
-            year: v.year,
-            color: v.color,
-            renavam: v.renavam,
-            chassis: v.chassis,
-            sectorId: v.sector_id,
-            responsiblePersonId: v.responsible_person_id,
-            documentUrl: v.document_url,
-            documentName: v.document_name,
-            vehicleImageUrl: v.vehicle_image_url,
-            status: v.status,
-            maintenanceStatus: v.maintenance_status,
-            fuelTypes: v.fuel_types,
-            requestManagerIds: v.request_manager_ids || [],
-            maxKml: v.max_kml,
-            minKml: v.min_kml,
-            currentKm: v.current_km,
-            oilLastChange: v.oil_last_change,
-            oilNextChange: v.oil_next_change,
-            oilCalculationBase: v.oil_calculation_base,
-            vehicleCategory: v.vehicle_category,
-            availableForScheduling: v.available_for_scheduling
-        }));
+        return allVehicles.map(v => mapVehicleFromDB(v));
     } catch (err) {
         console.error('Critical error in getVehicles:', err);
         return [];
     }
 };
 
-export const getVehicleById = async (id: string): Promise<Vehicle | null> => {
-    const vehicleColumns = 'id, type, model, plate, brand, year, color, renavam, chassis, sector_id, responsible_person_id, document_url, document_name, vehicle_image_url, status, maintenance_status, fuel_types, request_manager_ids, max_kml, min_kml, current_km, oil_last_change, oil_next_change, oil_calculation_base, vehicle_category, available_for_scheduling';
-    const { data, error } = await supabase
-        .from('vehicles')
-        .select(vehicleColumns)
-        .eq('id', id)
-        .single();
-
-    if (error) {
-        console.error('Error fetching vehicle details:', error);
-        return null;
-    }
-
+export const mapVehicleFromDB = (data: any): Vehicle => {
     return {
         id: data.id,
         type: data.type,
@@ -311,9 +272,29 @@ export const getVehicleById = async (id: string): Promise<Vehicle | null> => {
         oilLastChange: data.oil_last_change,
         oilNextChange: data.oil_next_change,
         oilCalculationBase: data.oil_calculation_base,
+        timingBeltLastChange: data.timing_belt_last_change,
+        timingBeltNextChange: data.timing_belt_next_change,
+        timingBeltCalculationBase: data.timing_belt_calculation_base,
+        passengerCapacity: data.passenger_capacity,
         vehicleCategory: data.vehicle_category,
         availableForScheduling: data.available_for_scheduling
     };
+};
+
+export const getVehicleById = async (id: string): Promise<Vehicle | null> => {
+    const vehicleColumns = 'id, type, model, plate, brand, year, color, renavam, chassis, sector_id, responsible_person_id, document_url, document_name, vehicle_image_url, status, maintenance_status, fuel_types, request_manager_ids, max_kml, min_kml, current_km, oil_last_change, oil_next_change, oil_calculation_base, timing_belt_last_change, timing_belt_next_change, timing_belt_calculation_base, passenger_capacity, vehicle_category, available_for_scheduling';
+    const { data, error } = await supabase
+        .from('vehicles')
+        .select(vehicleColumns)
+        .eq('id', id)
+        .single();
+
+    if (error) {
+        console.error('Error fetching vehicle details:', error);
+        return null;
+    }
+
+    return mapVehicleFromDB(data);
 };
 
 export const createVehicle = async (vehicle: Vehicle): Promise<Vehicle | null> => {
@@ -341,6 +322,10 @@ export const createVehicle = async (vehicle: Vehicle): Promise<Vehicle | null> =
         oil_last_change: vehicle.oilLastChange ? Math.round(vehicle.oilLastChange) : null,
         oil_next_change: vehicle.oilNextChange ? Math.round(vehicle.oilNextChange) : null,
         oil_calculation_base: vehicle.oilCalculationBase,
+        timing_belt_last_change: vehicle.timingBeltLastChange ? Math.round(vehicle.timingBeltLastChange) : null,
+        timing_belt_next_change: vehicle.timingBeltNextChange ? Math.round(vehicle.timingBeltNextChange) : null,
+        timing_belt_calculation_base: vehicle.timingBeltCalculationBase,
+        passenger_capacity: vehicle.passengerCapacity,
         vehicle_category: vehicle.vehicleCategory,
         available_for_scheduling: vehicle.availableForScheduling || 'Sim'
     };
@@ -356,34 +341,7 @@ export const createVehicle = async (vehicle: Vehicle): Promise<Vehicle | null> =
         return null;
     }
 
-    return {
-        id: data.id,
-        type: data.type,
-        model: data.model,
-        plate: data.plate,
-        brand: data.brand,
-        year: data.year,
-        color: data.color,
-        renavam: data.renavam,
-        chassis: data.chassis,
-        sectorId: data.sector_id,
-        responsiblePersonId: data.responsible_person_id,
-        documentUrl: data.document_url,
-        documentName: data.document_name,
-        vehicleImageUrl: data.vehicle_image_url,
-        status: data.status,
-        maintenanceStatus: data.maintenance_status,
-        fuelTypes: data.fuel_types,
-        requestManagerIds: data.request_manager_ids || [],
-        maxKml: data.max_kml,
-        minKml: data.min_kml,
-        currentKm: data.current_km,
-        oilLastChange: data.oil_last_change,
-        oilNextChange: data.oil_next_change,
-        oilCalculationBase: data.oil_calculation_base,
-        vehicleCategory: data.vehicle_category,
-        availableForScheduling: data.available_for_scheduling
-    };
+    return mapVehicleFromDB(data);
 };
 
 export const updateVehicle = async (vehicle: Vehicle): Promise<Vehicle | null> => {
@@ -411,6 +369,10 @@ export const updateVehicle = async (vehicle: Vehicle): Promise<Vehicle | null> =
         oil_last_change: vehicle.oilLastChange ? Math.round(vehicle.oilLastChange) : null,
         oil_next_change: vehicle.oilNextChange ? Math.round(vehicle.oilNextChange) : null,
         oil_calculation_base: vehicle.oilCalculationBase,
+        timing_belt_last_change: vehicle.timingBeltLastChange ? Math.round(vehicle.timingBeltLastChange) : null,
+        timing_belt_next_change: vehicle.timingBeltNextChange ? Math.round(vehicle.timingBeltNextChange) : null,
+        timing_belt_calculation_base: vehicle.timingBeltCalculationBase,
+        passenger_capacity: vehicle.passengerCapacity,
         vehicle_category: vehicle.vehicleCategory,
         available_for_scheduling: vehicle.availableForScheduling
     };
@@ -427,34 +389,7 @@ export const updateVehicle = async (vehicle: Vehicle): Promise<Vehicle | null> =
         return null;
     }
 
-    return {
-        id: data.id,
-        type: data.type,
-        model: data.model,
-        plate: data.plate,
-        brand: data.brand,
-        year: data.year,
-        color: data.color,
-        renavam: data.renavam,
-        chassis: data.chassis,
-        sectorId: data.sector_id,
-        responsiblePersonId: data.responsible_person_id,
-        documentUrl: data.document_url,
-        documentName: data.document_name,
-        vehicleImageUrl: data.vehicle_image_url,
-        status: data.status,
-        maintenanceStatus: data.maintenance_status,
-        fuelTypes: data.fuel_types,
-        requestManagerIds: data.request_manager_ids || [],
-        maxKml: data.max_kml,
-        minKml: data.min_kml,
-        currentKm: data.current_km,
-        oilLastChange: data.oil_last_change,
-        oilNextChange: data.oil_next_change,
-        oilCalculationBase: data.oil_calculation_base,
-        vehicleCategory: data.vehicle_category,
-        availableForScheduling: data.available_for_scheduling
-    };
+    return mapVehicleFromDB(data);
 };
 
 export const deleteVehicle = async (id: string): Promise<boolean> => {

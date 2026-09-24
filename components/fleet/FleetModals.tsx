@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
     Vehicle, 
     Sector, 
-    Person 
+    Person,
+    VehicleBrand as Brand
 } from '../../types';
 import { 
     FleetMaintenance, 
@@ -30,7 +31,14 @@ import {
     RotateCcw,
     Gauge,
     Car,
-    FileText
+    FileText,
+    Users,
+    Shield,
+    Activity,
+    Tag,
+    Sliders,
+    Fuel,
+    Truck
 } from 'lucide-react';
 
 // =========================================================================
@@ -728,6 +736,492 @@ export const NewPartModal: React.FC<NewPartModalProps> = ({
                         </button>
                         <button type="submit" disabled={saving} className="px-5 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-black uppercase shadow-md disabled:opacity-50">
                             {saving ? 'Cadastrando...' : 'Salvar Peça'}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+};
+
+// =========================================================================
+// 4. MODAL DE CADASTRO E EDIÇÃO DE VEÍCULO
+// =========================================================================
+interface VehicleFormModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    editingVehicle?: Vehicle | null;
+    sectors: Sector[];
+    persons: Person[];
+    brands?: Brand[];
+    onSave: (vehicleData: Partial<Vehicle>) => Promise<void>;
+}
+
+export const VehicleFormModal: React.FC<VehicleFormModalProps> = ({
+    isOpen,
+    onClose,
+    editingVehicle,
+    sectors,
+    persons,
+    brands = [],
+    onSave
+}) => {
+    const [activeTab, setActiveTab] = useState<'geral' | 'lotacao' | 'manutencao'>('geral');
+    
+    // Form fields
+    const [model, setModel] = useState('');
+    const [brand, setBrand] = useState('');
+    const [plate, setPlate] = useState('');
+    const [type, setType] = useState<Vehicle['type']>('leve');
+    const [vehicleCategory, setVehicleCategory] = useState<NonNullable<Vehicle['vehicleCategory']>>('Carro');
+    const [year, setYear] = useState('');
+    const [color, setColor] = useState('');
+    const [renavam, setRenavam] = useState('');
+    const [chassis, setChassis] = useState('');
+    const [sectorId, setSectorId] = useState('');
+    const [responsiblePersonId, setResponsiblePersonId] = useState('');
+    const [status, setStatus] = useState<Vehicle['status']>('operacional');
+    const [maintenanceStatus, setMaintenanceStatus] = useState<Vehicle['maintenanceStatus']>('em_dia');
+    const [availableForScheduling, setAvailableForScheduling] = useState<'Sim' | 'Não'>('Sim');
+    const [passengerCapacity, setPassengerCapacity] = useState<number>(5);
+    const [currentKm, setCurrentKm] = useState<number>(0);
+    const [oilCalculationBase, setOilCalculationBase] = useState<number>(5000);
+    const [timingBeltCalculationBase, setTimingBeltCalculationBase] = useState<number>(50000);
+    const [vehicleImageUrl, setVehicleImageUrl] = useState('');
+    const [saving, setSaving] = useState(false);
+
+    useEffect(() => {
+        if (editingVehicle) {
+            setModel(editingVehicle.model || '');
+            setBrand(editingVehicle.brand || '');
+            setPlate(editingVehicle.plate || '');
+            setType(editingVehicle.type || 'leve');
+            setVehicleCategory(editingVehicle.vehicleCategory || (editingVehicle.type === 'pesado' ? 'Caminhão' : 'Carro'));
+            setYear(editingVehicle.year || '');
+            setColor(editingVehicle.color || '');
+            setRenavam(editingVehicle.renavam || '');
+            setChassis(editingVehicle.chassis || '');
+            setSectorId(editingVehicle.sectorId || '');
+            setResponsiblePersonId(editingVehicle.responsiblePersonId || '');
+            setStatus(editingVehicle.status || 'operacional');
+            setMaintenanceStatus(editingVehicle.maintenanceStatus || 'em_dia');
+            setAvailableForScheduling(editingVehicle.availableForScheduling || 'Sim');
+            setPassengerCapacity(editingVehicle.passengerCapacity !== undefined ? editingVehicle.passengerCapacity : 5);
+            setCurrentKm(editingVehicle.currentKm || 0);
+            setOilCalculationBase(editingVehicle.oilCalculationBase || 5000);
+            setTimingBeltCalculationBase(editingVehicle.timingBeltCalculationBase || 50000);
+            setVehicleImageUrl(editingVehicle.vehicleImageUrl || '');
+        } else {
+            setModel('');
+            setBrand('');
+            setPlate('');
+            setType('leve');
+            setVehicleCategory('Carro');
+            setYear('');
+            setColor('');
+            setRenavam('');
+            setChassis('');
+            setSectorId(sectors[0]?.id || '');
+            setResponsiblePersonId('');
+            setStatus('operacional');
+            setMaintenanceStatus('em_dia');
+            setAvailableForScheduling('Sim');
+            setPassengerCapacity(5);
+            setCurrentKm(0);
+            setOilCalculationBase(5000);
+            setTimingBeltCalculationBase(50000);
+            setVehicleImageUrl('');
+        }
+        setActiveTab('geral');
+    }, [editingVehicle, isOpen, sectors]);
+
+    if (!isOpen) return null;
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!model.trim() || !plate.trim()) {
+            alert('Por favor, informe ao menos o Modelo e a Placa do veículo.');
+            return;
+        }
+
+        setSaving(true);
+        try {
+            const formattedPlate = plate.trim().toUpperCase();
+            await onSave({
+                ...(editingVehicle ? { id: editingVehicle.id } : {}),
+                model: model.trim(),
+                brand: brand.trim(),
+                plate: formattedPlate,
+                type,
+                vehicleCategory,
+                year: year.trim(),
+                color: color.trim(),
+                renavam: renavam.trim(),
+                chassis: chassis.trim(),
+                sectorId: sectorId || undefined,
+                responsiblePersonId: responsiblePersonId || undefined,
+                status,
+                maintenanceStatus,
+                availableForScheduling,
+                passengerCapacity: Number(passengerCapacity) || 5,
+                currentKm: Number(currentKm) || 0,
+                oilCalculationBase: oilCalculationBase as any,
+                timingBeltCalculationBase: timingBeltCalculationBase as any,
+                vehicleImageUrl: vehicleImageUrl.trim() || undefined
+            });
+            onClose();
+        } catch (err: any) {
+            alert('Erro ao salvar veículo: ' + (err.message || 'Erro desconhecido'));
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl p-5 md:p-6 w-full max-w-2xl shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150 max-h-[92vh] overflow-y-auto custom-scrollbar flex flex-col">
+                {/* Header */}
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 text-white flex items-center justify-center shadow-md shadow-amber-500/25">
+                            <Car className="w-5 h-5" />
+                        </div>
+                        <div>
+                            <h3 className="text-sm md:text-base font-black text-slate-900 uppercase">
+                                {editingVehicle ? `Editar Veículo: ${editingVehicle.model}` : 'Cadastrar Novo Veículo'}
+                            </h3>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
+                                {editingVehicle ? `Placa: ${editingVehicle.plate}` : 'Catálogo da Frota Municipal'}
+                            </p>
+                        </div>
+                    </div>
+                    <button type="button" onClick={onClose} className="p-1 text-slate-400 hover:text-slate-800 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer">
+                        <X className="w-5 h-5" />
+                    </button>
+                </div>
+
+                {/* Abas */}
+                <div className="flex items-center gap-1.5 border-b border-slate-100 my-4 pb-2">
+                    <button
+                        type="button"
+                        onClick={() => setActiveTab('geral')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                            activeTab === 'geral' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-500 hover:bg-slate-100'
+                        }`}
+                    >
+                        Dados Principais
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setActiveTab('lotacao')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                            activeTab === 'lotacao' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-500 hover:bg-slate-100'
+                        }`}
+                    >
+                        Lotação & Vínculos
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setActiveTab('manutencao')}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+                            activeTab === 'manutencao' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-500 hover:bg-slate-100'
+                        }`}
+                    >
+                        KM & Manutenção
+                    </button>
+                </div>
+
+                {/* Formulário */}
+                <form onSubmit={handleSubmit} className="space-y-4 text-xs flex-1">
+                    {/* ABA 1: DADOS PRINCIPAIS */}
+                    {activeTab === 'geral' && (
+                        <div className="space-y-3 animate-in fade-in duration-150">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div>
+                                    <label className="font-black uppercase text-slate-600 block mb-1">Modelo do Veículo *</label>
+                                    <input
+                                        type="text"
+                                        required
+                                        placeholder="Ex: SPIN 1.8, HB20, VAN MASTER..."
+                                        value={model}
+                                        onChange={e => setModel(e.target.value)}
+                                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:bg-white focus:border-amber-500"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="font-black uppercase text-slate-600 block mb-1">Marca / Fabricante</label>
+                                    <input
+                                        type="text"
+                                        list="brands-list"
+                                        placeholder="Ex: CHEVROLET, FIAT, RENAULT..."
+                                        value={brand}
+                                        onChange={e => setBrand(e.target.value.toUpperCase())}
+                                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 uppercase focus:bg-white focus:border-amber-500"
+                                    />
+                                    <datalist id="brands-list">
+                                        {brands.map(b => (
+                                            <option key={b.id} value={b.name} />
+                                        ))}
+                                    </datalist>
+                                </div>
+
+                                <div>
+                                    <label className="font-black uppercase text-slate-600 block mb-1">Placa do Veículo *</label>
+                                    <input
+                                        type="text"
+                                        required
+                                        placeholder="Ex: ABC1D23"
+                                        value={plate}
+                                        onChange={e => setPlate(e.target.value.toUpperCase())}
+                                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono font-black text-slate-900 uppercase tracking-widest focus:bg-white focus:border-amber-500"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="font-black uppercase text-slate-600 block mb-1">Tipo de Veículo *</label>
+                                    <select
+                                        value={type}
+                                        onChange={e => setType(e.target.value as any)}
+                                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900"
+                                    >
+                                        <option value="leve">Leve (Carro, Moto, Van, Utilitário)</option>
+                                        <option value="pesado">Pesado (Ônibus, Caminhão, Trator, Máquina)</option>
+                                        <option value="acessorio">Acessório (Implemento, Roçadeira, etc.)</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="font-black uppercase text-slate-600 block mb-1">Categoria Visual</label>
+                                    <select
+                                        value={vehicleCategory}
+                                        onChange={e => setVehicleCategory(e.target.value as any)}
+                                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900"
+                                    >
+                                        <option value="Carro">Carro de Passeio</option>
+                                        <option value="Van">Van</option>
+                                        <option value="Ônibus">Ônibus / Micro-ônibus</option>
+                                        <option value="Moto">Moto</option>
+                                        <option value="Caminhão">Caminhão</option>
+                                        <option value="Máquina Pesada">Máquina Pesada / Trator</option>
+                                        <option value="Acessórios">Acessório / Equipamento</option>
+                                    </select>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div>
+                                        <label className="font-black uppercase text-slate-600 block mb-1">Ano</label>
+                                        <input
+                                            type="text"
+                                            placeholder="Ex: 2023/2024"
+                                            value={year}
+                                            onChange={e => setYear(e.target.value)}
+                                            className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 text-center"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="font-black uppercase text-slate-600 block mb-1">Cor</label>
+                                        <input
+                                            type="text"
+                                            placeholder="Ex: BRANCO"
+                                            value={color}
+                                            onChange={e => setColor(e.target.value.toUpperCase())}
+                                            className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 text-center uppercase"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ABA 2: LOTAÇÃO & VÍNCULOS */}
+                    {activeTab === 'lotacao' && (
+                        <div className="space-y-3 animate-in fade-in duration-150">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div>
+                                    <label className="font-black uppercase text-slate-600 block mb-1">
+                                        Capacidade de Passageiros (Assentos)
+                                    </label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max="100"
+                                        value={passengerCapacity}
+                                        onChange={e => setPassengerCapacity(Number(e.target.value))}
+                                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono font-black text-indigo-900 text-center text-sm"
+                                    />
+                                    <span className="text-[10px] text-slate-400 font-medium block mt-1">
+                                        Para vans/ônibus, defina o número total de assentos de passageiros.
+                                    </span>
+                                </div>
+
+                                <div>
+                                    <label className="font-black uppercase text-slate-600 block mb-1">
+                                        Disponível para Agendamento de Viagem?
+                                    </label>
+                                    <select
+                                        value={availableForScheduling}
+                                        onChange={e => setAvailableForScheduling(e.target.value as any)}
+                                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900"
+                                    >
+                                        <option value="Sim">Sim (Aparece no módulo de Agendamentos)</option>
+                                        <option value="Não">Não (Uso interno exclusivo / Não agendável)</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="font-black uppercase text-slate-600 block mb-1">Setor / Secretaria Vinculada</label>
+                                    <select
+                                        value={sectorId}
+                                        onChange={e => setSectorId(e.target.value)}
+                                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900"
+                                    >
+                                        <option value="">Sem setor fixo / Geral</option>
+                                        {sectors.map(s => (
+                                            <option key={s.id} value={s.id}>{s.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="font-black uppercase text-slate-600 block mb-1">Motorista / Responsável Operacional</label>
+                                    <select
+                                        value={responsiblePersonId}
+                                        onChange={e => setResponsiblePersonId(e.target.value)}
+                                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900"
+                                    >
+                                        <option value="">Nenhum responsável atribuído</option>
+                                        {persons.map(p => (
+                                            <option key={p.id} value={p.id}>{p.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="font-black uppercase text-slate-600 block mb-1">Código RENAVAM</label>
+                                    <input
+                                        type="text"
+                                        placeholder="Número do RENAVAM"
+                                        value={renavam}
+                                        onChange={e => setRenavam(e.target.value)}
+                                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono font-bold text-slate-900"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="font-black uppercase text-slate-600 block mb-1">Número do Chassi</label>
+                                    <input
+                                        type="text"
+                                        placeholder="Número do Chassi"
+                                        value={chassis}
+                                        onChange={e => setChassis(e.target.value.toUpperCase())}
+                                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono font-bold text-slate-900 uppercase"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ABA 3: KM & MANUTENÇÃO */}
+                    {activeTab === 'manutencao' && (
+                        <div className="space-y-3 animate-in fade-in duration-150">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div>
+                                    <label className="font-black uppercase text-slate-600 block mb-1">Odômetro Atual (KM)</label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        value={currentKm}
+                                        onChange={e => setCurrentKm(Number(e.target.value))}
+                                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono font-bold text-indigo-900"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="font-black uppercase text-slate-600 block mb-1">Status Operacional</label>
+                                    <select
+                                        value={status}
+                                        onChange={e => setStatus(e.target.value as any)}
+                                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900"
+                                    >
+                                        <option value="operacional">Operacional (Em circulação)</option>
+                                        <option value="manutencao">Em Manutenção / Oficina</option>
+                                        <option value="inativo">Inativo / Baixado</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="font-black uppercase text-slate-600 block mb-1">Status de Manutenção</label>
+                                    <select
+                                        value={maintenanceStatus}
+                                        onChange={e => setMaintenanceStatus(e.target.value as any)}
+                                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900"
+                                    >
+                                        <option value="em_dia">Em Dia</option>
+                                        <option value="andamento">Em Andamento</option>
+                                        <option value="vencido">Vencido / Pendente</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="font-black uppercase text-slate-600 block mb-1">Intervalo Troca de Óleo</label>
+                                    <select
+                                        value={oilCalculationBase}
+                                        onChange={e => setOilCalculationBase(Number(e.target.value))}
+                                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900"
+                                    >
+                                        <option value={1000}>A cada 1.000 km (Motos)</option>
+                                        <option value={3000}>A cada 3.000 km</option>
+                                        <option value={5000}>A cada 5.000 km (Padrão)</option>
+                                        <option value={7000}>A cada 7.000 km</option>
+                                        <option value={10000}>A cada 10.000 km (Sintético)</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="font-black uppercase text-slate-600 block mb-1">Intervalo Correia Dentada</label>
+                                    <select
+                                        value={timingBeltCalculationBase}
+                                        onChange={e => setTimingBeltCalculationBase(Number(e.target.value))}
+                                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900"
+                                    >
+                                        <option value={40000}>A cada 40.000 km</option>
+                                        <option value={50000}>A cada 50.000 km (Padrão)</option>
+                                        <option value={60000}>A cada 60.000 km</option>
+                                        <option value={80000}>A cada 80.000 km</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="font-black uppercase text-slate-600 block mb-1">URL da Imagem / Foto (Opcional)</label>
+                                    <input
+                                        type="url"
+                                        placeholder="https://exemplo.com/foto.jpg"
+                                        value={vehicleImageUrl}
+                                        onChange={e => setVehicleImageUrl(e.target.value)}
+                                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Rodapé com Ações */}
+                    <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-black uppercase tracking-wider cursor-pointer"
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={saving}
+                            className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-xl font-black uppercase tracking-wider shadow-md shadow-amber-500/25 flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                        >
+                            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                            <span>{saving ? 'Gravando...' : (editingVehicle ? 'Atualizar Veículo' : 'Cadastrar Veículo')}</span>
                         </button>
                     </div>
                 </form>

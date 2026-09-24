@@ -198,6 +198,30 @@ export const SYSTEM_SCREENS: Record<string, ScreenMetadata> = {
   },
 
   // --- ADMINISTRAÇÃO ---
+  '/Admin/Dashboard': {
+    route: '/Admin/Dashboard',
+    canonicalRoute: '/Admin/Dashboard',
+    module: 'Administração',
+    submodule: 'Dashboard Administrativo',
+    title: 'Painel Geral de Controle Administrativo',
+    description: 'Acesso centralizado aos módulos e ferramentas de gestão do sistema.',
+    permissionKey: 'sub_admin_dashboard',
+    fields: [],
+    availableActions: ['Acessar Módulos', 'Gerenciar Configurações'],
+    howToGuide: 'Navegue pelos cartões para acessar gestão de usuários, frotas, logs, controle de acesso e atualização.'
+  },
+  '/Admin/Dashboard/atualizar': {
+    route: '/Admin/Dashboard/atualizar',
+    canonicalRoute: '/Admin/Dashboard/atualizar',
+    module: 'Administração',
+    submodule: 'Atualização Global',
+    title: 'Atualização Global do Sistema e Limpeza de Cache',
+    description: 'Ferramenta para administradores forçarem a atualização de ambiente de todos os usuários com limpeza de cache.',
+    permissionKey: 'sub_admin_atualizacao',
+    fields: [],
+    availableActions: ['Iniciar Atualização Global', 'Desconectar Sessões Ativas', 'Limpar Cache Storage'],
+    howToGuide: 'Clique em Iniciar Agora e confirme para acionar um alerta regressivo de 60s para todos os usuários online e forçar a nova versão.'
+  },
   '/Admin/Usuarios': {
     route: '/Admin/Usuarios',
     canonicalRoute: '/Admin/Usuarios',

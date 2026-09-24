@@ -554,7 +554,7 @@ export const MODULE_ACCESS_TREE: ModuleItemDefinition[] = [
     legacyKeys: ['admin'],
     label: 'Administração do Sistema',
     description: 'Gestão institucional, configurações gerais, segurança e auditoria',
-    routes: ['/Admin', '/Admin/Dashboard'],
+    routes: ['/Admin', '/Admin/Dashboard', '/Admin/Dashboard/atualizar'],
     iconName: 'ShieldAlert',
     submodules: [
       {
@@ -563,6 +563,13 @@ export const MODULE_ACCESS_TREE: ModuleItemDefinition[] = [
         label: 'Dashboard',
         description: 'Painel executivo de status dos módulos municipais',
         routes: ['/Admin/Dashboard']
+      },
+      {
+        key: 'sub_admin_atualizacao',
+        legacyKeys: ['parent_admin_atualizacao'],
+        label: 'Atualização Global',
+        description: 'Forçar atualização de ambiente e limpeza de cache para todos os usuários',
+        routes: ['/Admin/Dashboard/atualizar']
       },
       {
         key: 'sub_admin_usuarios',

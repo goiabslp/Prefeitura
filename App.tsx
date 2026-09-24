@@ -119,6 +119,7 @@ import { PoliticaPrivacidadeAppScreen } from './components/PoliticaPrivacidadeAp
 import { canUserAccessRoute, cleanPermissionsArray } from './services/permissionService';
 import { SystemAIAssistantScreen } from './components/ai/SystemAIAssistantScreen';
 import { EgressMonitorModal } from './components/admin/EgressMonitorModal';
+import { performClientCleanup, checkAndApplyOfflineUpdate } from './services/systemUpdateService';
 
 const VIEW_TO_PATH: Record<string, string> = {
   'login': '/Login',
@@ -128,6 +129,8 @@ const VIEW_TO_PATH: Record<string, string> = {
   'home:diarias': '/Diarias',
   'home:abastecimento': '/Abastecimento',
   'admin:dashboard': '/Admin/Dashboard',
+  'admin:system_update': '/Admin/Dashboard/atualizar',
+  'admin:update': '/Admin/Dashboard/atualizar',
   'admin:users': '/Admin/Usuarios',
   'admin:entities': '/Admin/Entidades',
   'admin:fleet': '/Frota',
@@ -779,7 +782,26 @@ const App: React.FC = () => {
     message: ''
   });
   const [isAdminSidebarOpen, setIsAdminSidebarOpen] = useState(false);
-  const [adminTab, setAdminTab] = useState<string | null>(null);
+  const [adminTab, setAdminTab] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      let rawPath = window.location.pathname;
+      try { rawPath = decodeURIComponent(rawPath); } catch (e) {}
+      const path = rawPath.replace(/\/$/, '').toLowerCase() || '/';
+      if (path === '/admin/dashboard/atualizar' || path.startsWith('/admin/dashboard/atualizar') || path === '/admin/atualizar') {
+        return 'system_update';
+      }
+      if (path.startsWith('/admin/usuarios')) return 'users';
+      if (path.startsWith('/admin/entidades')) return 'entities';
+      if (path.startsWith('/admin/assinaturas')) return 'signatures';
+      if (path.startsWith('/admin/autenticador')) return '2fa';
+      if (path.startsWith('/admin/interface')) return 'ui';
+      if (path.startsWith('/admin/design')) return 'design';
+      if (path.startsWith('/admin/controleacesso')) return 'access_control';
+      if (path.startsWith('/admin/logs')) return 'logs';
+      if (path.startsWith('/admin/acessoremoto')) return 'remote_access';
+    }
+    return null;
+  });
   const [isFinalizedView, setIsFinalizedView] = useState(false);
   const [isOficioNumberingModalOpen, setIsOficioNumberingModalOpen] = useState(false);
 
@@ -888,6 +910,11 @@ const App: React.FC = () => {
         // Also check if there's a forced update target active on load
         const { data } = await supabase.from('organization_settings').select('system_update_target').eq('id', 'global_config').single();
         if (data?.system_update_target) {
+          const appliedOffline = await checkAndApplyOfflineUpdate(data.system_update_target, signOut);
+          if (appliedOffline) {
+            window.location.href = '/Login?update=1';
+            return;
+          }
           setSystemUpdateTarget(data.system_update_target);
           setIsUpdateModalDismissed(false);
         }
@@ -1393,6 +1420,16 @@ const App: React.FC = () => {
       } else if (path.startsWith('/art')) {
         setCurrentView('art');
         return;
+      } else if (path === '/admin/dashboard/atualizar' || path.startsWith('/admin/dashboard/atualizar') || path === '/admin/atualizar') {
+        setCurrentView('admin');
+        setAdminTab('system_update');
+        setIsAdminSidebarOpen(false);
+        return;
+      } else if (path === '/admin/dashboard' || path === '/admin') {
+        setCurrentView('admin');
+        setAdminTab(null);
+        setIsAdminSidebarOpen(false);
+        return;
       } else if (path.startsWith('/admin/usuarios')) {
         setCurrentView('admin');
         setAdminTab('users');
@@ -1790,34 +1827,12 @@ const App: React.FC = () => {
 
       const performGlobalLogoutAndCachePurge = async () => {
         try {
-          const savedUser = localStorage.getItem('remember_user');
-          const savedPass = localStorage.getItem('remember_pass');
-
-          localStorage.clear();
-          sessionStorage.clear();
-
-          localStorage.setItem(FORCED_KEY, systemUpdateTarget.toString());
-          if (savedUser) localStorage.setItem('remember_user', savedUser);
-          if (savedPass) localStorage.setItem('remember_pass', savedPass);
-
-          if ('caches' in window) {
-            const keys = await caches.keys();
-            await Promise.all(keys.map(k => caches.delete(k)));
-          }
-
-          if ('serviceWorker' in navigator) {
-            const registrations = await navigator.serviceWorker.getRegistrations();
-            for (const reg of registrations) {
-              await reg.unregister();
-            }
-          }
-
-          auditLogService.clearCache();
+          await performClientCleanup(systemUpdateTarget);
           await signOut();
         } catch (e) {
           console.error('Erro na limpeza de cache/logout:', e);
         } finally {
-          window.location.href = '/Login';
+          window.location.href = '/Login?update=1';
         }
       };
 
@@ -4498,6 +4513,11 @@ const App: React.FC = () => {
                               window.history.pushState({}, '', '/Admin/Egress');
                               return;
                             }
+                            if (tab === 'system_update') {
+                              setAdminTab('system_update');
+                              window.history.pushState({}, '', '/Admin/Dashboard/atualizar');
+                              return;
+                            }
                             setAdminTab(tab);
                             if (VIEW_TO_PATH[`admin:${tab}`]) {
                               window.history.pushState({}, '', VIEW_TO_PATH[`admin:${tab}`]);
@@ -4507,7 +4527,13 @@ const App: React.FC = () => {
                         />
                       </div>
                     ) : currentView === 'admin' && adminTab === 'system_update' ? (
-                      <SystemUpdateScreen onBack={() => setAdminTab(null)} />
+                      <SystemUpdateScreen
+                        currentUser={currentUser}
+                        onBack={() => {
+                          setAdminTab(null);
+                          window.history.pushState({}, '', '/Admin/Dashboard');
+                        }}
+                      />
                     ) : currentView === 'admin' && adminTab === 'users' ? (
                       <UserManagementScreen
                         users={users}

@@ -309,8 +309,73 @@ export const LicitacaoWizard: React.FC<LicitacaoWizardProps> = ({ currentUser, o
 
     return (
         <div className="flex-1 flex flex-col font-sans animate-in fade-in duration-300 bg-[#f8fafc] overflow-hidden relative z-10">
-            {/* Top Bar with Stepper */}
-            <div className="sticky top-0 z-40 bg-white border-b border-slate-200 px-6 py-1 flex items-center gap-6 shadow-sm min-h-[50px]">
+            {/* 1. TOP BAR MOBILE (Responsiva para dispositivos móveis) */}
+            <div className="sticky top-0 z-40 bg-white border-b border-slate-200 md:hidden shadow-xs">
+                {/* Linha superior mobile: Voltar e Indicador */}
+                <div className="flex items-center justify-between px-3 py-2 border-b border-slate-100">
+                    <button
+                        onClick={handlePrev}
+                        disabled={isSubmitting}
+                        className={`flex items-center gap-1.5 px-2 py-1 rounded-lg font-black uppercase text-[11px] ${isSubmitting ? 'text-slate-200 cursor-not-allowed' : 'text-slate-500 hover:text-slate-900 active:scale-95'}`}
+                    >
+                        <ArrowLeft className="w-3.5 h-3.5" />
+                        <span>{currentStep === 0 ? 'Voltar' : 'Anterior'}</span>
+                    </button>
+
+                    <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                            Passo <b className="text-slate-700">{currentStep + 1}</b> de {steps.length}
+                        </span>
+                    </div>
+                </div>
+
+                {/* Linha de Abas com Scroll Horizontal Suave */}
+                <div className="flex items-center gap-2 overflow-x-auto no-scrollbar scroll-smooth px-3 py-2 bg-slate-50/70">
+                    {steps.map((step, index) => {
+                        const isCurrent = index === currentStep;
+                        const Icon = step.icon;
+                        const isValid = isStepValidByIndex(index);
+                        const isStarted = isStepStartedByIndex(index);
+
+                        let circleClass = 'bg-slate-100 border-2 border-slate-200 text-slate-400';
+                        let labelClass = 'text-slate-400 font-medium';
+
+                        if (isCurrent) {
+                            circleClass = 'bg-blue-600 border-blue-600 text-white ring-2 ring-blue-200 shadow-xs';
+                            labelClass = 'text-blue-600 font-black';
+                        } else if (isValid) {
+                            circleClass = 'bg-emerald-500 border-emerald-500 text-white';
+                            labelClass = 'text-emerald-600 font-bold';
+                        } else if (isStarted) {
+                            circleClass = 'bg-orange-400 border-orange-400 text-white';
+                            labelClass = 'text-orange-500 font-bold';
+                        }
+
+                        return (
+                            <button
+                                key={step.id}
+                                type="button"
+                                onClick={() => {
+                                    if (!isSubmitting) setCurrentStep(index);
+                                }}
+                                className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl transition-all shrink-0 active:scale-95 ${
+                                    isCurrent ? 'bg-white shadow-xs border border-blue-100' : 'bg-transparent'
+                                }`}
+                            >
+                                <div className={`w-7 h-7 rounded-full flex items-center justify-center transition-all ${circleClass}`}>
+                                    <Icon className="w-3.5 h-3.5" />
+                                </div>
+                                <span className={`text-[10px] uppercase tracking-wider whitespace-nowrap ${labelClass}`}>
+                                    {step.title}
+                                </span>
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
+
+            {/* 2. TOP BAR DESKTOP (100% Inalterada para a versão Web) */}
+            <div className="hidden md:flex sticky top-0 z-40 bg-white border-b border-slate-200 px-6 py-1 items-center gap-6 shadow-sm min-h-[50px]">
                 {/* 1. Voltar */}
                 <button
                     onClick={handlePrev}
@@ -405,7 +470,7 @@ export const LicitacaoWizard: React.FC<LicitacaoWizardProps> = ({ currentUser, o
             </div>
 
             {/* Main Content Area */}
-            <div className="flex-1 overflow-y-auto p-6 md:p-12">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-12 pb-28 md:pb-12">
                 <div className="max-w-5xl mx-auto space-y-8">
                     
                     {/* Step 1: Detalhes */}
@@ -629,7 +694,7 @@ export const LicitacaoWizard: React.FC<LicitacaoWizardProps> = ({ currentUser, o
                             {!readOnly && (
                                 <button
                                     onClick={addEmptyItem}
-                                    className="fixed bottom-6 right-6 sm:bottom-10 sm:right-10 z-[60] group flex items-center justify-center gap-2 px-6 py-4 bg-emerald-600 text-white rounded-full text-xs font-bold uppercase tracking-widest shadow-2xl shadow-emerald-600/40 hover:bg-emerald-700 hover:scale-105 active:scale-95 transition-all outline-none animate-in fade-in zoom-in"
+                                    className="fixed bottom-20 right-4 sm:bottom-10 sm:right-10 z-[45] group flex items-center justify-center gap-2 px-5 py-3.5 sm:px-6 sm:py-4 bg-emerald-600 text-white rounded-full text-xs font-bold uppercase tracking-widest shadow-2xl shadow-emerald-600/40 hover:bg-emerald-700 hover:scale-105 active:scale-95 transition-all outline-none animate-in fade-in zoom-in"
                                 >
                                     <Plus className="w-5 h-5 group-hover:rotate-90 transition-transform" />
                                     <span className="hidden sm:inline">Adicionar Itens</span>
@@ -906,6 +971,69 @@ export const LicitacaoWizard: React.FC<LicitacaoWizardProps> = ({ currentUser, o
                     )}
 
                 </div>
+            </div>
+
+            {/* 3. MOBILE FIXED BOTTOM ACTION BAR (Exclusiva para dispositivos móveis) */}
+            <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 px-4 py-2.5 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] flex items-center justify-between gap-3 pb-[max(0.65rem,env(safe-area-inset-bottom))]">
+                {/* Botão Voltar / Anterior */}
+                <button
+                    type="button"
+                    onClick={handlePrev}
+                    disabled={isSubmitting}
+                    className="flex-1 py-3 px-3 bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700 font-bold rounded-xl flex items-center justify-center gap-1.5 text-xs transition-all disabled:opacity-40 cursor-pointer"
+                >
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                    <span>{currentStep === 0 ? 'Voltar' : 'Anterior'}</span>
+                </button>
+
+                {/* Indicador de Bolinhas dos Passos */}
+                <div className="flex items-center gap-1 px-1 shrink-0">
+                    {steps.map((_, i) => (
+                        <div
+                            key={i}
+                            className={`rounded-full transition-all duration-300 ${
+                                i === currentStep
+                                    ? 'w-4 h-1.5 bg-blue-600'
+                                    : isStepValidByIndex(i)
+                                    ? 'w-1.5 h-1.5 bg-emerald-500'
+                                    : 'w-1.5 h-1.5 bg-slate-200'
+                            }`}
+                        />
+                    ))}
+                </div>
+
+                {/* Botão Avançar / Finalizar */}
+                {currentStep !== steps.length - 1 ? (
+                    <button
+                        type="button"
+                        onClick={handleNext}
+                        disabled={!isStepValid() || isSubmitting}
+                        className="flex-[1.4] py-3 px-4 bg-[#0f172a] hover:bg-slate-800 active:scale-95 text-white font-bold rounded-xl flex items-center justify-center gap-2 text-xs shadow-md shadow-slate-900/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                    >
+                        <span>Avançar</span>
+                        <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                ) : (
+                    <button
+                        type="button"
+                        onClick={readOnly ? onBack : handleSignAndSubmit}
+                        disabled={(readOnly ? false : !isAllValid()) || isSubmitting}
+                        className={`flex-[1.4] py-3 px-4 ${
+                            readOnly
+                                ? 'bg-[#0f172a] hover:bg-slate-800 shadow-slate-900/20'
+                                : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20'
+                        } text-white font-bold rounded-xl flex items-center justify-center gap-2 text-xs shadow-md active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer`}
+                    >
+                        {isSubmitting ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : readOnly ? (
+                            <ArrowLeft className="w-3.5 h-3.5" />
+                        ) : (
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                        )}
+                        <span>{isSubmitting ? 'Salvando...' : readOnly ? 'Voltar' : 'Finalizar'}</span>
+                    </button>
+                )}
             </div>
 
             {/* 2FA Modal Integration */}

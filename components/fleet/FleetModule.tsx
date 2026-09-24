@@ -56,7 +56,8 @@ import {
 import { 
     VehicleHealthModal, 
     NewMaintenanceModal, 
-    NewPartModal 
+    NewPartModal,
+    VehicleFormModal
 } from './FleetModals';
 import { 
     Car, 
@@ -151,6 +152,8 @@ export const FleetModule: React.FC<FleetModuleProps> = ({
     const [isNewMaintenanceModalOpen, setIsNewMaintenanceModalOpen] = useState(false);
     const [maintenanceVehicleTarget, setMaintenanceVehicleTarget] = useState<string | undefined>(undefined);
     const [isNewPartModalOpen, setIsNewPartModalOpen] = useState(false);
+    const [isVehicleModalOpen, setIsVehicleModalOpen] = useState(false);
+    const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
 
     // 1. Carregar todos os dados da Frota do Supabase
     const loadAllFleetData = useCallback(async () => {
@@ -222,10 +225,31 @@ export const FleetModule: React.FC<FleetModuleProps> = ({
     useEffect(() => {
         const path = window.location.pathname.toLowerCase();
 
+        if (path === '/frota/veiculos/novo') {
+            setCurrentTab('veiculos');
+            setEditingVehicle(null);
+            setIsVehicleModalOpen(true);
+            return;
+        }
+
+        if (path.startsWith('/frota/veiculos/editar/')) {
+            const parts = path.split('/frota/veiculos/editar/');
+            const id = parts[1]?.split('/')[0];
+            setCurrentTab('veiculos');
+            if (id) {
+                const found = vehicles.find(v => v.id === id);
+                if (found) {
+                    setEditingVehicle(found);
+                    setIsVehicleModalOpen(true);
+                }
+            }
+            return;
+        }
+
         if (path.startsWith('/frota/veiculos/')) {
             const parts = path.split('/frota/veiculos/');
             const id = parts[1]?.split('/')[0];
-            if (id) {
+            if (id && id !== 'novo' && id !== 'editar') {
                 setActiveVehicleId(id);
                 setCurrentTab('prontuario');
                 return;
@@ -242,7 +266,7 @@ export const FleetModule: React.FC<FleetModuleProps> = ({
         else if (path === '/frota/relatorios') setCurrentTab('relatorios');
         else if (path === '/frota/configuracoes') setCurrentTab('configuracoes');
         else if (path === '/frota' || path === '/frota/dashboard') setCurrentTab('dashboard');
-    }, []);
+    }, [vehicles]);
 
     const handleNavigate = (tab: string, subId?: string) => {
         const targetTab = tab as FleetTab;
@@ -284,6 +308,46 @@ export const FleetModule: React.FC<FleetModuleProps> = ({
     const handlePurchaseStatusUpdate = async (purchaseId: string, status: any) => {
         await fleetManagementService.updatePurchaseStatus(purchaseId, status);
         await loadAllFleetData();
+    };
+
+    // Handlers de Veículos com URL síncrona
+    const handleOpenNewVehicle = () => {
+        setEditingVehicle(null);
+        setIsVehicleModalOpen(true);
+        window.history.pushState({}, '', '/Frota/Veiculos/Novo');
+    };
+
+    const handleOpenEditVehicle = (vehicle: Vehicle) => {
+        setEditingVehicle(vehicle);
+        setIsVehicleModalOpen(true);
+        window.history.pushState({}, '', `/Frota/Veiculos/Editar/${vehicle.id}`);
+    };
+
+    const handleCloseVehicleModal = () => {
+        setIsVehicleModalOpen(false);
+        setEditingVehicle(null);
+        window.history.pushState({}, '', '/Frota/Veiculos');
+    };
+
+    const handleSaveVehicle = async (vehicleData: Partial<Vehicle>) => {
+        if (editingVehicle && onUpdateVehicle) {
+            await onUpdateVehicle(vehicleData as Vehicle);
+        } else if (onAddVehicle) {
+            await onAddVehicle(vehicleData as Vehicle);
+        }
+        await loadAllFleetData();
+        handleCloseVehicleModal();
+    };
+
+    const handleDeleteVehicle = async (id: string) => {
+        const v = vehicles.find(x => x.id === id);
+        const label = v ? `${v.brand} ${v.model} (${v.plate})` : 'este veículo';
+        if (window.confirm(`Tem certeza que deseja excluir ${label} da frota?`)) {
+            if (onDeleteVehicle) {
+                await onDeleteVehicle(id);
+            }
+            await loadAllFleetData();
+        }
     };
 
     return (
@@ -373,11 +437,9 @@ export const FleetModule: React.FC<FleetModuleProps> = ({
                         brands={brands}
                         healthList={healthList}
                         onOpenVehicleRecord={handleOpenProntuario}
-                        onOpenNewVehicle={() => {}}
-                        onEditVehicle={() => {}}
-                        onDeleteVehicle={async (id) => {
-                            if (onDeleteVehicle) await onDeleteVehicle(id);
-                        }}
+                        onOpenNewVehicle={handleOpenNewVehicle}
+                        onEditVehicle={handleOpenEditVehicle}
+                        onDeleteVehicle={handleDeleteVehicle}
                         onOpenHealthModal={(health, vehicle) => setHealthModalTarget({ health, vehicle })}
                     />
                 )}
@@ -519,6 +581,19 @@ export const FleetModule: React.FC<FleetModuleProps> = ({
                     onSubmit={handlePartSubmit}
                 />
             )}
+
+            <VehicleFormModal
+                isOpen={isVehicleModalOpen}
+                onClose={() => {
+                    setIsVehicleModalOpen(false);
+                    setEditingVehicle(null);
+                }}
+                editingVehicle={editingVehicle}
+                sectors={sectors}
+                persons={persons}
+                brands={brands}
+                onSave={handleSaveVehicle}
+            />
         </div>
     );
 };
