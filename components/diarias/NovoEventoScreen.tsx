@@ -350,6 +350,42 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
   const [isPolishingAI, setIsPolishingAI] = useState(false);
   const recognitionRef = useRef<any>(null);
 
+  // Estados de Veículos e Parâmetros
+  const { data: cachedVehicles = [] } = useCachedVehicles();
+  const [directVehicles, setDirectVehicles] = useState<Vehicle[]>([]);
+  const vehicles = directVehicles.length > 0 ? directVehicles : cachedVehicles;
+
+  useEffect(() => {
+    if (cachedVehicles && cachedVehicles.length > 0) return;
+    const loadVehiclesDirectly = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('vehicles')
+          .select('id, plate, model, brand, year, type, sector_id, status')
+          .order('plate', { ascending: true });
+        if (data && !error) {
+          setDirectVehicles(data as unknown as Vehicle[]);
+        }
+      } catch (e) {
+        console.warn("Direct vehicle loading failed:", e);
+      }
+    };
+    loadVehiclesDirectly();
+  }, [cachedVehicles]);
+
+  const [hospedagem, setHospedagem] = useState(false);
+  const [hospedagemDias, setHospedagemDias] = useState<number>(1);
+  const [selectedVehicle, setSelectedVehicle] = useState(() => {
+    if (editingEvento) {
+      return (editingEvento.veiculo === 'OUTRO' ? editingEvento.veiculo_outro : (editingEvento.veiculo || editingEvento.veiculo_outro)) || '';
+    }
+    return '';
+  });
+  const [customVehicle, setCustomVehicle] = useState('');
+  const [distancia, setDistancia] = useState<number | ''>(editingEvento?.distancia !== undefined && editingEvento?.distancia !== null ? editingEvento.distancia : '');
+  const [isCalculatingDistance, setIsCalculatingDistance] = useState(false);
+
+
   // Efeito para preencher estados quando loadedEditingEvento for carregado assincronamente
   useEffect(() => {
     if (loadedEditingEvento) {
@@ -363,14 +399,62 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
       } else {
         setReturnDateTime('');
       }
-      setSelectedVehicle(loadedEditingEvento.veiculo || '');
-      setCustomVehicle(loadedEditingEvento.veiculo_outro || '');
+
+      // Tratamento Inteligente do Veículo: Não criar campo extra ao editar!
+      const rawVeiculo = (loadedEditingEvento.veiculo === 'OUTRO'
+        ? loadedEditingEvento.veiculo_outro
+        : (loadedEditingEvento.veiculo || loadedEditingEvento.veiculo_outro)) || '';
+
+      if (rawVeiculo && rawVeiculo !== 'OUTRO') {
+        const rawLower = rawVeiculo.toLowerCase().trim();
+        const match = vehicles.find(v => {
+          const fullStr = `${v.brand} ${v.model} - ${v.plate}`.toLowerCase();
+          const brandModel = `${v.brand} ${v.model}`.toLowerCase();
+          const modelOnly = v.model?.toLowerCase() || '';
+          const plateOnly = v.plate?.toLowerCase() || '';
+
+          return fullStr === rawLower ||
+                 brandModel === rawLower ||
+                 (rawLower.includes(brandModel) && plateOnly && rawLower.includes(plateOnly)) ||
+                 rawLower.includes(brandModel) ||
+                 brandModel.includes(rawLower) ||
+                 (modelOnly && rawLower.includes(modelOnly)) ||
+                 (plateOnly && rawLower.includes(plateOnly));
+        });
+
+        if (match) {
+          setSelectedVehicle(`${match.brand} ${match.model} - ${match.plate}`);
+          setCustomVehicle('');
+        } else {
+          setSelectedVehicle(rawVeiculo);
+          setCustomVehicle('');
+        }
+      } else if (loadedEditingEvento.veiculo === 'OUTRO' && loadedEditingEvento.veiculo_outro) {
+        const customLower = loadedEditingEvento.veiculo_outro.toLowerCase().trim();
+        const match = vehicles.find(v => {
+          const brandModel = `${v.brand} ${v.model}`.toLowerCase();
+          const plateOnly = v.plate?.toLowerCase() || '';
+          return customLower.includes(brandModel) || brandModel.includes(customLower) || (plateOnly && customLower.includes(plateOnly));
+        });
+
+        if (match) {
+          setSelectedVehicle(`${match.brand} ${match.model} - ${match.plate}`);
+          setCustomVehicle('');
+        } else {
+          setSelectedVehicle(loadedEditingEvento.veiculo_outro);
+          setCustomVehicle('');
+        }
+      } else {
+        setSelectedVehicle(loadedEditingEvento.veiculo || '');
+        setCustomVehicle('');
+      }
+
       setDistancia(loadedEditingEvento.distancia !== undefined && loadedEditingEvento.distancia !== null ? loadedEditingEvento.distancia : '');
       setHospedagem(!!loadedEditingEvento.hospedagem);
       setHospedagemDias(loadedEditingEvento.hospedagem_dias || 1);
       setReason(loadedEditingEvento.motivo || '');
     }
-  }, [loadedEditingEvento]);
+  }, [loadedEditingEvento, vehicles]);
   
   const isLastActionPolishRef = useRef(false);
   const lastPolishedTextRef = useRef('');
@@ -808,35 +892,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
     setReturnDateTime(val);
   };
 
-  // Novos campos adicionados
-  const { data: cachedVehicles = [] } = useCachedVehicles();
-  const [directVehicles, setDirectVehicles] = useState<Vehicle[]>([]);
-  const vehicles = directVehicles.length > 0 ? directVehicles : cachedVehicles;
-
-  useEffect(() => {
-    if (cachedVehicles && cachedVehicles.length > 0) return;
-    const loadVehiclesDirectly = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('vehicles')
-          .select('id, plate, model, brand, year, type, sector_id, status')
-          .order('plate', { ascending: true });
-        if (data && !error) {
-          setDirectVehicles(data as unknown as Vehicle[]);
-        }
-      } catch (e) {
-        console.warn("Direct vehicle loading failed:", e);
-      }
-    };
-    loadVehiclesDirectly();
-  }, [cachedVehicles]);
-
-  const [hospedagem, setHospedagem] = useState(false);
-  const [hospedagemDias, setHospedagemDias] = useState<number>(1);
-  const [selectedVehicle, setSelectedVehicle] = useState('');
-  const [customVehicle, setCustomVehicle] = useState('');
-  const [distancia, setDistancia] = useState<number | ''>('');
-  const [isCalculatingDistance, setIsCalculatingDistance] = useState(false);
+  // Estados de Operação
 
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
@@ -1141,8 +1197,8 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
           data_saida: departureDateTime,
           data_retorno: hasReturn ? returnDateTime : (loadedEditingEvento.data_retorno || '2099-12-31T00:00:00.000Z'),
           motivo: reason.trim(),
-          veiculo: selectedVehicle,
-          veiculo_outro: selectedVehicle === 'OUTRO' ? customVehicle : '',
+          veiculo: selectedVehicle === 'OUTRO' ? (customVehicle.trim() || 'OUTRO') : selectedVehicle,
+          veiculo_outro: selectedVehicle === 'OUTRO' ? customVehicle.trim() : '',
           distancia: Number(distancia) || 0,
           hospedagem,
           hospedagem_dias: hospedagem ? hospedagemDias : 0
@@ -1174,8 +1230,8 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
             status: initialStatus,
             hospedagem,
             hospedagem_dias: hospedagem ? hospedagemDias : 0,
-            veiculo: selectedVehicle,
-            veiculo_outro: selectedVehicle === 'OUTRO' ? customVehicle : '',
+            veiculo: selectedVehicle === 'OUTRO' ? (customVehicle.trim() || 'OUTRO') : selectedVehicle,
+            veiculo_outro: selectedVehicle === 'OUTRO' ? customVehicle.trim() : '',
             distancia: Number(distancia) || 0
           });
         }
