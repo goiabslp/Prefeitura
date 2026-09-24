@@ -825,8 +825,15 @@ export const AbastecimentoForm: React.FC<AbastecimentoFormProps> = ({
                         <div className="col-span-12 sm:col-span-4 space-y-1">
                             <label className={labelClass}>Valor Total (Calculado)</label>
                             <div className="relative group">
-                                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-emerald-500 transition-colors"><DollarSign className="w-5 h-5" /></div>
-                                <input type="text" value={formattedCost} onChange={handleCostChange} className={`${inputClass} pl-12 text-emerald-600 font-bold border-emerald-100 bg-emerald-50/30 focus:border-emerald-500 focus:ring-emerald-500/20`} />
+                                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-600 transition-colors"><DollarSign className="w-5 h-5" /></div>
+                                <input 
+                                    type="text" 
+                                    value={formattedCost} 
+                                    readOnly 
+                                    tabIndex={-1}
+                                    title="Valor calculado automaticamente (Litros × Preço Unitário)"
+                                    className={`${inputClass} pl-12 text-emerald-700 font-bold border-emerald-200/80 bg-emerald-50/40 cursor-not-allowed select-none focus:ring-0 focus:border-emerald-200/80 outline-none`} 
+                                />
                             </div>
                         </div>
                     </div>
