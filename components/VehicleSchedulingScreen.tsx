@@ -2229,13 +2229,24 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
       {activeSubView === 'consultar' && (canAccessConsultar ? (
         <ConsultarVeiculoScreen
           sectors={sectors}
+          persons={persons}
+          vehicles={vehicles}
           onBack={() => handleSubViewChange('menu')}
-          onSelectVehicleToSchedule={(vehicleId, dateStr, startTime, endTime) => {
+          onNavigate={onNavigate}
+          currentUserId={currentUserId}
+          currentUserName={currentUserName}
+          onSelectVehicleToSchedule={(vehicleId, dateStr, startTime, endTime, destination, passengerCount) => {
             try {
               const [d, m, y] = dateStr.split('/');
               const departureDate = new Date(`${y}-${m}-${d}T${startTime}:00`);
               const returnDate = new Date(`${y}-${m}-${d}T${endTime}:00`);
               handleOpenModal(undefined, departureDate, vehicleId, returnDate);
+              if (destination) {
+                setFormData(prev => ({
+                  ...prev,
+                  destination: destination || prev.destination
+                }));
+              }
               handleSubViewChange('novo');
             } catch (e) {
               handleOpenModal(undefined, new Date(), vehicleId);

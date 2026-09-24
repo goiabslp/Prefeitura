@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { ShieldCheck, Car, User, MapPin, Clock, CheckCircle2, XCircle, AlertCircle, Calendar, ArrowLeft, Lock, Info, Target, FileText, ChevronDown, Check, Building2, Activity, Navigation, X, Search } from 'lucide-react';
+import { ShieldCheck, Car, User, Users, MapPin, Clock, CheckCircle2, XCircle, AlertCircle, Calendar, ArrowLeft, Lock, Info, Target, FileText, ChevronDown, Check, Building2, Activity, Navigation, X, Search } from 'lucide-react';
 import { Vehicle, Person, VehicleSchedule, Sector, AppState } from '../types';
 import { VehicleServiceOrderPreview } from './VehicleServiceOrderPreview';
 
@@ -454,12 +454,43 @@ export const VehicleScheduleApprovals: React.FC<VehicleScheduleApprovalsProps> =
               <button onClick={() => setViewingPurpose(null)} className="p-3 hover:bg-white hover:shadow-md rounded-2xl text-slate-400 hover:text-slate-900 transition-all active:scale-90"><X className="w-6 h-6" /></button>
             </div>
 
-            <div className="p-8 flex-1 overflow-y-auto custom-scrollbar">
-              <div className="bg-slate-50 border border-slate-200 rounded-[2rem] p-6 relative">
-                <p className="text-base text-slate-700 font-medium leading-relaxed">
+            <div className="p-8 flex-1 overflow-y-auto custom-scrollbar space-y-4">
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 relative">
+                <span className="text-[10px] font-black uppercase text-slate-400 block mb-1">Finalidade / Observações:</span>
+                <p className="text-sm text-slate-700 font-medium leading-relaxed">
                   "{viewingPurpose.purpose}"
                 </p>
               </div>
+
+              {viewingPurpose.passengers && viewingPurpose.passengers.length > 0 && (
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                      <Users className="w-4 h-4 text-emerald-600" />
+                      Passageiros da Solicitação ({viewingPurpose.passengers.length})
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    {viewingPurpose.passengers.map((p, idx) => (
+                      <div key={idx} className="p-3 bg-white rounded-xl border border-slate-200/80 text-xs flex flex-col gap-1">
+                        <div className="flex items-center justify-between">
+                          <span className="font-black text-slate-800 uppercase">{p.name}</span>
+                          <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-[10px] font-bold uppercase">
+                            {p.type || 'Passageiro'}
+                          </span>
+                        </div>
+                        {(p.departureLocation || p.appointmentLocation) && (
+                          <div className="text-[11px] text-slate-500 flex items-center gap-2 flex-wrap mt-0.5">
+                            {p.departureLocation && <span>Origem: <strong>{p.departureLocation}</strong></span>}
+                            {p.appointmentLocation && <span>• Destino: <strong>{p.appointmentLocation}</strong></span>}
+                            {p.appointmentTime && <span>• Horário: <strong>{p.appointmentTime}</strong></span>}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="p-6 bg-slate-50 border-t border-slate-100 shrink-0">
