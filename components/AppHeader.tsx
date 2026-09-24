@@ -392,13 +392,16 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
               </div>
 
               {systemUpdateCountdown !== null && systemUpdateCountdown > 0 && (
-                <div className="flex items-center gap-2.5 px-3.5 py-1.5 bg-emerald-50 border border-emerald-200 rounded-xl animate-pulse-glow shadow-lg shadow-emerald-500/10 ring-4 ring-emerald-500/5">
-                  <div className="flex items-center justify-center w-7 h-7 bg-emerald-500 rounded-lg shadow-inner">
-                    <Settings className="w-3.5 h-3.5 text-white animate-spin-slow" />
+                <div className="flex items-center gap-2 sm:gap-2.5 px-3 py-1.5 sm:px-3.5 sm:py-1.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-xl shadow-lg shadow-orange-500/20 ring-4 ring-orange-500/10 animate-pulse-glow z-30 shrink-0">
+                  <div className="flex items-center justify-center w-6 h-6 sm:w-7 sm:h-7 bg-white/20 rounded-lg text-white">
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin-slow" />
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-[9px] font-black text-emerald-600 uppercase tracking-widest leading-none mb-0.5">SISTEMA ATUALIZA EM</span>
-                    <span className="text-sm font-black text-emerald-900 tabular-nums leading-none">{systemUpdateCountdown}<span className="text-[10px] ml-0.5 text-emerald-400">seg</span></span>
+                    <span className="text-[8px] sm:text-[9px] font-black uppercase tracking-wider text-amber-100 leading-none mb-0.5">SISTEMA ATUALIZA EM</span>
+                    <span className="text-xs sm:text-sm font-black tabular-nums leading-none text-white flex items-baseline gap-0.5">
+                      {systemUpdateCountdown}
+                      <span className="text-[9px] text-amber-200 font-bold">seg</span>
+                    </span>
                   </div>
                 </div>
               )}

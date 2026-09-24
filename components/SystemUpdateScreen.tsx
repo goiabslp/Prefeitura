@@ -8,9 +8,10 @@ declare const __LATEST_COMMIT__: string | undefined;
 interface SystemUpdateScreenProps {
   onBack: () => void;
   currentUser?: User;
+  onUpdateTriggered?: (target: number) => void;
 }
 
-export const SystemUpdateScreen: React.FC<SystemUpdateScreenProps> = ({ onBack, currentUser }) => {
+export const SystemUpdateScreen: React.FC<SystemUpdateScreenProps> = ({ onBack, currentUser, onUpdateTriggered }) => {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [isInitiating, setIsInitiating] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
@@ -76,9 +77,12 @@ export const SystemUpdateScreen: React.FC<SystemUpdateScreenProps> = ({ onBack, 
       
       if (result.success) {
         setIsSuccess(true);
+        if (onUpdateTriggered) {
+          onUpdateTriggered(result.target);
+        }
         setTimeout(() => {
           onBack();
-        }, 3000);
+        }, 2500);
       } else {
         alert("Erro ao disparar atualização: " + (result.error || "Tente novamente."));
         setIsInitiating(false);

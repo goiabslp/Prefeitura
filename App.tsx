@@ -1795,21 +1795,22 @@ const App: React.FC = () => {
       return;
     }
 
-    const interval = setInterval(() => {
+    const updateCountdown = () => {
       const currentNow = Date.now();
-      const diff = Math.floor((systemUpdateTarget - currentNow) / 1000);
+      const diff = Math.ceil((systemUpdateTarget - currentNow) / 1000);
 
       if (diff > 0) {
         setSystemUpdateCountdown(diff);
       } else if (diff >= -5) {
         // Janela de 5s no momento exato do término
         setSystemUpdateCountdown(0);
-        clearInterval(interval);
       } else {
         setSystemUpdateCountdown(null);
-        clearInterval(interval);
       }
-    }, 1000);
+    };
+
+    updateCountdown(); // Executa no mesmo instante!
+    const interval = setInterval(updateCountdown, 1000);
 
     return () => clearInterval(interval);
   }, [systemUpdateTarget]);
@@ -4529,6 +4530,11 @@ const App: React.FC = () => {
                     ) : currentView === 'admin' && adminTab === 'system_update' ? (
                       <SystemUpdateScreen
                         currentUser={currentUser}
+                        onUpdateTriggered={(target) => {
+                          setSystemUpdateTarget(target);
+                          setSystemUpdateCountdown(60);
+                          setIsUpdateModalDismissed(false);
+                        }}
                         onBack={() => {
                           setAdminTab(null);
                           window.history.pushState({}, '', '/Admin/Dashboard');

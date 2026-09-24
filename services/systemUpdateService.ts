@@ -114,8 +114,10 @@ export const triggerGlobalSystemUpdate = async (adminUser: { id?: string; name?:
   const nowIso = new Date().toISOString();
 
   try {
-    // 1. Broadcast instantâneo via Realtime
-    const channel = supabase.channel('global-updates');
+    // 1. Broadcast instantâneo via Realtime (com self: true para sincronizar todas as abas e o próprio emissor)
+    const channel = supabase.channel('global-updates', {
+      config: { broadcast: { self: true } }
+    });
     await channel.subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
         try {
