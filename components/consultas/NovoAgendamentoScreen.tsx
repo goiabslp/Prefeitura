@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import * as db from '../../services/consultasService';
 import { formatProcedimentoLabel, isSlotPast } from '../../services/consultasService';
+import { CadastroIncompletoModal, isPatientComplete } from '../common/CadastroIncompletoModal';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import { ConsultaPdfGenerator } from './ConsultaPdfGenerator';
@@ -89,6 +90,27 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
     const [selectedPatient, setSelectedPatient] = useState<ConsultaPaciente | null>(null);
     const [patientHistory, setPatientHistory] = useState<ConsultaAgendamento[]>([]);
     const [isRegistering, setIsRegistering] = useState(false);
+
+    // Validação de Cadastro Incompleto do Paciente
+    const [incompletePatient, setIncompletePatient] = useState<ConsultaPaciente | null>(null);
+    const [isValidationModalOpen, setIsValidationModalOpen] = useState(false);
+
+    const selectAndValidatePatient = (patientObj: ConsultaPaciente) => {
+        if (!isPatientComplete(patientObj)) {
+            setIncompletePatient(patientObj);
+            setIsValidationModalOpen(true);
+        } else {
+            setSelectedPatient(patientObj);
+            onNavigate('consultas:novo-agendamento-paciente');
+        }
+    };
+
+    const handlePatientValidationComplete = (updated: ConsultaPaciente) => {
+        setSelectedPatient(updated);
+        setIsValidationModalOpen(false);
+        setIncompletePatient(null);
+        onNavigate('consultas:novo-agendamento-paciente');
+    };
 
     // Fetch patient history when selectedPatient changes
     useEffect(() => {
@@ -480,7 +502,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                         const directPatient = await db.getPacienteByCpf(cleanQuery);
                         if (directPatient) {
                             setPatientResults([directPatient]);
-                            setSelectedPatient(directPatient);
+                            selectAndValidatePatient(directPatient);
                             setShowCpfNotFoundModal(false);
                             setSearching(false);
                             return;
@@ -513,7 +535,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                 if (cleanQuery.length === 11) {
                     const found = results.find(p => (p.cpf || '').replace(/\D/g, '') === cleanQuery);
                     if (found) {
-                        setSelectedPatient(found);
+                        selectAndValidatePatient(found);
                         setShowCpfNotFoundModal(false);
                     } else {
                         const formattedCpf = `${cleanQuery.slice(0, 3)}.${cleanQuery.slice(3, 6)}.${cleanQuery.slice(6, 9)}-${cleanQuery.slice(9, 11)}`;
@@ -548,6 +570,15 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
             setErrorMessage('Data de nascimento é obrigatória.');
             return;
         }
+        const cleanPhone = newPatientPhone.replace(/\D/g, '');
+        if (!cleanPhone || cleanPhone.length < 10) {
+            setErrorMessage('Telefone é obrigatório (informe DDD + Número com pelo menos 10 dígitos).');
+            return;
+        }
+        if (!newPatientAgenteSaude || !newPatientAgenteSaude.trim()) {
+            setErrorMessage('Agente de Saúde (ACS) é obrigatório.');
+            return;
+        }
 
         setLoading(true);
         try {
@@ -556,12 +587,12 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                 nickname: newPatientNickname.trim() ? newPatientNickname.trim().toUpperCase() : null,
                 cpf: newPatientCpf,
                 birth_date: newPatientBirthDate,
-                phone: newPatientPhone.trim() || null,
+                phone: newPatientPhone.trim(),
                 neighborhood: newPatientNeighborhood.trim() ? newPatientNeighborhood.trim().toUpperCase() : null,
                 street: newPatientStreet.trim() ? newPatientStreet.trim().toUpperCase() : null,
                 city: newPatientCity.trim() ? newPatientCity.trim().toUpperCase() : 'SÃO JOSÉ DO GOIABAL -MG',
                 sus_number: newPatientSusNumber.trim() || null,
-                agente_saude: newPatientAgenteSaude.trim() || null
+                agente_saude: newPatientAgenteSaude.trim()
             });
 
             if (newPatient) {
@@ -1227,7 +1258,14 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
 
                                 <div className="pt-0.5 flex justify-end shrink-0">
                                     <button
-                                        onClick={() => onNavigate('consultas:novo-agendamento-procedimento')}
+                                        onClick={() => {
+                                            if (selectedPatient && !isPatientComplete(selectedPatient)) {
+                                                setIncompletePatient(selectedPatient);
+                                                setIsValidationModalOpen(true);
+                                                return;
+                                            }
+                                            onNavigate('consultas:novo-agendamento-procedimento');
+                                        }}
                                         className="px-5 py-2 bg-sky-600 hover:bg-sky-700 text-white font-extrabold rounded-xl shadow-md shadow-sky-600/10 hover:shadow-sky-600/20 active:scale-95 transition-all text-xs uppercase tracking-widest flex items-center gap-1.5 cursor-pointer"
                                     >
                                         Avançar para Procedimento
@@ -1284,8 +1322,7 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                                         <div 
                                                             key={patient.id}
                                                             onClick={() => {
-                                                                setSelectedPatient(patient);
-                                                                onNavigate('consultas:novo-agendamento-paciente');
+                                                                selectAndValidatePatient(patient);
                                                             }}
                                                             className={`p-4 rounded-xl border transition-all duration-300 cursor-pointer flex items-center justify-between group/card ${
                                                                 selectedPatient?.id === patient.id
@@ -2826,13 +2863,14 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1 ml-1">Telefone</label>
+                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1 ml-1">Telefone *</label>
                                     <input
                                         type="text"
                                         className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-3 px-3.5 text-xs text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all font-bold tracking-wider shadow-inner"
                                         placeholder="(00) 00000-0000"
                                         value={newPatientPhone}
                                         onChange={(e) => handlePhoneChange(e.target.value)}
+                                        required
                                     />
                                 </div>
                             </div>
@@ -2888,14 +2926,15 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
 
                             {/* Agente de Saúde */}
                             <div>
-                                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1 ml-1">Agente de Saúde (ACS)</label>
+                                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1 ml-1">Agente de Saúde (ACS) *</label>
                                 <div className="relative">
                                     <select
                                         className="w-full rounded-xl border border-slate-200 bg-slate-50/50 py-3 px-3.5 pr-8 text-xs text-slate-900 focus:bg-white focus:border-sky-500 focus:ring-4 focus:ring-sky-500/10 outline-none transition-all font-semibold uppercase shadow-inner cursor-pointer appearance-none"
                                         value={newPatientAgenteSaude}
                                         onChange={(e) => setNewPatientAgenteSaude(e.target.value)}
+                                        required
                                     >
-                                        <option value="">-- SELECIONE O AGENTE DE SAÚDE (OPCIONAL) --</option>
+                                        <option value="">-- SELECIONE O AGENTE DE SAÚDE (ACS) * --</option>
                                         {agentesSaudeItems.map((item) => (
                                             <option key={item.nome} value={item.nome}>
                                                 {item.nome} {item.psf ? `(${item.psf})` : ''}
@@ -3067,6 +3106,20 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                 </div>,
                 document.body
             )}
+
+            {/* MODAL DE VALIDAÇÃO AUTOMÁTICA DE CADASTRO INCOMPLETO */}
+            <CadastroIncompletoModal
+                isOpen={isValidationModalOpen}
+                patient={incompletePatient}
+                onClose={() => {
+                    setIsValidationModalOpen(false);
+                    setIncompletePatient(null);
+                    setSelectedPatient(null);
+                }}
+                onComplete={handlePatientValidationComplete}
+                accentColor="sky"
+                contextTitle="Regulação / Novo Agendamento"
+            />
         </div>
     );
 };

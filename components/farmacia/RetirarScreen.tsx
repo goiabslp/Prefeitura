@@ -1,10 +1,12 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { User, FarmaciaMedicamento, FarmaciaMovimentacao, FarmaciaMedico, ConsultaPaciente, AppState, AGENTES_DE_SAUDE } from '../../types';
-import { ArrowLeft, User as UserIcon, Calendar, ClipboardList, CheckCircle2, AlertTriangle, Search, Loader2, History, X, FileDown, Pill, ShieldCheck, FileText, Plus, Trash2, Minus, UserPlus, ChevronDown, Sparkles, Check, Stethoscope, UserCheck } from 'lucide-react';
+import { ArrowLeft, User as UserIcon, Calendar, ClipboardList, CheckCircle2, AlertTriangle, Search, Loader2, History, X, FileDown, Pill, ShieldCheck, FileText, Plus, Trash2, Minus, UserPlus, ChevronDown, Sparkles, Check, Stethoscope, UserCheck, ArrowRight, ClipboardCheck, Edit3, RefreshCw } from 'lucide-react';
 import * as db from '../../services/farmaciaService';
 import { normalizeCrmAndUf } from './dashboard/MedicosDashboardTab';
-import { getPacientes, createPaciente } from '../../services/consultasService';
+import { getPacientes, createPaciente, updatePaciente } from '../../services/consultasService';
 import { useAgentesSaude } from '../../services/agentesSaudeService';
+import { CadastroIncompletoModal, isPatientComplete } from '../common/CadastroIncompletoModal';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import { FarmaciaPdfGenerator } from './FarmaciaPdfGenerator';
@@ -14,6 +16,129 @@ export interface SelectedItem {
     med: FarmaciaMedicamento;
     quantity: number;
 }
+
+const ESTADOS_BRASIL = [
+    'MG', 'SP', 'RJ', 'ES', 'BA', 'DF', 'GO', 'AC', 'AL', 'AP', 'AM', 'CE', 'MA', 
+    'MT', 'MS', 'PA', 'PB', 'PR', 'PE', 'PI', 'RN', 'RS', 'RO', 'RR', 'SC', 'SE', 'TO'
+];
+
+export type RetirarTab = 'localizar' | 'paciente' | 'medicamentos' | 'medico' | 'revisar';
+
+interface FloatingPortalProps {
+    isOpen: boolean;
+    targetRef: React.RefObject<HTMLElement | null>;
+    onClose?: () => void;
+    children: React.ReactNode;
+    maxHeight?: number;
+    className?: string;
+}
+
+const FloatingDropdownPortal: React.FC<FloatingPortalProps> = ({
+    isOpen,
+    targetRef,
+    onClose,
+    children,
+    maxHeight = 280,
+    className = ''
+}) => {
+    const [coords, setCoords] = useState<{
+        top?: number;
+        bottom?: number;
+        left: number;
+        width: number;
+        placement: 'bottom' | 'top';
+        availableHeight: number;
+    } | null>(null);
+
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
+    const updatePosition = () => {
+        if (!targetRef.current) return;
+        const rect = targetRef.current.getBoundingClientRect();
+        const spaceBelow = window.innerHeight - rect.bottom - 12;
+        const spaceAbove = rect.top - 12;
+        const preferTop = spaceBelow < 200 && spaceAbove > spaceBelow;
+
+        const left = Math.max(8, Math.min(rect.left, window.innerWidth - rect.width - 8));
+        const width = Math.min(rect.width, window.innerWidth - 16);
+
+        if (preferTop) {
+            setCoords({
+                bottom: window.innerHeight - rect.top + 6,
+                left,
+                width,
+                placement: 'top',
+                availableHeight: Math.min(maxHeight, spaceAbove)
+            });
+        } else {
+            setCoords({
+                top: rect.bottom + 6,
+                left,
+                width,
+                placement: 'bottom',
+                availableHeight: Math.min(maxHeight, spaceBelow)
+            });
+        }
+    };
+
+    useEffect(() => {
+        if (!isOpen) {
+            setCoords(null);
+            return;
+        }
+
+        updatePosition();
+
+        const handleScrollOrResize = () => {
+            updatePosition();
+        };
+
+        const handleOutsideClick = (e: MouseEvent | TouchEvent) => {
+            if (
+                dropdownRef.current &&
+                !dropdownRef.current.contains(e.target as Node) &&
+                targetRef.current &&
+                !targetRef.current.contains(e.target as Node)
+            ) {
+                if (onClose) onClose();
+            }
+        };
+
+        window.addEventListener('resize', handleScrollOrResize, { passive: true });
+        window.addEventListener('scroll', handleScrollOrResize, { capture: true, passive: true });
+        document.addEventListener('mousedown', handleOutsideClick);
+        document.addEventListener('touchstart', handleOutsideClick);
+
+        return () => {
+            window.removeEventListener('resize', handleScrollOrResize);
+            window.removeEventListener('scroll', handleScrollOrResize, true);
+            document.removeEventListener('mousedown', handleOutsideClick);
+            document.removeEventListener('touchstart', handleOutsideClick);
+        };
+    }, [isOpen, targetRef, maxHeight]);
+
+    if (!isOpen || !coords || typeof document === 'undefined') return null;
+
+    const style: React.CSSProperties = {
+        position: 'fixed',
+        left: `${coords.left}px`,
+        width: `${coords.width}px`,
+        maxHeight: `${coords.availableHeight}px`,
+        zIndex: 99999,
+        ...(coords.placement === 'top' ? { bottom: `${coords.bottom}px` } : { top: `${coords.top}px` })
+    };
+
+    return createPortal(
+        <div
+            ref={dropdownRef}
+            style={style}
+            className={`bg-white rounded-2xl shadow-2xl border border-slate-200/90 overflow-y-auto custom-scrollbar animate-in fade-in zoom-in-95 duration-150 ${className}`}
+        >
+            {children}
+        </div>,
+        document.body
+    );
+};
 
 interface RetirarScreenProps {
     currentUser?: User | null;
@@ -31,12 +156,20 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
     const { items: agentesSaudeItems } = useAgentesSaude();
     const { showAlert } = useFarmaciaAlert();
 
+    // Input container refs para o FloatingDropdownPortal
+    const patientInputContainerRef = useRef<HTMLDivElement>(null);
+    const medicoInputContainerRef = useRef<HTMLDivElement>(null);
+
     // DB Data states
     const [medicamentos, setMedicamentos] = useState<FarmaciaMedicamento[]>([]);
     const [pacientes, setPacientes] = useState<ConsultaPaciente[]>([]);
     const [recentWithdrawals, setRecentWithdrawals] = useState<FarmaciaMovimentacao[]>([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+
+    // Validação de Cadastro Incompleto do Paciente
+    const [incompletePatient, setIncompletePatient] = useState<ConsultaPaciente | null>(null);
+    const [isValidationModalOpen, setIsValidationModalOpen] = useState(false);
 
     // Helper to get local date time formatted for datetime-local (YYYY-MM-DDTHH:mm:ss)
     const getFormattedDateTimeLocal = () => {
@@ -45,7 +178,23 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
         return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
     };
 
+    // Fluxo de Etapas / Abas
+    const getInitialTabFromUrl = (): RetirarTab => {
+        const path = window.location.pathname;
+        if (path.includes('/Retirar/Paciente')) return 'paciente';
+        if (path.includes('/Retirar/Medicamentos')) return 'medicamentos';
+        if (path.includes('/Retirar/Medico')) return 'medico';
+        if (path.includes('/Retirar/Revisar')) return 'revisar';
+        return 'localizar';
+    };
+
+    const [activeTab, setActiveTab] = useState<RetirarTab>(getInitialTabFromUrl());
+    const [selectedPatientObj, setSelectedPatientObj] = useState<ConsultaPaciente | null>(null);
+
     // Form inputs
+    const [patientSearchCpf, setPatientSearchCpf] = useState('');
+    const [matchedPatient, setMatchedPatient] = useState<ConsultaPaciente | null>(null);
+    const [searchNotFound, setSearchNotFound] = useState(false);
     const [patientName, setPatientName] = useState('');
     const [patientCpf, setPatientCpf] = useState('');
     const [isPatientUnlocked, setIsPatientUnlocked] = useState(false);
@@ -61,13 +210,8 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
     const [showMedicoDropdown, setShowMedicoDropdown] = useState(false);
     const [medicosCadastrados, setMedicosCadastrados] = useState<Record<string, FarmaciaMedico>>({});
 
-    // Autocomplete dropdown UI states
-    const [showPatientDropdown, setShowPatientDropdown] = useState(false);
-    const [patientSearchQuery, setPatientSearchQuery] = useState('');
-    const [recentSearchQuery, setRecentSearchQuery] = useState('');
+    // Patient history & registration UI states
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
-
-    // Patient registration UI states
     const [isRegModalOpen, setIsRegModalOpen] = useState(false);
     const [pendingCpf, setPendingCpf] = useState('');
     const [newPatientName, setNewPatientName] = useState('');
@@ -95,6 +239,39 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
     const [medModalCategory, setMedModalCategory] = useState<'TODOS' | 'CBAF' | 'CESAF' | 'CEAF'>('TODOS');
     const [qtyModalMed, setQtyModalMed] = useState<FarmaciaMedicamento | null>(null);
     const [qtyInput, setQtyInput] = useState<number>(1);
+
+    // Navegação sincronizada de abas com URL
+    const navigateToTab = (tab: RetirarTab) => {
+        if (tab !== 'localizar' && !selectedPatientObj) {
+            setActiveTab('localizar');
+            window.history.pushState({}, '', '/FarmaciaPopular/Retirar');
+            return;
+        }
+
+        setActiveTab(tab);
+        let path = '/FarmaciaPopular/Retirar';
+        if (tab === 'paciente') path = '/FarmaciaPopular/Retirar/Paciente';
+        else if (tab === 'medicamentos') path = '/FarmaciaPopular/Retirar/Medicamentos';
+        else if (tab === 'medico') path = '/FarmaciaPopular/Retirar/Medico';
+        else if (tab === 'revisar') path = '/FarmaciaPopular/Retirar/Revisar';
+
+        window.history.pushState({ tab }, '', path);
+    };
+
+    // Sincronizar com popstate (botão voltar do navegador)
+    useEffect(() => {
+        const handlePopState = () => {
+            const currentTab = getInitialTabFromUrl();
+            if (currentTab !== 'localizar' && !selectedPatientObj) {
+                setActiveTab('localizar');
+            } else {
+                setActiveTab(currentTab);
+            }
+        };
+
+        window.addEventListener('popstate', handlePopState);
+        return () => window.removeEventListener('popstate', handlePopState);
+    }, [selectedPatientObj]);
 
     const handleOpenQtyModal = (med: FarmaciaMedicamento) => {
         const existing = selectedItems.find(si => si.med.id === med.id);
@@ -177,18 +354,6 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
         return () => clearInterval(interval);
     }, []);
 
-    // Filter patients suggestion list (por nome, CPF ou Cartão SUS)
-    const patientSuggestions = useMemo(() => {
-        if (!patientSearchQuery) return [];
-        const query = patientSearchQuery.toLowerCase();
-        const cleanQuery = query.replace(/\D/g, '');
-        return pacientes.filter(p => 
-            p.name.toLowerCase().includes(query) || 
-            (p.cpf && p.cpf.replace(/\D/g, '').includes(cleanQuery)) ||
-            (p.sus_number && p.sus_number.replace(/\D/g, '').includes(cleanQuery))
-        ).slice(0, 5);
-    }, [pacientes, patientSearchQuery]);
-
     // Lista consolidada de médicos conhecidos para sugestão no autocomplete
     const allKnownDoctors = useMemo(() => {
         const map: Record<string, { crm: string; uf: string; nome?: string; count: number; displayLabel: string }> = {};
@@ -230,19 +395,60 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
         return Object.values(map);
     }, [medicosCadastrados, recentWithdrawals]);
 
-    // Sugestões filtradas dinamicamente com base na busca (Nome, CRM, UF)
+    // Função de correspondência sequencial a partir do início do campo ou início de uma palavra
+    const matchPrefixSequential = (target?: string | null, query?: string | null): boolean => {
+        if (!target || !query) return false;
+        const t = target.toLowerCase().trim();
+        const q = query.toLowerCase().trim();
+        if (!q) return false;
+
+        // 1. Início exato do texto
+        if (t.startsWith(q)) return true;
+
+        // 2. Início exato de qualquer palavra no texto
+        const words = t.split(/[\s,./\\-]+/).filter(Boolean);
+        return words.some(word => word.startsWith(q));
+    };
+
+    // Helper para extrair CRM e UF a partir de string única digitada
+    const parseCrmAndUfInput = (val: string) => {
+        const matchCrmUf = val.match(/(\d+)\s*(?:[\/\-]\s*([A-Za-z]{2}))?/);
+        if (matchCrmUf) {
+            const crmNum = matchCrmUf[1];
+            const ufStr = matchCrmUf[2] ? matchCrmUf[2].toUpperCase() : 'MG';
+            return { crm: crmNum, uf: ufStr };
+        }
+        const onlyDigits = val.replace(/\D/g, '');
+        return { crm: onlyDigits, uf: 'MG' };
+    };
+
+    // Sugestões filtradas sequencialmente a partir do início (CRM, Nome, CRM/UF)
     const medicoSuggestions = useMemo(() => {
-        const q = medicoSearchQuery.trim().toLowerCase();
+        const q = medicoSearchQuery.trim();
         if (!q) return [];
-        const cleanQ = q.replace(/\D/g, '');
+        const cleanQ = q.toLowerCase();
+        const digitsQ = q.replace(/\D/g, '');
 
         return allKnownDoctors.filter(doc => {
-            const matchCrm = cleanQ ? doc.crm.includes(cleanQ) : false;
-            const matchNome = doc.nome ? doc.nome.toLowerCase().includes(q) : false;
-            const matchUf = doc.uf.toLowerCase().includes(q);
-            const matchCombined = `${doc.crm}/${doc.uf}`.toLowerCase().includes(q) || `${doc.crm} ${doc.uf}`.toLowerCase().includes(q) || doc.displayLabel.toLowerCase().includes(q);
-            return matchCrm || matchNome || matchUf || matchCombined;
+            // 1. Se digitou dígitos, verifica se o CRM começa sequencialmente com esses dígitos
+            const matchCrm = digitsQ ? doc.crm.startsWith(digitsQ) : false;
+
+            // 2. Se o médico tiver nome, verifica se o nome ou palavra do nome começa com o termo digitado
+            const matchNome = doc.nome ? matchPrefixSequential(doc.nome, cleanQ) : false;
+
+            // 3. Correspondência sequencial no rótulo completo ou formato CRM/UF
+            const matchLabel = matchPrefixSequential(doc.displayLabel, cleanQ);
+            const matchCrmUf = matchPrefixSequential(`${doc.crm}/${doc.uf}`, cleanQ) || matchPrefixSequential(`CRM ${doc.crm}/${doc.uf}`, cleanQ);
+
+            return matchCrm || matchNome || matchLabel || matchCrmUf;
         }).sort((a, b) => {
+            // Prioriza correspondência exata do início
+            if (digitsQ) {
+                const aCrmStart = a.crm.startsWith(digitsQ);
+                const bCrmStart = b.crm.startsWith(digitsQ);
+                if (aCrmStart && !bCrmStart) return -1;
+                if (!aCrmStart && bCrmStart) return 1;
+            }
             if (a.nome && !b.nome) return -1;
             if (!a.nome && b.nome) return 1;
             return b.count - a.count;
@@ -358,65 +564,97 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
             if (cpfQuery || nameQuery) {
                 return matchesCpf || matchesName;
             }
-            return true; // show all if empty
+            return true;
         });
     }, [recentWithdrawals, patientName, patientCpf]);
 
-    // Mask CPF / Cartão SUS input helper
-    const handleCpfChange = (val: string) => {
-        let clean = val.replace(/\D/g, '');
-        if (clean.length > 15) clean = clean.slice(0, 15);
-
+    // Formatação de máscara estrita para CPF (11 dígitos: 000.000.000-00)
+    const formatCpfMask = (val: string) => {
+        let clean = val.replace(/\D/g, '').slice(0, 11);
         let formatted = clean;
-        if (clean.length <= 11) {
-            formatted = '';
-            if (clean.length > 0) formatted += clean.slice(0, 3);
-            if (clean.length > 3) formatted += '.' + clean.slice(3, 6);
-            if (clean.length > 6) formatted += '.' + clean.slice(6, 9);
-            if (clean.length > 9) formatted += '-' + clean.slice(9, 11);
-        } else {
-            formatted = '';
-            if (clean.length > 0) formatted += clean.slice(0, 3);
-            if (clean.length > 3) formatted += ' ' + clean.slice(3, 7);
-            if (clean.length > 7) formatted += ' ' + clean.slice(7, 11);
-            if (clean.length > 11) formatted += ' ' + clean.slice(11, 15);
+        if (clean.length > 9) {
+            formatted = `${clean.slice(0, 3)}.${clean.slice(3, 6)}.${clean.slice(6, 9)}-${clean.slice(9, 11)}`;
+        } else if (clean.length > 6) {
+            formatted = `${clean.slice(0, 3)}.${clean.slice(3, 6)}.${clean.slice(6)}`;
+        } else if (clean.length > 3) {
+            formatted = `${clean.slice(0, 3)}.${clean.slice(3)}`;
+        }
+        return formatted;
+    };
+
+    // Manipulação da digitação do CPF com busca automática somente aos 11 dígitos exatos
+    const handleCpfInputChange = (val: string) => {
+        const formatted = formatCpfMask(val);
+        setPatientSearchCpf(formatted);
+
+        const clean = formatted.replace(/\D/g, '');
+
+        // Com menos de 11 dígitos: não realizar nenhuma consulta
+        if (clean.length < 11) {
+            setMatchedPatient(null);
+            setSearchNotFound(false);
+            return;
         }
 
-        setPatientCpf(formatted);
-
-        const findMatchingPatient = (cleanNum: string) => {
-            return pacientes.find(p => 
-                (p.cpf && p.cpf.replace(/\D/g, '') === cleanNum) ||
-                (p.sus_number && p.sus_number.replace(/\D/g, '') === cleanNum)
-            );
-        };
-
-        if (clean.length === 11 || clean.length === 15) {
-            const found = findMatchingPatient(clean);
+        // Ao completar exatamente 11 dígitos: pesquisar automaticamente por correspondência exata
+        if (clean.length === 11) {
+            const found = pacientes.find(p => p.cpf && p.cpf.replace(/\D/g, '') === clean);
             if (found) {
-                const displayName = found.nickname ? `${found.name} (${found.nickname})` : found.name;
-                setPatientName(displayName);
-                setIsPatientUnlocked(true);
+                setMatchedPatient(found);
+                setSearchNotFound(false);
             } else {
-                setPatientName('');
-                setIsPatientUnlocked(false);
-                setPendingCpf(formatted);
-                setIsRegModalOpen(true);
+                setMatchedPatient(null);
+                setSearchNotFound(true);
             }
-        } else if (clean.length >= 11) {
-            const found = findMatchingPatient(clean);
-            if (found) {
-                const displayName = found.nickname ? `${found.name} (${found.nickname})` : found.name;
-                setPatientName(displayName);
-                setIsPatientUnlocked(true);
-            } else {
-                setPatientName('');
-                setIsPatientUnlocked(false);
-            }
-        } else {
-            setPatientName('');
+        }
+    };
+
+    // Helper para selecionar paciente e checar se seu cadastro está completo
+    const selectAndValidatePatient = (patientObj: ConsultaPaciente) => {
+        setSearchNotFound(false);
+        const displayName = patientObj.nickname ? `${patientObj.name} (${patientObj.nickname})` : patientObj.name;
+        const formattedCpf = patientObj.cpf 
+            ? patientObj.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")
+            : (patientObj.sus_number || '');
+
+        setPatientName(displayName);
+        setPatientCpf(formattedCpf);
+        setSelectedPatientObj(patientObj);
+
+        if (!isPatientComplete(patientObj)) {
+            setIncompletePatient(patientObj);
+            setIsValidationModalOpen(true);
             setIsPatientUnlocked(false);
+        } else {
+            setIsPatientUnlocked(true);
+            navigateToTab('paciente');
         }
+    };
+
+    const handlePatientValidationComplete = (updated: ConsultaPaciente) => {
+        setPacientes(prev => prev.map(p => p.id === updated.id ? updated : p));
+        const displayName = updated.nickname ? `${updated.name} (${updated.nickname})` : updated.name;
+        setPatientName(displayName);
+        if (updated.cpf) {
+            setPatientCpf(updated.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4"));
+        }
+        setSelectedPatientObj(updated);
+        setIsPatientUnlocked(true);
+        setIsValidationModalOpen(false);
+        setIncompletePatient(null);
+        navigateToTab('paciente');
+    };
+
+    // Resetar paciente e voltar para busca
+    const handleResetPatient = () => {
+        setSelectedPatientObj(null);
+        setPatientName('');
+        setPatientCpf('');
+        setPatientSearchCpf('');
+        setMatchedPatient(null);
+        setSearchNotFound(false);
+        setIsPatientUnlocked(false);
+        navigateToTab('localizar');
     };
 
     // Format Phone Input: (00) 00000-0000 or (00) 0000-0000
@@ -486,39 +724,6 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
         }
     };
 
-    // Pre-submit validation to open confirmation modal
-    const handlePreSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!patientName || !patientCpf || !withdrawalDate) {
-            showAlert('Por favor, preencha os dados do paciente.', 'error');
-            return;
-        }
-
-        const cleanCrm = medicoCrm.replace(/\D/g, '');
-        if (!cleanCrm) {
-            showAlert('Por favor, informe o número do CRM do médico prescritor.', 'error');
-            return;
-        }
-
-        if (selectedItems.length === 0) {
-            showAlert('Por favor, selecione pelo menos um medicamento para dispensar.', 'error');
-            return;
-        }
-
-        for (const item of selectedItems) {
-            if (isNaN(item.quantity) || item.quantity <= 0) {
-                showAlert(`A quantidade para ${item.med.nome} deve ser maior que zero.`, 'error');
-                return;
-            }
-            if (item.quantity > item.med.quantidade) {
-                showAlert(`A quantidade de ${item.med.nome} excede o estoque disponível (${item.med.quantidade} ${item.med.unidade}).`, 'error');
-                return;
-            }
-        }
-
-        setIsConfirmModalOpen(true);
-    };
-
     // Real checkout / save handler
     const handleConfirmSubmit = async () => {
         if (!patientName || !patientCpf || selectedItems.length === 0 || !withdrawalDate) {
@@ -526,136 +731,127 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
             return;
         }
 
-        const cleanCrm = medicoCrm.replace(/\D/g, '');
+        let cleanCrm = medicoCrm.replace(/\D/g, '');
+        let effectiveUf = medicoUf || 'MG';
+
+        if (!cleanCrm && medicoSearchQuery) {
+            const parsed = parseCrmAndUfInput(medicoSearchQuery);
+            cleanCrm = parsed.crm;
+            if (parsed.uf) effectiveUf = parsed.uf;
+            setMedicoCrm(cleanCrm);
+            setMedicoUf(effectiveUf);
+        }
+
         if (!cleanCrm) {
             showAlert('Por favor, informe o número do CRM do médico prescritor.', 'error');
+            navigateToTab('medico');
             return;
         }
 
         setSaving(true);
 
-        // --- OPTIMISTIC UI UPDATE ---
         const originalMedState = [...medicamentos];
         const originalRecentMovsState = [...recentWithdrawals];
 
         // Deduct quantity locally for all selected items
         setMedicamentos(prev => prev.map(m => {
-            const itemMatch = selectedItems.find(si => si.med.id === m.id);
-            if (itemMatch) {
-                return { ...m, quantidade: m.quantidade - itemMatch.quantity };
+            const selected = selectedItems.find(si => si.med.id === m.id);
+            if (selected) {
+                return { ...m, quantidade: Math.max(0, m.quantidade - selected.quantity) };
             }
             return m;
         }));
 
-        // Create mock local movement logs for optimistic UI
-        const isoDate = new Date(withdrawalDate).toISOString();
-        const cleanCpf = patientCpf.replace(/\D/g, '');
-        const finalMedicoNome = medicoNome || medicosCadastrados[`${cleanCrm}_${medicoUf}`]?.nome || `MÉDICO PRESCRITOR (CRM ${cleanCrm}/${medicoUf})`;
-
-        const optimisticLogs: FarmaciaMovimentacao[] = selectedItems.map((item, idx) => ({
-            id: 'optimistic-id-' + Date.now() + '-' + idx,
-            medicamento_id: item.med.id,
-            tipo: 'Saída',
-            quantidade: item.quantity,
-            medicamento_nome: item.med.nome,
-            medicamento_categoria: item.med.categoria,
-            medicamento_tipo: item.med.tipo,
-            medicamento_dosagem: item.med.dosagem,
-            lote: item.med.lote,
-            validade: item.med.validade,
-            paciente_nome: patientName,
-            paciente_cpf: cleanCpf,
-            medico_crm: cleanCrm,
-            medico_uf: medicoUf,
-            medico_nome: finalMedicoNome,
-            medico_consulta_data: new Date().toISOString(),
-            responsavel_nome: currentUser?.name || '',
-            responsavel_id: currentUser?.id || '',
-            data: isoDate,
-            observacoes: observacoes
-        }));
-
-        setRecentWithdrawals(prev => [...optimisticLogs, ...prev]);
-
-        // Keep copy of values to clear or restore
-        const savedPatientName = patientName;
-        const savedPatientCpf = patientCpf;
-        const savedMedicoCrm = cleanCrm;
-        const savedMedicoUf = medicoUf;
-        const savedMedicoNome = finalMedicoNome;
-        const savedSelectedItems = [...selectedItems];
-        const savedWithdrawalDate = withdrawalDate;
-        const savedObservacoes = observacoes;
-
-        // Clear form fields immediately for crisp UX
-        setSelectedItems([]);
-        setObservacoes('');
-        setPatientName('');
-        setPatientCpf('');
-        setMedicoCrm('');
-        setMedicoUf('MG');
-        setMedicoNome('');
-        setMedicoSearchQuery('');
-        setShowMedicoDropdown(false);
-        setIsPatientUnlocked(false);
-
         try {
-            const results = await Promise.all(savedSelectedItems.map(item =>
-                db.registrarMovimentacao({
+            const cleanCpf = patientCpf.replace(/\D/g, '');
+            const createdList: FarmaciaMovimentacao[] = [];
+
+            for (const item of selectedItems) {
+                const movData: any = {
                     medicamento_id: item.med.id,
-                    tipo: 'Saída',
-                    quantidade: item.quantity,
                     medicamento_nome: item.med.nome,
                     medicamento_categoria: item.med.categoria,
-                    medicamento_tipo: item.med.tipo,
-                    medicamento_dosagem: item.med.dosagem,
+                    medicamento_dosagem: item.med.dosagem || '',
+                    medicamento_tipo: item.med.tipo || '',
                     lote: item.med.lote,
                     validade: item.med.validade,
-                    paciente_nome: savedPatientName,
+                    quantidade: item.quantity,
+                    tipo: 'Saída',
+                    paciente_nome: patientName,
                     paciente_cpf: cleanCpf,
-                    medico_crm: savedMedicoCrm,
-                    medico_uf: savedMedicoUf,
-                    medico_nome: savedMedicoNome,
-                    medico_consulta_data: new Date().toISOString(),
-                    responsavel_nome: currentUser?.name || '',
-                    responsavel_id: currentUser?.id || '',
-                    data: isoDate,
-                    observacoes: savedObservacoes
-                })
-            ));
+                    medico_crm: cleanCrm,
+                    medico_uf: effectiveUf,
+                    medico_nome: medicoNome ? medicoNome : `MÉDICO PRESCRITOR (CRM ${cleanCrm}/${effectiveUf})`,
+                    observacoes: observacoes || undefined,
+                    responsavel_id: currentUser?.id,
+                    responsavel_nome: currentUser?.name || 'Farmacêutico(a)',
+                    data: withdrawalDate
+                };
 
-            // Trigger visual refresh of all local caches
-            await loadData(true);
-            setIsConfirmModalOpen(false);
-            setCreatedMovs(results);
-            setCreatedMov(results[0] || null);
+                const savedMov = await db.registrarMovimentacao(movData);
+                createdList.push(savedMov);
+            }
+
+            // Atualiza histórico local
+            setRecentWithdrawals(prev => [...createdList, ...prev]);
+            setCreatedMovs(createdList);
+            setCreatedMov(createdList[0] || null);
             setIsSuccessModalOpen(true);
-        } catch (err: any) {
-            // Revert optimistic updates on error
+            setIsConfirmModalOpen(false);
+
+            // Dispara eventos globais
+            window.dispatchEvent(new CustomEvent('farmacia-medicamentos-changed'));
+            window.dispatchEvent(new CustomEvent('farmacia-movimentacoes-changed'));
+
+        } catch (error) {
+            console.error('[RetirarScreen] Error saving withdrawal batch:', error);
             setMedicamentos(originalMedState);
             setRecentWithdrawals(originalRecentMovsState);
-            // Restore form values
-            setPatientName(savedPatientName);
-            setPatientCpf(savedPatientCpf);
-            setMedicoCrm(savedMedicoCrm);
-            setMedicoUf(savedMedicoUf);
-            setSelectedItems(savedSelectedItems);
-            setWithdrawalDate(savedWithdrawalDate);
-            setObservacoes(savedObservacoes);
-            setIsPatientUnlocked(true);
-            setIsConfirmModalOpen(false);
-            showAlert('Falha ao registrar a dispensação. Tente novamente.', 'error');
+            showAlert('Erro ao registrar a retirada no banco de dados.', 'error');
         } finally {
             setSaving(false);
         }
     };
 
-    const formatDateBr = (d: string) => {
+    const formatDateBr = (d?: string) => {
         if (!d) return '';
         const parts = d.split('T')[0].split('-');
-        if (parts.length !== 3) return d;
-        const [year, month, day] = parts;
-        return `${day}/${month}/${year}`;
+        if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+        return d;
+    };
+
+    const formatPatientBirthAndAge = (birthDateStr?: string) => {
+        if (!birthDateStr) return null;
+        try {
+            const cleanDate = birthDateStr.split('T')[0];
+            const parts = cleanDate.split(/[-/]/);
+            if (parts.length === 3) {
+                let y: number, m: number, d: number;
+                if (parts[0].length === 4) {
+                    y = parseInt(parts[0], 10);
+                    m = parseInt(parts[1], 10) - 1;
+                    d = parseInt(parts[2], 10);
+                } else {
+                    d = parseInt(parts[0], 10);
+                    m = parseInt(parts[1], 10) - 1;
+                    y = parseInt(parts[2], 10);
+                }
+                const bDate = new Date(y, m, d);
+                if (!isNaN(bDate.getTime())) {
+                    const today = new Date();
+                    let age = today.getFullYear() - bDate.getFullYear();
+                    const monthDiff = today.getMonth() - bDate.getMonth();
+                    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < bDate.getDate())) {
+                        age--;
+                    }
+                    const formatted = `${String(d).padStart(2, '0')}/${String(m + 1).padStart(2, '0')}/${y}`;
+                    return `${formatted} (${age} anos)`;
+                }
+            }
+        } catch {
+            return birthDateStr;
+        }
+        return birthDateStr;
     };
 
     const formatDateTimeBr = (d: string) => {
@@ -673,28 +869,62 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
     };
 
     return (
-        <div className="w-full max-w-none mx-auto h-full min-h-0 overflow-hidden flex flex-col flex-1 gap-2.5">
-            {/* Top Bar / Header Moderno */}
-            <div className="bg-white border-2 border-slate-200/90 rounded-2xl px-4 py-2 shadow-xs flex items-center justify-between shrink-0">
-                <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-pink-500 to-rose-600 text-white flex items-center justify-center shadow-xs">
-                        <Pill className="w-4 h-4" />
-                    </div>
-                    <div>
-                        <div className="flex items-center gap-2">
-                            <h3 className="font-black text-slate-900 text-xs md:text-sm uppercase tracking-tight">Dispensação de Medicamentos</h3>
-                            <span className="px-2 py-0.5 rounded-full bg-pink-100 text-pink-700 text-[9px] font-black uppercase tracking-wider">
-                                Atendimento
-                            </span>
-                        </div>
-                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Preencha os dados da receita e selecione os itens para dispensação</p>
-                    </div>
-                </div>
-                <div className="flex items-center gap-2">
+        <div className="w-full max-w-none mx-auto h-full max-h-full min-h-0 overflow-hidden flex flex-col flex-1 gap-2">
+            {/* TOP BAR / HEADER UNIFICADO */}
+            <div className="bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-2xl px-3 sm:px-4 py-2 shadow-2xs flex items-center justify-between shrink-0 transition-all gap-2">
+                {/* Lado Esquerdo: Voltar + Identidade Visual */}
+                <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
                     <button
                         type="button"
                         onClick={() => {
-                            setPendingCpf('');
+                            if (activeTab !== 'localizar' && selectedPatientObj) {
+                                handleResetPatient();
+                            } else {
+                                onBack();
+                            }
+                        }}
+                        className="group flex items-center gap-1.5 text-slate-500 hover:text-pink-600 font-bold transition-all p-1.5 pr-2.5 rounded-full bg-slate-50 hover:bg-pink-50 border border-slate-200/70 shadow-2xs hover:shadow-xs cursor-pointer shrink-0"
+                        title={activeTab !== 'localizar' ? "Novo Atendimento" : "Voltar ao Menu Farmácia"}
+                    >
+                        <div className="w-5 h-5 rounded-full bg-white border border-slate-200/60 flex items-center justify-center group-hover:bg-pink-100 group-hover:border-pink-200 transition-colors">
+                            <ArrowLeft className="w-3 h-3 group-hover:-translate-x-0.5 transition-transform text-slate-500 group-hover:text-pink-600" />
+                        </div>
+                        <span className="text-[9px] uppercase tracking-widest font-black group-hover:text-pink-700">
+                            {activeTab !== 'localizar' ? "Trocar Paciente" : "Voltar"}
+                        </span>
+                    </button>
+
+                    <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-gradient-to-tr from-pink-600 via-rose-500 to-pink-500 text-white flex items-center justify-center shadow-sm shadow-pink-500/25 ring-2 ring-pink-50 shrink-0">
+                            <Pill className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                        </div>
+                        <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <h2 className="text-xs sm:text-sm font-black text-slate-800 tracking-tight uppercase leading-none truncate">
+                                    Farmácia Popular
+                                </h2>
+                                <span className="text-slate-300 font-light hidden sm:inline">|</span>
+                                <h3 className="text-xs sm:text-sm font-black text-pink-600 tracking-tight uppercase leading-none truncate flex items-center gap-1.5">
+                                    Dispensação de Medicamentos
+                                </h3>
+                                <span className="px-2 py-0.5 rounded-full bg-rose-50 border border-rose-200/80 text-rose-700 text-[8.5px] font-black uppercase tracking-wider flex items-center gap-1 shadow-2xs shrink-0">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+                                    Atendimento Ativo
+                                </span>
+                            </div>
+                            <p className="text-slate-400 text-[8.5px] sm:text-[9.5px] font-bold uppercase tracking-widest mt-0.5 truncate hidden md:block">
+                                Gestão e dispensação de medicamentos • Fluxo de retirada estruturado por etapas
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Lado Direito: Ações Rápidas */}
+                <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setPendingCpf(patientSearchCpf || '');
                             setNewPatientName('');
                             setNewPatientBirthDate('');
                             setNewPatientNickname('');
@@ -706,441 +936,1016 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                             setNewPatientAgenteSaude('');
                             setIsRegModalOpen(true);
                         }}
-                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] uppercase tracking-wider rounded-xl transition-all flex items-center gap-1.5 shadow-xs hover:shadow-sm active:scale-95 cursor-pointer border border-emerald-700"
+                        className="px-2.5 sm:px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-[9.5px] sm:text-[10px] uppercase tracking-wider rounded-xl transition-all flex items-center gap-1 shadow-2xs hover:shadow-xs active:scale-95 cursor-pointer border border-emerald-700/20"
                     >
                         <UserPlus className="w-3.5 h-3.5" />
-                        Cadastrar Paciente
+                        <span className="hidden sm:inline">Cadastrar Paciente</span>
+                        <span className="sm:hidden">Cadastrar</span>
                     </button>
                     <button
                         type="button"
                         onClick={() => setIsHistoryModalOpen(true)}
-                        className="px-3 py-1.5 bg-pink-50 hover:bg-pink-100 text-pink-700 font-black text-[10px] uppercase tracking-wider rounded-xl transition-all flex items-center gap-1.5 border-2 border-pink-200 shadow-xs hover:shadow-sm active:scale-95 cursor-pointer"
+                        className="px-2.5 sm:px-3 py-1.5 bg-pink-50/90 hover:bg-pink-100 text-pink-700 font-extrabold text-[9.5px] sm:text-[10px] uppercase tracking-wider rounded-xl transition-all flex items-center gap-1 border border-pink-200/80 shadow-2xs hover:shadow-xs active:scale-95 cursor-pointer"
                     >
                         <History className="w-3.5 h-3.5" />
-                        Ver Histórico
+                        <span className="hidden sm:inline">Ver Histórico</span>
+                        <span className="sm:hidden">Histórico</span>
                     </button>
                 </div>
             </div>
 
-            {/* Split Form: 2 Colunas Modernas (Esquerda: Paciente + Prescritor + Obs | Direita: Medicamentos + Ação) */}
-            <form onSubmit={handlePreSubmit} className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-2.5 overflow-hidden">
-                {/* COLUNA ESQUERDA: Paciente, Médico e Observações */}
-                <div className="lg:col-span-5 flex flex-col gap-2.5 h-full min-h-0 overflow-hidden">
-                    {/* Card 1: Paciente e Prescritor */}
-                    <div className="bg-white rounded-2xl border-2 border-slate-200/90 p-3 shadow-xs flex flex-col gap-2 shrink-0">
-                        <div className="flex items-center justify-between pb-1 border-b border-slate-100">
-                            <div className="flex items-center gap-2">
-                                <div className="p-1 rounded-lg bg-pink-100 text-pink-700">
-                                    <UserIcon className="w-3.5 h-3.5" />
-                                </div>
-                                <span className="text-[10px] font-black uppercase tracking-wider text-slate-800">
-                                    1. Paciente & Prescritor
-                                </span>
-                            </div>
-                            {isPatientUnlocked && (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[8px] font-black uppercase">
-                                    <Check className="w-3 h-3 text-emerald-600" /> Identificado
-                                </span>
-                            )}
-                        </div>
-
-                        {/* CPF ou SUS */}
-                        <div>
-                            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-700 mb-0.5 ml-0.5">
-                                CPF / Cartão SUS *
-                            </label>
-                            <input
-                                type="text"
-                                className="w-full rounded-xl border-2 border-slate-300 bg-white py-1.5 px-3 text-xs text-slate-900 focus:border-pink-600 focus:ring-4 focus:ring-pink-500/10 outline-none transition-all font-mono font-black placeholder:text-slate-400 shadow-inner"
-                                placeholder="000.000.000-00 ou N° SUS"
-                                value={patientCpf}
-                                onChange={(e) => handleCpfChange(e.target.value)}
-                                required
-                            />
-                        </div>
-
-                        {/* Nome do Paciente com autocomplete */}
-                        <div className="relative">
-                            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-700 mb-0.5 ml-0.5">
-                                Nome do Paciente *
-                            </label>
-                            <input
-                                type="text"
-                                className={`w-full rounded-xl border-2 py-1.5 px-3 text-xs outline-none transition-all font-black uppercase shadow-inner ${
-                                    !isPatientUnlocked 
-                                        ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed placeholder:text-slate-400' 
-                                        : 'bg-white border-slate-300 text-slate-900 focus:border-pink-600 focus:ring-4 focus:ring-pink-500/10 placeholder:text-slate-400'
-                                }`}
-                                placeholder={!isPatientUnlocked ? "DIGITE O CPF OU SUS PRIMEIRO" : "Nome Completo do Paciente"}
-                                value={patientName}
-                                onChange={(e) => {
-                                    setPatientName(e.target.value.toUpperCase());
-                                    setPatientSearchQuery(e.target.value.toUpperCase());
-                                    setShowPatientDropdown(true);
-                                }}
-                                onFocus={() => setShowPatientDropdown(true)}
-                                onBlur={() => setTimeout(() => setShowPatientDropdown(false), 200)}
-                                disabled={!isPatientUnlocked}
-                                required
-                            />
-
-                            {/* Autocomplete suggestion box */}
-                            {showPatientDropdown && patientSuggestions.length > 0 && (
-                                <div className="absolute left-0 top-full mt-1 w-full bg-white rounded-xl shadow-2xl border-2 border-slate-200 max-h-40 overflow-y-auto z-50 custom-scrollbar">
-                                    {patientSuggestions.map(p => (
-                                        <button
-                                            key={p.id}
-                                            type="button"
-                                            onMouseDown={() => {
-                                                const displayName = p.nickname ? `${p.name} (${p.nickname})` : p.name;
-                                                setPatientName(displayName);
-                                                handleCpfChange(p.cpf || p.sus_number || '');
-                                                setShowPatientDropdown(false);
-                                            }}
-                                            className="w-full text-left px-3 py-2 hover:bg-pink-50 text-slate-800 text-xs font-bold border-b border-slate-100 last:border-0 flex items-center justify-between transition-colors"
-                                        >
-                                            <span className="font-extrabold text-slate-900">{p.name}</span>
-                                            <span className="text-[10px] text-slate-500 font-mono font-bold">
-                                                {p.cpf ? `CPF: ${p.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}` : ''}
-                                                {p.sus_number ? ` • SUS: ${p.sus_number}` : ''}
-                                            </span>
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-
-                        {/* CRM & UF do Médico Prescritor (Campo com Autocomplete Dinâmico) */}
-                        <div className="relative">
-                            <div className="flex items-center justify-between mb-0.5 ml-0.5">
-                                <label className="text-[10px] font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-                                    <Stethoscope className="w-3.5 h-3.5 text-pink-600" />
-                                    <span>CRM & UF do Médico Prescritor *</span>
-                                </label>
-                                {medicoCrm && (
-                                    <span className="text-[9px] font-bold text-pink-600 font-mono">
-                                        CRM {medicoCrm}/{medicoUf}
-                                    </span>
-                                )}
-                            </div>
-
-                            <div className="flex gap-2 items-center">
-                                {/* Campo Principal de Autocomplete */}
-                                <div className="relative flex-1">
-                                    <input
-                                        type="text"
-                                        className="w-full rounded-xl border-2 border-slate-300 bg-white py-1.5 pl-8 pr-8 text-xs font-bold text-slate-900 outline-none focus:border-pink-600 focus:ring-4 focus:ring-pink-500/10 transition-all placeholder:text-slate-400 shadow-inner"
-                                        placeholder="Pesquise por Nome, CRM ou UF (Ex: João, 12345/MG)..."
-                                        value={medicoSearchQuery}
-                                        onFocus={() => setShowMedicoDropdown(true)}
-                                        onChange={(e) => {
-                                            const val = e.target.value;
-                                            setMedicoSearchQuery(val);
-                                            setShowMedicoDropdown(true);
-
-                                            // Se o usuário digitar números, atualiza o CRM automaticamente
-                                            const onlyDigits = val.replace(/\D/g, '');
-                                            if (onlyDigits) {
-                                                setMedicoCrm(onlyDigits);
-                                            }
-                                        }}
-                                        required={!medicoCrm}
-                                    />
-                                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                                    {medicoSearchQuery && (
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                setMedicoSearchQuery('');
-                                                setMedicoCrm('');
-                                                setMedicoNome('');
-                                                setShowMedicoDropdown(false);
-                                            }}
-                                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
-                                        >
-                                            <X className="w-3.5 h-3.5" />
-                                        </button>
-                                    )}
-
-                                    {/* Dropdown de Sugestões de Médicos */}
-                                    {showMedicoDropdown && medicoSuggestions.length > 0 && (
-                                        <div className="absolute left-0 top-full mt-1 w-full bg-white rounded-xl shadow-2xl border-2 border-slate-200 max-h-48 overflow-y-auto z-50 custom-scrollbar divide-y divide-slate-100 animate-in fade-in zoom-in-95 duration-150">
-                                            {medicoSuggestions.map((sug, idx) => (
-                                                <button
-                                                    key={`${sug.crm}_${sug.uf}_${idx}`}
-                                                    type="button"
-                                                    onMouseDown={() => {
-                                                        setMedicoCrm(sug.crm);
-                                                        setMedicoUf(sug.uf);
-                                                        setMedicoNome(sug.nome || '');
-                                                        setMedicoSearchQuery(sug.displayLabel);
-                                                        setShowMedicoDropdown(false);
-                                                    }}
-                                                    className="w-full text-left px-3 py-2 hover:bg-pink-50 text-slate-800 text-xs font-bold flex items-center justify-between transition-colors group cursor-pointer"
-                                                >
-                                                    <div className="flex items-center gap-2 min-w-0">
-                                                        <div className="w-7 h-7 rounded-lg bg-pink-100 group-hover:bg-pink-600 group-hover:text-white text-pink-700 flex items-center justify-center shrink-0 transition-colors">
-                                                            <Stethoscope className="w-3.5 h-3.5" />
-                                                        </div>
-                                                        <div className="min-w-0">
-                                                            <span className="font-extrabold text-slate-900 block truncate">
-                                                                {sug.nome || `CRM ${sug.crm}/${sug.uf}`}
-                                                            </span>
-                                                            <span className="text-[10px] text-slate-500 font-mono font-bold">
-                                                                CRM {sug.crm}/{sug.uf} {sug.count > 0 ? `• ${sug.count} receitas` : ''}
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                    <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[9px] font-black uppercase font-mono shrink-0">
-                                                        {sug.uf}
-                                                    </span>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* Campo CRM Numérico para digitação direta */}
-                                <div className="w-24">
-                                    <input
-                                        type="text"
-                                        pattern="[0-9]*"
-                                        className="w-full rounded-xl border-2 border-slate-300 bg-white py-1.5 px-2 text-xs font-mono font-black text-slate-900 outline-none focus:border-pink-600 focus:ring-4 focus:ring-pink-500/10 transition-all placeholder:text-slate-400 text-center shadow-inner"
-                                        placeholder="CRM"
-                                        value={medicoCrm}
-                                        onChange={(e) => {
-                                            const clean = e.target.value.replace(/\D/g, '');
-                                            setMedicoCrm(clean);
-                                        }}
-                                        required
-                                        title="Número do CRM"
-                                    />
-                                </div>
-
-                                {/* Select UF */}
-                                <select
-                                    className="w-16 rounded-xl border-2 border-slate-300 bg-white py-1.5 px-1.5 text-xs font-black text-slate-900 outline-none focus:border-pink-600 focus:ring-4 focus:ring-pink-500/10 transition-all uppercase cursor-pointer text-center shadow-inner"
-                                    value={medicoUf}
-                                    onChange={(e) => setMedicoUf(e.target.value)}
-                                    title="UF do CRM"
-                                >
-                                    {['AC', 'AL', 'AM', 'AP', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MG', 'MS', 'MT', 'PA', 'PB', 'PE', 'PI', 'PR', 'RJ', 'RN', 'RO', 'RR', 'RS', 'SC', 'SE', 'SP', 'TO'].map(uf => (
-                                        <option key={uf} value={uf}>{uf}</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            {/* Badge do Médico Selecionado */}
-                            {medicoNome && (
-                                <div className="mt-1.5 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10px] font-bold animate-in fade-in">
-                                    <UserCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                                    <span className="truncate">Médico Vinculado: <strong>{medicoNome}</strong> (CRM {medicoCrm}/{medicoUf})</span>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Card 2: Observações / Dados da Receita */}
-                    <div className="flex-1 min-h-0 bg-white rounded-2xl border-2 border-slate-200/90 p-3 shadow-xs flex flex-col justify-between gap-1.5 overflow-hidden">
-                        <div className="flex items-center justify-between pb-1 border-b border-slate-100 shrink-0">
-                            <div className="flex items-center gap-2">
-                                <div className="p-1 rounded-lg bg-pink-100 text-pink-700">
-                                    <FileText className="w-3.5 h-3.5" />
-                                </div>
-                                <span className="text-[10px] font-black uppercase tracking-wider text-slate-800">
-                                    2. Observações / Receita
-                                </span>
-                            </div>
-                            <span className="text-[8px] font-bold text-slate-400 uppercase">
-                                Instruções e posologia
-                            </span>
-                        </div>
-
-                        {/* Atalhos Rápidos */}
-                        <div className="flex flex-wrap gap-1 shrink-0">
-                            {[
-                                'Uso Contínuo',
-                                'Receita Retida',
-                                'Validade 30 Dias',
-                                'Orientado(a)'
-                            ].map(tag => (
-                                <button
-                                    key={tag}
-                                    type="button"
-                                    onClick={() => {
-                                        if (!observacoes.includes(tag)) {
-                                            setObservacoes(prev => prev ? `${prev} • ${tag}` : tag);
-                                        }
-                                    }}
-                                    className="px-2 py-0.5 rounded-lg bg-slate-100 hover:bg-pink-100 text-slate-700 hover:text-pink-800 text-[8px] font-black uppercase tracking-wider transition-colors border border-slate-200 hover:border-pink-300 active:scale-95 cursor-pointer"
-                                >
-                                    + {tag}
-                                </button>
-                            ))}
-                        </div>
-
-                        <textarea
-                            className="flex-1 min-h-[50px] w-full rounded-xl border-2 border-slate-300 focus:border-pink-600 bg-slate-50/70 focus:bg-white p-2 text-xs text-slate-900 focus:ring-4 focus:ring-pink-500/10 outline-none transition-all font-semibold placeholder:text-slate-400 resize-none custom-scrollbar shadow-inner"
-                            placeholder="Digite anotações da receita, dosagens prescritas, recomendações repassadas ao paciente..."
-                            value={observacoes}
-                            onChange={(e) => setObservacoes(e.target.value)}
-                        />
-                    </div>
-                </div>
-
-                {/* COLUNA DIREITA: Medicamentos e Finalização */}
-                <div className="lg:col-span-7 flex flex-col h-full min-h-0 bg-white rounded-2xl border-2 border-slate-200/90 p-3 shadow-xs justify-between gap-2 overflow-hidden">
-                    {/* Header da Cesta */}
-                    <div className="flex items-center justify-between pb-1.5 border-b-2 border-slate-100 shrink-0">
-                        <div className="flex items-center gap-2">
-                            <div className="p-1.5 rounded-xl bg-pink-100 text-pink-700 shadow-xs border border-pink-200/60">
-                                <Pill className="w-4 h-4 text-pink-700" />
-                            </div>
-                            <div>
-                                <div className="flex items-center gap-2">
-                                    <h4 className="font-black text-slate-900 text-xs md:text-sm uppercase tracking-tight">
-                                        3. Medicamentos a Dispensar
-                                    </h4>
-                                    <span className="px-2 py-0.5 rounded-full bg-pink-600 text-white text-[9px] font-black shadow-xs">
-                                        {selectedItems.length} {selectedItems.length === 1 ? 'item' : 'itens'}
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-
+            {/* SE O PACIENTE ESTIVER LOCALIZADO: EXIBIR STEPPER / BARRA DE ABAS */}
+            {selectedPatientObj && activeTab !== 'localizar' && (
+                <div className="bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-2xl px-3 py-1.5 shadow-2xs flex items-center justify-between gap-2 shrink-0 transition-all">
+                    {/* Abas com Progresso */}
+                    <div className="flex items-center gap-1 sm:gap-2 flex-1 overflow-x-auto custom-scrollbar">
+                        {/* Aba 1: Paciente */}
                         <button
                             type="button"
-                            onClick={() => {
-                                setMedModalSearch('');
-                                setMedModalCategory('TODOS');
-                                setIsMedModalOpen(true);
-                            }}
-                            className="px-3.5 py-1.5 bg-gradient-to-r from-pink-600 via-rose-600 to-pink-600 hover:from-pink-700 hover:to-rose-700 text-white font-black text-[10px] uppercase tracking-wider rounded-xl transition-all shadow-md shadow-pink-600/20 active:scale-95 flex items-center gap-1.5 cursor-pointer border border-pink-700"
+                            onClick={() => navigateToTab('paciente')}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer shrink-0 ${
+                                activeTab === 'paciente'
+                                    ? 'bg-pink-600 text-white shadow-sm shadow-pink-600/25'
+                                    : 'bg-slate-50 hover:bg-pink-50 text-slate-700 hover:text-pink-700 border border-slate-200/70'
+                            }`}
                         >
-                            <Plus className="w-3.5 h-3.5" />
-                            Adicionar Medicamento
+                            <span className="w-4.5 h-4.5 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[9px] font-black">
+                                ✓
+                            </span>
+                            <span>1. Paciente</span>
+                        </button>
+
+                        <span className="text-slate-300 font-bold text-xs shrink-0">→</span>
+
+                        {/* Aba 2: Medicamentos */}
+                        <button
+                            type="button"
+                            onClick={() => navigateToTab('medicamentos')}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer shrink-0 ${
+                                activeTab === 'medicamentos'
+                                    ? 'bg-pink-600 text-white shadow-sm shadow-pink-600/25'
+                                    : selectedItems.length > 0
+                                        ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200/80'
+                                        : 'bg-slate-50 hover:bg-pink-50 text-slate-700 hover:text-pink-700 border border-slate-200/70'
+                            }`}
+                        >
+                            <Pill className="w-3.5 h-3.5" />
+                            <span>2. Medicamentos</span>
+                            {selectedItems.length > 0 && (
+                                <span className={`px-1.5 py-0.2 rounded-full text-[8.5px] font-black ${
+                                    activeTab === 'medicamentos' ? 'bg-white text-pink-700' : 'bg-emerald-600 text-white'
+                                }`}>
+                                    {selectedItems.length}
+                                </span>
+                            )}
+                        </button>
+
+                        <span className="text-slate-300 font-bold text-xs shrink-0">→</span>
+
+                        {/* Aba 3: Médico & Receita */}
+                        <button
+                            type="button"
+                            onClick={() => navigateToTab('medico')}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer shrink-0 ${
+                                activeTab === 'medico'
+                                    ? 'bg-pink-600 text-white shadow-sm shadow-pink-600/25'
+                                    : (medicoCrm || medicoSearchQuery)
+                                        ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200/80'
+                                        : 'bg-slate-50 hover:bg-pink-50 text-slate-700 hover:text-pink-700 border border-slate-200/70'
+                            }`}
+                        >
+                            <Stethoscope className="w-3.5 h-3.5" />
+                            <span>3. Médico & Receita</span>
+                            {(medicoCrm || medicoSearchQuery) && (
+                                <span className="w-4 h-4 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[8px] font-black">
+                                    ✓
+                                </span>
+                            )}
+                        </button>
+
+                        <span className="text-slate-300 font-bold text-xs shrink-0">→</span>
+
+                        {/* Aba 4: Revisar */}
+                        <button
+                            type="button"
+                            onClick={() => navigateToTab('revisar')}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer shrink-0 ${
+                                activeTab === 'revisar'
+                                    ? 'bg-pink-600 text-white shadow-sm shadow-pink-600/25'
+                                    : 'bg-slate-50 hover:bg-pink-50 text-slate-700 hover:text-pink-700 border border-slate-200/70'
+                            }`}
+                        >
+                            <ClipboardCheck className="w-3.5 h-3.5" />
+                            <span>4. Revisar & Finalizar</span>
                         </button>
                     </div>
 
-                    {/* Centro: Lista de Medicamentos ou Empty State Moderno */}
-                    {selectedItems.length === 0 ? (
-                        <div
-                            onClick={() => {
-                                setMedModalSearch('');
-                                setMedModalCategory('TODOS');
-                                setIsMedModalOpen(true);
-                            }}
-                            className="flex-1 min-h-0 flex flex-col items-center justify-center border-2 border-dashed border-pink-300 hover:border-pink-500 bg-gradient-to-b from-white to-pink-50/25 hover:bg-pink-50/40 rounded-2xl p-4 text-center cursor-pointer transition-all group shadow-inner"
-                        >
-                            <div className="w-12 h-12 rounded-2xl bg-pink-100 text-pink-600 group-hover:bg-pink-600 group-hover:text-white flex items-center justify-center group-hover:scale-110 transition-all mb-2 shadow-xs border border-pink-200">
-                                <Pill className="w-6 h-6" />
-                            </div>
-                            <h4 className="text-xs font-black text-slate-900 uppercase tracking-tight group-hover:text-pink-700 transition-colors">
-                                Nenhum medicamento selecionado
-                            </h4>
-                            <p className="text-[10px] text-slate-500 font-bold max-w-xs mt-0.5">
-                                Clique para abrir o catálogo e incluir os itens da receita
-                            </p>
-                            <div className="mt-2.5 px-3.5 py-1.5 rounded-xl bg-pink-600 text-white text-[10px] font-black uppercase tracking-wider shadow-xs group-hover:bg-pink-700 transition-colors flex items-center gap-1.5">
-                                <Plus className="w-3 h-3" /> Abrir Catálogo
-                            </div>
-                        </div>
-                    ) : (
-                        <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-1.5 custom-scrollbar">
-                            <div className="grid grid-cols-1 gap-1.5">
-                                {selectedItems.map((item, idx) => (
-                                    <div
-                                        key={item.med.id}
-                                        className="bg-white border-2 border-slate-200 hover:border-pink-400 p-2 rounded-xl flex items-center justify-between gap-2.5 transition-all shadow-xs"
-                                    >
-                                        <div className="flex items-center gap-2 min-w-0 flex-1">
-                                            <div className="w-6 h-6 rounded-lg bg-pink-600 text-white flex items-center justify-center shrink-0 font-black text-[9px] shadow-xs">
-                                                #{idx + 1}
+                    {/* Resumo do Paciente Selecionado */}
+                    <div className="hidden lg:flex items-center gap-2 px-3 py-1 rounded-xl bg-slate-50 border border-slate-200/70 shrink-0">
+                        <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
+                        <span className="text-[11px] font-black text-slate-900 uppercase truncate max-w-[200px]">
+                            {selectedPatientObj.name}
+                        </span>
+                        <span className="text-[9px] font-mono font-bold text-slate-500">
+                            {selectedPatientObj.cpf ? `CPF: ${selectedPatientObj.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")}` : (selectedPatientObj.sus_number || '')}
+                        </span>
+                    </div>
+                </div>
+            )}
+
+            {/* CORPO PRINCIPAL CONDICIONAL POR ABA */}
+            <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+                {/* ========================================================================= */}
+                {/* 1. TELA INICIAL: LOCALIZAR PACIENTE (DESIGN ELEGANTE E MODERNO) */}
+                {/* ========================================================================= */}
+                {(!selectedPatientObj || activeTab === 'localizar') && (
+                    <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-3 sm:p-5 md:p-6 flex flex-col items-center justify-start bg-slate-50/40">
+                        <div className="w-full max-w-4xl lg:max-w-5xl my-auto py-2 flex flex-col gap-4 animate-in fade-in duration-200">
+                            {/* Card Principal */}
+                            <div className="w-full bg-white rounded-2xl sm:rounded-3xl border border-slate-200/90 shadow-lg shadow-slate-200/40 p-5 sm:p-7 relative overflow-hidden flex flex-col gap-4 sm:gap-5">
+                                {/* Barra decorativa superior em gradiente */}
+                                <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-pink-500 via-rose-500 to-indigo-500" />
+
+                                {/* Header do Card */}
+                                <div className="flex items-start gap-3.5 sm:gap-4 text-left">
+                                    <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-gradient-to-br from-pink-600 via-rose-500 to-pink-600 text-white flex items-center justify-center shadow-md shadow-pink-500/25 shrink-0">
+                                        <Search className="w-5 h-5 sm:w-5.5 sm:h-5.5" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                            <span className="px-2.5 py-0.5 rounded-full bg-pink-50 border border-pink-200/70 text-pink-700 text-[10px] font-black uppercase tracking-wider inline-flex items-center gap-1">
+                                                <Sparkles className="w-3 h-3 text-pink-500" />
+                                                Identificação do Paciente
+                                            </span>
+                                        </div>
+                                        <h2 className="text-lg sm:text-xl font-black text-slate-900 uppercase tracking-tight">
+                                            Localizar Paciente
+                                        </h2>
+                                        <p className="text-xs text-slate-500 font-medium mt-0.5">
+                                            Digite o CPF do paciente para iniciar o atendimento e a dispensação de medicamentos.
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {/* Campo de CPF com Indicador Inteligente de Dígitos */}
+                                <div className="space-y-1.5 text-left">
+                                    <div className="flex items-center justify-between">
+                                        <label className="block text-xs font-black uppercase tracking-wider text-slate-700">
+                                            CPF do Paciente *
+                                        </label>
+                                        {patientSearchCpf ? (
+                                            patientSearchCpf.replace(/\D/g, '').length === 11 ? (
+                                                <span className="text-[11px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-lg inline-flex items-center gap-1 animate-in fade-in duration-150">
+                                                    <Check className="w-3 h-3 text-emerald-600" />
+                                                    11 dígitos completos
+                                                </span>
+                                            ) : (
+                                                <span className="text-[11px] font-bold text-slate-500 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-lg font-mono">
+                                                    {patientSearchCpf.replace(/\D/g, '').length} / 11 dígitos
+                                                </span>
+                                            )
+                                        ) : (
+                                            <span className="text-[11px] font-semibold text-slate-400">
+                                                11 dígitos numéricos
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    <div className="relative group">
+                                        <input
+                                            type="text"
+                                            autoFocus
+                                            className="w-full rounded-2xl border-2 border-slate-200 hover:border-pink-300 focus:border-pink-500 bg-slate-50/50 hover:bg-white focus:bg-white py-3.5 pl-11 pr-11 text-base sm:text-lg font-mono font-black tracking-wider text-slate-900 focus:ring-4 focus:ring-pink-500/10 outline-none transition-all placeholder:text-slate-400 placeholder:font-sans placeholder:font-normal placeholder:tracking-normal shadow-xs"
+                                            placeholder="Digite o CPF do paciente"
+                                            value={patientSearchCpf}
+                                            onChange={(e) => handleCpfInputChange(e.target.value)}
+                                            maxLength={14}
+                                        />
+                                        <Search className="w-5 h-5 text-slate-400 group-focus-within:text-pink-600 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none transition-colors" />
+                                        {patientSearchCpf && (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setPatientSearchCpf('');
+                                                    setMatchedPatient(null);
+                                                    setSearchNotFound(false);
+                                                }}
+                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-1.5 rounded-xl hover:bg-slate-200/70 transition-all cursor-pointer"
+                                                title="Limpar campo"
+                                            >
+                                                <X className="w-4 h-4" />
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* PACIENTE ENCONTRADO - NO FLUXO NORMAL DA PÁGINA (DOCUMENT FLOW, SEM ABSOLUTE) */}
+                                {matchedPatient && (
+                                    <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-emerald-50/90 via-white to-teal-50/40 border-2 border-emerald-500/70 shadow-md shadow-emerald-600/10 flex flex-col md:flex-row md:items-center justify-between gap-4 animate-in fade-in slide-in-from-top-2 duration-200">
+                                        <div className="flex items-start sm:items-center gap-3.5 min-w-0 flex-1">
+                                            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white font-black text-sm flex items-center justify-center shrink-0 shadow-md shadow-emerald-600/20">
+                                                {matchedPatient.name
+                                                    ? matchedPatient.name
+                                                        .split(' ')
+                                                        .filter(Boolean)
+                                                        .slice(0, 2)
+                                                        .map(n => n[0])
+                                                        .join('')
+                                                        .toUpperCase()
+                                                    : <UserCheck className="w-6 h-6" />}
                                             </div>
-                                            <div className="min-w-0 flex-1">
-                                                <h4 className="font-black text-xs uppercase text-slate-950 truncate">
-                                                    {item.med.nome} {item.med.dosagem ? `(${item.med.dosagem})` : ''}
+                                            <div className="min-w-0 flex-1 text-left">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-md border border-emerald-200 inline-flex items-center gap-1">
+                                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                                        Paciente Localizado
+                                                    </span>
+                                                </div>
+                                                <h4 className="text-sm sm:text-base font-black text-slate-900 uppercase leading-snug break-words">
+                                                    {matchedPatient.name} {matchedPatient.nickname ? `(${matchedPatient.nickname})` : ''}
                                                 </h4>
-                                                <div className="flex flex-wrap gap-1 mt-0.5 items-center">
-                                                    <span className="px-1.5 py-0.2 text-[8px] font-black uppercase rounded bg-pink-100 text-pink-800 border border-pink-200">
-                                                        {item.med.categoria}
+                                                
+                                                {/* Grade de informações detalhadas do paciente */}
+                                                <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap text-xs text-slate-600 font-mono font-bold mt-2">
+                                                    <span className="bg-white px-2 py-0.5 rounded-md border border-slate-200/80 shadow-2xs">
+                                                        CPF: {matchedPatient.cpf ? matchedPatient.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4") : ''}
                                                     </span>
-                                                    <span className="px-1.5 py-0.2 text-[8px] font-black uppercase rounded bg-slate-100 text-slate-700 font-mono border border-slate-200">
-                                                        Lote: {item.med.lote}
-                                                    </span>
-                                                    <span className="text-[9px] font-extrabold text-emerald-700 ml-1">
-                                                        Estoque: <strong>{item.med.quantidade} {item.med.unidade}</strong>
-                                                    </span>
+                                                    {matchedPatient.sus_number && (
+                                                        <span className="bg-white px-2 py-0.5 rounded-md border border-slate-200/80 font-sans text-[11px] font-semibold text-slate-600 shadow-2xs">
+                                                            SUS: {matchedPatient.sus_number}
+                                                        </span>
+                                                    )}
+                                                    {matchedPatient.birth_date && formatPatientBirthAndAge(matchedPatient.birth_date) && (
+                                                        <span className="bg-white px-2 py-0.5 rounded-md border border-slate-200/80 font-sans text-[11px] font-semibold text-slate-600 shadow-2xs">
+                                                            Nasc: {formatPatientBirthAndAge(matchedPatient.birth_date)}
+                                                        </span>
+                                                    )}
+                                                    {matchedPatient.phone && (
+                                                        <span className="bg-white px-2 py-0.5 rounded-md border border-slate-200/80 font-sans text-[11px] font-semibold text-slate-600 shadow-2xs">
+                                                            Tel: {matchedPatient.phone}
+                                                        </span>
+                                                    )}
+                                                    {matchedPatient.neighborhood && (
+                                                        <span className="bg-white px-2 py-0.5 rounded-md border border-slate-200/80 font-sans text-[11px] font-semibold text-slate-600 shadow-2xs">
+                                                            Bairro: {matchedPatient.neighborhood}
+                                                        </span>
+                                                    )}
+                                                    {matchedPatient.street && (
+                                                        <span className="bg-white px-2 py-0.5 rounded-md border border-slate-200/80 font-sans text-[11px] font-semibold text-slate-600 shadow-2xs">
+                                                            Rua: {matchedPatient.street}
+                                                        </span>
+                                                    )}
+                                                    {matchedPatient.agente_saude && (
+                                                        <span className="bg-white px-2 py-0.5 rounded-md border border-slate-200/80 font-sans text-[11px] font-semibold text-slate-600 shadow-2xs">
+                                                            ACS: {matchedPatient.agente_saude}
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>
 
-                                        {/* Quantity controls */}
-                                        <div className="flex items-center gap-1.5 shrink-0">
-                                            <div className="flex items-center bg-slate-100 border-2 border-slate-200 rounded-lg p-0.5 shadow-inner">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleUpdateItemQuantity(item.med.id, item.quantity - 1)}
-                                                    className="w-5 h-5 rounded bg-white hover:bg-pink-600 hover:text-white text-slate-800 flex items-center justify-center transition-colors active:scale-95 shadow-xs font-bold"
-                                                >
-                                                    <Minus className="w-2.5 h-2.5" />
-                                                </button>
-                                                <input
-                                                    type="number"
-                                                    className="w-9 text-center text-xs font-black text-slate-950 bg-transparent outline-none"
-                                                    value={item.quantity}
-                                                    onChange={(e) => handleUpdateItemQuantity(item.med.id, parseInt(e.target.value, 10) || 1)}
-                                                    min="1"
-                                                    max={item.med.quantidade}
-                                                />
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleUpdateItemQuantity(item.med.id, item.quantity + 1)}
-                                                    className="w-5 h-5 rounded bg-white hover:bg-pink-600 hover:text-white text-slate-800 flex items-center justify-center transition-colors active:scale-95 shadow-xs font-bold"
-                                                >
-                                                    <Plus className="w-2.5 h-2.5" />
-                                                </button>
-                                            </div>
-                                            <span className="text-[10px] font-black text-slate-700 uppercase min-w-[16px]">
-                                                {item.med.unidade || 'un'}
-                                            </span>
-                                            <button
-                                                type="button"
-                                                onClick={() => handleRemoveItem(item.med.id)}
-                                                className="p-1 text-rose-500 hover:text-rose-700 hover:bg-rose-100 rounded-lg transition-all"
-                                                title="Remover medicamento"
-                                            >
-                                                <Trash2 className="w-3.5 h-3.5" />
-                                            </button>
-                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => selectAndValidatePatient(matchedPatient)}
+                                            className="px-5 py-3 bg-gradient-to-r from-pink-600 via-rose-600 to-pink-600 hover:from-pink-500 hover:via-rose-500 hover:to-pink-500 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-md shadow-pink-600/25 active:scale-95 flex items-center justify-center gap-2 cursor-pointer border border-pink-700/20 shrink-0 whitespace-nowrap group"
+                                        >
+                                            <span>Continuar Retirada</span>
+                                            <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                                        </button>
                                     </div>
-                                ))}
+                                )}
+
+                                {/* PACIENTE NÃO LOCALIZADO (11 DÍGITOS PREENCHIDOS E NÃO ENCONTRADO) */}
+                                {searchNotFound && patientSearchCpf.replace(/\D/g, '').length === 11 && (
+                                    <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-amber-50/90 via-white to-amber-50/50 border-2 border-amber-300 shadow-sm text-left flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in fade-in slide-in-from-top-2 duration-200">
+                                        <div className="flex items-center gap-3.5 min-w-0">
+                                            <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 border border-amber-200">
+                                                <AlertTriangle className="w-5 h-5" />
+                                            </div>
+                                            <div className="min-w-0">
+                                                <h4 className="text-xs sm:text-sm font-black text-amber-900 uppercase">Paciente não localizado</h4>
+                                                <p className="text-xs text-amber-700 font-medium mt-0.5">
+                                                    Nenhum paciente cadastrado com o CPF <strong className="font-mono font-bold">{patientSearchCpf}</strong>.
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setPendingCpf(patientSearchCpf);
+                                                setNewPatientName('');
+                                                setNewPatientBirthDate('');
+                                                setNewPatientNickname('');
+                                                setNewPatientPhone('');
+                                                setNewPatientNeighborhood('');
+                                                setNewPatientStreet('');
+                                                setNewPatientCity('SÃO JOSÉ DO GOIABAL -MG');
+                                                setNewPatientSusNumber('');
+                                                setNewPatientAgenteSaude('');
+                                                setIsRegModalOpen(true);
+                                            }}
+                                            className="px-4.5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-md shadow-emerald-600/20 flex items-center justify-center gap-1.5 cursor-pointer shrink-0 active:scale-95"
+                                        >
+                                            <UserPlus className="w-4 h-4" />
+                                            <span>Cadastrar Paciente</span>
+                                        </button>
+                                    </div>
+                                )}
+
+                                {/* Rodapé com Estatísticas e Botão de Novo Cadastro */}
+                                <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-2.5 text-xs">
+                                    <div className="flex items-center gap-2 text-slate-500 font-medium">
+                                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                        <span>Cadastrados no sistema: <strong className="text-slate-800 font-black">{pacientes.length} pacientes</strong></span>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setPendingCpf('');
+                                            setIsRegModalOpen(true);
+                                        }}
+                                        className="px-3.5 py-1.5 rounded-xl text-pink-600 hover:text-pink-700 bg-pink-50/80 hover:bg-pink-100 border border-pink-200/80 font-black text-xs uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs hover:shadow-xs active:scale-95"
+                                    >
+                                        <Plus className="w-3.5 h-3.5" />
+                                        <span>Novo Cadastro</span>
+                                    </button>
+                                </div>
                             </div>
                         </div>
-                    )}
-
-                    {/* Rodapé da Coluna Direita: Botão de Finalização */}
-                    <div className="pt-1.5 border-t-2 border-slate-100 shrink-0">
-                        <button
-                            type="submit"
-                            disabled={saving || selectedItems.length === 0}
-                            className="w-full h-10 rounded-xl bg-gradient-to-r from-pink-600 via-rose-600 to-pink-600 hover:from-pink-700 hover:via-rose-700 hover:to-pink-700 disabled:from-slate-200 disabled:to-slate-200 disabled:text-slate-400 text-white font-black text-xs uppercase tracking-wider transition-all shadow-md shadow-pink-600/20 active:scale-98 border-2 border-pink-500 disabled:border-transparent flex items-center justify-center gap-2 cursor-pointer"
-                        >
-                            {saving ? (
-                                <>
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                    Processando Dispensação...
-                                </>
-                            ) : (
-                                <>
-                                    <CheckCircle2 className="w-4 h-4" />
-                                    Finalizar Atendimento ({selectedItems.length} {selectedItems.length === 1 ? 'medicamento' : 'medicamentos'})
-                                </>
-                            )}
-                        </button>
                     </div>
-                </div>
-            </form>
+                )}
+
+                {/* ========================================================================= */}
+                {/* 2. ABA: PACIENTE */}
+                {/* ========================================================================= */}
+                {selectedPatientObj && activeTab === 'paciente' && (
+                    <div className="flex-1 h-full min-h-0 bg-white rounded-2xl border border-slate-200/90 p-4 sm:p-5 shadow-2xs flex flex-col justify-between gap-3 overflow-hidden animate-in fade-in duration-200">
+                        <div className="space-y-3 flex-1 overflow-y-auto pr-1 custom-scrollbar">
+                            {/* Header da Aba */}
+                            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                                <div className="flex items-center gap-2">
+                                    <div className="p-1.5 rounded-xl bg-pink-50 text-pink-600 border border-pink-100 shadow-2xs">
+                                        <UserIcon className="w-4 h-4" />
+                                    </div>
+                                    <div>
+                                        <h3 className="font-black text-slate-900 text-xs sm:text-sm uppercase tracking-tight">
+                                            Dados do Paciente Identificado
+                                        </h3>
+                                        <p className="text-[10px] text-slate-400 font-semibold">
+                                            Informações recuperadas automaticamente do cadastro
+                                        </p>
+                                    </div>
+                                </div>
+                                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] font-black uppercase shadow-2xs">
+                                    <Check className="w-3.5 h-3.5 text-emerald-600" /> Cadastro Validado
+                                </span>
+                            </div>
+
+                            {/* Grid de Dados Principais */}
+                            <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                                {/* CPF / Cartão SUS */}
+                                <div className="sm:col-span-4 bg-slate-50/70 border border-slate-200/80 rounded-2xl p-3 shadow-2xs">
+                                    <label className="block text-[9.5px] font-black uppercase tracking-wider text-slate-500 mb-0.5">
+                                        CPF / Documento Principal *
+                                    </label>
+                                    <div className="text-sm font-black font-mono text-slate-900">
+                                        {selectedPatientObj.cpf 
+                                            ? selectedPatientObj.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")
+                                            : (selectedPatientObj.sus_number || 'Não informado')}
+                                    </div>
+                                </div>
+
+                                {/* Nome do Paciente */}
+                                <div className="sm:col-span-8 bg-slate-50/70 border border-slate-200/80 rounded-2xl p-3 shadow-2xs">
+                                    <label className="block text-[9.5px] font-black uppercase tracking-wider text-slate-500 mb-0.5">
+                                        Nome Completo do Paciente *
+                                    </label>
+                                    <div className="text-sm font-black uppercase text-slate-900 truncate">
+                                        {selectedPatientObj.name} {selectedPatientObj.nickname ? `(${selectedPatientObj.nickname})` : ''}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Informações Complementares em Cards */}
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                                <div className="bg-white border border-slate-200/80 rounded-xl p-2.5 shadow-2xs">
+                                    <span className="block text-[8.5px] font-black uppercase tracking-wider text-slate-400">Data de Nascimento</span>
+                                    <span className="text-xs font-black font-mono text-slate-800">
+                                        {formatDateBr(selectedPatientObj.birth_date) || '—'}
+                                    </span>
+                                </div>
+
+                                <div className="bg-white border border-slate-200/80 rounded-xl p-2.5 shadow-2xs">
+                                    <span className="block text-[8.5px] font-black uppercase tracking-wider text-slate-400">Telefone / Contato</span>
+                                    <span className="text-xs font-black text-slate-800">
+                                        {selectedPatientObj.phone || '—'}
+                                    </span>
+                                </div>
+
+                                <div className="bg-white border border-slate-200/80 rounded-xl p-2.5 shadow-2xs">
+                                    <span className="block text-[8.5px] font-black uppercase tracking-wider text-slate-400">Bairro</span>
+                                    <span className="text-xs font-black uppercase text-slate-800 truncate block">
+                                        {selectedPatientObj.neighborhood || '—'}
+                                    </span>
+                                </div>
+
+                                <div className="bg-white border border-slate-200/80 rounded-xl p-2.5 shadow-2xs">
+                                    <span className="block text-[8.5px] font-black uppercase tracking-wider text-slate-400">Agente de Saúde</span>
+                                    <span className="text-xs font-black uppercase text-slate-800 truncate block">
+                                        {selectedPatientObj.agente_saude || '—'}
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* Endereço e Cartão SUS */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                <div className="bg-white border border-slate-200/80 rounded-xl p-2.5 shadow-2xs">
+                                    <span className="block text-[8.5px] font-black uppercase tracking-wider text-slate-400">Endereço / Logradouro</span>
+                                    <span className="text-xs font-black uppercase text-slate-800 truncate block">
+                                        {selectedPatientObj.street || '—'}, {selectedPatientObj.city || 'SÃO JOSÉ DO GOIABAL -MG'}
+                                    </span>
+                                </div>
+
+                                <div className="bg-white border border-slate-200/80 rounded-xl p-2.5 shadow-2xs">
+                                    <span className="block text-[8.5px] font-black uppercase tracking-wider text-slate-400">N° Cartão SUS</span>
+                                    <span className="text-xs font-black font-mono text-slate-800">
+                                        {selectedPatientObj.sus_number || '—'}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Barra de Navegação Inferior */}
+                        <div className="pt-2 border-t border-slate-100 flex items-center justify-between shrink-0">
+                            <button
+                                type="button"
+                                onClick={handleResetPatient}
+                                className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center gap-1 cursor-pointer"
+                            >
+                                <RefreshCw className="w-3.5 h-3.5" />
+                                <span>Trocar Paciente</span>
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => navigateToTab('medicamentos')}
+                                className="px-5 py-2.5 bg-gradient-to-r from-pink-600 via-rose-600 to-pink-600 hover:from-pink-500 hover:via-rose-500 hover:to-pink-500 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-md shadow-pink-600/25 active:scale-95 flex items-center gap-2 cursor-pointer border border-pink-700/20"
+                            >
+                                <span>Avançar para Medicamentos</span>
+                                <ArrowRight className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* ========================================================================= */}
+                {/* 3. ABA: MEDICAMENTOS */}
+                {/* ========================================================================= */}
+                {selectedPatientObj && activeTab === 'medicamentos' && (
+                    <div className="flex-1 h-full min-h-0 bg-white rounded-2xl border border-slate-200/90 p-3 sm:p-4 shadow-2xs flex flex-col justify-between gap-2.5 overflow-hidden animate-in fade-in duration-200">
+                        {/* Header da Aba Medicamentos */}
+                        <div className="flex items-center justify-between pb-2 border-b border-slate-100 shrink-0">
+                            <div className="flex items-center gap-2">
+                                <div className="p-1.5 rounded-xl bg-pink-50 text-pink-600 border border-pink-100 shadow-2xs">
+                                    <Pill className="w-4 h-4 text-pink-600" />
+                                </div>
+                                <div>
+                                    <div className="flex items-center gap-2">
+                                        <h3 className="font-black text-slate-900 text-xs sm:text-sm uppercase tracking-tight">
+                                            Itens da Receita a Dispensar
+                                        </h3>
+                                        <span className="px-2 py-0.5 rounded-full bg-gradient-to-r from-pink-600 to-rose-600 text-white text-[9px] font-black shadow-2xs">
+                                            {selectedItems.length} {selectedItems.length === 1 ? 'item' : 'itens'}
+                                        </span>
+                                    </div>
+                                    <p className="text-[10px] text-slate-400 font-semibold">
+                                        Adicione um ou múltiplos medicamentos receitados para o paciente
+                                    </p>
+                                </div>
+                            </div>
+
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setMedModalSearch('');
+                                    setMedModalCategory('TODOS');
+                                    setIsMedModalOpen(true);
+                                }}
+                                className="px-3.5 py-2 bg-gradient-to-r from-pink-600 via-rose-600 to-pink-600 hover:from-pink-500 hover:via-rose-500 hover:to-pink-500 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-md shadow-pink-600/20 active:scale-95 flex items-center gap-1.5 cursor-pointer border border-pink-700/20"
+                            >
+                                <Plus className="w-4 h-4" />
+                                <span>+ Adicionar Medicamento</span>
+                            </button>
+                        </div>
+
+                        {/* Centro: Lista de Medicamentos ou Empty State Moderno */}
+                        {selectedItems.length === 0 ? (
+                            <div
+                                onClick={() => {
+                                    setMedModalSearch('');
+                                    setMedModalCategory('TODOS');
+                                    setIsMedModalOpen(true);
+                                }}
+                                className="flex-1 min-h-0 flex flex-col items-center justify-center border-2 border-dashed border-pink-200 hover:border-pink-400 bg-gradient-to-b from-pink-50/20 via-white to-slate-50/30 hover:bg-pink-50/30 rounded-2xl p-6 text-center cursor-pointer transition-all group shadow-inner"
+                            >
+                                <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-pink-500/15 to-rose-500/10 text-pink-600 group-hover:bg-gradient-to-tr group-hover:from-pink-600 group-hover:to-rose-600 group-hover:text-white flex items-center justify-center group-hover:scale-110 transition-all mb-2 shadow-2xs border border-pink-200/80">
+                                    <Pill className="w-6 h-6" />
+                                </div>
+                                <h4 className="text-sm font-black text-slate-900 uppercase tracking-tight group-hover:text-pink-700 transition-colors">
+                                    Nenhum medicamento adicionado ainda
+                                </h4>
+                                <p className="text-xs text-slate-400 font-semibold max-w-sm mt-1 leading-relaxed">
+                                    Clique no botão abaixo para abrir o catálogo de estoque e incluir os medicamentos receitados.
+                                </p>
+                                <div className="mt-3 px-4 py-2 rounded-xl bg-pink-600 hover:bg-pink-700 text-white text-xs font-black uppercase tracking-wider shadow-sm group-hover:shadow-md transition-all flex items-center gap-1.5">
+                                    <Plus className="w-4 h-4" /> Abrir Estoque de Medicamentos
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-2 custom-scrollbar">
+                                <div className="grid grid-cols-1 gap-2">
+                                    {selectedItems.map((item, idx) => (
+                                        <div
+                                            key={item.med.id}
+                                            className="bg-white border border-slate-200/90 hover:border-pink-400 p-3 rounded-2xl flex items-center justify-between gap-3 transition-all shadow-2xs hover:shadow-xs"
+                                        >
+                                            <div className="flex items-center gap-3 min-w-0 flex-1">
+                                                <div className="w-7 h-7 rounded-xl bg-pink-50 text-pink-700 border border-pink-200/80 flex items-center justify-center shrink-0 font-black text-xs shadow-2xs">
+                                                    #{idx + 1}
+                                                </div>
+                                                <div className="min-w-0 flex-1">
+                                                    <h4 className="font-black text-xs sm:text-sm uppercase text-slate-900 truncate">
+                                                        {item.med.nome} {item.med.dosagem ? `(${item.med.dosagem})` : ''}
+                                                    </h4>
+                                                    <div className="flex flex-wrap gap-1.5 mt-0.5 items-center">
+                                                        <span className="px-1.5 py-0.2 text-[8px] font-black uppercase rounded bg-pink-50 text-pink-700 border border-pink-200/60">
+                                                            {item.med.categoria}
+                                                        </span>
+                                                        <span className="text-[9px] font-bold text-slate-500 font-mono">
+                                                            Lote: {item.med.lote}
+                                                        </span>
+                                                        <span className="text-[9px] font-bold text-emerald-700 font-mono">
+                                                            Estoque Disponível: {item.med.quantidade} {item.med.unidade}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Controle de Quantidade */}
+                                            <div className="flex items-center gap-2 shrink-0">
+                                                <div className="flex items-center bg-slate-100/90 border border-slate-200/80 rounded-xl p-1 shadow-inner">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleUpdateItemQuantity(item.med.id, item.quantity - 1)}
+                                                        className="w-6 h-6 rounded-lg bg-white hover:bg-pink-600 hover:text-white text-slate-700 flex items-center justify-center transition-colors active:scale-95 shadow-2xs font-bold cursor-pointer"
+                                                    >
+                                                        <Minus className="w-3 h-3" />
+                                                    </button>
+                                                    <input
+                                                        type="number"
+                                                        className="w-10 text-center text-xs font-black font-mono text-slate-900 bg-transparent outline-none"
+                                                        value={item.quantity}
+                                                        onChange={(e) => handleUpdateItemQuantity(item.med.id, parseInt(e.target.value, 10) || 1)}
+                                                        min="1"
+                                                        max={item.med.quantidade}
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleUpdateItemQuantity(item.med.id, item.quantity + 1)}
+                                                        className="w-6 h-6 rounded-lg bg-white hover:bg-pink-600 hover:text-white text-slate-700 flex items-center justify-center transition-colors active:scale-95 shadow-2xs font-bold cursor-pointer"
+                                                    >
+                                                        <Plus className="w-3 h-3" />
+                                                    </button>
+                                                </div>
+                                                <span className="text-[10px] font-black text-slate-700 uppercase min-w-[20px]">
+                                                    {item.med.unidade || 'un'}
+                                                </span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleRemoveItem(item.med.id)}
+                                                    className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-xl transition-all cursor-pointer"
+                                                    title="Remover medicamento"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Barra de Navegação Inferior */}
+                        <div className="pt-2 border-t border-slate-100 flex items-center justify-between shrink-0">
+                            <button
+                                type="button"
+                                onClick={() => navigateToTab('paciente')}
+                                className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center gap-1 cursor-pointer"
+                            >
+                                <ArrowLeft className="w-3.5 h-3.5" />
+                                <span>Voltar: Paciente</span>
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    if (selectedItems.length === 0) {
+                                        showAlert('Adicione pelo menos um medicamento para prosseguir.', 'error');
+                                        return;
+                                    }
+                                    navigateToTab('medico');
+                                }}
+                                disabled={selectedItems.length === 0}
+                                className={`px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer shadow-md ${
+                                    selectedItems.length === 0
+                                        ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed shadow-none'
+                                        : 'bg-gradient-to-r from-pink-600 via-rose-600 to-pink-600 hover:from-pink-500 hover:via-rose-500 hover:to-pink-500 text-white shadow-pink-600/25 active:scale-95 border border-pink-700/20'
+                                }`}
+                            >
+                                <span>Avançar para Médico & Receita</span>
+                                <ArrowRight className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* ========================================================================= */}
+                {/* 4. ABA: MÉDICO & RECEITA */}
+                {/* ========================================================================= */}
+                {selectedPatientObj && activeTab === 'medico' && (
+                    <div className="flex-1 h-full min-h-0 bg-white rounded-2xl border border-slate-200/90 p-4 sm:p-5 shadow-2xs flex flex-col justify-between gap-3 overflow-hidden animate-in fade-in duration-200">
+                        <div className="space-y-3.5 flex-1 overflow-y-auto pr-1 custom-scrollbar">
+                            {/* Header da Aba */}
+                            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                                <div className="flex items-center gap-2">
+                                    <div className="p-1.5 rounded-xl bg-pink-50 text-pink-600 border border-pink-100 shadow-2xs">
+                                        <Stethoscope className="w-4 h-4" />
+                                    </div>
+                                    <div>
+                                        <h3 className="font-black text-slate-900 text-xs sm:text-sm uppercase tracking-tight">
+                                            Médico Prescritor & Receita
+                                        </h3>
+                                        <p className="text-[10px] text-slate-400 font-semibold">
+                                            Informe o CRM do médico prescritor e as instruções da receita
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Card 1: CRM do Médico e UF */}
+                            <div className="bg-slate-50/70 border border-slate-200/80 rounded-2xl p-3.5 space-y-2">
+                                <div className="grid grid-cols-12 gap-2.5">
+                                    {/* CRM / Busca */}
+                                    <div className="col-span-8 sm:col-span-9 relative">
+                                        <div className="flex items-center justify-between mb-1 ml-0.5">
+                                            <label className="text-[10px] font-black uppercase tracking-wider text-slate-700 flex items-center gap-1">
+                                                <Stethoscope className="w-3.5 h-3.5 text-pink-600" />
+                                                <span>CRM do Médico Prescritor *</span>
+                                            </label>
+                                            {medicoCrm && (
+                                                <span className="text-[9px] font-black text-pink-600 font-mono bg-pink-50 px-1.5 py-0.2 rounded border border-pink-100 shadow-2xs">
+                                                    CRM {medicoCrm}
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        <div ref={medicoInputContainerRef} className="relative w-full">
+                                            <input
+                                                type="text"
+                                                className="w-full rounded-xl border border-slate-300/90 bg-white py-2 pl-8 pr-7 text-xs font-bold text-slate-900 outline-none focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 transition-all placeholder:text-slate-400 shadow-2xs font-mono"
+                                                placeholder="Ex: 12345 ou busque por nome do médico..."
+                                                value={medicoSearchQuery}
+                                                onFocus={() => setShowMedicoDropdown(true)}
+                                                onChange={(e) => {
+                                                    const val = e.target.value;
+                                                    setMedicoSearchQuery(val);
+                                                    setShowMedicoDropdown(true);
+
+                                                    const parsed = parseCrmAndUfInput(val);
+                                                    setMedicoCrm(parsed.crm);
+                                                    if (parsed.uf && parsed.uf !== 'MG') {
+                                                        setMedicoUf(parsed.uf);
+                                                    }
+                                                }}
+                                                required
+                                            />
+                                            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                            {medicoSearchQuery && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setMedicoSearchQuery('');
+                                                        setMedicoCrm('');
+                                                        setMedicoNome('');
+                                                        setShowMedicoDropdown(false);
+                                                    }}
+                                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                                                    title="Limpar CRM"
+                                                >
+                                                    <X className="w-3.5 h-3.5" />
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        {/* Dropdown de Sugestões de Médicos via Portal */}
+                                        <FloatingDropdownPortal
+                                            isOpen={showMedicoDropdown && medicoSuggestions.length > 0}
+                                            targetRef={medicoInputContainerRef}
+                                            onClose={() => setShowMedicoDropdown(false)}
+                                        >
+                                            <div className="divide-y divide-slate-100">
+                                                {medicoSuggestions.map((sug, idx) => (
+                                                    <button
+                                                        key={`${sug.crm}_${sug.uf}_${idx}`}
+                                                        type="button"
+                                                        onMouseDown={(e) => {
+                                                            e.preventDefault();
+                                                            setMedicoCrm(sug.crm);
+                                                            setMedicoUf(sug.uf || 'MG');
+                                                            setMedicoNome(sug.nome || '');
+                                                            setMedicoSearchQuery(sug.nome ? `${sug.nome} (CRM ${sug.crm})` : sug.crm);
+                                                            setShowMedicoDropdown(false);
+                                                        }}
+                                                        className="w-full text-left px-3 py-2.5 hover:bg-pink-50 text-slate-800 text-xs font-bold flex items-center justify-between transition-colors group cursor-pointer"
+                                                    >
+                                                        <div className="flex items-center gap-2.5 min-w-0">
+                                                            <div className="w-7 h-7 rounded-lg bg-pink-50 group-hover:bg-pink-600 group-hover:text-white text-pink-700 flex items-center justify-center shrink-0 transition-colors border border-pink-100">
+                                                                <Stethoscope className="w-3.5 h-3.5" />
+                                                            </div>
+                                                            <div className="min-w-0">
+                                                                <span className="font-black text-slate-900 block truncate group-hover:text-pink-900 text-xs uppercase">
+                                                                    {sug.nome || `CRM ${sug.crm}/${sug.uf}`}
+                                                                </span>
+                                                                <span className="text-[10px] text-slate-500 font-mono font-semibold block mt-0.5">
+                                                                    CRM {sug.crm}/{sug.uf} {sug.count > 0 ? `• ${sug.count} prescrições anteriores` : ''}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                        <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[9px] font-black uppercase font-mono shrink-0 group-hover:bg-pink-100 group-hover:text-pink-800">
+                                                            {sug.uf}
+                                                        </span>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </FloatingDropdownPortal>
+                                    </div>
+
+                                    {/* Campo UF */}
+                                    <div className="col-span-4 sm:col-span-3">
+                                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-700 mb-1 block ml-0.5">
+                                            UF *
+                                        </label>
+                                        <div className="relative">
+                                            <select
+                                                value={medicoUf}
+                                                onChange={(e) => setMedicoUf(e.target.value.toUpperCase())}
+                                                className="w-full rounded-xl border border-slate-300/90 bg-white py-2 pl-2.5 pr-6 text-xs font-black text-slate-900 outline-none focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 transition-all cursor-pointer font-mono uppercase shadow-2xs appearance-none"
+                                                required
+                                            >
+                                                {ESTADOS_BRASIL.map(uf => (
+                                                    <option key={uf} value={uf}>
+                                                        {uf}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Badge do Médico Selecionado */}
+                                {medicoNome && (
+                                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-50 border border-emerald-200/80 text-emerald-800 text-[10px] font-bold animate-in fade-in shadow-2xs">
+                                        <UserCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                        <span className="truncate">Médico Vinculado: <strong>{medicoNome}</strong> (CRM {medicoCrm}/{medicoUf})</span>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Card 2: Observações / Receita */}
+                            <div className="bg-slate-50/70 border border-slate-200/80 rounded-2xl p-3.5 space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <label className="text-[10px] font-black uppercase tracking-wider text-slate-700 flex items-center gap-1">
+                                        <FileText className="w-3.5 h-3.5 text-pink-600" />
+                                        <span>Observações / Receita</span>
+                                    </label>
+                                    <span className="text-[9px] font-bold text-slate-400 uppercase">
+                                        Instruções e posologia
+                                    </span>
+                                </div>
+
+                                {/* Atalhos Rápidos */}
+                                <div className="flex flex-wrap gap-1.5">
+                                    {[
+                                        'Uso Contínuo',
+                                        'Receita Retida',
+                                        'Validade 30 Dias',
+                                        'Orientado(a)'
+                                    ].map(tag => {
+                                        const isIncluded = observacoes.includes(tag);
+                                        return (
+                                            <button
+                                                key={tag}
+                                                type="button"
+                                                onClick={() => {
+                                                    if (!observacoes.includes(tag)) {
+                                                        setObservacoes(prev => prev ? `${prev} • ${tag}` : tag);
+                                                    }
+                                                }}
+                                                className={`px-2.5 py-1 rounded-lg text-[9px] font-extrabold uppercase tracking-wider transition-all border active:scale-95 cursor-pointer flex items-center gap-1 ${
+                                                    isIncluded 
+                                                        ? 'bg-pink-100 border-pink-300 text-pink-800 shadow-2xs' 
+                                                        : 'bg-white hover:bg-pink-50 hover:text-pink-700 text-slate-600 border-slate-200/80'
+                                                }`}
+                                            >
+                                                <span>+</span>
+                                                <span>{tag}</span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+
+                                <textarea
+                                    className="w-full min-h-[70px] rounded-xl border border-slate-300/90 bg-white p-2.5 text-xs text-slate-900 focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-medium placeholder:text-slate-400 resize-none custom-scrollbar shadow-2xs"
+                                    placeholder="Digite anotações da receita, dosagens prescritas, recomendações repassadas ao paciente..."
+                                    value={observacoes}
+                                    onChange={(e) => setObservacoes(e.target.value)}
+                                />
+                            </div>
+                        </div>
+
+                        {/* Barra de Navegação Inferior */}
+                        <div className="pt-2 border-t border-slate-100 flex items-center justify-between shrink-0">
+                            <button
+                                type="button"
+                                onClick={() => navigateToTab('medicamentos')}
+                                className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center gap-1 cursor-pointer"
+                            >
+                                <ArrowLeft className="w-3.5 h-3.5" />
+                                <span>Voltar: Medicamentos</span>
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    if (!medicoCrm && !medicoSearchQuery) {
+                                        showAlert('Informe o CRM do médico prescritor para continuar.', 'error');
+                                        return;
+                                    }
+                                    navigateToTab('revisar');
+                                }}
+                                disabled={!medicoCrm && !medicoSearchQuery}
+                                className={`px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer shadow-md ${
+                                    !medicoCrm && !medicoSearchQuery
+                                        ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed shadow-none'
+                                        : 'bg-gradient-to-r from-pink-600 via-rose-600 to-pink-600 hover:from-pink-500 hover:via-rose-500 hover:to-pink-500 text-white shadow-pink-600/25 active:scale-95 border border-pink-700/20'
+                                }`}
+                            >
+                                <span>Avançar para Revisão</span>
+                                <ArrowRight className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* ========================================================================= */}
+                {/* 5. ABA: REVISAR & FINALIZAR */}
+                {/* ========================================================================= */}
+                {selectedPatientObj && activeTab === 'revisar' && (
+                    <div className="flex-1 h-full min-h-0 bg-white rounded-2xl border border-slate-200/90 p-4 sm:p-5 shadow-2xs flex flex-col justify-between gap-3 overflow-hidden animate-in fade-in duration-200">
+                        <div className="space-y-3 flex-1 overflow-y-auto pr-1 custom-scrollbar">
+                            {/* Header da Aba */}
+                            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                                <div className="flex items-center gap-2">
+                                    <div className="p-1.5 rounded-xl bg-pink-50 text-pink-600 border border-pink-100 shadow-2xs">
+                                        <ClipboardCheck className="w-4 h-4" />
+                                    </div>
+                                    <div>
+                                        <h3 className="font-black text-slate-900 text-xs sm:text-sm uppercase tracking-tight">
+                                            Revisão Geral da Dispensação
+                                        </h3>
+                                        <p className="text-[10px] text-slate-400 font-semibold">
+                                            Confira todas as informações antes de registrar a retirada no sistema
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Resumo do Paciente e Prescritor */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                {/* Paciente */}
+                                <div className="bg-slate-50/80 border border-slate-200/80 rounded-2xl p-3.5 space-y-1">
+                                    <span className="text-[9px] font-black uppercase text-pink-600 tracking-wider">Beneficiário</span>
+                                    <h4 className="font-black text-sm text-slate-900 uppercase truncate">
+                                        {selectedPatientObj.name}
+                                    </h4>
+                                    <p className="text-xs font-mono font-bold text-slate-600">
+                                        CPF: {selectedPatientObj.cpf ? selectedPatientObj.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4") : (selectedPatientObj.sus_number || '')}
+                                    </p>
+                                    <p className="text-[10px] font-semibold text-slate-500">
+                                        Bairro: {selectedPatientObj.neighborhood || '—'}
+                                    </p>
+                                </div>
+
+                                {/* Médico */}
+                                <div className="bg-slate-50/80 border border-slate-200/80 rounded-2xl p-3.5 space-y-1">
+                                    <span className="text-[9px] font-black uppercase text-pink-600 tracking-wider">Médico Prescritor</span>
+                                    <h4 className="font-black text-sm text-slate-900 uppercase truncate">
+                                        {medicoNome || `CRM ${medicoCrm || medicoSearchQuery}/${medicoUf}`}
+                                    </h4>
+                                    <p className="text-xs font-mono font-bold text-slate-600">
+                                        CRM: {medicoCrm || medicoSearchQuery} / {medicoUf}
+                                    </p>
+                                    <p className="text-[10px] font-semibold text-slate-500">
+                                        Data do Atendimento: {formatDateTimeBr(withdrawalDate)}
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Resumo dos Medicamentos */}
+                            <div className="bg-slate-50/80 border border-slate-200/80 rounded-2xl p-3.5 space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-[9.5px] font-black uppercase text-slate-700 tracking-wider">
+                                        Medicamentos Selecionados ({selectedItems.length})
+                                    </span>
+                                </div>
+
+                                <div className="divide-y divide-slate-200/70 bg-white rounded-xl border border-slate-200/70 overflow-hidden">
+                                    {selectedItems.map((item, idx) => (
+                                        <div key={item.med.id} className="p-2.5 flex items-center justify-between text-xs">
+                                            <div className="flex items-center gap-2">
+                                                <span className="w-5 h-5 rounded-md bg-pink-50 text-pink-700 font-black text-[9px] flex items-center justify-center">
+                                                    #{idx + 1}
+                                                </span>
+                                                <div>
+                                                    <span className="font-black text-slate-900 uppercase">
+                                                        {item.med.nome} {item.med.dosagem ? `(${item.med.dosagem})` : ''}
+                                                    </span>
+                                                    <span className="text-[9px] text-slate-400 font-mono block">
+                                                        Lote: {item.med.lote} • Cat: {item.med.categoria}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <span className="font-black text-pink-600 text-xs font-mono bg-pink-50 px-2 py-0.5 rounded-lg border border-pink-100">
+                                                {item.quantity} {item.med.unidade || 'un'}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Observações da Receita */}
+                            {observacoes && observacoes.trim() && (
+                                <div className="bg-slate-50/80 border border-slate-200/80 rounded-2xl p-3 space-y-1">
+                                    <span className="text-[9px] font-black uppercase text-slate-500 tracking-wider">Observações e Posologia</span>
+                                    <p className="text-xs text-slate-700 font-semibold leading-relaxed whitespace-pre-line bg-white p-2.5 rounded-xl border border-slate-200/60">
+                                        {observacoes}
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Barra de Navegação e Confirmação */}
+                        <div className="pt-2 border-t border-slate-100 flex items-center justify-between shrink-0">
+                            <button
+                                type="button"
+                                onClick={() => navigateToTab('medico')}
+                                className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center gap-1 cursor-pointer"
+                            >
+                                <ArrowLeft className="w-3.5 h-3.5" />
+                                <span>Voltar para Ajustar</span>
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={handleConfirmSubmit}
+                                disabled={saving || selectedItems.length === 0}
+                                className={`px-6 py-3 rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer shadow-md ${
+                                    saving || selectedItems.length === 0
+                                        ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed shadow-none'
+                                        : 'bg-gradient-to-r from-pink-600 via-rose-600 to-pink-600 hover:from-pink-500 hover:via-rose-500 hover:to-pink-500 text-white shadow-pink-600/30 hover:shadow-lg hover:shadow-pink-600/40 active:scale-98 border border-pink-700/20'
+                                }`}
+                            >
+                                {saving ? (
+                                    <>
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        <span>Gravando Retirada...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <CheckCircle2 className="w-4 h-4" />
+                                        <span>Confirmar Retirada ({selectedItems.length} {selectedItems.length === 1 ? 'item' : 'itens'})</span>
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* ========================================================================= */}
+            {/* MODAIS AUXILIARES (HISTÓRICO, CADASTRO, SUCESSO, CATÁLOGO, ETC.) */}
+            {/* ========================================================================= */}
 
             {/* PATIENT HISTORY MODAL */}
             {isHistoryModalOpen && (
@@ -1266,7 +2071,7 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                             <button
                                 type="button"
                                 onClick={() => setIsRegModalOpen(false)}
-                                className="p-1.5 hover:bg-slate-200 rounded-lg text-slate-500 transition-colors"
+                                className="p-1.5 hover:bg-slate-200 rounded-lg text-slate-500 transition-colors cursor-pointer"
                             >
                                 <X className="w-5 h-5" />
                             </button>
@@ -1276,8 +2081,13 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                         <form
                             onSubmit={async (e) => {
                                 e.preventDefault();
-                                if (!newPatientName || !pendingCpf || !newPatientBirthDate || !newPatientCity) {
-                                    showAlert('Por favor, preencha todos os campos obrigatórios.', 'error');
+                                if (!newPatientName || !pendingCpf || !newPatientBirthDate || !newPatientCity || !newPatientPhone.trim() || !newPatientAgenteSaude.trim()) {
+                                    showAlert('Por favor, preencha todos os campos obrigatórios (*).', 'error');
+                                    return;
+                                }
+                                const cleanPhone = newPatientPhone.replace(/\D/g, '');
+                                if (cleanPhone.length < 10) {
+                                    showAlert('O telefone deve conter DDD + Número (mínimo 10 dígitos).', 'error');
                                     return;
                                 }
                                 setRegistering(true);
@@ -1287,317 +2097,173 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                         nickname: newPatientNickname.trim() || null,
                                         cpf: pendingCpf.replace(/\D/g, ''),
                                         birth_date: newPatientBirthDate,
-                                        phone: newPatientPhone.trim() || null,
-                                        neighborhood: newPatientNeighborhood.trim() || null,
-                                        street: newPatientStreet.trim() || null,
-                                        city: newPatientCity.trim() || null,
+                                        phone: newPatientPhone,
+                                        neighborhood: newPatientNeighborhood,
+                                        street: newPatientStreet,
+                                        city: newPatientCity,
                                         sus_number: newPatientSusNumber.trim() || null,
                                         agente_saude: newPatientAgenteSaude.trim() || null
                                     });
-                                    if (created) {
-                                        setPacientes(prev => [...prev, created]);
-                                        const displayName = created.nickname ? `${created.name} (${created.nickname})` : created.name;
-                                        setPatientName(displayName);
-                                        setPatientCpf(pendingCpf);
-                                        setIsPatientUnlocked(true);
-                                        setNewPatientName('');
-                                        setNewPatientNickname('');
-                                        setNewPatientBirthDate('');
-                                        setNewPatientPhone('');
-                                        setNewPatientNeighborhood('');
-                                        setNewPatientStreet('');
-                                        setNewPatientCity('SÃO JOSÉ DO GOIABAL -MG');
-                                        setNewPatientSusNumber('');
-                                        setNewPatientAgenteSaude('');
-                                        setIsRegModalOpen(false);
-                                        showAlert('Paciente cadastrado com sucesso!', 'success');
-                                    } else {
-                                        showAlert('Erro ao cadastrar paciente.', 'error');
-                                    }
-                                } catch (err: any) {
-                                    showAlert(err.message || 'Erro ao cadastrar paciente.', 'error');
+                                    setPacientes(prev => [...prev, created]);
+                                    selectAndValidatePatient(created);
+                                    setIsRegModalOpen(false);
+                                    showAlert('Paciente cadastrado com sucesso!', 'success');
+                                } catch (error) {
+                                    console.error('Erro ao cadastrar paciente:', error);
+                                    showAlert('Erro ao cadastrar paciente.', 'error');
                                 } finally {
                                     setRegistering(false);
                                 }
                             }}
-                            className="p-5 space-y-3.5 text-left"
+                            className="p-6 space-y-4 overflow-y-auto max-h-[75vh] custom-scrollbar"
                         >
-                            {/* Linha 1: CPF e Nome Completo */}
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                <div className="md:col-span-1">
-                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">CPF do Paciente</label>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-700 mb-1">
+                                        Nome Completo *
+                                    </label>
                                     <input
                                         type="text"
-                                        className="w-full rounded-xl border border-slate-200 bg-slate-100 py-2.5 px-3.5 text-xs text-slate-500 font-mono font-bold outline-none cursor-not-allowed shadow-inner"
-                                        value={pendingCpf}
-                                        disabled
-                                    />
-                                </div>
-                                <div className="md:col-span-2">
-                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">Nome Completo *</label>
-                                    <input
-                                        type="text"
-                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 px-3.5 text-xs text-slate-900 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold uppercase shadow-inner"
-                                        placeholder="Nome Completo do Paciente"
+                                        required
+                                        className="w-full rounded-xl border border-slate-300 p-2.5 text-xs uppercase font-bold text-slate-900 focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none"
+                                        placeholder="NOME DO PACIENTE"
                                         value={newPatientName}
                                         onChange={(e) => setNewPatientName(e.target.value.toUpperCase())}
-                                        required
                                     />
                                 </div>
-                            </div>
-
-                            {/* Linha 2: Apelido, Data de Nascimento e Telefone */}
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                 <div>
-                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">Apelido</label>
+                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-700 mb-1">
+                                        Apelido / Como gosta de ser chamado
+                                    </label>
                                     <input
                                         type="text"
-                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 px-3.5 text-xs text-slate-900 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold uppercase shadow-inner"
-                                        placeholder="Ex: Netinho"
+                                        className="w-full rounded-xl border border-slate-300 p-2.5 text-xs uppercase font-bold text-slate-900 focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none"
+                                        placeholder="EX: DONA MARIA"
                                         value={newPatientNickname}
                                         onChange={(e) => setNewPatientNickname(e.target.value.toUpperCase())}
                                     />
                                 </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                 <div>
-                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">Data de Nascimento *</label>
+                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-700 mb-1">
+                                        CPF *
+                                    </label>
                                     <input
-                                        type="date"
-                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 px-3.5 text-xs text-slate-900 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold cursor-pointer shadow-inner"
-                                        value={newPatientBirthDate}
-                                        onChange={(e) => setNewPatientBirthDate(e.target.value)}
+                                        type="text"
                                         required
+                                        className="w-full rounded-xl border border-slate-300 p-2.5 text-xs font-mono font-bold text-slate-900 focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none"
+                                        value={pendingCpf}
+                                        onChange={(e) => setPendingCpf(formatCpfMask(e.target.value))}
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">Telefone</label>
+                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-700 mb-1">
+                                        Data de Nascimento *
+                                    </label>
+                                    <input
+                                        type="date"
+                                        required
+                                        className="w-full rounded-xl border border-slate-300 p-2.5 text-xs font-bold text-slate-900 focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none"
+                                        value={newPatientBirthDate}
+                                        onChange={(e) => setNewPatientBirthDate(e.target.value)}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-700 mb-1">
+                                        Telefone / WhatsApp *
+                                    </label>
                                     <input
                                         type="text"
-                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 px-3.5 text-xs text-slate-900 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold shadow-inner"
-                                        placeholder="(00) 00000-0000"
+                                        required
+                                        className="w-full rounded-xl border border-slate-300 p-2.5 text-xs font-bold text-slate-900 focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none"
+                                        placeholder="(31) 90000-0000"
                                         value={newPatientPhone}
                                         onChange={(e) => handlePhoneChange(e.target.value)}
                                     />
                                 </div>
                             </div>
 
-                            {/* Linha 3: Número do SUS e Rua */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">Número do SUS (Opcional)</label>
+                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-700 mb-1">
+                                        Cartão Nacional do SUS (15 dígitos)
+                                    </label>
                                     <input
                                         type="text"
-                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 px-3.5 text-xs text-slate-900 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-bold tracking-wider shadow-inner"
+                                        className="w-full rounded-xl border border-slate-300 p-2.5 text-xs font-mono font-bold text-slate-900 focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none"
                                         placeholder="000 0000 0000 0000"
                                         value={newPatientSusNumber}
                                         onChange={(e) => setNewPatientSusNumber(e.target.value.replace(/\D/g, '').slice(0, 15))}
                                     />
                                 </div>
+
                                 <div>
-                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">Rua</label>
+                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-700 mb-1">
+                                        Agente de Saúde Responsável *
+                                    </label>
+                                    <select
+                                        required
+                                        className="w-full rounded-xl border border-slate-300 p-2.5 text-xs font-bold text-slate-900 focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none uppercase bg-white cursor-pointer"
+                                        value={newPatientAgenteSaude}
+                                        onChange={(e) => setNewPatientAgenteSaude(e.target.value)}
+                                    >
+                                        <option value="">Selecione o agente de saúde...</option>
+                                        {(agentesSaudeItems && agentesSaudeItems.length > 0 ? agentesSaudeItems.map(a => a.nome) : AGENTES_DE_SAUDE).map(a => (
+                                            <option key={a} value={a}>{a}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-700 mb-1">
+                                        Bairro *
+                                    </label>
                                     <input
                                         type="text"
-                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 px-3.5 text-xs text-slate-900 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold uppercase shadow-inner"
-                                        placeholder="Ex: Rua Principal, 10"
+                                        required
+                                        className="w-full rounded-xl border border-slate-300 p-2.5 text-xs uppercase font-bold text-slate-900 focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none"
+                                        placeholder="BAIRRO DO PACIENTE"
+                                        value={newPatientNeighborhood}
+                                        onChange={(e) => setNewPatientNeighborhood(e.target.value.toUpperCase())}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-700 mb-1">
+                                        Rua / Endereço *
+                                    </label>
+                                    <input
+                                        type="text"
+                                        required
+                                        className="w-full rounded-xl border border-slate-300 p-2.5 text-xs uppercase font-bold text-slate-900 focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none"
+                                        placeholder="RUA, NÚMERO, COMPLEMENTO"
                                         value={newPatientStreet}
                                         onChange={(e) => setNewPatientStreet(e.target.value.toUpperCase())}
                                     />
                                 </div>
                             </div>
 
-                            {/* Linha 4: Bairro e Cidade */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">Bairro</label>
-                                    <input
-                                        type="text"
-                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 px-3.5 text-xs text-slate-900 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold uppercase shadow-inner"
-                                        placeholder="Ex: Centro"
-                                        value={newPatientNeighborhood}
-                                        onChange={(e) => setNewPatientNeighborhood(e.target.value.toUpperCase())}
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">Cidade *</label>
-                                    <input
-                                        type="text"
-                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 px-3.5 text-xs text-slate-900 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold uppercase shadow-inner"
-                                        value={newPatientCity}
-                                        onChange={(e) => setNewPatientCity(e.target.value.toUpperCase())}
-                                        required
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Linha 5: Agente de Saúde */}
-                            <div>
-                                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">Agente de Saúde (ACS)</label>
-                                <div className="relative">
-                                    <select
-                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-3.5 pr-8 text-xs text-slate-900 focus:bg-white focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-semibold uppercase shadow-inner cursor-pointer appearance-none"
-                                        value={newPatientAgenteSaude}
-                                        onChange={(e) => setNewPatientAgenteSaude(e.target.value)}
-                                    >
-                                        <option value="">-- SELECIONE O AGENTE DE SAÚDE (OPCIONAL) --</option>
-                                        {agentesSaudeItems.map((item) => (
-                                            <option key={item.nome} value={item.nome}>
-                                                {item.nome} {item.psf ? `(${item.psf})` : ''}
-                                            </option>
-                                        ))}
-                                    </select>
-                                    <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                                </div>
-                            </div>
-
-                            {/* Footer Buttons */}
-                            <div className="flex gap-3 pt-3">
+                            <div className="p-4 bg-slate-50 border-t border-slate-100 -mx-6 -mb-6 mt-6 flex justify-end gap-3">
                                 <button
                                     type="button"
                                     onClick={() => setIsRegModalOpen(false)}
-                                    className="flex-1 py-3 rounded-xl border border-slate-200 text-slate-700 font-extrabold text-xs uppercase tracking-wider hover:bg-slate-50 transition-all active:scale-98"
+                                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs uppercase rounded-xl transition-all cursor-pointer"
                                 >
                                     Cancelar
                                 </button>
                                 <button
                                     type="submit"
                                     disabled={registering}
-                                    className="flex-1 py-3 rounded-xl bg-pink-600 hover:bg-pink-700 text-white font-black text-xs uppercase tracking-wider transition-all shadow-md hover:shadow-lg active:scale-98 flex items-center justify-center gap-2"
+                                    className="px-5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs uppercase rounded-xl transition-all shadow-md active:scale-95 flex items-center gap-1.5 cursor-pointer"
                                 >
-                                    {registering ? (
-                                        <>
-                                            <Loader2 className="w-4 h-4 animate-spin" />
-                                            Salvando...
-                                        </>
-                                    ) : (
-                                        'Cadastrar'
-                                    )}
+                                    {registering ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
+                                    <span>Salvar e Selecionar</span>
                                 </button>
                             </div>
                         </form>
-                    </div>
-                </div>
-            )}
-
-            {/* CONFIRMATION MODAL (PRÉ-SALVAMENTO MULTI-ITEM) */}
-            {isConfirmModalOpen && selectedItems.length > 0 && (
-                <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-md transition-all">
-                    <div className="bg-white rounded-[32px] shadow-[0_25px_50px_-12px_rgba(0,0,0,0.15)] w-full max-w-lg overflow-hidden border border-slate-100 flex flex-col animate-in fade-in zoom-in-95 slide-in-from-bottom-8 duration-300 ease-out max-h-[92vh]">
-                        {/* Header com Gradiente Moderno */}
-                        <div className="p-5 border-b border-slate-50 flex justify-between items-center bg-gradient-to-r from-slate-50 via-white to-pink-50/20 shrink-0">
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-pink-500 to-rose-500 flex items-center justify-center text-white shadow-[0_8px_16px_-4px_rgba(219,39,119,0.3)] shrink-0">
-                                    <AlertTriangle className="w-5 h-5" />
-                                </div>
-                                <div>
-                                    <h3 className="font-black text-slate-800 uppercase text-xs tracking-wider">
-                                        Confirmar Atendimento ({selectedItems.length} {selectedItems.length === 1 ? 'item' : 'itens'})
-                                    </h3>
-                                    <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5 tracking-tight">
-                                        Revise os dados da retirada antes de finalizar
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Content Body */}
-                        <div className="p-5 flex-1 flex flex-col justify-between gap-4 overflow-hidden text-left bg-gradient-to-b from-white to-slate-50/50 relative min-h-0">
-                            {saving && (
-                                <div className="absolute inset-0 bg-white/90 backdrop-blur-sm z-50 flex flex-col items-center justify-center gap-3.5 animate-in fade-in duration-200">
-                                    <div className="relative flex items-center justify-center">
-                                        <div className="w-14 h-14 rounded-full border-4 border-slate-100 border-t-pink-600 animate-spin"></div>
-                                        <Pill className="w-6 h-6 text-pink-600 absolute animate-pulse" />
-                                    </div>
-                                    <div className="text-center">
-                                        <span className="block text-slate-800 font-black text-xs uppercase tracking-widest">
-                                            Finalizando Atendimento
-                                        </span>
-                                        <span className="block text-slate-400 text-[9px] font-bold uppercase mt-1">
-                                            Registrando {selectedItems.length} medicamentos no sistema...
-                                        </span>
-                                    </div>
-                                </div>
-                            )}
-
-                            <div className="space-y-3 flex-1 overflow-y-auto pr-1 custom-scrollbar">
-                                {/* Paciente */}
-                                <div className="bg-white border border-slate-100 p-3.5 rounded-2xl shadow-sm flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded-xl bg-pink-50 text-pink-600 flex items-center justify-center shrink-0">
-                                        <UserIcon className="w-4 h-4" />
-                                    </div>
-                                    <div className="min-w-0 flex-1">
-                                        <span className="block text-[8px] font-black uppercase text-slate-400 tracking-wider">Beneficiário</span>
-                                        <div className="text-xs font-black text-slate-800 uppercase truncate">
-                                            {patientName}
-                                        </div>
-                                        <div className="text-[10px] text-slate-500 font-mono font-bold">
-                                            CPF: {patientCpf}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Lista de Medicamentos */}
-                                <div className="bg-white border border-slate-100 rounded-2xl p-3.5 shadow-sm space-y-2">
-                                    <span className="block text-[8px] font-black uppercase text-slate-400 tracking-wider mb-1">
-                                        Itens a Entregar ({selectedItems.length})
-                                    </span>
-                                    <div className="divide-y divide-slate-100 max-h-48 overflow-y-auto custom-scrollbar pr-1">
-                                        {selectedItems.map((item, idx) => (
-                                            <div key={item.med.id} className="py-2 first:pt-0 last:pb-0 flex justify-between items-center text-xs">
-                                                <div>
-                                                    <div className="font-extrabold text-slate-800 uppercase">
-                                                        {idx + 1}. {item.med.nome} {item.med.dosagem ? `(${item.med.dosagem})` : ''}
-                                                    </div>
-                                                    <div className="text-[9px] text-slate-400 font-semibold font-mono">
-                                                        Lote: {item.med.lote} • Cat: {item.med.categoria}
-                                                    </div>
-                                                </div>
-                                                <div className="text-right shrink-0 ml-2">
-                                                    <span className="font-black text-pink-600 text-xs">
-                                                        {item.quantity} {item.med.unidade || 'un'}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                {/* Observações / Receita */}
-                                {observacoes && observacoes.trim() && (
-                                    <div className="bg-white border border-slate-100 p-3 rounded-2xl shadow-sm flex items-start gap-2.5">
-                                        <FileText className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
-                                        <div className="min-w-0 flex-1">
-                                            <span className="block text-[8px] font-black uppercase text-slate-400 tracking-wider">Observações / Receita</span>
-                                            <p className="text-slate-600 text-[10px] font-semibold leading-relaxed whitespace-pre-line">
-                                                {observacoes}
-                                            </p>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Action Buttons */}
-                            <div className="flex gap-3 pt-2 shrink-0">
-                                <button
-                                    onClick={() => handleConfirmSubmit()}
-                                    disabled={saving}
-                                    className="flex-1 py-3 bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-700 hover:to-rose-700 disabled:from-pink-400 disabled:to-rose-400 text-white font-black text-xs uppercase tracking-widest rounded-2xl transition-all shadow-[0_8px_20px_-6px_rgba(219,39,119,0.4)] active:scale-98 flex items-center justify-center gap-2 cursor-pointer"
-                                >
-                                    {saving ? (
-                                        <>
-                                            <Loader2 className="w-4 h-4 animate-spin" />
-                                            Salvando...
-                                        </>
-                                    ) : (
-                                        'Confirmar e Finalizar'
-                                    )}
-                                </button>
-                                <button
-                                    onClick={() => setIsConfirmModalOpen(false)}
-                                    className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs uppercase tracking-wider rounded-2xl transition-all active:scale-98 shadow-sm"
-                                >
-                                    Voltar e Corrigir
-                                </button>
-                            </div>
-                        </div>
                     </div>
                 </div>
             )}
@@ -1648,11 +2314,11 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                         setIsSuccessModalOpen(false);
                                         setCreatedMov(null);
                                         setCreatedMovs([]);
-                                        onNavigate('farmacia');
+                                        handleResetPatient();
                                     }}
-                                    className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs uppercase tracking-wider rounded-2xl transition-all active:scale-98"
+                                    className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs uppercase tracking-wider rounded-2xl transition-all active:scale-98 cursor-pointer"
                                 >
-                                    Ok, Voltar
+                                    Nova Dispensação
                                 </button>
                             </div>
                         </div>
@@ -1708,24 +2374,35 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
 
             {/* MEDICAMENTO SELECT MODAL (MULTI-SELECTION CATÁLOGO) */}
             {isMedModalOpen && (
-                <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden border border-slate-200/50 flex flex-col animate-in zoom-in-95 duration-200">
+                <div className="fixed inset-0 z-[130] flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-md animate-in fade-in duration-200">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[88vh] overflow-hidden border border-slate-200/80 flex flex-col animate-in zoom-in-95 duration-200">
                         {/* Header */}
-                        <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
-                            <div>
-                                <h3 className="font-extrabold text-slate-800 uppercase text-xs tracking-wider">
-                                    Catálogo de Medicamentos
-                                </h3>
-                                <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">
-                                    Selecione os medicamentos e quantidades desejadas ({selectedItems.length} selecionado{selectedItems.length === 1 ? '' : 's'})
-                                </p>
+                        <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-gradient-to-r from-pink-50/80 via-white to-rose-50/50 shrink-0">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-pink-600 to-rose-500 text-white flex items-center justify-center shadow-md shadow-pink-500/25 ring-4 ring-pink-50 shrink-0">
+                                    <Pill className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <div className="flex items-center gap-2">
+                                        <h3 className="font-black text-slate-900 uppercase text-xs md:text-sm tracking-tight">
+                                            Catálogo de Medicamentos
+                                        </h3>
+                                        <span className="px-2 py-0.5 rounded-full bg-pink-100 text-pink-700 text-[9px] font-black uppercase">
+                                            {selectedItems.length} selecionado{selectedItems.length === 1 ? '' : 's'}
+                                        </span>
+                                    </div>
+                                    <p className="text-[11px] text-slate-400 font-semibold mt-0.5">
+                                        Pesquise no catálogo e ajuste as quantidades para dispensar
+                                    </p>
+                                </div>
                             </div>
                             <button
                                 type="button"
                                 onClick={() => setIsMedModalOpen(false)}
-                                className="p-1.5 hover:bg-slate-200 rounded-lg text-slate-500 transition-colors"
+                                className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-all cursor-pointer"
+                                title="Fechar Catálogo"
                             >
-                                <X className="w-5 h-5" />
+                                <X className="w-4 h-4" />
                             </button>
                         </div>
 
@@ -1735,7 +2412,7 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                 <input
                                     type="text"
                                     placeholder="Buscar por nome, princípio ativo, lote..."
-                                    className="w-full pl-10 pr-8 py-2.5 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:border-pink-500 bg-slate-50 focus:bg-white transition-all placeholder:text-slate-400"
+                                    className="w-full pl-10 pr-9 py-2.5 border border-slate-300/90 bg-slate-50/50 hover:bg-white focus:bg-white rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 transition-all placeholder:text-slate-400 shadow-2xs"
                                     value={medModalSearch}
                                     onChange={(e) => setMedModalSearch(e.target.value)}
                                     autoFocus
@@ -1745,7 +2422,7 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                     <button
                                         type="button"
                                         onClick={() => setMedModalSearch('')}
-                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer p-0.5"
                                     >
                                         <X className="w-3.5 h-3.5" />
                                     </button>
@@ -1753,16 +2430,16 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                             </div>
 
                             {/* Categories tabs */}
-                            <div className="flex gap-1.5">
+                            <div className="flex gap-1.5 overflow-x-auto custom-scrollbar pb-0.5">
                                 {(['TODOS', 'CBAF', 'CESAF', 'CEAF'] as const).map(cat => (
                                     <button
                                         key={cat}
                                         type="button"
                                         onClick={() => setMedModalCategory(cat)}
-                                        className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${
+                                        className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1 shrink-0 ${
                                             medModalCategory === cat
-                                                ? 'bg-pink-600 text-white shadow-sm'
-                                                : 'bg-slate-50 text-slate-400 hover:bg-slate-100'
+                                                ? 'bg-gradient-to-r from-pink-600 to-rose-600 text-white shadow-sm shadow-pink-600/20 scale-102'
+                                                : 'bg-slate-100/90 text-slate-600 hover:bg-slate-200'
                                         }`}
                                     >
                                         {cat}
@@ -1772,23 +2449,25 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                         </div>
 
                         {/* List */}
-                        <div className="flex-1 overflow-y-auto p-4 space-y-2.5 custom-scrollbar min-h-0">
+                        <div className="flex-1 overflow-y-auto p-4 space-y-2.5 custom-scrollbar min-h-0 bg-slate-50/40">
                             {!medModalSearch.trim() ? (
-                                <div className="py-16 flex flex-col items-center justify-center text-slate-400">
-                                    <Search className="w-12 h-12 mb-3 text-slate-300 animate-pulse" />
-                                    <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider">Digite um termo para pesquisar</h4>
-                                    <p className="text-[11px] text-slate-400 text-center mt-1 font-semibold max-w-xs">
-                                        Digite no campo acima o nome do medicamento, princípio ativo ou número do lote para listar as opções.
+                                <div className="py-16 flex flex-col items-center justify-center text-slate-400 text-center">
+                                    <div className="w-14 h-14 rounded-2xl bg-pink-50 text-pink-400 flex items-center justify-center mb-3 shadow-2xs border border-pink-100">
+                                        <Search className="w-7 h-7 animate-pulse" />
+                                    </div>
+                                    <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">Digite um termo para pesquisar</h4>
+                                    <p className="text-[11px] text-slate-400 text-center mt-1 font-semibold max-w-xs leading-relaxed">
+                                        Informe o nome do medicamento, princípio ativo ou lote acima para listar os itens disponíveis.
                                     </p>
                                 </div>
                             ) : modalMedOptions.length > 0 ? (
                                 modalMedOptions.map(med => {
                                     const isLowStock = med.quantidade <= med.limite_minimo;
                                     const qtyBadgeColor = med.quantidade === 0 
-                                        ? 'bg-rose-50 text-rose-700 border-rose-100' 
+                                        ? 'bg-rose-50 text-rose-700 border-rose-200' 
                                         : isLowStock 
-                                            ? 'bg-amber-50 text-amber-700 border-amber-100' 
-                                            : 'bg-emerald-50 text-emerald-700 border-emerald-100';
+                                            ? 'bg-amber-50 text-amber-800 border-amber-200' 
+                                            : 'bg-emerald-50 text-emerald-800 border-emerald-200';
 
                                     const isExpired = new Date(med.validade).getTime() <= Date.now();
                                     const existing = selectedItems.find(si => si.med.id === med.id);
@@ -1797,14 +2476,14 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                     return (
                                         <div
                                             key={med.id}
-                                            className={`w-full p-4 rounded-2xl border-2 transition-all flex flex-col gap-2.5 relative overflow-hidden ${
+                                            className={`w-full p-3.5 rounded-2xl border transition-all flex flex-col gap-2 relative overflow-hidden ${
                                                 isSelected 
-                                                    ? 'border-pink-500 bg-pink-50/40 shadow-md shadow-pink-500/10 ring-2 ring-pink-500/20' 
-                                                    : 'border-slate-200/80 hover:border-pink-300 hover:bg-pink-50/10 bg-white'
+                                                    ? 'border-pink-500 bg-pink-50/50 shadow-md shadow-pink-500/10 ring-2 ring-pink-500/20' 
+                                                    : 'border-slate-200/90 hover:border-pink-300 hover:bg-white bg-white shadow-2xs hover:shadow-xs'
                                             }`}
                                         >
                                             {isSelected && (
-                                                <div className="absolute top-0 right-0 bg-pink-600 text-white text-[9px] font-black uppercase px-3 py-1 rounded-bl-xl shadow-xs flex items-center gap-1">
+                                                <div className="absolute top-0 right-0 bg-gradient-to-r from-pink-600 to-rose-600 text-white text-[9px] font-black uppercase px-3 py-1 rounded-bl-xl shadow-xs flex items-center gap-1">
                                                     <CheckCircle2 className="w-3 h-3" />
                                                     <span>Selecionado ({existing.quantity} {med.unidade})</span>
                                                 </div>
@@ -1812,34 +2491,34 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
 
                                             <div className="flex justify-between items-start w-full pr-24">
                                                 <div>
-                                                    <h4 className="font-black text-sm uppercase text-slate-800 flex items-center gap-2">
+                                                    <h4 className="font-black text-xs md:text-sm uppercase text-slate-900 flex items-center gap-2">
                                                         {med.nome} {med.dosagem ? `(${med.dosagem})` : ''}
                                                     </h4>
-                                                    <div className="flex flex-wrap gap-1 mt-1.5">
-                                                        <span className="px-2 py-0.5 text-[8px] font-black uppercase tracking-wider rounded bg-pink-100 text-pink-700">
+                                                    <div className="flex flex-wrap gap-1.5 mt-1">
+                                                        <span className="px-2 py-0.5 text-[8px] font-black uppercase tracking-wider rounded-md bg-pink-50 text-pink-700 border border-pink-200/60">
                                                             {med.categoria}
                                                         </span>
                                                         {med.tipo && (
-                                                            <span className="px-2 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded bg-slate-100 text-slate-600">
+                                                            <span className="px-2 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded-md bg-slate-100 text-slate-600 border border-slate-200">
                                                                 {med.tipo}
                                                             </span>
                                                         )}
                                                         {med.principio_ativo && (
-                                                            <span className="px-2 py-0.5 text-[8px] font-extrabold uppercase tracking-wider rounded bg-emerald-50 text-emerald-700 border border-emerald-200/60">
+                                                            <span className="px-2 py-0.5 text-[8px] font-extrabold uppercase tracking-wider rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200/60">
                                                                 P.Ativo: {med.principio_ativo}
                                                             </span>
                                                         )}
-                                                        <span className="px-2 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded bg-slate-50 border border-slate-200 text-slate-600 font-mono">
+                                                        <span className="px-2 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded-md bg-slate-50 border border-slate-200 text-slate-600 font-mono">
                                                             Lote: {med.lote}
                                                         </span>
                                                     </div>
                                                 </div>
                                             </div>
 
-                                            <div className="flex items-center justify-between text-[10px] text-slate-500 border-t border-slate-100 pt-2.5 mt-1">
+                                            <div className="flex items-center justify-between text-[10px] text-slate-500 border-t border-slate-100 pt-2 mt-0.5">
                                                 <div className="flex items-center gap-3">
-                                                    <span className="font-semibold">
-                                                        Validade: <span className={isExpired ? 'text-rose-500 font-bold' : 'font-bold text-slate-700'}>
+                                                    <span className="font-semibold text-slate-600">
+                                                        Validade: <span className={isExpired ? 'text-rose-600 font-black' : 'font-bold text-slate-800'}>
                                                             {formatDateBr(med.validade)}
                                                             {isExpired && ' (Vencido)'}
                                                         </span>
@@ -1853,10 +2532,10 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                                     <button
                                                         type="button"
                                                         onClick={() => handleOpenQtyModal(med)}
-                                                        className={`px-3.5 py-1.5 text-white font-extrabold text-[10px] uppercase tracking-wider rounded-xl transition-all shadow-sm active:scale-95 flex items-center gap-1 cursor-pointer ${
+                                                        className={`px-3.5 py-1.5 text-white font-extrabold text-[10px] uppercase tracking-wider rounded-xl transition-all shadow-xs active:scale-95 flex items-center gap-1 cursor-pointer ${
                                                             isSelected 
-                                                                ? 'bg-purple-600 hover:bg-purple-700' 
-                                                                : 'bg-pink-600 hover:bg-pink-700'
+                                                                ? 'bg-purple-600 hover:bg-purple-700 shadow-purple-600/20' 
+                                                                : 'bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 shadow-pink-600/20'
                                                         }`}
                                                     >
                                                         <Plus className="w-3.5 h-3.5" />
@@ -1868,10 +2547,10 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                     );
                                 })
                             ) : (
-                                <div className="py-12 flex flex-col items-center justify-center text-slate-400">
+                                <div className="py-12 flex flex-col items-center justify-center text-slate-400 text-center">
                                     <Search className="w-12 h-12 mb-2 opacity-20 text-slate-500" />
                                     <h4 className="text-xs font-extrabold text-slate-700 uppercase tracking-wider">Nenhum medicamento encontrado</h4>
-                                    <p className="text-[10px] text-slate-500 text-center mt-0.5 font-medium">
+                                    <p className="text-[10px] text-slate-400 text-center mt-0.5 font-medium">
                                         Não encontramos resultados para "{medModalSearch}". Tente alterar os termos de busca ou a categoria.
                                     </p>
                                 </div>
@@ -1879,14 +2558,14 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                         </div>
 
                         {/* Modal Footer */}
-                        <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-between items-center shrink-0">
+                        <div className="p-4 bg-white border-t border-slate-100 flex justify-between items-center shrink-0">
                             <span className="text-xs font-extrabold text-slate-700">
                                 {selectedItems.length} {selectedItems.length === 1 ? 'medicamento selecionado' : 'medicamentos selecionados'}
                             </span>
                             <button
                                 type="button"
                                 onClick={() => setIsMedModalOpen(false)}
-                                className="px-5 py-2.5 bg-pink-600 hover:bg-pink-700 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md active:scale-95 cursor-pointer"
+                                className="px-5 py-2.5 bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-md shadow-pink-600/20 active:scale-95 cursor-pointer"
                             >
                                 Concluir Seleção
                             </button>
@@ -1897,42 +2576,42 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
 
             {/* MODAL DE QUANTIDADE DESEJADA */}
             {qtyModalMed && (
-                <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200">
-                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-100 flex flex-col animate-in zoom-in-95 duration-200">
+                <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md animate-in fade-in duration-200">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200/80 flex flex-col animate-in zoom-in-95 duration-200">
                         {/* Header */}
-                        <div className="p-5 border-b border-slate-100 bg-gradient-to-r from-pink-50/80 via-purple-50/50 to-white flex justify-between items-start">
+                        <div className="p-5 border-b border-slate-100 bg-gradient-to-r from-pink-50/90 via-rose-50/40 to-white flex justify-between items-start">
                             <div className="space-y-1">
                                 <div className="flex items-center gap-2">
-                                    <span className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider rounded bg-pink-600 text-white">
+                                    <span className="px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider rounded-md bg-pink-600 text-white shadow-2xs">
                                         {qtyModalMed.categoria}
                                     </span>
                                     {qtyModalMed.dosagem && (
-                                        <span className="px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider rounded bg-pink-100 text-pink-800">
+                                        <span className="px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider rounded-md bg-pink-100 text-pink-800">
                                             {qtyModalMed.dosagem}
                                         </span>
                                     )}
                                 </div>
-                                <h3 className="font-black text-slate-800 text-base uppercase leading-tight pt-1">
+                                <h3 className="font-black text-slate-900 text-base uppercase leading-tight pt-1">
                                     {qtyModalMed.nome}
                                 </h3>
                                 <p className="text-[11px] text-slate-500 font-semibold flex items-center gap-2 pt-0.5">
                                     <span>Lote: <strong className="font-mono font-bold text-slate-700">{qtyModalMed.lote}</strong></span>
                                     <span>•</span>
-                                    <span>Estoque: <strong className="text-emerald-600 font-extrabold">{qtyModalMed.quantidade} {qtyModalMed.unidade}</strong></span>
+                                    <span>Estoque: <strong className="text-emerald-700 font-black">{qtyModalMed.quantidade} {qtyModalMed.unidade}</strong></span>
                                 </p>
                             </div>
                             <button
                                 type="button"
                                 onClick={() => setQtyModalMed(null)}
-                                className="p-1.5 hover:bg-slate-200/70 rounded-xl text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-colors cursor-pointer"
                             >
-                                <X className="w-5 h-5" />
+                                <X className="w-4 h-4" />
                             </button>
                         </div>
 
                         {/* Body: Input de quantidade */}
-                        <div className="p-6 space-y-4">
-                            <label className="block text-xs font-black uppercase tracking-wider text-slate-500 text-center">
+                        <div className="p-6 space-y-4 bg-slate-50/30">
+                            <label className="block text-xs font-black uppercase tracking-wider text-slate-600 text-center">
                                 Informe a quantidade desejada a dispensar
                             </label>
 
@@ -1941,7 +2620,7 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                     type="button"
                                     onClick={() => setQtyInput(prev => Math.max(1, prev - 1))}
                                     disabled={qtyInput <= 1}
-                                    className="w-12 h-12 rounded-2xl bg-slate-100 hover:bg-slate-200 active:scale-95 disabled:opacity-40 text-slate-700 flex items-center justify-center font-extrabold text-lg transition-all shadow-sm cursor-pointer"
+                                    className="w-12 h-12 rounded-2xl bg-white hover:bg-slate-100 active:scale-95 disabled:opacity-40 text-slate-700 flex items-center justify-center font-extrabold text-lg transition-all shadow-sm border border-slate-200 cursor-pointer"
                                 >
                                     <Minus className="w-5 h-5" />
                                 </button>
@@ -1956,9 +2635,9 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                             const val = parseInt(e.target.value) || 0;
                                             setQtyInput(Math.max(0, Math.min(qtyModalMed.quantidade, val)));
                                         }}
-                                        className="w-32 py-3 px-3 border-2 border-pink-500 rounded-2xl text-center text-2xl font-black font-mono text-slate-900 bg-pink-50/20 focus:outline-none focus:ring-4 focus:ring-pink-500/20 shadow-inner"
+                                        className="w-32 py-3 px-3 border-2 border-pink-500 rounded-2xl text-center text-2xl font-black font-mono text-slate-900 bg-white focus:outline-none focus:ring-4 focus:ring-pink-500/20 shadow-inner"
                                     />
-                                    <span className="block text-[9px] font-extrabold uppercase text-slate-400 text-center mt-1">
+                                    <span className="block text-[10px] font-black uppercase text-slate-400 text-center mt-1">
                                         {qtyModalMed.unidade || 'Unidades'}
                                     </span>
                                 </div>
@@ -1967,32 +2646,32 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                     type="button"
                                     onClick={() => setQtyInput(prev => Math.min(qtyModalMed.quantidade, prev + 1))}
                                     disabled={qtyInput >= qtyModalMed.quantidade}
-                                    className="w-12 h-12 rounded-2xl bg-pink-600 hover:bg-pink-700 active:scale-95 disabled:opacity-40 text-white flex items-center justify-center font-extrabold text-lg transition-all shadow-sm shadow-pink-600/30 cursor-pointer"
+                                    className="w-12 h-12 rounded-2xl bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 active:scale-95 disabled:opacity-40 text-white flex items-center justify-center font-extrabold text-lg transition-all shadow-md shadow-pink-600/30 cursor-pointer"
                                 >
                                     <Plus className="w-5 h-5" />
                                 </button>
                             </div>
 
                             {qtyInput >= qtyModalMed.quantidade && (
-                                <p className="text-[10px] font-bold text-amber-600 text-center bg-amber-50 py-1.5 px-3 rounded-xl border border-amber-200/60">
-                                    Limite máximo disponível no estoque atingo ({qtyModalMed.quantidade} {qtyModalMed.unidade})
+                                <p className="text-[10px] font-bold text-amber-700 text-center bg-amber-50 py-1.5 px-3 rounded-xl border border-amber-200/80 shadow-2xs">
+                                    Limite máximo disponível no estoque atingido ({qtyModalMed.quantidade} {qtyModalMed.unidade})
                                 </p>
                             )}
                         </div>
 
                         {/* Footer */}
-                        <div className="p-4 bg-slate-50 border-t border-slate-100 flex gap-3">
+                        <div className="p-4 bg-white border-t border-slate-100 flex gap-3">
                             <button
                                 type="button"
                                 onClick={() => setQtyModalMed(null)}
-                                className="flex-1 py-3 bg-slate-200/80 hover:bg-slate-300 text-slate-700 font-extrabold text-xs uppercase tracking-wider rounded-2xl transition-all cursor-pointer"
+                                className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer"
                             >
                                 Cancelar
                             </button>
                             <button
                                 type="button"
                                 onClick={handleConfirmQuantity}
-                                className="flex-1 py-3 bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-700 hover:to-rose-700 text-white font-black text-xs uppercase tracking-wider rounded-2xl transition-all shadow-md shadow-pink-600/30 active:scale-95 cursor-pointer"
+                                className="flex-1 py-3 bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-md shadow-pink-600/30 active:scale-95 cursor-pointer"
                             >
                                 Confirmar Quantidade
                             </button>
@@ -2000,6 +2679,24 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                     </div>
                 </div>
             )}
+
+            {/* MODAL DE VALIDAÇÃO AUTOMÁTICA DE CADASTRO INCOMPLETO */}
+            <CadastroIncompletoModal
+                isOpen={isValidationModalOpen}
+                patient={incompletePatient}
+                onClose={() => {
+                    setIsValidationModalOpen(false);
+                    setIncompletePatient(null);
+                    if (!selectedPatientObj) {
+                        setPatientName('');
+                        setPatientCpf('');
+                        setIsPatientUnlocked(false);
+                    }
+                }}
+                onComplete={handlePatientValidationComplete}
+                accentColor="pink"
+                contextTitle="Dispensação de Medicamentos"
+            />
         </div>
     );
 };

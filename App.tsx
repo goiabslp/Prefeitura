@@ -225,6 +225,10 @@ const VIEW_TO_PATH: Record<string, string> = {
   'farmacia:pacientes': '/FarmaciaPopular/Pacientes',
   'farmacia:consultar': '/FarmaciaPopular/Consultar',
   'farmacia:retirar': '/FarmaciaPopular/Retirar',
+  'farmacia:retirar-paciente': '/FarmaciaPopular/Retirar/Paciente',
+  'farmacia:retirar-medicamentos': '/FarmaciaPopular/Retirar/Medicamentos',
+  'farmacia:retirar-medico': '/FarmaciaPopular/Retirar/Medico',
+  'farmacia:retirar-revisar': '/FarmaciaPopular/Retirar/Revisar',
   'farmacia:estoque': '/FarmaciaPopular/Estoque',
   'farmacia:dados': '/FarmaciaPopular/Dados',
   'farmacia:historico': '/FarmaciaPopular/Historico',
@@ -5523,6 +5527,18 @@ const App: React.FC = () => {
                   } else if (view === 'farmacia:retirar') {
                     setAppState(prev => ({ ...prev, view: 'retirar' }));
                     window.history.pushState({}, '', '/FarmaciaPopular/Retirar');
+                  } else if (view === 'farmacia:retirar-paciente') {
+                    setAppState(prev => ({ ...prev, view: 'retirar-paciente' }));
+                    window.history.pushState({}, '', '/FarmaciaPopular/Retirar/Paciente');
+                  } else if (view === 'farmacia:retirar-medicamentos') {
+                    setAppState(prev => ({ ...prev, view: 'retirar-medicamentos' }));
+                    window.history.pushState({}, '', '/FarmaciaPopular/Retirar/Medicamentos');
+                  } else if (view === 'farmacia:retirar-medico') {
+                    setAppState(prev => ({ ...prev, view: 'retirar-medico' }));
+                    window.history.pushState({}, '', '/FarmaciaPopular/Retirar/Medico');
+                  } else if (view === 'farmacia:retirar-revisar') {
+                    setAppState(prev => ({ ...prev, view: 'retirar-revisar' }));
+                    window.history.pushState({}, '', '/FarmaciaPopular/Retirar/Revisar');
                   } else if (view === 'farmacia:estoque') {
                     setAppState(prev => ({ ...prev, view: 'estoque' }));
                     window.history.pushState({}, '', '/FarmaciaPopular/Estoque');

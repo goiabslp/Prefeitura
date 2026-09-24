@@ -226,7 +226,7 @@ export const FarmaciaModule: React.FC<FarmaciaModuleProps> = ({
     const canAccessGestor = userCanAccessSubmodule(currentUser, 'parent_farmacia', 'sub_farmacia_gestor', moduleStatus);
 
     const showConsultar = subView === 'consultar' && canAccessConsultar;
-    const showRetirar = subView === 'retirar' && canAccessRetirar;
+    const showRetirar = (subView === 'retirar' || subView?.startsWith('retirar')) && canAccessRetirar;
     const showEstoque = subView === 'estoque' && canAccessEstoque;
     const showDashboard = subView === 'dashboard' && canAccessDados;
     const showDados = subView === 'dados' && canAccessDados;
@@ -302,7 +302,7 @@ export const FarmaciaModule: React.FC<FarmaciaModuleProps> = ({
         <FarmaciaAlertProvider>
         <div className="flex-1 w-full h-full bg-[#f8fafc] relative flex flex-col overflow-hidden min-h-0">
             {/* Header / Subnav container */}
-            {subView !== 'consultar' && subView !== 'pacientes' && subView !== 'estoque' && (
+            {subView !== 'consultar' && subView !== 'pacientes' && subView !== 'estoque' && !subView?.startsWith('retirar') && (
                 <div className="bg-slate-50 border-b border-slate-200/60 py-2.5 px-4 md:px-6 flex flex-col md:flex-row md:items-center justify-between gap-3 shrink-0 z-40">
                     <div className="flex items-center gap-3">
                         <button

@@ -138,6 +138,17 @@ export const PacientesTab: React.FC<PacientesTabProps> = ({
             return;
         }
 
+        const cleanPhone = patPhone.replace(/\D/g, '');
+        if (!cleanPhone || cleanPhone.length < 10) {
+            setPatError('O Telefone é obrigatório (informe DDD + Número com pelo menos 10 dígitos).');
+            return;
+        }
+
+        if (!patAgenteSaude || !patAgenteSaude.trim()) {
+            setPatError('O Agente de Saúde (ACS) é obrigatório.');
+            return;
+        }
+
         setLoading(true);
         try {
             const patientData = {
@@ -611,7 +622,7 @@ export const PacientesTab: React.FC<PacientesTabProps> = ({
 
                                         <div>
                                             <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">
-                                                Telefone {isFieldBlank(patPhone) && <span className="text-amber-600 font-black ml-1 uppercase">(Pendente)</span>}
+                                                Telefone * {isFieldBlank(patPhone) && <span className="text-amber-600 font-black ml-1 uppercase">(Pendente)</span>}
                                             </label>
                                             <input
                                                 type="text"
@@ -619,6 +630,7 @@ export const PacientesTab: React.FC<PacientesTabProps> = ({
                                                 placeholder="(00) 00000-0000"
                                                 value={patPhone}
                                                 onChange={(e) => handlePatPhoneChange(e.target.value)}
+                                                required
                                             />
                                         </div>
 
@@ -679,15 +691,16 @@ export const PacientesTab: React.FC<PacientesTabProps> = ({
 
                                         <div className="md:col-span-2">
                                             <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">
-                                                Agente de Saúde (ACS) {isFieldBlank(patAgenteSaude) && <span className="text-amber-600 font-black ml-1 uppercase">(Pendente)</span>}
+                                                Agente de Saúde (ACS) * {isFieldBlank(patAgenteSaude) && <span className="text-amber-600 font-black ml-1 uppercase">(Pendente)</span>}
                                             </label>
                                             <div className="relative">
                                                 <select
                                                     className={getFieldClass(isFieldBlank(patAgenteSaude), "pr-8 uppercase cursor-pointer appearance-none")}
                                                     value={patAgenteSaude}
                                                     onChange={(e) => setPatAgenteSaude(e.target.value)}
+                                                    required
                                                 >
-                                                    <option value="">-- SELECIONE O AGENTE DE SAÚDE (OPCIONAL) --</option>
+                                                    <option value="">-- SELECIONE O AGENTE DE SAÚDE (ACS) * --</option>
                                                     {agentesSaudeItems.map((item) => (
                                                         <option key={item.nome} value={item.nome}>
                                                             {item.nome} {item.psf ? `(${item.psf})` : ''}
