@@ -400,6 +400,33 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
   const [selectedSpecialOption, setSelectedSpecialOption] = useState<'sim' | 'nao' | ''>('');
   const [newPassengerType, setNewPassengerType] = useState<'paciente' | 'acompanhante' | 'passageiro'>('paciente');
 
+  // Identificação do veículo selecionado e verificação de Van de Hemodiálise (Placa UEA1J55 / UAE1J55)
+  const selectedVehicle = useMemo(() => {
+    return vehicles.find(v => v.id === formData.vehicleId);
+  }, [vehicles, formData.vehicleId]);
+
+  const isHemodialysisVan = useMemo(() => {
+    if (!selectedVehicle) return false;
+    const cleanPlate = (selectedVehicle.plate || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    return cleanPlate === 'UEA1J55' || 
+           cleanPlate === 'UAE1J55' || 
+           cleanPlate.includes('UEA1J55') || 
+           cleanPlate.includes('UAE1J55') ||
+           cleanPlate.endsWith('1J55') ||
+           selectedVehicle.id === '7e1a30d6-bc38-4302-8399-19f052f5697d';
+  }, [selectedVehicle]);
+
+  const maxVanCrewCapacity = useMemo(() => {
+    if (!selectedVehicle) return 15;
+    if (selectedVehicle.passengerCapacity !== undefined && selectedVehicle.passengerCapacity > 5) {
+      return selectedVehicle.passengerCapacity;
+    }
+    if (selectedVehicle.passengerCapacity !== undefined && selectedVehicle.passengerCapacity > 1) {
+      return selectedVehicle.passengerCapacity;
+    }
+    return 15;
+  }, [selectedVehicle]);
+
   // Cálculos de limites da tripulação
   const patientCount = useMemo(() => {
     return (formData.passengers || []).filter(p => p.type === 'paciente').length;
@@ -415,10 +442,19 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
 
   const isSpecialLimitReached = useMemo(() => {
     if (!isSpecialTreatmentTrip) return false;
+    if (isHemodialysisVan) {
+      return totalCrewCount >= maxVanCrewCapacity;
+    }
     return totalCrewCount >= 3 || (patientCount >= 1 && companionCount >= 2);
-  }, [isSpecialTreatmentTrip, totalCrewCount, patientCount, companionCount]);
+  }, [isSpecialTreatmentTrip, isHemodialysisVan, totalCrewCount, maxVanCrewCapacity, patientCount, companionCount]);
 
   const handleOpenTripulacaoModal = () => {
+    if (!formData.vehicleId) {
+      showToast("Selecione o Veículo Operacional na aba 'Dados Gerais' antes de configurar a Tripulação.", "warning");
+      setModalActiveTab('dados_gerais');
+      setActiveSelectionField('vehicle');
+      return;
+    }
     setSelectedSpecialOption(isSpecialTreatmentTrip === true ? 'sim' : isSpecialTreatmentTrip === false ? 'nao' : '');
     setTripulacaoModalStep(1);
     setIsTripulacaoModalOpen(true);
@@ -443,16 +479,29 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
   const handleConfirmSpecialWarning = () => {
     setIsTripulacaoUnlocked(true);
     setIsSpecialTreatmentTrip(true);
-    if (patientCount === 0) {
+    if (isHemodialysisVan) {
       setNewPassengerType('paciente');
-    } else if (companionCount < 2) {
-      setNewPassengerType('acompanhante');
+      setIsTripulacaoModalOpen(false);
+      showToast("Tripulação liberada para a Van Exclusiva de Hemodiálise (múltiplos pacientes permitidos).", "success");
+    } else {
+      if (patientCount === 0) {
+        setNewPassengerType('paciente');
+      } else if (companionCount < 2) {
+        setNewPassengerType('acompanhante');
+      }
+      setIsTripulacaoModalOpen(false);
+      showToast("Tripulação liberada para paciente oncológico/hemodiálise com veículo de uso exclusivo.", "success");
     }
-    setIsTripulacaoModalOpen(false);
-    showToast("Tripulação liberada para paciente oncológico/hemodiálise com veículo de uso exclusivo.", "success");
   };
 
   const handleAddPassenger = () => {
+    if (!formData.vehicleId) {
+      showToast("Selecione o Veículo Operacional antes de adicionar integrantes à tripulação.", "warning");
+      setModalActiveTab('dados_gerais');
+      setActiveSelectionField('vehicle');
+      return;
+    }
+
     if (!isTripulacaoUnlocked) {
       showToast("Clique no botão ADICIONAR TRIPULAÇÃO para liberar os campos.", "warning");
       return;
@@ -466,19 +515,26 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
     if (isSpecialTreatmentTrip) {
       const targetType = newPassengerType || (patientCount === 0 ? 'paciente' : 'acompanhante');
 
-      if (totalCrewCount >= 3) {
-        showToast("Limite máximo de 03 pessoas atingido nesta viagem exclusiva.", "warning");
-        return;
-      }
+      if (isHemodialysisVan) {
+        if (totalCrewCount >= maxVanCrewCapacity) {
+          showToast(`Limite máximo da Van (${maxVanCrewCapacity} passageiros) atingido.`, "warning");
+          return;
+        }
+      } else {
+        if (totalCrewCount >= 3) {
+          showToast("Limite máximo de 03 pessoas atingido nesta viagem exclusiva.", "warning");
+          return;
+        }
 
-      if (targetType === 'paciente' && patientCount >= 1) {
-        showToast("Não é permitido adicionar um segundo paciente (máximo 01 paciente).", "error");
-        return;
-      }
+        if (targetType === 'paciente' && patientCount >= 1) {
+          showToast("Não é permitido adicionar um segundo paciente em viagem convencional (máximo 01 paciente).", "error");
+          return;
+        }
 
-      if (targetType === 'acompanhante' && companionCount >= 2) {
-        showToast("Não é permitido adicionar mais de 02 acompanhantes (máximo 02).", "error");
-        return;
+        if (targetType === 'acompanhante' && companionCount >= 2) {
+          showToast("Não é permitido adicionar mais de 02 acompanhantes (máximo 02).", "error");
+          return;
+        }
       }
 
       const memberToAdd: CrewMember = {
@@ -501,7 +557,7 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
       }));
 
       setNewPassenger({ name: '', departureLocation: '', appointmentTime: '', appointmentLocation: '' });
-      if (targetType === 'paciente' && nextCCount < 2) {
+      if (!isHemodialysisVan && targetType === 'paciente' && nextCCount < 2) {
         setNewPassengerType('acompanhante');
       }
       showToast(`${targetType === 'paciente' ? 'Paciente' : 'Acompanhante'} adicionado à tripulação!`, "success");
@@ -539,7 +595,7 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
       companionCount: nextCCount
     }));
 
-    if (isSpecialTreatmentTrip && nextPCount === 0) {
+    if (isSpecialTreatmentTrip && !isHemodialysisVan && nextPCount === 0) {
       setNewPassengerType('paciente');
     }
   };
@@ -811,17 +867,19 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
     if (isSpecialTreatmentTrip) {
       const pCount = (formData.passengers || []).filter(p => p.type === 'paciente').length;
       const cCount = (formData.passengers || []).filter(p => p.type === 'acompanhante').length;
-      if (pCount > 1) {
-        showToast("Viagem exclusiva permite no máximo 01 paciente.", "error");
-        return;
-      }
-      if (cCount > 2) {
-        showToast("Viagem exclusiva permite no máximo 02 acompanhantes.", "error");
-        return;
-      }
-      if (pCount + cCount > 3) {
-        showToast("Viagem exclusiva permite no máximo 03 pessoas na tripulação.", "error");
-        return;
+      if (!isHemodialysisVan) {
+        if (pCount > 1) {
+          showToast("Viagem exclusiva convencional permite no máximo 01 paciente.", "error");
+          return;
+        }
+        if (cCount > 2) {
+          showToast("Viagem exclusiva convencional permite no máximo 02 acompanhantes.", "error");
+          return;
+        }
+        if (pCount + cCount > 3) {
+          showToast("Viagem exclusiva convencional permite no máximo 03 pessoas na tripulação.", "error");
+          return;
+        }
       }
     }
 
@@ -1505,6 +1563,15 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
       { id: 'tripulacao', label: 'Tripulação', icon: Users },
     ];
 
+    const handleTabChange = (tabId: 'dados_gerais' | 'destino' | 'data' | 'objetivo' | 'tripulacao') => {
+      if (tabId === 'tripulacao' && !formData.vehicleId) {
+        showToast("Por favor, selecione o Veículo Operacional na aba 'Dados Gerais' antes de acessar a Tripulação.", "warning");
+        setActiveSelectionField('vehicle');
+        return;
+      }
+      setModalActiveTab(tabId);
+    };
+
     const currentTabIndex = tabs.findIndex(t => t.id === modalActiveTab);
 
     return (
@@ -1568,26 +1635,40 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
               {tabs.map((tab) => {
                 const TabIcon = tab.icon;
                 const isActive = modalActiveTab === tab.id;
+                const isTripulacaoLocked = tab.id === 'tripulacao' && !formData.vehicleId;
+
                 return (
                   <button
                     key={tab.id}
                     type="button"
-                    onClick={() => setModalActiveTab(tab.id)}
+                    onClick={() => handleTabChange(tab.id)}
                     className={`flex items-center gap-2 px-4 py-2.5 rounded-t-xl text-xs font-black uppercase tracking-wider transition-all border-b-2 shrink-0 cursor-pointer ${
                       isActive
                         ? 'border-indigo-600 text-indigo-600 bg-white shadow-xs'
-                        : 'border-transparent text-slate-400 hover:text-slate-700 bg-transparent'
+                        : isTripulacaoLocked
+                          ? 'border-transparent text-slate-400 hover:text-amber-600 bg-transparent'
+                          : 'border-transparent text-slate-400 hover:text-slate-700 bg-transparent'
                     }`}
+                    title={isTripulacaoLocked ? "Selecione o veículo operacional na aba 'Dados Gerais' antes de acessar a tripulação" : undefined}
                   >
-                    <TabIcon className="w-4 h-4" />
+                    {isTripulacaoLocked ? (
+                      <Lock className="w-4 h-4 text-amber-500 shrink-0" />
+                    ) : (
+                      <TabIcon className="w-4 h-4 shrink-0" />
+                    )}
                     <span>{tab.label}</span>
+                    {isTripulacaoLocked && (
+                      <span className="px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-700 text-[9px] font-bold uppercase tracking-wider">
+                        Requer Veículo
+                      </span>
+                    )}
                   </button>
                 );
               })}
             </div>
 
             {/* Tab Bodies com Rolagem Suave */}
-            <div className={`p-4 md:p-6 lg:p-8 flex-1 ${modalActiveTab === 'tripulacao' && !isTripulacaoUnlocked ? 'overflow-hidden flex flex-col' : 'overflow-y-auto custom-scrollbar'}`}>
+            <div className={`p-4 md:p-6 lg:p-8 flex-1 ${modalActiveTab === 'tripulacao' && (!isTripulacaoUnlocked || !formData.vehicleId) ? 'overflow-hidden flex flex-col' : 'overflow-y-auto custom-scrollbar'}`}>
                 {modalActiveTab === 'dados_gerais' && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5 animate-fade-in">
                     <div>
@@ -1726,7 +1807,31 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
                 )}
 
                 {modalActiveTab === 'tripulacao' && (
-                  !isTripulacaoUnlocked ? (
+                  !formData.vehicleId ? (
+                    /* ESTADO BLOQUEADO: VEÍCULO NÃO INFORMADO */
+                    <div className="flex-1 flex flex-col items-center justify-center text-center p-8 my-auto space-y-4 max-w-md mx-auto animate-fade-in select-none">
+                      <div className="w-16 h-16 rounded-3xl bg-amber-500/10 border border-amber-500/20 text-amber-600 flex items-center justify-center shadow-lg shadow-amber-500/10">
+                        <Lock className="w-8 h-8" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <h3 className="text-base font-black text-slate-900 uppercase tracking-tight">Veículo Não Informado</h3>
+                        <p className="text-xs text-slate-500 leading-relaxed font-medium">
+                          Para configurar a tripulação e aplicar as regras corretas de capacidade e triagem oncológica/hemodiálise, informe primeiro o <strong className="text-slate-700">Veículo Operacional</strong> na aba Dados Gerais.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setModalActiveTab('dados_gerais');
+                          setActiveSelectionField('vehicle');
+                        }}
+                        className="px-6 py-3 bg-gradient-to-r from-indigo-600 via-indigo-700 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-black rounded-2xl text-xs uppercase tracking-wider transition-all shadow-md shadow-indigo-600/25 flex items-center gap-2 cursor-pointer hover:scale-[1.02] active:scale-95"
+                      >
+                        <Car className="w-4 h-4" />
+                        <span>Selecionar Veículo Agora</span>
+                      </button>
+                    </div>
+                  ) : !isTripulacaoUnlocked ? (
                     /* ESTADO INICIAL: APENAS 1 BOTÃO CENTRALIZADO SEM NENHUMA ROLAGEM */
                     <div className="flex-1 flex flex-col items-center justify-center text-center w-full h-full my-auto animate-fade-in p-4 select-none">
                       <button
@@ -1743,49 +1848,98 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
                     <div className="space-y-5 animate-fade-in">
                       {/* Banner Informativo do Tipo de Viagem */}
                       {isSpecialTreatmentTrip ? (
-                        <div className="p-4 md:p-5 rounded-2xl bg-gradient-to-r from-amber-500/10 via-indigo-500/10 to-purple-500/10 border border-amber-500/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-700 flex items-center justify-center shrink-0 border border-amber-500/30">
-                              <HeartPulse className="w-5 h-5 text-amber-600" />
-                            </div>
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <h4 className="text-xs md:text-sm font-black text-slate-900 uppercase tracking-tight">Viagem Exclusiva: Oncológico / Hemodiálise</h4>
-                                <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 font-black text-[9px] uppercase tracking-wider border border-amber-200">Uso Exclusivo</span>
+                        isHemodialysisVan ? (
+                          /* BANNER ESPECÍFICO DA VAN DE HEMODIÁLISE (UEA1J55) */
+                          <div className="p-4 md:p-5 rounded-2xl bg-gradient-to-r from-teal-500/10 via-indigo-500/10 to-purple-500/10 border border-teal-500/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-xl bg-teal-500/20 text-teal-700 flex items-center justify-center shrink-0 border border-teal-500/30">
+                                <HeartPulse className="w-5 h-5 text-teal-600" />
                               </div>
-                              <p className="text-[11px] text-slate-500 font-medium mt-0.5">
-                                Veículo restrito ao paciente e acompanhantes autorizados.
-                              </p>
+                              <div>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <h4 className="text-xs md:text-sm font-black text-slate-900 uppercase tracking-tight">Van Exclusiva de Hemodiálise</h4>
+                                  <span className="px-2 py-0.5 rounded-md bg-teal-100 text-teal-800 font-black text-[9px] uppercase tracking-wider border border-teal-200">
+                                    Placa: {selectedVehicle?.plate || 'UEA1J55'}
+                                  </span>
+                                  <span className="px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800 font-black text-[9px] uppercase tracking-wider border border-indigo-200">
+                                    Múltiplos Pacientes Liberados
+                                  </span>
+                                </div>
+                                <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                                  Van destinada exclusivamente ao transporte conjunto de pacientes de hemodiálise e acompanhantes autorizados.
+                                </p>
+                              </div>
                             </div>
-                          </div>
 
-                          {/* Contadores da Viagem Especial */}
-                          <div className="flex items-center gap-2 flex-wrap self-stretch md:self-auto justify-end">
-                            <div className={`px-2.5 py-1 rounded-xl border text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 ${
-                              patientCount >= 1 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-50 text-slate-600 border-slate-200'
-                            }`}>
-                              <UserIcon className="w-3 h-3" /> Paciente: {patientCount}/1
+                            {/* Contadores da Van de Hemodiálise */}
+                            <div className="flex items-center gap-2 flex-wrap self-stretch md:self-auto justify-end">
+                              <div className="px-2.5 py-1 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5">
+                                <HeartPulse className="w-3 h-3" /> Pacientes: {patientCount}
+                              </div>
+                              <div className="px-2.5 py-1 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5">
+                                <Users className="w-3 h-3" /> Acompanhantes: {companionCount}
+                              </div>
+                              <div className={`px-2.5 py-1 rounded-xl border text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 ${
+                                isSpecialLimitReached ? 'bg-purple-100 text-purple-800 border-purple-300' : 'bg-slate-100 text-slate-700 border-slate-300'
+                              }`}>
+                                Total: {totalCrewCount}/{maxVanCrewCapacity} máx.
+                              </div>
+                              <button
+                                type="button"
+                                onClick={handleOpenTripulacaoModal}
+                                className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 underline uppercase tracking-wider ml-1 cursor-pointer"
+                                title="Reabrir triagem de tripulação"
+                              >
+                                Alterar Modo
+                              </button>
                             </div>
-                            <div className={`px-2.5 py-1 rounded-xl border text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 ${
-                              companionCount >= 2 ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-slate-50 text-slate-600 border-slate-200'
-                            }`}>
-                              <Users className="w-3 h-3" /> Acompanhantes: {companionCount}/2
-                            </div>
-                            <div className={`px-2.5 py-1 rounded-xl border text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 ${
-                              isSpecialLimitReached ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-slate-100 text-slate-700 border-slate-300'
-                            }`}>
-                              Total: {totalCrewCount}/3
-                            </div>
-                            <button
-                              type="button"
-                              onClick={handleOpenTripulacaoModal}
-                              className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 underline uppercase tracking-wider ml-1 cursor-pointer"
-                              title="Reabrir triagem de tripulação"
-                            >
-                              Alterar Modo
-                            </button>
                           </div>
-                        </div>
+                        ) : (
+                          /* BANNER DE VEÍCULO CONVENCIONAL EXCLUSIVO */
+                          <div className="p-4 md:p-5 rounded-2xl bg-gradient-to-r from-amber-500/10 via-indigo-500/10 to-purple-500/10 border border-amber-500/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-700 flex items-center justify-center shrink-0 border border-amber-500/30">
+                                <HeartPulse className="w-5 h-5 text-amber-600" />
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <h4 className="text-xs md:text-sm font-black text-slate-900 uppercase tracking-tight">Viagem Exclusiva: Oncológico / Hemodiálise</h4>
+                                  <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 font-black text-[9px] uppercase tracking-wider border border-amber-200">Uso Exclusivo</span>
+                                </div>
+                                <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                                  Veículo restrito ao paciente e acompanhantes autorizados.
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Contadores da Viagem Especial Convencional */}
+                            <div className="flex items-center gap-2 flex-wrap self-stretch md:self-auto justify-end">
+                              <div className={`px-2.5 py-1 rounded-xl border text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 ${
+                                patientCount >= 1 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-50 text-slate-600 border-slate-200'
+                              }`}>
+                                <UserIcon className="w-3 h-3" /> Paciente: {patientCount}/1
+                              </div>
+                              <div className={`px-2.5 py-1 rounded-xl border text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 ${
+                                companionCount >= 2 ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-slate-50 text-slate-600 border-slate-200'
+                              }`}>
+                                <Users className="w-3 h-3" /> Acompanhantes: {companionCount}/2
+                              </div>
+                              <div className={`px-2.5 py-1 rounded-xl border text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 ${
+                                isSpecialLimitReached ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-slate-100 text-slate-700 border-slate-300'
+                              }`}>
+                                Total: {totalCrewCount}/3
+                              </div>
+                              <button
+                                type="button"
+                                onClick={handleOpenTripulacaoModal}
+                                className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 underline uppercase tracking-wider ml-1 cursor-pointer"
+                                title="Reabrir triagem de tripulação"
+                              >
+                                Alterar Modo
+                              </button>
+                            </div>
+                          </div>
+                        )
                       ) : (
                         <div className="p-3.5 px-4 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-3">
                           <div className="flex items-center gap-2.5">
@@ -1813,50 +1967,67 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
                         
                         {/* Seletor de Categoria se for Viagem Especial */}
                         {isSpecialTreatmentTrip && (
-                          <div className="mb-3 flex items-center gap-2">
+                          <div className="mb-3 flex items-center gap-2 flex-wrap">
                             <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 mr-1">Tipo de Integrante:</span>
                             
                             <button
                               type="button"
-                              disabled={patientCount >= 1}
+                              disabled={isSpecialLimitReached || (!isHemodialysisVan && patientCount >= 1)}
                               onClick={() => setNewPassengerType('paciente')}
                               className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer border ${
                                 newPassengerType === 'paciente'
                                   ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
-                                  : patientCount >= 1
+                                  : (!isHemodialysisVan && patientCount >= 1) || isSpecialLimitReached
                                     ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-60'
                                     : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
                               }`}
                             >
                               <HeartPulse className="w-3.5 h-3.5" />
-                              <span>Paciente {patientCount >= 1 ? '(Limite 1/1 atingido)' : '(Máx. 1)'}</span>
+                              <span>
+                                {isHemodialysisVan
+                                  ? `Paciente (${patientCount})`
+                                  : `Paciente ${patientCount >= 1 ? '(Limite 1/1 atingido)' : '(Máx. 1)'}`}
+                              </span>
                             </button>
 
                             <button
                               type="button"
-                              disabled={companionCount >= 2}
+                              disabled={isSpecialLimitReached || (!isHemodialysisVan && companionCount >= 2)}
                               onClick={() => setNewPassengerType('acompanhante')}
                               className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer border ${
                                 newPassengerType === 'acompanhante'
                                   ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
-                                  : companionCount >= 2
+                                  : (!isHemodialysisVan && companionCount >= 2) || isSpecialLimitReached
                                     ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-60'
                                     : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
                               }`}
                             >
                               <Users className="w-3.5 h-3.5" />
-                              <span>Acompanhante {companionCount >= 2 ? '(Limite 2/2 atingido)' : `(${companionCount}/2)`}</span>
+                              <span>
+                                {isHemodialysisVan
+                                  ? `Acompanhante (${companionCount})`
+                                  : `Acompanhante ${companionCount >= 2 ? '(Limite 2/2 atingido)' : `(${companionCount}/2)`}`}
+                              </span>
                             </button>
                           </div>
                         )}
 
                         {isSpecialLimitReached ? (
-                          <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200 text-center space-y-1">
-                            <p className="text-xs font-black text-amber-800 uppercase tracking-tight flex items-center justify-center gap-1.5">
-                              <ShieldCheck className="w-4 h-4 text-amber-600" /> Limite Máximo da Tripulação Atingido (03 Pessoas)
+                          <div className={`p-4 rounded-2xl text-center space-y-1 ${
+                            isHemodialysisVan
+                              ? 'bg-teal-50/80 border border-teal-200 text-teal-900'
+                              : 'bg-amber-50/80 border border-amber-200 text-amber-900'
+                          }`}>
+                            <p className="text-xs font-black uppercase tracking-tight flex items-center justify-center gap-1.5">
+                              <ShieldCheck className={`w-4 h-4 ${isHemodialysisVan ? 'text-teal-600' : 'text-amber-600'}`} />
+                              {isHemodialysisVan
+                                ? `Limite Máximo da Van Atingido (${maxVanCrewCapacity} Passageiros)`
+                                : 'Limite Máximo da Tripulação Atingido (03 Pessoas)'}
                             </p>
-                            <p className="text-[11px] text-amber-700/80 font-medium">
-                              Esta viagem oncológica/hemodiálise já atingiu a lotação permitida (01 paciente e até 02 acompanhantes). Para adicionar um novo integrante, remova um da lista abaixo.
+                            <p className="text-[11px] opacity-80 font-medium">
+                              {isHemodialysisVan
+                                ? `Esta Van de Hemodiálise atingiu a lotação máxima de passageiros permitida (${maxVanCrewCapacity} pessoas). Para adicionar um novo integrante, remova um da lista abaixo.`
+                                : 'Esta viagem oncológica/hemodiálise já atingiu a lotação permitida (01 paciente e até 02 acompanhantes). Para adicionar um novo integrante, remova um da lista abaixo.'}
                             </p>
                           </div>
                         ) : (
@@ -1914,7 +2085,9 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
                             </span>
                             {isSpecialTreatmentTrip && (
                               <span className="text-[10px] font-black uppercase tracking-wider text-indigo-600">
-                                Lotação: {formData.passengers.length} de 3 máx.
+                                {isHemodialysisVan
+                                  ? `Lotação: ${formData.passengers.length} de ${maxVanCrewCapacity} máx.`
+                                  : `Lotação: ${formData.passengers.length} de 3 máx.`}
                               </span>
                             )}
                           </div>
@@ -2401,104 +2574,120 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
         shouldDisableDate={isDateBlocked}
       />
 
-      {/* MODAL DE TRIAGEM DA TRIPULAÇÃO (PASSOS 1 E 2) */}
+      {/* MODAL DE TRIAGEM / INFORMAÇÃO DA TRIPULAÇÃO */}
       {isTripulacaoModalOpen && createPortal(
         <div className="fixed inset-0 z-[310] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md animate-fade-in">
           <div className="bg-white rounded-3xl shadow-2xl border border-slate-200/80 w-full max-w-lg overflow-hidden animate-scale-in transition-all">
             
-            {/* ETAPA 1: PERGUNTA DE TRIAGEM COM SELECT MODERNO */}
-            {tripulacaoModalStep === 1 && (
+            {/* CASO 1: MODAL EXCLUSIVO E DEDICADO PARA A VAN DE HEMODIÁLISE (UEA1J55) */}
+            {isHemodialysisVan ? (
               <div className="flex flex-col animate-fade-in">
-                {/* Header */}
-                <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
+                {/* Header Exclusivo da Van de Hemodiálise */}
+                <div className="px-6 py-5 border-b border-teal-500/20 bg-gradient-to-r from-teal-600 via-teal-700 to-indigo-700 text-white flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-600/30">
-                      <HeartPulse className="w-5 h-5" />
+                    <div className="w-11 h-11 rounded-2xl bg-white/15 backdrop-blur-md text-white border border-white/20 flex items-center justify-center shadow-lg shadow-teal-950/20">
+                      <HeartPulse className="w-6 h-6 text-teal-200 animate-pulse" />
                     </div>
                     <div>
-                      <h3 className="text-base font-black text-slate-900 uppercase tracking-tight">Triagem da Tripulação</h3>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Identificação do perfil da viagem</p>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-base font-black uppercase tracking-tight text-white">Van de Hemodiálise</h3>
+                        <span className="px-2 py-0.5 rounded-md bg-teal-400/20 text-teal-100 border border-teal-300/30 text-[9px] font-black uppercase tracking-wider">
+                          Uso Exclusivo
+                        </span>
+                      </div>
+                      <p className="text-[11px] font-semibold text-teal-100/90 tracking-wide mt-0.5">
+                        Transporte Coletivo de Tratamento Contínuo
+                      </p>
                     </div>
                   </div>
                   <button
                     type="button"
                     onClick={() => setIsTripulacaoModalOpen(false)}
-                    className="p-2 text-slate-400 hover:text-slate-600 hover:bg-white rounded-xl transition-colors cursor-pointer"
+                    className="p-2 text-white/70 hover:text-white hover:bg-white/15 rounded-xl transition-colors cursor-pointer"
+                    title="Fechar"
                   >
                     <X className="w-5 h-5" />
                   </button>
                 </div>
 
-                {/* Conteúdo */}
-                <div className="p-6 space-y-6">
-                  <div className="text-center space-y-2">
-                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-black uppercase tracking-widest border border-indigo-200">
-                      <ShieldCheck className="w-3 h-3" /> Pergunta Obrigatória
-                    </span>
-                    <h4 className="text-base md:text-lg font-black text-slate-900 leading-snug">
-                      Existe paciente <span className="text-indigo-600 bg-indigo-50/90 px-2 py-0.5 rounded-lg border border-indigo-200/80 font-black shadow-2xs">ONCOLÓGICO</span> ou de <span className="text-indigo-600 bg-indigo-50/90 px-2 py-0.5 rounded-lg border border-indigo-200/80 font-black shadow-2xs">HEMODIÁLISE</span> nesta viagem?
-                    </h4>
-                    <p className="text-xs text-slate-500 font-medium max-w-md mx-auto">
-                      Selecione abaixo para aplicarmos as normas e limites corretos de capacidade do veículo.
+                {/* Conteúdo Exclusivo da Van UEA1J55 */}
+                <div className="p-6 space-y-5">
+                  {/* Card de Identificação do Veículo com estilo Placa Mercosul */}
+                  <div className="p-4 rounded-2xl bg-gradient-to-br from-teal-50 via-indigo-50/40 to-slate-50 border border-teal-200/80 shadow-xs flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                      <div className="w-10 h-10 rounded-xl bg-teal-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-teal-600/25">
+                        <Car className="w-5 h-5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[10px] font-black text-teal-700 uppercase tracking-widest">Veículo Selecionado</p>
+                        <h4 className="text-sm font-black text-slate-900 uppercase truncate">
+                          {selectedVehicle ? `${selectedVehicle.brand} ${selectedVehicle.model}` : 'Van Municipal'}
+                        </h4>
+                        <p className="text-xs text-slate-500 font-medium">
+                          Capacidade: <strong className="text-teal-900 font-bold">{maxVanCrewCapacity} assentos de passageiros</strong>
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Placa em Destaque */}
+                    <div className="px-3 py-1.5 rounded-xl bg-white border-2 border-teal-600/40 shadow-xs text-center shrink-0">
+                      <span className="text-[8px] font-black text-blue-700 block tracking-widest leading-none border-b border-slate-200 pb-0.5 mb-0.5">BRASIL</span>
+                      <span className="text-sm font-black text-slate-900 tracking-wider font-mono">
+                        {selectedVehicle?.plate || 'UEA1J55'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Mensagem Oficial de Condição Exclusiva */}
+                  <div className="p-4 rounded-2xl bg-teal-500/10 border border-teal-500/25 text-teal-950 space-y-1.5">
+                    <div className="flex items-center gap-1.5 text-teal-800 text-[11px] font-black uppercase tracking-wider">
+                      <Info className="w-3.5 h-3.5" /> Condição Operacional Reconhecida
+                    </div>
+                    <p className="text-xs md:text-sm font-bold leading-relaxed text-slate-800">
+                      Por se tratar da van oficial de Hemodiálise, o sistema reconhece a condição exclusiva e autoriza o <strong className="text-teal-700 font-black">transporte conjunto de múltiplos pacientes</strong> e seus respectivos acompanhantes até a capacidade total do veículo.
                     </p>
                   </div>
 
-                  {/* Cards de Escolha Interativa (Sim / Não) */}
-                  <div className="grid grid-cols-2 gap-3 pt-2">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedSpecialOption('sim')}
-                      className={`p-4 rounded-2xl border-2 text-left transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between ${
-                        selectedSpecialOption === 'sim'
-                          ? 'border-indigo-600 bg-indigo-50/60 shadow-md shadow-indigo-600/10 ring-2 ring-indigo-600/20'
-                          : 'border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50/50'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-black text-xs">
-                          <HeartPulse className="w-4 h-4" />
-                        </span>
-                        {selectedSpecialOption === 'sim' && (
-                          <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center">
-                            <Check className="w-3 h-3" />
-                          </span>
-                        )}
+                  {/* 3 Cards de Regras e Lotação */}
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Regras e Lotação Deste Veículo:</p>
+                    <div className="grid grid-cols-3 gap-2.5">
+                      <div className="p-3 rounded-2xl bg-teal-50/80 border border-teal-200/90 text-center space-y-1 shadow-2xs">
+                        <div className="w-7 h-7 rounded-xl bg-teal-100 text-teal-700 flex items-center justify-center mx-auto text-xs font-black">
+                          <HeartPulse className="w-3.5 h-3.5" />
+                        </div>
+                        <p className="text-xs font-black text-teal-950 leading-tight">Múltiplos</p>
+                        <p className="text-[9px] text-teal-700 font-bold uppercase tracking-tight">Pacientes</p>
                       </div>
-                      <div>
-                        <p className="text-sm font-black text-slate-900 uppercase">Sim</p>
-                        <p className="text-[10px] text-slate-500 font-medium leading-tight mt-0.5">Paciente oncológico ou hemodiálise</p>
-                      </div>
-                    </button>
 
-                    <button
-                      type="button"
-                      onClick={() => setSelectedSpecialOption('nao')}
-                      className={`p-4 rounded-2xl border-2 text-left transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between ${
-                        selectedSpecialOption === 'nao'
-                          ? 'border-indigo-600 bg-indigo-50/60 shadow-md shadow-indigo-600/10 ring-2 ring-indigo-600/20'
-                          : 'border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50/50'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="w-8 h-8 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center font-black text-xs">
-                          <Users className="w-4 h-4" />
-                        </span>
-                        {selectedSpecialOption === 'nao' && (
-                          <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center">
-                            <Check className="w-3 h-3" />
-                          </span>
-                        )}
+                      <div className="p-3 rounded-2xl bg-indigo-50/80 border border-indigo-200/90 text-center space-y-1 shadow-2xs">
+                        <div className="w-7 h-7 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center mx-auto text-xs font-black">
+                          <Users className="w-3.5 h-3.5" />
+                        </div>
+                        <p className="text-xs font-black text-indigo-950 leading-tight">Liberados</p>
+                        <p className="text-[9px] text-indigo-700 font-bold uppercase tracking-tight">Acompanhantes</p>
                       </div>
-                      <div>
-                        <p className="text-sm font-black text-slate-900 uppercase">Não</p>
-                        <p className="text-[10px] text-slate-500 font-medium leading-tight mt-0.5">Viagem convencional comum</p>
+
+                      <div className="p-3 rounded-2xl bg-purple-50/80 border border-purple-200/90 text-center space-y-1 shadow-2xs">
+                        <div className="w-7 h-7 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center mx-auto text-xs font-black">
+                          <ShieldCheck className="w-3.5 h-3.5" />
+                        </div>
+                        <p className="text-xs font-black text-purple-950 leading-tight">{maxVanCrewCapacity} Vagas</p>
+                        <p className="text-[9px] text-purple-700 font-bold uppercase tracking-tight">Capacidade Total</p>
                       </div>
-                    </button>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-start gap-2.5 text-xs text-slate-600 font-medium">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                    <span>
+                      O seletor de integrantes permanecerá com os botões <strong>Paciente</strong> e <strong>Acompanhante</strong> liberados para inclusões sucessivas até o limite de <strong>{maxVanCrewCapacity} passageiros</strong>.
+                    </span>
                   </div>
                 </div>
 
                 {/* Footer com Ações */}
-                <div className="p-4 px-6 bg-slate-50/80 border-t border-slate-100 flex items-center justify-between gap-3">
+                <div className="p-4 px-6 bg-slate-50/90 border-t border-slate-100 flex items-center justify-between gap-3">
                   <button
                     type="button"
                     onClick={() => setIsTripulacaoModalOpen(false)}
@@ -2509,110 +2698,231 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
 
                   <button
                     type="button"
-                    onClick={handleConfirmSpecialQuestion}
-                    disabled={!selectedSpecialOption}
-                    className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-xl text-xs uppercase tracking-wider transition-all shadow-md shadow-indigo-600/25 disabled:opacity-40 disabled:pointer-events-none flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <span>Continuar</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* ETAPA 2: AVISO DE USO EXCLUSIVO E LIMITAÇÕES */}
-            {tripulacaoModalStep === 2 && (
-              <div className="flex flex-col animate-fade-in">
-                {/* Header */}
-                <div className="px-6 py-5 border-b border-amber-100 flex items-center justify-between bg-amber-50/60">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white flex items-center justify-center shadow-md shadow-amber-500/30">
-                      <ShieldAlert className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h3 className="text-base font-black text-slate-900 uppercase tracking-tight">Aviso de Uso Exclusivo</h3>
-                      <p className="text-[10px] font-bold text-amber-700 uppercase tracking-widest mt-0.5">Regras de Lotação Especial</p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setIsTripulacaoModalOpen(false)}
-                    className="p-2 text-slate-400 hover:text-slate-600 hover:bg-white rounded-xl transition-colors cursor-pointer"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-
-                {/* Conteúdo */}
-                <div className="p-6 space-y-5">
-                  {/* Mensagem Oficial em Destaque */}
-                  <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-amber-950 space-y-1.5">
-                    <p className="text-[11px] font-black uppercase tracking-wider text-amber-700 flex items-center gap-1.5">
-                      <Info className="w-3.5 h-3.5" /> Diretriz de Transporte da Saúde
-                    </p>
-                    <p className="text-xs md:text-sm font-bold leading-relaxed">
-                      "Para viagens destinadas a pacientes <span className="text-amber-900 bg-amber-200/60 px-1.5 py-0.5 rounded-md font-black">oncológicos</span> ou em tratamento de <span className="text-amber-900 bg-amber-200/60 px-1.5 py-0.5 rounded-md font-black">hemodiálise</span>, o veículo será de uso exclusivo do paciente e seus acompanhantes."
-                    </p>
-                  </div>
-
-                  {/* Cards Informativos de Limitações Obrigatórias */}
-                  <div className="space-y-2">
-                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Limitações Obrigatórias Aplicadas:</p>
-                    
-                    <div className="grid grid-cols-3 gap-2.5">
-                      <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-center space-y-1">
-                        <div className="w-6 h-6 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto text-xs font-black">
-                          <UserIcon className="w-3 h-3" />
-                        </div>
-                        <p className="text-xs font-black text-slate-900">01 Paciente</p>
-                        <p className="text-[9px] text-slate-400 font-bold uppercase">Máximo</p>
-                      </div>
-
-                      <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-center space-y-1">
-                        <div className="w-6 h-6 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center mx-auto text-xs font-black">
-                          <Users className="w-3 h-3" />
-                        </div>
-                        <p className="text-xs font-black text-slate-900">02 Acomp.</p>
-                        <p className="text-[9px] text-slate-400 font-bold uppercase">Máximo</p>
-                      </div>
-
-                      <div className="p-3 rounded-xl bg-purple-50/60 border border-purple-200 text-center space-y-1">
-                        <div className="w-6 h-6 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center mx-auto text-xs font-black">
-                          <Car className="w-3 h-3" />
-                        </div>
-                        <p className="text-xs font-black text-purple-900">03 Pessoas</p>
-                        <p className="text-[9px] text-purple-600 font-bold uppercase">Total Máx.</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-start gap-2.5 text-xs text-slate-600 font-medium">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                    <span>Não será permitido cadastrar um segundo paciente ou mais de dois acompanhantes. Ao atingir o limite de 3 pessoas, o sistema bloqueará novas adições automaticamente.</span>
-                  </div>
-                </div>
-
-                {/* Footer com Botões */}
-                <div className="p-4 px-6 bg-slate-50/80 border-t border-slate-100 flex items-center justify-between gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setTripulacaoModalStep(1)}
-                    className="px-4 py-2.5 text-slate-600 hover:text-slate-800 hover:bg-white font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer border border-slate-200 flex items-center gap-1.5"
-                  >
-                    <ChevronLeft className="w-3.5 h-3.5" />
-                    <span>Voltar</span>
-                  </button>
-
-                  <button
-                    type="button"
                     onClick={handleConfirmSpecialWarning}
-                    className="px-5 py-2.5 bg-gradient-to-r from-amber-600 via-indigo-600 to-purple-600 hover:from-amber-700 hover:to-purple-700 text-white font-black rounded-xl text-xs uppercase tracking-wider transition-all shadow-md shadow-indigo-600/25 flex items-center gap-2 cursor-pointer"
+                    className="px-6 py-2.5 bg-gradient-to-r from-teal-600 via-teal-700 to-indigo-600 hover:from-teal-700 hover:to-indigo-700 text-white font-black rounded-xl text-xs uppercase tracking-wider transition-all shadow-md shadow-teal-600/25 flex items-center gap-2 cursor-pointer hover:scale-[1.02] active:scale-95"
                   >
                     <Check className="w-4 h-4" />
                     <span>Confirmar e Liberar Tripulação</span>
                   </button>
                 </div>
               </div>
+            ) : (
+              /* CASO 2: MODAL DE TRIAGEM PADRÃO PARA OS DEMAIS VEÍCULOS (PASSOS 1 E 2) */
+              <>
+                {/* ETAPA 1: PERGUNTA DE TRIAGEM COM SELECT MODERNO */}
+                {tripulacaoModalStep === 1 && (
+                  <div className="flex flex-col animate-fade-in">
+                    {/* Header */}
+                    <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-600/30">
+                          <HeartPulse className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <h3 className="text-base font-black text-slate-900 uppercase tracking-tight">Triagem da Tripulação</h3>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Identificação do perfil da viagem</p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsTripulacaoModalOpen(false)}
+                        className="p-2 text-slate-400 hover:text-slate-600 hover:bg-white rounded-xl transition-colors cursor-pointer"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+
+                    {/* Conteúdo */}
+                    <div className="p-6 space-y-6">
+                      <div className="text-center space-y-2">
+                        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-black uppercase tracking-widest border border-indigo-200">
+                          <ShieldCheck className="w-3 h-3" /> Pergunta Obrigatória
+                        </span>
+                        <h4 className="text-base md:text-lg font-black text-slate-900 leading-snug">
+                          Existe paciente <span className="text-indigo-600 bg-indigo-50/90 px-2 py-0.5 rounded-lg border border-indigo-200/80 font-black shadow-2xs">ONCOLÓGICO</span> ou de <span className="text-indigo-600 bg-indigo-50/90 px-2 py-0.5 rounded-lg border border-indigo-200/80 font-black shadow-2xs">HEMODIÁLISE</span> nesta viagem?
+                        </h4>
+                        <p className="text-xs text-slate-500 font-medium max-w-md mx-auto">
+                          Selecione abaixo para aplicarmos as normas e limites corretos de capacidade do veículo.
+                        </p>
+                      </div>
+
+                      {/* Cards de Escolha Interativa (Sim / Não) */}
+                      <div className="grid grid-cols-2 gap-3 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedSpecialOption('sim')}
+                          className={`p-4 rounded-2xl border-2 text-left transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between ${
+                            selectedSpecialOption === 'sim'
+                              ? 'border-indigo-600 bg-indigo-50/60 shadow-md shadow-indigo-600/10 ring-2 ring-indigo-600/20'
+                              : 'border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50/50'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-black text-xs">
+                              <HeartPulse className="w-4 h-4" />
+                            </span>
+                            {selectedSpecialOption === 'sim' && (
+                              <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center">
+                                <Check className="w-3 h-3" />
+                              </span>
+                            )}
+                          </div>
+                          <div>
+                            <p className="text-sm font-black text-slate-900 uppercase">Sim</p>
+                            <p className="text-[10px] text-slate-500 font-medium leading-tight mt-0.5">Paciente oncológico ou hemodiálise</p>
+                          </div>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setSelectedSpecialOption('nao')}
+                          className={`p-4 rounded-2xl border-2 text-left transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between ${
+                            selectedSpecialOption === 'nao'
+                              ? 'border-indigo-600 bg-indigo-50/60 shadow-md shadow-indigo-600/10 ring-2 ring-indigo-600/20'
+                              : 'border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50/50'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="w-8 h-8 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center font-black text-xs">
+                              <Users className="w-4 h-4" />
+                            </span>
+                            {selectedSpecialOption === 'nao' && (
+                              <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center">
+                                <Check className="w-3 h-3" />
+                              </span>
+                            )}
+                          </div>
+                          <div>
+                            <p className="text-sm font-black text-slate-900 uppercase">Não</p>
+                            <p className="text-[10px] text-slate-500 font-medium leading-tight mt-0.5">Viagem convencional comum</p>
+                          </div>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Footer com Ações */}
+                    <div className="p-4 px-6 bg-slate-50/80 border-t border-slate-100 flex items-center justify-between gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setIsTripulacaoModalOpen(false)}
+                        className="px-4 py-2.5 text-slate-500 hover:text-slate-700 hover:bg-white font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer border border-transparent"
+                      >
+                        Cancelar
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleConfirmSpecialQuestion}
+                        disabled={!selectedSpecialOption}
+                        className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-xl text-xs uppercase tracking-wider transition-all shadow-md shadow-indigo-600/25 disabled:opacity-40 disabled:pointer-events-none flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <span>Continuar</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* ETAPA 2: AVISO DE USO EXCLUSIVO E LIMITAÇÕES (VEÍCULOS DE PASSEIO) */}
+                {tripulacaoModalStep === 2 && (
+                  <div className="flex flex-col animate-fade-in">
+                    {/* Header */}
+                    <div className="px-6 py-5 border-b border-amber-100 bg-amber-50/60 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-2xl bg-amber-500 shadow-amber-500/30 text-white flex items-center justify-center shadow-md">
+                          <ShieldAlert className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <h3 className="text-base font-black text-slate-900 uppercase tracking-tight">
+                            Aviso de Uso Exclusivo
+                          </h3>
+                          <p className="text-[10px] font-bold uppercase tracking-widest mt-0.5 text-amber-700">
+                            Regras de Lotação Especial
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsTripulacaoModalOpen(false)}
+                        className="p-2 text-slate-400 hover:text-slate-600 hover:bg-white rounded-xl transition-colors cursor-pointer"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+
+                    {/* Conteúdo */}
+                    <div className="p-6 space-y-5">
+                      {/* Mensagem Oficial em Destaque */}
+                      <div className="p-4 rounded-2xl border text-slate-900 space-y-1.5 bg-amber-500/10 border-amber-500/25 text-amber-950">
+                        <p className="text-[11px] font-black uppercase tracking-wider flex items-center gap-1.5 text-amber-700">
+                          <Info className="w-3.5 h-3.5" /> Diretriz de Transporte da Saúde
+                        </p>
+                        <p className="text-xs md:text-sm font-bold leading-relaxed">
+                          "Para viagens destinadas a pacientes oncológicos ou em tratamento de hemodiálise em veículo convencional, o veículo será de uso exclusivo do paciente e seus acompanhantes."
+                        </p>
+                      </div>
+
+                      {/* Cards Informativos de Limitações Obrigatórias */}
+                      <div className="space-y-2">
+                        <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Regras e Lotação Permitida:</p>
+                        <div className="grid grid-cols-3 gap-2.5">
+                          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-center space-y-1">
+                            <div className="w-6 h-6 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto text-xs font-black">
+                              <UserIcon className="w-3 h-3" />
+                            </div>
+                            <p className="text-xs font-black text-slate-900">01 Paciente</p>
+                            <p className="text-[9px] text-slate-400 font-bold uppercase">Máximo</p>
+                          </div>
+
+                          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-center space-y-1">
+                            <div className="w-6 h-6 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center mx-auto text-xs font-black">
+                              <Users className="w-3 h-3" />
+                            </div>
+                            <p className="text-xs font-black text-slate-900">02 Acomp.</p>
+                            <p className="text-[9px] text-slate-400 font-bold uppercase">Máximo</p>
+                          </div>
+
+                          <div className="p-3 rounded-xl bg-purple-50/60 border border-purple-200 text-center space-y-1">
+                            <div className="w-6 h-6 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center mx-auto text-xs font-black">
+                              <Car className="w-3 h-3" />
+                            </div>
+                            <p className="text-xs font-black text-purple-900">03 Pessoas</p>
+                            <p className="text-[9px] text-purple-600 font-bold uppercase">Total Máx.</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-start gap-2.5 text-xs text-slate-600 font-medium">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                        <span>
+                          Para veículos convencionais exclusivos, não é permitido cadastrar um segundo paciente ou mais de dois acompanhantes (máx. 3 pessoas).
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Footer com Botões */}
+                    <div className="p-4 px-6 bg-slate-50/80 border-t border-slate-100 flex items-center justify-between gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setTripulacaoModalStep(1)}
+                        className="px-4 py-2.5 text-slate-600 hover:text-slate-800 hover:bg-white font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer border border-slate-200 flex items-center gap-1.5"
+                      >
+                        <ChevronLeft className="w-3.5 h-3.5" />
+                        <span>Voltar</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleConfirmSpecialWarning}
+                        className="px-5 py-2.5 text-white font-black rounded-xl text-xs uppercase tracking-wider transition-all shadow-md flex items-center gap-2 cursor-pointer bg-gradient-to-r from-amber-600 via-indigo-600 to-purple-600 hover:from-amber-700 hover:to-purple-700 shadow-indigo-600/25"
+                      >
+                        <Check className="w-4 h-4" />
+                        <span>Confirmar e Liberar Tripulação</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
 
           </div>
