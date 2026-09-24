@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
     Vehicle, 
     Sector, 
@@ -38,7 +38,10 @@ import {
     Tag,
     Sliders,
     Fuel,
-    Truck
+    Truck,
+    Image as ImageIcon,
+    Upload,
+    Camera
 } from 'lucide-react';
 
 // =========================================================================
@@ -766,7 +769,8 @@ export const VehicleFormModal: React.FC<VehicleFormModalProps> = ({
     brands = [],
     onSave
 }) => {
-    const [activeTab, setActiveTab] = useState<'geral' | 'lotacao' | 'manutencao'>('geral');
+    const [activeTab, setActiveTab] = useState<'geral' | 'lotacao' | 'imagem'>('geral');
+    const fileInputRef = useRef<HTMLInputElement | null>(null);
     
     // Form fields
     const [model, setModel] = useState('');
@@ -837,6 +841,28 @@ export const VehicleFormModal: React.FC<VehicleFormModalProps> = ({
 
     if (!isOpen) return null;
 
+    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            if (!file.type.startsWith('image/')) {
+                alert('Por favor, selecione um arquivo de imagem válido (PNG, JPG, JPEG, WEBP).');
+                return;
+            }
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setVehicleImageUrl(reader.result as string);
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+
+    const handleRemoveImage = () => {
+        setVehicleImageUrl('');
+        if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+        }
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!model.trim() || !plate.trim()) {
@@ -857,16 +883,16 @@ export const VehicleFormModal: React.FC<VehicleFormModalProps> = ({
                 year: year.trim(),
                 color: color.trim(),
                 renavam: renavam.trim(),
-                chassis: chassis.trim(),
+                chassis: chassis.trim().toUpperCase(),
                 sectorId: sectorId || undefined,
                 responsiblePersonId: responsiblePersonId || undefined,
                 status,
-                maintenanceStatus,
+                maintenanceStatus: editingVehicle?.maintenanceStatus || maintenanceStatus,
                 availableForScheduling,
                 passengerCapacity: Number(passengerCapacity) || 5,
-                currentKm: Number(currentKm) || 0,
-                oilCalculationBase: oilCalculationBase as any,
-                timingBeltCalculationBase: timingBeltCalculationBase as any,
+                currentKm: Number(currentKm) || editingVehicle?.currentKm || 0,
+                oilCalculationBase: (oilCalculationBase as any) || editingVehicle?.oilCalculationBase || 5000,
+                timingBeltCalculationBase: (timingBeltCalculationBase as any) || editingVehicle?.timingBeltCalculationBase || 50000,
                 vehicleImageUrl: vehicleImageUrl.trim() || undefined
             });
             onClose();
@@ -878,347 +904,501 @@ export const VehicleFormModal: React.FC<VehicleFormModalProps> = ({
     };
 
     return (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl p-5 md:p-6 w-full max-w-2xl shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150 max-h-[92vh] overflow-y-auto custom-scrollbar flex flex-col">
-                {/* Header */}
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 text-white flex items-center justify-center shadow-md shadow-amber-500/25">
-                            <Car className="w-5 h-5" />
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 md:p-6 animate-in fade-in duration-200">
+            <div className="bg-white rounded-3xl w-full max-w-4xl lg:max-w-5xl shadow-2xl border border-slate-200/90 max-h-[92vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+                {/* Header Premium */}
+                <div className="px-6 py-4 md:px-8 md:py-5 border-b border-slate-100 bg-gradient-to-r from-slate-50/80 via-white to-orange-50/40 flex items-center justify-between gap-4 shrink-0">
+                    <div className="flex items-center gap-3.5">
+                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 via-orange-500 to-amber-600 text-white flex items-center justify-center shadow-lg shadow-orange-500/25 shrink-0">
+                            <Car className="w-6 h-6" />
                         </div>
                         <div>
-                            <h3 className="text-sm md:text-base font-black text-slate-900 uppercase">
-                                {editingVehicle ? `Editar Veículo: ${editingVehicle.model}` : 'Cadastrar Novo Veículo'}
-                            </h3>
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
-                                {editingVehicle ? `Placa: ${editingVehicle.plate}` : 'Catálogo da Frota Municipal'}
+                            <div className="flex items-center gap-2">
+                                <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
+                                    {editingVehicle ? `Editar Veículo: ${editingVehicle.model}` : 'Cadastrar Novo Veículo'}
+                                </h3>
+                                {editingVehicle && (
+                                    <span className="px-2.5 py-0.5 rounded-lg bg-orange-100 text-orange-700 font-mono font-black text-[11px] uppercase tracking-wider">
+                                        {editingVehicle.plate}
+                                    </span>
+                                )}
+                            </div>
+                            <p className="text-xs font-semibold text-slate-400 mt-0.5">
+                                {editingVehicle ? 'Atualize as informações cadastrais e vinculações do veículo' : 'Catálogo Oficial da Frota Municipal'}
                             </p>
                         </div>
                     </div>
-                    <button type="button" onClick={onClose} className="p-1 text-slate-400 hover:text-slate-800 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer">
+
+                    <button 
+                        type="button" 
+                        onClick={onClose} 
+                        className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition-all cursor-pointer shrink-0"
+                        title="Fechar"
+                    >
                         <X className="w-5 h-5" />
                     </button>
                 </div>
 
-                {/* Abas */}
-                <div className="flex items-center gap-1.5 border-b border-slate-100 my-4 pb-2">
-                    <button
-                        type="button"
-                        onClick={() => setActiveTab('geral')}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
-                            activeTab === 'geral' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-500 hover:bg-slate-100'
-                        }`}
-                    >
-                        Dados Principais
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => setActiveTab('lotacao')}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
-                            activeTab === 'lotacao' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-500 hover:bg-slate-100'
-                        }`}
-                    >
-                        Lotação & Vínculos
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => setActiveTab('manutencao')}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
-                            activeTab === 'manutencao' ? 'bg-slate-900 text-white shadow-xs' : 'text-slate-500 hover:bg-slate-100'
-                        }`}
-                    >
-                        KM & Manutenção
-                    </button>
+                {/* Abas Modernas (Segmented Control) */}
+                <div className="px-6 md:px-8 pt-4 pb-2 bg-white border-b border-slate-100 shrink-0">
+                    <div className="inline-flex p-1 bg-slate-100/90 rounded-2xl gap-1 border border-slate-200/70 overflow-x-auto max-w-full">
+                        <button
+                            type="button"
+                            onClick={() => setActiveTab('geral')}
+                            className={`flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
+                                activeTab === 'geral' 
+                                    ? 'bg-slate-900 text-white shadow-sm' 
+                                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                            }`}
+                        >
+                            <Car className="w-4 h-4" />
+                            <span>Dados Principais</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setActiveTab('lotacao')}
+                            className={`flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
+                                activeTab === 'lotacao' 
+                                    ? 'bg-slate-900 text-white shadow-sm' 
+                                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                            }`}
+                        >
+                            <Building2 className="w-4 h-4" />
+                            <span>Lotação & Vínculos</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setActiveTab('imagem')}
+                            className={`flex items-center gap-2 px-4 sm:px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap cursor-pointer ${
+                                activeTab === 'imagem' 
+                                    ? 'bg-slate-900 text-white shadow-sm' 
+                                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                            }`}
+                        >
+                            <ImageIcon className="w-4 h-4" />
+                            <span>Imagem do Veículo</span>
+                            {vehicleImageUrl && (
+                                <span className="w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white"></span>
+                            )}
+                        </button>
+                    </div>
                 </div>
 
-                {/* Formulário */}
-                <form onSubmit={handleSubmit} className="space-y-4 text-xs flex-1">
-                    {/* ABA 1: DADOS PRINCIPAIS */}
-                    {activeTab === 'geral' && (
-                        <div className="space-y-3 animate-in fade-in duration-150">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                <div>
-                                    <label className="font-black uppercase text-slate-600 block mb-1">Modelo do Veículo *</label>
-                                    <input
-                                        type="text"
-                                        required
-                                        placeholder="Ex: SPIN 1.8, HB20, VAN MASTER..."
-                                        value={model}
-                                        onChange={e => setModel(e.target.value)}
-                                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:bg-white focus:border-amber-500"
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="font-black uppercase text-slate-600 block mb-1">Marca / Fabricante</label>
-                                    <input
-                                        type="text"
-                                        list="brands-list"
-                                        placeholder="Ex: CHEVROLET, FIAT, RENAULT..."
-                                        value={brand}
-                                        onChange={e => setBrand(e.target.value.toUpperCase())}
-                                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 uppercase focus:bg-white focus:border-amber-500"
-                                    />
-                                    <datalist id="brands-list">
-                                        {brands.map(b => (
-                                            <option key={b.id} value={b.name} />
-                                        ))}
-                                    </datalist>
-                                </div>
-
-                                <div>
-                                    <label className="font-black uppercase text-slate-600 block mb-1">Placa do Veículo *</label>
-                                    <input
-                                        type="text"
-                                        required
-                                        placeholder="Ex: ABC1D23"
-                                        value={plate}
-                                        onChange={e => setPlate(e.target.value.toUpperCase())}
-                                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono font-black text-slate-900 uppercase tracking-widest focus:bg-white focus:border-amber-500"
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="font-black uppercase text-slate-600 block mb-1">Tipo de Veículo *</label>
-                                    <select
-                                        value={type}
-                                        onChange={e => setType(e.target.value as any)}
-                                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900"
-                                    >
-                                        <option value="leve">Leve (Carro, Moto, Van, Utilitário)</option>
-                                        <option value="pesado">Pesado (Ônibus, Caminhão, Trator, Máquina)</option>
-                                        <option value="acessorio">Acessório (Implemento, Roçadeira, etc.)</option>
-                                    </select>
-                                </div>
-
-                                <div>
-                                    <label className="font-black uppercase text-slate-600 block mb-1">Categoria Visual</label>
-                                    <select
-                                        value={vehicleCategory}
-                                        onChange={e => setVehicleCategory(e.target.value as any)}
-                                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900"
-                                    >
-                                        <option value="Carro">Carro de Passeio</option>
-                                        <option value="Van">Van</option>
-                                        <option value="Ônibus">Ônibus / Micro-ônibus</option>
-                                        <option value="Moto">Moto</option>
-                                        <option value="Caminhão">Caminhão</option>
-                                        <option value="Máquina Pesada">Máquina Pesada / Trator</option>
-                                        <option value="Acessórios">Acessório / Equipamento</option>
-                                    </select>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-2">
-                                    <div>
-                                        <label className="font-black uppercase text-slate-600 block mb-1">Ano</label>
+                {/* Formulário com Scroll Interno */}
+                <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto custom-scrollbar px-6 md:px-8 py-5 flex flex-col justify-between">
+                    <div>
+                        {/* ========================================================================= */}
+                        {/* ABA 1: DADOS PRINCIPAIS */}
+                        {/* ========================================================================= */}
+                        {activeTab === 'geral' && (
+                            <div className="space-y-5 animate-in fade-in duration-150">
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
+                                    {/* Modelo do Veículo */}
+                                    <div className="space-y-1.5 md:col-span-2 lg:col-span-1">
+                                        <label className="text-[11px] font-black uppercase tracking-wider text-slate-700 flex items-center gap-1">
+                                            Modelo do Veículo <span className="text-orange-600">*</span>
+                                        </label>
                                         <input
                                             type="text"
-                                            placeholder="Ex: 2023/2024"
-                                            value={year}
-                                            onChange={e => setYear(e.target.value)}
-                                            className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 text-center"
+                                            required
+                                            placeholder="Ex: SPIN 1.8, HB20, VAN MASTER..."
+                                            value={model}
+                                            onChange={e => setModel(e.target.value)}
+                                            className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100/70 border border-slate-200 rounded-2xl font-bold text-slate-900 placeholder:text-slate-400 placeholder:font-normal focus:bg-white focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 transition-all outline-none text-sm"
                                         />
                                     </div>
-                                    <div>
-                                        <label className="font-black uppercase text-slate-600 block mb-1">Cor</label>
+
+                                    {/* Marca / Fabricante */}
+                                    <div className="space-y-1.5">
+                                        <label className="text-[11px] font-black uppercase tracking-wider text-slate-700">
+                                            Marca / Fabricante
+                                        </label>
                                         <input
                                             type="text"
-                                            placeholder="Ex: BRANCO"
-                                            value={color}
-                                            onChange={e => setColor(e.target.value.toUpperCase())}
-                                            className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 text-center uppercase"
+                                            list="brands-list"
+                                            placeholder="Ex: CHEVROLET, FIAT, RENAULT..."
+                                            value={brand}
+                                            onChange={e => setBrand(e.target.value.toUpperCase())}
+                                            className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100/70 border border-slate-200 rounded-2xl font-bold text-slate-900 uppercase placeholder:text-slate-400 placeholder:font-normal placeholder:normal-case focus:bg-white focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 transition-all outline-none text-sm"
+                                        />
+                                        <datalist id="brands-list">
+                                            {brands.map(b => (
+                                                <option key={b.id} value={b.name} />
+                                            ))}
+                                            <option value="CHEVROLET" />
+                                            <option value="FIAT" />
+                                            <option value="VOLKSWAGEN" />
+                                            <option value="RENAULT" />
+                                            <option value="TOYOTA" />
+                                            <option value="FORD" />
+                                            <option value="HYUNDAI" />
+                                            <option value="MERCEDES-BENZ" />
+                                            <option value="IVECO" />
+                                            <option value="HONDA" />
+                                            <option value="YAMAHA" />
+                                        </datalist>
+                                    </div>
+
+                                    {/* Placa do Veículo */}
+                                    <div className="space-y-1.5">
+                                        <label className="text-[11px] font-black uppercase tracking-wider text-slate-700 flex items-center gap-1">
+                                            Placa do Veículo <span className="text-orange-600">*</span>
+                                        </label>
+                                        <input
+                                            type="text"
+                                            required
+                                            maxLength={8}
+                                            placeholder="Ex: ABC1D23"
+                                            value={plate}
+                                            onChange={e => setPlate(e.target.value.toUpperCase())}
+                                            className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100/70 border border-slate-200 rounded-2xl font-mono font-black text-slate-900 uppercase tracking-widest placeholder:tracking-normal placeholder:font-normal placeholder:text-slate-400 focus:bg-white focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 transition-all outline-none text-sm"
+                                        />
+                                    </div>
+
+                                    {/* Tipo de Veículo */}
+                                    <div className="space-y-1.5">
+                                        <label className="text-[11px] font-black uppercase tracking-wider text-slate-700 flex items-center gap-1">
+                                            Tipo de Veículo <span className="text-orange-600">*</span>
+                                        </label>
+                                        <select
+                                            value={type}
+                                            onChange={e => setType(e.target.value as any)}
+                                            className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100/70 border border-slate-200 rounded-2xl font-bold text-slate-900 focus:bg-white focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 transition-all outline-none text-sm cursor-pointer"
+                                        >
+                                            <option value="leve">Leve (Carro, Moto, Van, Utilitário)</option>
+                                            <option value="pesado">Pesado (Ônibus, Caminhão, Trator, Máquina)</option>
+                                            <option value="acessorio">Acessório (Implemento, Roçadeira, etc.)</option>
+                                        </select>
+                                    </div>
+
+                                    {/* Categoria Visual */}
+                                    <div className="space-y-1.5">
+                                        <label className="text-[11px] font-black uppercase tracking-wider text-slate-700">
+                                            Categoria Visual
+                                        </label>
+                                        <select
+                                            value={vehicleCategory}
+                                            onChange={e => setVehicleCategory(e.target.value as any)}
+                                            className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100/70 border border-slate-200 rounded-2xl font-bold text-slate-900 focus:bg-white focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 transition-all outline-none text-sm cursor-pointer"
+                                        >
+                                            <option value="Carro">Carro de Passeio</option>
+                                            <option value="Van">Van</option>
+                                            <option value="Ônibus">Ônibus / Micro-ônibus</option>
+                                            <option value="Moto">Motocicleta</option>
+                                            <option value="Caminhão">Caminhão</option>
+                                            <option value="Máquina Pesada">Máquina Pesada / Trator</option>
+                                            <option value="Acessórios">Acessório / Equipamento</option>
+                                        </select>
+                                    </div>
+
+                                    {/* Ano e Cor */}
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="space-y-1.5">
+                                            <label className="text-[11px] font-black uppercase tracking-wider text-slate-700">
+                                                Ano
+                                            </label>
+                                            <input
+                                                type="text"
+                                                placeholder="Ex: 2023/2024"
+                                                value={year}
+                                                onChange={e => setYear(e.target.value)}
+                                                className="w-full px-3 py-3 bg-slate-50 hover:bg-slate-100/70 border border-slate-200 rounded-2xl font-bold text-slate-900 text-center placeholder:text-slate-400 placeholder:font-normal focus:bg-white focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 transition-all outline-none text-sm"
+                                            />
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <label className="text-[11px] font-black uppercase tracking-wider text-slate-700">
+                                                Cor
+                                            </label>
+                                            <input
+                                                type="text"
+                                                placeholder="Ex: BRANCO"
+                                                value={color}
+                                                onChange={e => setColor(e.target.value.toUpperCase())}
+                                                className="w-full px-3 py-3 bg-slate-50 hover:bg-slate-100/70 border border-slate-200 rounded-2xl font-bold text-slate-900 text-center uppercase placeholder:text-slate-400 placeholder:font-normal placeholder:normal-case focus:bg-white focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 transition-all outline-none text-sm"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Código RENAVAM */}
+                                    <div className="space-y-1.5">
+                                        <label className="text-[11px] font-black uppercase tracking-wider text-slate-700 flex items-center justify-between">
+                                            <span>Código RENAVAM</span>
+                                            <span className="text-[10px] text-slate-400 font-medium">Documento</span>
+                                        </label>
+                                        <input
+                                            type="text"
+                                            placeholder="Número do RENAVAM"
+                                            value={renavam}
+                                            onChange={e => setRenavam(e.target.value)}
+                                            className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100/70 border border-slate-200 rounded-2xl font-mono font-bold text-slate-900 tracking-wider placeholder:tracking-normal placeholder:text-slate-400 placeholder:font-normal focus:bg-white focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 transition-all outline-none text-sm"
+                                        />
+                                    </div>
+
+                                    {/* Número do Chassi */}
+                                    <div className="space-y-1.5 md:col-span-2">
+                                        <label className="text-[11px] font-black uppercase tracking-wider text-slate-700 flex items-center justify-between">
+                                            <span>Número do Chassi</span>
+                                            <span className="text-[10px] text-slate-400 font-medium">Identificação VIN</span>
+                                        </label>
+                                        <input
+                                            type="text"
+                                            placeholder="Número do Chassi"
+                                            value={chassis}
+                                            onChange={e => setChassis(e.target.value.toUpperCase())}
+                                            className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100/70 border border-slate-200 rounded-2xl font-mono font-bold text-slate-900 uppercase tracking-widest placeholder:tracking-normal placeholder:text-slate-400 placeholder:font-normal focus:bg-white focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 transition-all outline-none text-sm"
                                         />
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                    )}
+                        )}
 
-                    {/* ABA 2: LOTAÇÃO & VÍNCULOS */}
-                    {activeTab === 'lotacao' && (
-                        <div className="space-y-3 animate-in fade-in duration-150">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                <div>
-                                    <label className="font-black uppercase text-slate-600 block mb-1">
-                                        Capacidade de Passageiros (Assentos)
-                                    </label>
-                                    <input
-                                        type="number"
-                                        min="1"
-                                        max="100"
-                                        value={passengerCapacity}
-                                        onChange={e => setPassengerCapacity(Number(e.target.value))}
-                                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono font-black text-indigo-900 text-center text-sm"
-                                    />
-                                    <span className="text-[10px] text-slate-400 font-medium block mt-1">
-                                        Para vans/ônibus, defina o número total de assentos de passageiros.
-                                    </span>
-                                </div>
+                        {/* ========================================================================= */}
+                        {/* ABA 2: LOTAÇÃO & VÍNCULOS */}
+                        {/* ========================================================================= */}
+                        {activeTab === 'lotacao' && (
+                            <div className="space-y-5 animate-in fade-in duration-150">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
+                                    {/* Capacidade de Passageiros */}
+                                    <div className="space-y-1.5 p-4 rounded-2xl bg-amber-50/60 border border-amber-200/70">
+                                        <label className="text-[11px] font-black uppercase tracking-wider text-amber-950 flex items-center justify-between">
+                                            <span>Capacidade de Passageiros (Assentos) <span className="text-orange-600">*</span></span>
+                                        </label>
+                                        <div className="flex items-center gap-3">
+                                            <input
+                                                type="number"
+                                                min="1"
+                                                max="100"
+                                                required
+                                                value={passengerCapacity}
+                                                onChange={e => setPassengerCapacity(Number(e.target.value))}
+                                                className="w-28 px-4 py-3 bg-white border border-amber-300 rounded-2xl font-mono font-black text-amber-950 text-center text-base focus:border-amber-600 focus:ring-4 focus:ring-amber-500/20 outline-none transition-all shadow-xs"
+                                            />
+                                            <span className="text-xs text-amber-900/80 font-medium leading-relaxed">
+                                                Para vans e ônibus, define a quantidade de assentos disponíveis no agendamento de viagens.
+                                            </span>
+                                        </div>
+                                    </div>
 
-                                <div>
-                                    <label className="font-black uppercase text-slate-600 block mb-1">
-                                        Disponível para Agendamento de Viagem?
-                                    </label>
-                                    <select
-                                        value={availableForScheduling}
-                                        onChange={e => setAvailableForScheduling(e.target.value as any)}
-                                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900"
-                                    >
-                                        <option value="Sim">Sim (Aparece no módulo de Agendamentos)</option>
-                                        <option value="Não">Não (Uso interno exclusivo / Não agendável)</option>
-                                    </select>
-                                </div>
+                                    {/* Disponibilidade para Agendamentos */}
+                                    <div className="space-y-1.5 p-4 rounded-2xl bg-slate-50 border border-slate-200">
+                                        <label className="text-[11px] font-black uppercase tracking-wider text-slate-700 block">
+                                            Disponível para Agendamento de Viagem?
+                                        </label>
+                                        <select
+                                            value={availableForScheduling}
+                                            onChange={e => setAvailableForScheduling(e.target.value as any)}
+                                            className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl font-bold text-slate-900 focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 transition-all outline-none text-sm cursor-pointer"
+                                        >
+                                            <option value="Sim">Sim (Aparece no módulo de Agendamentos)</option>
+                                            <option value="Não">Não (Uso interno exclusivo / Não agendável)</option>
+                                        </select>
+                                    </div>
 
-                                <div>
-                                    <label className="font-black uppercase text-slate-600 block mb-1">Setor / Secretaria Vinculada</label>
-                                    <select
-                                        value={sectorId}
-                                        onChange={e => setSectorId(e.target.value)}
-                                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900"
-                                    >
-                                        <option value="">Sem setor fixo / Geral</option>
-                                        {sectors.map(s => (
-                                            <option key={s.id} value={s.id}>{s.name}</option>
-                                        ))}
-                                    </select>
-                                </div>
+                                    {/* Setor / Secretaria Vinculada */}
+                                    <div className="space-y-1.5">
+                                        <label className="text-[11px] font-black uppercase tracking-wider text-slate-700">
+                                            Setor / Secretaria Vinculada
+                                        </label>
+                                        <select
+                                            value={sectorId}
+                                            onChange={e => setSectorId(e.target.value)}
+                                            className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100/70 border border-slate-200 rounded-2xl font-bold text-slate-900 focus:bg-white focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 transition-all outline-none text-sm cursor-pointer"
+                                        >
+                                            <option value="">Sem setor fixo / Pool Geral</option>
+                                            {sectors.map(s => (
+                                                <option key={s.id} value={s.id}>{s.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
 
-                                <div>
-                                    <label className="font-black uppercase text-slate-600 block mb-1">Motorista / Responsável Operacional</label>
-                                    <select
-                                        value={responsiblePersonId}
-                                        onChange={e => setResponsiblePersonId(e.target.value)}
-                                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900"
-                                    >
-                                        <option value="">Nenhum responsável atribuído</option>
-                                        {persons.map(p => (
-                                            <option key={p.id} value={p.id}>{p.name}</option>
-                                        ))}
-                                    </select>
-                                </div>
+                                    {/* Motorista / Responsável Operacional */}
+                                    <div className="space-y-1.5">
+                                        <label className="text-[11px] font-black uppercase tracking-wider text-slate-700">
+                                            Motorista / Responsável Operacional
+                                        </label>
+                                        <select
+                                            value={responsiblePersonId}
+                                            onChange={e => setResponsiblePersonId(e.target.value)}
+                                            className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100/70 border border-slate-200 rounded-2xl font-bold text-slate-900 focus:bg-white focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 transition-all outline-none text-sm cursor-pointer"
+                                        >
+                                            <option value="">Nenhum motorista fixo / Atribuição livre</option>
+                                            {persons.map(p => (
+                                                <option key={p.id} value={p.id}>{p.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
 
-                                <div>
-                                    <label className="font-black uppercase text-slate-600 block mb-1">Código RENAVAM</label>
-                                    <input
-                                        type="text"
-                                        placeholder="Número do RENAVAM"
-                                        value={renavam}
-                                        onChange={e => setRenavam(e.target.value)}
-                                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono font-bold text-slate-900"
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="font-black uppercase text-slate-600 block mb-1">Número do Chassi</label>
-                                    <input
-                                        type="text"
-                                        placeholder="Número do Chassi"
-                                        value={chassis}
-                                        onChange={e => setChassis(e.target.value.toUpperCase())}
-                                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono font-bold text-slate-900 uppercase"
-                                    />
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* ABA 3: KM & MANUTENÇÃO */}
-                    {activeTab === 'manutencao' && (
-                        <div className="space-y-3 animate-in fade-in duration-150">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                <div>
-                                    <label className="font-black uppercase text-slate-600 block mb-1">Odômetro Atual (KM)</label>
-                                    <input
-                                        type="number"
-                                        min="0"
-                                        value={currentKm}
-                                        onChange={e => setCurrentKm(Number(e.target.value))}
-                                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono font-bold text-indigo-900"
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="font-black uppercase text-slate-600 block mb-1">Status Operacional</label>
-                                    <select
-                                        value={status}
-                                        onChange={e => setStatus(e.target.value as any)}
-                                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900"
-                                    >
-                                        <option value="operacional">Operacional (Em circulação)</option>
-                                        <option value="manutencao">Em Manutenção / Oficina</option>
-                                        <option value="inativo">Inativo / Baixado</option>
-                                    </select>
-                                </div>
-
-                                <div>
-                                    <label className="font-black uppercase text-slate-600 block mb-1">Status de Manutenção</label>
-                                    <select
-                                        value={maintenanceStatus}
-                                        onChange={e => setMaintenanceStatus(e.target.value as any)}
-                                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900"
-                                    >
-                                        <option value="em_dia">Em Dia</option>
-                                        <option value="andamento">Em Andamento</option>
-                                        <option value="vencido">Vencido / Pendente</option>
-                                    </select>
-                                </div>
-
-                                <div>
-                                    <label className="font-black uppercase text-slate-600 block mb-1">Intervalo Troca de Óleo</label>
-                                    <select
-                                        value={oilCalculationBase}
-                                        onChange={e => setOilCalculationBase(Number(e.target.value))}
-                                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900"
-                                    >
-                                        <option value={1000}>A cada 1.000 km (Motos)</option>
-                                        <option value={3000}>A cada 3.000 km</option>
-                                        <option value={5000}>A cada 5.000 km (Padrão)</option>
-                                        <option value={7000}>A cada 7.000 km</option>
-                                        <option value={10000}>A cada 10.000 km (Sintético)</option>
-                                    </select>
-                                </div>
-
-                                <div>
-                                    <label className="font-black uppercase text-slate-600 block mb-1">Intervalo Correia Dentada</label>
-                                    <select
-                                        value={timingBeltCalculationBase}
-                                        onChange={e => setTimingBeltCalculationBase(Number(e.target.value))}
-                                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900"
-                                    >
-                                        <option value={40000}>A cada 40.000 km</option>
-                                        <option value={50000}>A cada 50.000 km (Padrão)</option>
-                                        <option value={60000}>A cada 60.000 km</option>
-                                        <option value={80000}>A cada 80.000 km</option>
-                                    </select>
-                                </div>
-
-                                <div>
-                                    <label className="font-black uppercase text-slate-600 block mb-1">URL da Imagem / Foto (Opcional)</label>
-                                    <input
-                                        type="url"
-                                        placeholder="https://exemplo.com/foto.jpg"
-                                        value={vehicleImageUrl}
-                                        onChange={e => setVehicleImageUrl(e.target.value)}
-                                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900"
-                                    />
+                                    {/* Status Operacional */}
+                                    <div className="space-y-1.5 md:col-span-2">
+                                        <label className="text-[11px] font-black uppercase tracking-wider text-slate-700">
+                                            Status Operacional
+                                        </label>
+                                        <select
+                                            value={status}
+                                            onChange={e => setStatus(e.target.value as any)}
+                                            className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100/70 border border-slate-200 rounded-2xl font-bold text-slate-900 focus:bg-white focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 transition-all outline-none text-sm cursor-pointer"
+                                        >
+                                            <option value="operacional">Operacional (Em circulação regular)</option>
+                                            <option value="manutencao">Em Manutenção / Oficina</option>
+                                            <option value="inativo">Inativo / Baixado</option>
+                                        </select>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    )}
+                        )}
+
+                        {/* ========================================================================= */}
+                        {/* ABA 3: IMAGEM DO VEÍCULO */}
+                        {/* ========================================================================= */}
+                        {activeTab === 'imagem' && (
+                            <div className="space-y-5 animate-in fade-in duration-150">
+                                {/* Input oculto de arquivo */}
+                                <input
+                                    type="file"
+                                    ref={fileInputRef}
+                                    accept="image/*"
+                                    onChange={handleFileUpload}
+                                    className="hidden"
+                                />
+
+                                {vehicleImageUrl ? (
+                                    /* Card de Preview da Foto Carregada */
+                                    <div className="bg-slate-50/80 rounded-3xl border border-slate-200 p-5 md:p-6 space-y-4">
+                                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-slate-200">
+                                            <div className="flex items-center gap-2.5">
+                                                <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-200 flex items-center justify-center">
+                                                    <CheckCircle2 className="w-4 h-4" />
+                                                </div>
+                                                <div>
+                                                    <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                                                        Foto do Veículo Carregada
+                                                    </h4>
+                                                    <p className="text-[11px] text-slate-500 font-medium">
+                                                        Esta foto será exibida nos cards da frota e no módulo de agendamento.
+                                                    </p>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex items-center gap-2 w-full sm:w-auto">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => fileInputRef.current?.click()}
+                                                    className="flex-1 sm:flex-initial px-4 py-2 rounded-xl bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-100 text-slate-700 text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                                                >
+                                                    <Upload className="w-3.5 h-3.5 text-amber-600" />
+                                                    <span>Trocar Foto</span>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={handleRemoveImage}
+                                                    className="px-3 py-2 rounded-xl bg-rose-50 border border-rose-200 hover:bg-rose-100 text-rose-600 text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                                                    title="Remover foto atual"
+                                                >
+                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                    <span className="hidden sm:inline">Remover</span>
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {/* Imagem Centralizada com Aspect Ratio Moderno */}
+                                        <div className="relative rounded-2xl overflow-hidden border border-slate-200/80 bg-slate-900/5 max-h-[300px] flex items-center justify-center group shadow-inner">
+                                            <img
+                                                src={vehicleImageUrl}
+                                                alt="Foto do veículo"
+                                                className="w-full h-full object-contain max-h-[280px] rounded-2xl transition-transform duration-300 group-hover:scale-101"
+                                                onError={(e) => {
+                                                    (e.currentTarget as HTMLImageElement).src = 'https://placehold.co/600x400/f1f5f9/94a3b8?text=Erro+ao+Carregar+Imagem';
+                                                }}
+                                            />
+                                        </div>
+
+                                        {/* Campo Opcional de Link Externo */}
+                                        <div className="pt-2">
+                                            <label className="text-[11px] font-black uppercase tracking-wider text-slate-600 block mb-1">
+                                                Ou edite a URL da foto diretamente:
+                                            </label>
+                                            <input
+                                                type="url"
+                                                placeholder="https://exemplo.com/foto.jpg ou data:image/..."
+                                                value={vehicleImageUrl}
+                                                onChange={e => setVehicleImageUrl(e.target.value)}
+                                                className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-mono text-xs text-slate-700 focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 outline-none transition-all"
+                                            />
+                                        </div>
+                                    </div>
+                                ) : (
+                                    /* Banner Interativo de Upload quando NÃO há foto */
+                                    <div className="space-y-4">
+                                        <div 
+                                            onClick={() => fileInputRef.current?.click()}
+                                            className="border-2 border-dashed border-amber-300 hover:border-amber-500 bg-gradient-to-b from-amber-50/40 via-orange-50/20 to-white hover:bg-amber-50/60 rounded-3xl p-8 md:p-10 flex flex-col items-center justify-center text-center cursor-pointer transition-all group"
+                                        >
+                                            <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-amber-500 to-orange-500 text-white flex items-center justify-center shadow-lg shadow-amber-500/30 group-hover:scale-105 transition-transform mb-4">
+                                                <Upload className="w-8 h-8" />
+                                            </div>
+
+                                            <h4 className="text-base font-black text-slate-900 tracking-tight mb-1">
+                                                Enviar Foto do Veículo
+                                            </h4>
+                                            <p className="text-xs text-slate-500 font-medium max-w-md mb-5">
+                                                Clique no botão abaixo ou nesta área para selecionar uma imagem do seu computador ou celular.
+                                            </p>
+
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    fileInputRef.current?.click();
+                                                }}
+                                                className="px-6 py-3 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-black text-xs uppercase tracking-wider shadow-md shadow-orange-500/25 flex items-center gap-2 group-hover:shadow-lg transition-all cursor-pointer"
+                                            >
+                                                <Camera className="w-4 h-4" />
+                                                <span>Fazer Upload da Imagem</span>
+                                            </button>
+
+                                            <div className="mt-4 flex items-center gap-3 text-[11px] text-slate-400 font-semibold">
+                                                <span>PNG</span>
+                                                <span>•</span>
+                                                <span>JPG</span>
+                                                <span>•</span>
+                                                <span>JPEG</span>
+                                                <span>•</span>
+                                                <span>WEBP</span>
+                                            </div>
+                                        </div>
+
+                                        {/* Opção Alternativa: Inserir Link Direto */}
+                                        <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80">
+                                            <label className="text-[11px] font-black uppercase tracking-wider text-slate-700 block mb-1.5">
+                                                Ou cole o link direto de uma imagem na Web:
+                                            </label>
+                                            <input
+                                                type="url"
+                                                placeholder="https://exemplo.com/foto-do-veiculo.jpg"
+                                                value={vehicleImageUrl}
+                                                onChange={e => setVehicleImageUrl(e.target.value)}
+                                                className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 placeholder:text-slate-400 placeholder:font-normal focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 outline-none transition-all"
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
 
                     {/* Rodapé com Ações */}
-                    <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                    <div className="flex flex-col-reverse sm:flex-row items-center justify-end gap-3 pt-6 mt-6 border-t border-slate-100 shrink-0">
                         <button
                             type="button"
                             onClick={onClose}
-                            className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-black uppercase tracking-wider cursor-pointer"
+                            className="w-full sm:w-auto px-6 py-3 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 rounded-2xl font-black text-xs uppercase tracking-wider transition-all cursor-pointer text-center"
                         >
                             Cancelar
                         </button>
                         <button
                             type="submit"
                             disabled={saving}
-                            className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-xl font-black uppercase tracking-wider shadow-md shadow-amber-500/25 flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                            className="w-full sm:w-auto px-8 py-3 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-600 hover:to-orange-700 text-white rounded-2xl font-black text-xs uppercase tracking-wider shadow-lg shadow-orange-500/25 hover:shadow-orange-500/35 active:scale-98 transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
                         >
                             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                             <span>{saving ? 'Gravando...' : (editingVehicle ? 'Atualizar Veículo' : 'Cadastrar Veículo')}</span>
