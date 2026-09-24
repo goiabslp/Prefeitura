@@ -296,6 +296,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
   // Carregamento de Evento para Edição
   const [loadedEditingEvento, setLoadedEditingEvento] = useState<DiariaEvento | null>(editingEvento || null);
   const [isLoadingEvento, setIsLoadingEvento] = useState(false);
+  const initializedEventoIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (editingEvento) {
@@ -303,7 +304,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
       return;
     }
     const targetId = editingEventoId || (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('id') || window.location.pathname.match(/\/diarias\/editar\/([^/]+)/i)?.[1] : null);
-    if (targetId && !loadedEditingEvento) {
+    if (targetId && (!loadedEditingEvento || String(loadedEditingEvento.id) !== String(targetId))) {
       setIsLoadingEvento(true);
       const loadEvento = async () => {
         try {
@@ -386,9 +387,15 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
   const [isCalculatingDistance, setIsCalculatingDistance] = useState(false);
 
 
-  // Efeito para preencher estados quando loadedEditingEvento for carregado assincronamente
+  // Efeito para preencher estados quando loadedEditingEvento for carregado assincronamente (apenas uma única vez por evento)
   useEffect(() => {
     if (loadedEditingEvento) {
+      const evIdStr = String(loadedEditingEvento.id);
+      if (initializedEventoIdRef.current === evIdStr) {
+        return;
+      }
+      initializedEventoIdRef.current = evIdStr;
+
       if (loadedEditingEvento.pessoas && Array.isArray(loadedEditingEvento.pessoas) && loadedEditingEvento.pessoas.length > 0) {
         setSelectedPersons(loadedEditingEvento.pessoas);
       }
@@ -535,6 +542,10 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
       if (evt.status === 'concluido' || evt.status === 'cancelado' || evt.status === 'rejeitado_gestor' || evt.status === 'rejeitado_administrador') {
         return false;
       }
+      // Se estivermos editando um evento, ele não deve conflitar consigo mesmo
+      if (loadedEditingEvento && String(evt.id) === String(loadedEditingEvento.id)) {
+        return false;
+      }
       const evtVeiculoStr = normalize(typeof evt.veiculo === 'string' ? evt.veiculo : (evt.veiculo as any)?.plate || (evt.veiculo as any)?.model || '');
       if (!evtVeiculoStr) return false;
 
@@ -595,7 +606,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
     return {
       isAvailable: false,
       statusKey: 'aguardando_aprovacao',
-      statusLabel: 'Aguardando Aprovação',
+      statusLabel: 'Em Revisão',
       badgeClass: 'bg-blue-50 text-blue-700 border-blue-300',
       evento: activeEvt
     };
@@ -1092,6 +1103,10 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
   };
 
   useEffect(() => {
+    // Se o evento foi carregado com uma distância já existente e o destino não foi alterado pelo usuário, preserva
+    if (loadedEditingEvento && loadedEditingEvento.destino === destination && loadedEditingEvento.distancia !== undefined && loadedEditingEvento.distancia !== null) {
+      return;
+    }
     calculateDistance(destination);
   }, [destination]);
 
@@ -1191,7 +1206,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
     try {
       if (loadedEditingEvento) {
         // MODO EDIÇÃO: Atualiza a viagem permanentemente no banco de dados
-        await updateDiariaEvento(loadedEditingEvento.id, {
+        const updated = await updateDiariaEvento(loadedEditingEvento.id, {
           pessoas: selectedPersons,
           destino: destination,
           data_saida: departureDateTime,
@@ -1201,9 +1216,13 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
           veiculo_outro: selectedVehicle === 'OUTRO' ? customVehicle.trim() : '',
           distancia: Number(distancia) || 0,
           hospedagem,
-          hospedagem_dias: hospedagem ? hospedagemDias : 0
-        });
+          hospedagem_dias: hospedagem ? hospedagemDias : 0,
+          status: 'aguardando_gestor',
+          justificativa_gestor: null
+        } as any);
         
+        window.dispatchEvent(new CustomEvent('diarias_eventos_updated', { detail: { updatedEvento: updated } }));
+
         setIsSuccess(true);
         setTimeout(() => {
           setIsSuccess(false);
@@ -1213,7 +1232,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
             window.history.pushState({}, '', '/Diarias/Lancamentos');
             window.dispatchEvent(new Event('popstate'));
           }
-        }, 1800);
+        }, 1500);
       } else {
         // MODO CRIAÇÃO: Cria uma viagem individualizada para cada servidor selecionado
         for (const p of selectedPersons) {
@@ -2888,13 +2907,25 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => setCurrentStep(1)}
-                  className="w-full py-2.5 text-center text-xs font-bold text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-xl transition-all border border-indigo-100 shadow-2xs"
-                >
-                  ← Editar Dados do Passo 1
-                </button>
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={handleSubmit}
+                    disabled={!isFormValid || isLoading || isSuccess}
+                    className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-md shadow-emerald-600/20 active:scale-98 flex items-center justify-center gap-2"
+                  >
+                    {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                    <span>{isLoading ? 'Salvando...' : (loadedEditingEvento ? 'Salvar Alterações' : 'Finalizar Solicitação')}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setCurrentStep(1)}
+                    className="w-full py-2.5 text-center text-xs font-bold text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-xl transition-all border border-indigo-100 shadow-2xs"
+                  >
+                    ← Editar Dados do Passo 1
+                  </button>
+                </div>
               </div>
 
             </div>

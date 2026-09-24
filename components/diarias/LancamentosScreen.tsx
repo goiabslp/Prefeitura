@@ -2119,7 +2119,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
       case 'aguardando_aprovacao':
       case 'em_analise':
       case 'aguardando_gestor':
-        return { label: 'Aguardando Gestor', style: 'border-amber-200 bg-amber-50 text-amber-700' };
+        return { label: 'Em Revisão', style: 'border-amber-200 bg-amber-50 text-amber-700' };
       case 'rejeitado_gestor':
         return { label: 'Rejeitado pelo Gestor', style: 'border-rose-200 bg-rose-50 text-rose-700' };
       case 'aguardando_administrador':
@@ -2130,7 +2130,7 @@ export const LancamentosScreen: React.FC<LancamentosScreenProps> = ({
       case 'viagem_cancelada':
         return { label: 'Viagem Cancelada', style: 'border-slate-300 bg-slate-200 text-slate-700 font-bold' };
       default:
-        return { label: 'Aguardando Gestor', style: 'border-amber-200 bg-amber-50 text-amber-700' };
+        return { label: 'Em Revisão', style: 'border-amber-200 bg-amber-50 text-amber-700' };
     }
   };
 
