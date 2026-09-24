@@ -210,6 +210,16 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
       return "Módulo de Abastecimento";
     }
 
+    if (currentView === 'consultas') return "Módulo de Regulação";
+    if (currentView === 'farmacia') return "Módulo de Farmácia Popular";
+    if (currentView === 'noticias') return "Módulo de Notícias";
+    if (currentView === 'art') return "Módulo Art & Design";
+    if (currentView === 'rh') return "Módulo de Recursos Humanos";
+    if (currentView === 'projetos') return "Módulo de Gestão de Projetos";
+    if (currentView === 'marketing') return "Módulo de Marketing";
+    if (currentView === 'calendario') return "Módulo de Calendário";
+    if (currentView === 'upload') return "Central de Upload Rápido";
+
     switch (activeBlock) {
       case 'oficio': return "Módulo de Ofícios";
       case 'compras': return "Módulo de Compras";

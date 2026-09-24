@@ -73,8 +73,8 @@ const WORKFLOW_DEFS: WorkflowDef[] = [
   {
     key: 'agendamento_consulta',
     name: 'Agendamento de Consulta',
-    module: 'Consultas',
-    route: '/Consultas/NovoAgendamento',
+    module: 'Regulação',
+    route: '/Regulacao/NovoAgendamento',
     permissionKey: 'sub_consultas_novo',
     triggerKeywords: ['consulta', 'agendamento', 'agendar consulta', 'marcar consulta', 'médico', 'especialidade'],
     fields: [

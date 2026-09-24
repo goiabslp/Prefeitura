@@ -91,7 +91,7 @@ export const SYSTEM_AI_TOOLS: Record<string, ToolDefinition> = {
       const modulos = [
         { nome: 'Calendário Oficial', rota: '/Calendario', permitido: checkRouteAccess(user, '/Calendario') },
         { nome: 'Agendamento de Veículos', rota: '/AgendamentoVeiculos', permitido: checkRouteAccess(user, '/AgendamentoVeiculos') },
-        { nome: 'Consultas e Saúde', rota: '/Consultas', permitido: checkRouteAccess(user, '/Consultas') },
+        { nome: 'Regulação e Saúde', rota: '/Regulacao', permitido: checkRouteAccess(user, '/Regulacao') },
         { nome: 'Farmácia Popular', rota: '/FarmaciaPopular', permitido: checkRouteAccess(user, '/FarmaciaPopular') },
         { nome: 'Diárias de Viagem', rota: '/Diarias', permitido: checkRouteAccess(user, '/Diarias') },
         { nome: 'Compras e Licitações', rota: '/Compras', permitido: checkRouteAccess(user, '/Compras') },
@@ -249,8 +249,8 @@ export const SYSTEM_AI_TOOLS: Record<string, ToolDefinition> = {
   consultar_pacientes_consultas: {
     name: 'consultar_pacientes_consultas',
     description: 'Consulta o cadastro de pacientes da saúde municipal por nome ou CPF.',
-    module: 'Consultas',
-    requiredRoute: '/Consultas/Pacientes',
+    module: 'Regulação',
+    requiredRoute: '/Regulacao/Pacientes',
     parameters: {
       type: 'object',
       properties: {
@@ -259,8 +259,8 @@ export const SYSTEM_AI_TOOLS: Record<string, ToolDefinition> = {
       required: ['termoBusca']
     },
     execute: async (params, user) => {
-      if (!checkRouteAccess(user, '/Consultas')) {
-        return { success: false, message: 'Acesso negado: Seu usuário não possui autorização para acessar o módulo de Consultas e Saúde.' };
+      if (!checkRouteAccess(user, '/Regulacao')) {
+        return { success: false, message: 'Acesso negado: Seu usuário não possui autorização para acessar o módulo de Regulação.' };
       }
 
       try {

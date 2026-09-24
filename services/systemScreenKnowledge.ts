@@ -27,11 +27,11 @@ export interface ScreenMetadata {
 }
 
 export const SYSTEM_SCREENS: Record<string, ScreenMetadata> = {
-  // --- CONSULTAS ---
-  '/Consultas/NovoAgendamento': {
-    route: '/Consultas/NovoAgendamento',
-    canonicalRoute: '/Consultas/NovoAgendamento',
-    module: 'Consultas',
+  // --- REGULAÇÃO ---
+  '/Regulacao/NovoAgendamento': {
+    route: '/Regulacao/NovoAgendamento',
+    canonicalRoute: '/Regulacao/NovoAgendamento',
+    module: 'Regulação',
     submodule: 'Novo Agendamento',
     title: 'Novo Agendamento de Consulta',
     description: 'Tela de agendamento de consultas e procedimentos de saúde para cidadãos municipais.',
@@ -58,12 +58,12 @@ export const SYSTEM_SCREENS: Record<string, ScreenMetadata> = {
     availableActions: ['Agendar Consulta', 'Consultar Disponibilidade Médica', 'Limpar Formulário'],
     howToGuide: 'Informe o nome do paciente, a especialidade desejada, a data e o horário. Após preencher, clique em Salvar para registrar no prontuário do SUS municipal.'
   },
-  '/Consultas': {
-    route: '/Consultas',
-    canonicalRoute: '/Consultas',
-    module: 'Consultas',
-    title: 'Gestão de Consultas e Exames',
-    description: 'Painel geral com listagem de consultas agendadas, filtros por médico, paciente e status.',
+  '/Regulacao': {
+    route: '/Regulacao',
+    canonicalRoute: '/Regulacao',
+    module: 'Regulação',
+    title: 'Gestão de Regulação e Consultas',
+    description: 'Painel geral com listagem de consultas e procedimentos agendados, filtros por médico, paciente e status.',
     permissionKey: 'parent_consultas',
     fields: [
       { name: 'busca', label: 'Buscar por Paciente ou SUS', type: 'text', required: false },

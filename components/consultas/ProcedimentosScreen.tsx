@@ -1287,7 +1287,7 @@ export const ProcedimentosScreen: React.FC<ProcedimentosScreenProps> = ({
                                     </select>
                                     {hasEspecialista && especialistas.length === 0 && (
                                         <p className="text-[10px] text-amber-600 font-bold mt-1">
-                                            Nenhum especialista cadastrado. Cadastre em /Consultas/DADOS/Dashboard/Especialistas
+                                            Nenhum especialista cadastrado. Cadastre em /Regulacao/DADOS/Dashboard/Especialistas
                                         </p>
                                     )}
                                 </div>

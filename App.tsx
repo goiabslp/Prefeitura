@@ -195,32 +195,32 @@ const VIEW_TO_PATH: Record<string, string> = {
   'licitacao:details': '/Licitacao/MeusProcessos',
   'licitacao:kanban': '/Licitacao/Kanban',
   'licitacao:kanban-view': '/Licitacao/Kanban/view',
-  'consultas': '/Consultas',
-  'consultas:procedimentos': '/Consultas/Procedimentos',
-  'consultas:pacientes': '/Consultas/Pacientes',
-  'consultas:novo-agendamento': '/Consultas/NovoAgendamento',
-  'consultas:novo-agendamento-paciente': '/Consultas/NovoAgendamento/Paciente',
-  'consultas:novo-agendamento-procedimento': '/Consultas/NovoAgendamento/Procedimento',
-  'consultas:novo-agendamento-revisao': '/Consultas/NovoAgendamento/Revisao',
-  'consultas:definir-agenda': '/Consultas/DefinirAgenda',
-  'consultas:vagas-reservadas': '/Consultas/VagasReservadas',
-  'consultas:novo-agendamento-definir-agenda': '/Consultas/NovoAgendamento/DefinirAgenda',
-  'consultas:liberar-vagas': '/Consultas/LiberarVagas',
-  'consultas:acompanhar': '/Consultas/Acompanhar',
-  'consultas:dados': '/Consultas/DADOS',
-  'consultas:dados-dashboard': '/Consultas/DADOS/Dashboard',
-  'consultas:dados-dashboard-geral': '/Consultas/DADOS/Dashboard/VisaoGeral',
-  'consultas:dados-dashboard-especialistas': '/Consultas/DADOS/Dashboard/Especialistas',
-  'consultas:dados-dashboard-prazos': '/Consultas/DADOS/Dashboard/Prazos',
-  'consultas:dados-dashboard-filas': '/Consultas/DADOS/Dashboard/Filas',
-  'consultas:dados-dashboard-ia': '/Consultas/DADOS/Dashboard/IA',
-  'consultas:dados-dashboard-eficiencia': '/Consultas/DADOS/Dashboard/Eficiencia',
-  'consultas:dados-pacientes': '/Consultas/DADOS/Pacientes',
-  'consultas:dados-procedimentos': '/Consultas/DADOS/Exames',
-  'consultas:dados-historico': '/Consultas/DADOS/Historico',
-  'consultas:dados-gestor': '/Consultas/DADOS/Gestor',
-  'consultas:dados-agentes': '/Consultas/DADOS/AgentesSaude',
-  'consultas:gestor': '/Consultas/Gestor',
+  'consultas': '/Regulacao',
+  'consultas:procedimentos': '/Regulacao/Procedimentos',
+  'consultas:pacientes': '/Regulacao/Pacientes',
+  'consultas:novo-agendamento': '/Regulacao/NovoAgendamento',
+  'consultas:novo-agendamento-paciente': '/Regulacao/NovoAgendamento/Paciente',
+  'consultas:novo-agendamento-procedimento': '/Regulacao/NovoAgendamento/Procedimento',
+  'consultas:novo-agendamento-revisao': '/Regulacao/NovoAgendamento/Revisao',
+  'consultas:definir-agenda': '/Regulacao/DefinirAgenda',
+  'consultas:vagas-reservadas': '/Regulacao/VagasReservadas',
+  'consultas:novo-agendamento-definir-agenda': '/Regulacao/NovoAgendamento/DefinirAgenda',
+  'consultas:liberar-vagas': '/Regulacao/LiberarVagas',
+  'consultas:acompanhar': '/Regulacao/Acompanhar',
+  'consultas:dados': '/Regulacao/DADOS',
+  'consultas:dados-dashboard': '/Regulacao/DADOS/Dashboard',
+  'consultas:dados-dashboard-geral': '/Regulacao/DADOS/Dashboard/VisaoGeral',
+  'consultas:dados-dashboard-especialistas': '/Regulacao/DADOS/Dashboard/Especialistas',
+  'consultas:dados-dashboard-prazos': '/Regulacao/DADOS/Dashboard/Prazos',
+  'consultas:dados-dashboard-filas': '/Regulacao/DADOS/Dashboard/Filas',
+  'consultas:dados-dashboard-ia': '/Regulacao/DADOS/Dashboard/IA',
+  'consultas:dados-dashboard-eficiencia': '/Regulacao/DADOS/Dashboard/Eficiencia',
+  'consultas:dados-pacientes': '/Regulacao/DADOS/Pacientes',
+  'consultas:dados-procedimentos': '/Regulacao/DADOS/Exames',
+  'consultas:dados-historico': '/Regulacao/DADOS/Historico',
+  'consultas:dados-gestor': '/Regulacao/DADOS/Gestor',
+  'consultas:dados-agentes': '/Regulacao/DADOS/AgentesSaude',
+  'consultas:gestor': '/Regulacao/Gestor',
   'farmacia': '/FarmaciaPopular',
   'farmacia:pacientes': '/FarmaciaPopular/Pacientes',
   'farmacia:consultar': '/FarmaciaPopular/Consultar',
@@ -1451,11 +1451,14 @@ const App: React.FC = () => {
         return;
       }
 
+      // Suporte a redirecionamento retrocompatível de /consultas para /regulacao
+      const lookupPath = path.startsWith('/consultas') ? path.replace('/consultas', '/regulacao') : path;
+
       const matchedEntry = Object.entries(PATH_TO_STATE).find(
         ([key]) => {
           let normKey = key;
           try { normKey = decodeURIComponent(key); } catch (e) {}
-          return normKey.replace(/\/$/, '').toLowerCase() === path;
+          return normKey.replace(/\/$/, '').toLowerCase() === lookupPath;
         }
       );
       const state = matchedEntry ? matchedEntry[1] : null;
@@ -4892,6 +4895,7 @@ const App: React.FC = () => {
                 onConsultas={() => {
                   setCurrentView('consultas');
                   setAppState(prev => ({ ...prev, view: undefined }));
+                  window.history.pushState({}, '', VIEW_TO_PATH['consultas']);
                 }}
                 onFarmacia={() => {
                   setCurrentView('farmacia');
@@ -5419,79 +5423,79 @@ const App: React.FC = () => {
                     window.history.pushState({}, '', '/PaginaInicial');
                   } else if (view === 'consultas:procedimentos') {
                     setAppState(prev => ({ ...prev, view: 'procedimentos' }));
-                    window.history.pushState({}, '', '/Consultas/Procedimentos');
+                    window.history.pushState({}, '', '/Regulacao/Procedimentos');
                   } else if (view === 'consultas:pacientes') {
                     setAppState(prev => ({ ...prev, view: 'pacientes' }));
-                    window.history.pushState({}, '', '/Consultas/Pacientes');
+                    window.history.pushState({}, '', '/Regulacao/Pacientes');
                   } else if (view === 'consultas:novo-agendamento') {
                     setAppState(prev => ({ ...prev, view: 'novo-agendamento' }));
-                    window.history.pushState({}, '', '/Consultas/NovoAgendamento');
+                    window.history.pushState({}, '', '/Regulacao/NovoAgendamento');
                   } else if (view === 'consultas:novo-agendamento-paciente') {
                     setAppState(prev => ({ ...prev, view: 'novo-agendamento-paciente' }));
-                    window.history.pushState({}, '', '/Consultas/NovoAgendamento/Paciente');
+                    window.history.pushState({}, '', '/Regulacao/NovoAgendamento/Paciente');
                   } else if (view === 'consultas:novo-agendamento-procedimento') {
                     setAppState(prev => ({ ...prev, view: 'novo-agendamento-procedimento' }));
-                    window.history.pushState({}, '', '/Consultas/NovoAgendamento/Procedimento');
+                    window.history.pushState({}, '', '/Regulacao/NovoAgendamento/Procedimento');
                   } else if (view === 'consultas:novo-agendamento-revisao') {
                     setAppState(prev => ({ ...prev, view: 'novo-agendamento-revisao' }));
-                    window.history.pushState({}, '', '/Consultas/NovoAgendamento/Revisao');
+                    window.history.pushState({}, '', '/Regulacao/NovoAgendamento/Revisao');
                   } else if (view === 'consultas:definir-agenda' || view === 'consultas:novo-agendamento-definir-agenda') {
                     setAppState(prev => ({ ...prev, view: 'novo-agendamento-definir-agenda' }));
-                    window.history.pushState({}, '', '/Consultas/DefinirAgenda');
+                    window.history.pushState({}, '', '/Regulacao/DefinirAgenda');
                   } else if (view === 'consultas:vagas-reservadas') {
                     setAppState(prev => ({ ...prev, view: 'novo-agendamento-definir-agenda' }));
-                    window.history.pushState({}, '', '/Consultas/VagasReservadas');
+                    window.history.pushState({}, '', '/Regulacao/VagasReservadas');
                   } else if (view === 'consultas:liberar-vagas') {
                     setAppState(prev => ({ ...prev, view: 'liberar-vagas' }));
-                    window.history.pushState({}, '', '/Consultas/LiberarVagas');
+                    window.history.pushState({}, '', '/Regulacao/LiberarVagas');
                   } else if (view === 'consultas:acompanhar') {
                     setAppState(prev => ({ ...prev, view: 'acompanhar' }));
-                    window.history.pushState({}, '', '/Consultas/Acompanhar');
+                    window.history.pushState({}, '', '/Regulacao/Acompanhar');
                   } else if (view === 'consultas:dados') {
                     setAppState(prev => ({ ...prev, view: 'dados-dashboard' }));
-                    window.history.pushState({}, '', '/Consultas/DADOS/Dashboard');
+                    window.history.pushState({}, '', '/Regulacao/DADOS/Dashboard');
                   } else if (view === 'consultas:dados-dashboard') {
                     setAppState(prev => ({ ...prev, view: 'dados-dashboard' }));
-                    window.history.pushState({}, '', '/Consultas/DADOS/Dashboard');
+                    window.history.pushState({}, '', '/Regulacao/DADOS/Dashboard');
                   } else if (view === 'consultas:dados-dashboard-geral') {
                     setAppState(prev => ({ ...prev, view: 'dados-dashboard-geral' }));
-                    window.history.pushState({}, '', '/Consultas/DADOS/Dashboard/VisaoGeral');
+                    window.history.pushState({}, '', '/Regulacao/DADOS/Dashboard/VisaoGeral');
                   } else if (view === 'consultas:dados-dashboard-especialistas') {
                     setAppState(prev => ({ ...prev, view: 'dados-dashboard-especialistas' }));
-                    window.history.pushState({}, '', '/Consultas/DADOS/Dashboard/Especialistas');
+                    window.history.pushState({}, '', '/Regulacao/DADOS/Dashboard/Especialistas');
                   } else if (view === 'consultas:dados-dashboard-prazos') {
                     setAppState(prev => ({ ...prev, view: 'dados-dashboard-prazos' }));
-                    window.history.pushState({}, '', '/Consultas/DADOS/Dashboard/Prazos');
+                    window.history.pushState({}, '', '/Regulacao/DADOS/Dashboard/Prazos');
                   } else if (view === 'consultas:dados-dashboard-filas') {
                     setAppState(prev => ({ ...prev, view: 'dados-dashboard-filas' }));
-                    window.history.pushState({}, '', '/Consultas/DADOS/Dashboard/Filas');
+                    window.history.pushState({}, '', '/Regulacao/DADOS/Dashboard/Filas');
                   } else if (view === 'consultas:dados-dashboard-ia') {
                     setAppState(prev => ({ ...prev, view: 'dados-dashboard-ia' }));
-                    window.history.pushState({}, '', '/Consultas/DADOS/Dashboard/IA');
+                    window.history.pushState({}, '', '/Regulacao/DADOS/Dashboard/IA');
                   } else if (view === 'consultas:dados-dashboard-eficiencia') {
                     setAppState(prev => ({ ...prev, view: 'dados-dashboard-eficiencia' }));
-                    window.history.pushState({}, '', '/Consultas/DADOS/Dashboard/Eficiencia');
+                    window.history.pushState({}, '', '/Regulacao/DADOS/Dashboard/Eficiencia');
                   } else if (view === 'consultas:dados-pacientes') {
                     setAppState(prev => ({ ...prev, view: 'dados-pacientes' }));
-                    window.history.pushState({}, '', '/Consultas/DADOS/Pacientes');
+                    window.history.pushState({}, '', '/Regulacao/DADOS/Pacientes');
                   } else if (view === 'consultas:dados-procedimentos') {
                     setAppState(prev => ({ ...prev, view: 'dados-procedimentos' }));
-                    window.history.pushState({}, '', '/Consultas/DADOS/Exames');
+                    window.history.pushState({}, '', '/Regulacao/DADOS/Exames');
                   } else if (view === 'consultas:dados-historico') {
                     setAppState(prev => ({ ...prev, view: 'dados-historico' }));
-                    window.history.pushState({}, '', '/Consultas/DADOS/Historico');
+                    window.history.pushState({}, '', '/Regulacao/DADOS/Historico');
                   } else if (view === 'consultas:gestor') {
                     setAppState(prev => ({ ...prev, view: 'gestor' }));
-                    window.history.pushState({}, '', '/Consultas/Gestor');
+                    window.history.pushState({}, '', '/Regulacao/Gestor');
                   } else if (view === 'consultas:dados-gestor') {
                     setAppState(prev => ({ ...prev, view: 'dados-gestor' }));
-                    window.history.pushState({}, '', '/Consultas/DADOS/Gestor');
+                    window.history.pushState({}, '', '/Regulacao/DADOS/Gestor');
                   } else if (view === 'consultas:dados-agentes') {
                     setAppState(prev => ({ ...prev, view: 'dados-agentes' }));
-                    window.history.pushState({}, '', '/Consultas/DADOS/AgentesSaude');
+                    window.history.pushState({}, '', '/Regulacao/DADOS/AgentesSaude');
                   } else if (view === 'consultas') {
                     setAppState(prev => ({ ...prev, view: undefined }));
-                    window.history.pushState({}, '', '/Consultas');
+                    window.history.pushState({}, '', '/Regulacao');
                   }
                 }}
                 onLogout={signOut}

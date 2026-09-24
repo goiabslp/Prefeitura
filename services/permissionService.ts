@@ -213,18 +213,23 @@ export const MODULE_ACCESS_TREE: ModuleItemDefinition[] = [
   },
   {
     key: 'parent_consultas',
-    legacyKeys: ['consultas'],
-    label: 'Regulação & Consultas',
-    description: 'Agendamento de consultas médicas especializadas, exames e regulação',
-    routes: ['/Consultas'],
+    legacyKeys: ['consultas', 'regulacao', 'parent_regulacao'],
+    label: 'Regulação',
+    description: 'Agendamento de consultas médicas especializadas, exames e regulação municipal',
+    routes: ['/Regulacao', '/Consultas'],
     iconName: 'HeartPulse',
     submodules: [
       {
         key: 'sub_consultas_novo_agendamento',
-        legacyKeys: ['parent_consultas_novo_agendamento'],
+        legacyKeys: ['parent_consultas_novo_agendamento', 'sub_regulacao_novo_agendamento'],
         label: 'Novo Agendamento',
         description: 'Marcar nova consulta médica ou procedimento',
         routes: [
+          '/Regulacao/NovoAgendamento',
+          '/Regulacao/NovoAgendamento/Paciente',
+          '/Regulacao/NovoAgendamento/Procedimento',
+          '/Regulacao/NovoAgendamento/Revisao',
+          '/Regulacao/NovoAgendamento/DefinirAgenda',
           '/Consultas/NovoAgendamento',
           '/Consultas/NovoAgendamento/Paciente',
           '/Consultas/NovoAgendamento/Procedimento',
@@ -234,45 +239,58 @@ export const MODULE_ACCESS_TREE: ModuleItemDefinition[] = [
       },
       {
         key: 'sub_consultas_liberar_vagas',
-        legacyKeys: ['parent_consultas_liberar_vagas'],
+        legacyKeys: ['parent_consultas_liberar_vagas', 'sub_regulacao_liberar_vagas'],
         label: 'Liberar Vagas',
         description: 'Disponibilização de novas cotas e vagas para marcação',
-        routes: ['/Consultas/LiberarVagas']
+        routes: ['/Regulacao/LiberarVagas', '/Consultas/LiberarVagas']
       },
       {
         key: 'sub_consultas_acompanhar',
-        legacyKeys: ['parent_consultas_acompanhar'],
+        legacyKeys: ['parent_consultas_acompanhar', 'sub_regulacao_acompanhar'],
         label: 'Acompanhar',
         description: 'Fila de espera e acompanhamento de agendamentos',
-        routes: ['/Consultas/Acompanhar', '/Consultas/VagasReservadas']
+        routes: ['/Regulacao/Acompanhar', '/Regulacao/VagasReservadas', '/Consultas/Acompanhar', '/Consultas/VagasReservadas']
       },
       {
         key: 'sub_consultas_definir_agenda',
-        legacyKeys: ['parent_consultas_definir_agenda'],
+        legacyKeys: ['parent_consultas_definir_agenda', 'sub_regulacao_definir_agenda'],
         label: 'Definir Agenda',
         description: 'Parametrização de agendas e prestadores credenciados',
-        routes: ['/Consultas/DefinirAgenda']
+        routes: ['/Regulacao/DefinirAgenda', '/Consultas/DefinirAgenda']
       },
       {
         key: 'sub_consultas_procedimentos',
-        legacyKeys: ['parent_consultas_procedimentos'],
+        legacyKeys: ['parent_consultas_procedimentos', 'sub_regulacao_procedimentos'],
         label: 'Procedimentos',
         description: 'Gestão, cadastro, edição e suspensão de exames e consultas',
-        routes: ['/Consultas/Procedimentos']
+        routes: ['/Regulacao/Procedimentos', '/Consultas/Procedimentos']
       },
       {
         key: 'sub_consultas_pacientes',
-        legacyKeys: ['parent_consultas_pacientes'],
+        legacyKeys: ['parent_consultas_pacientes', 'sub_regulacao_pacientes'],
         label: 'Pacientes',
         description: 'Cadastro e consulta de prontuário de pacientes',
-        routes: ['/Consultas/Pacientes']
+        routes: ['/Regulacao/Pacientes', '/Consultas/Pacientes']
       },
       {
         key: 'sub_consultas_dados',
-        legacyKeys: ['parent_consultas_dados'],
+        legacyKeys: ['parent_consultas_dados', 'sub_regulacao_dados'],
         label: 'Dados & Métricas',
         description: 'Indicadores, dashboards e inteligência de regulação em saúde',
         routes: [
+          '/Regulacao/DADOS',
+          '/Regulacao/DADOS/Dashboard',
+          '/Regulacao/DADOS/Dashboard/VisaoGeral',
+          '/Regulacao/DADOS/Dashboard/Especialistas',
+          '/Regulacao/DADOS/Dashboard/Prazos',
+          '/Regulacao/DADOS/Dashboard/Filas',
+          '/Regulacao/DADOS/Dashboard/IA',
+          '/Regulacao/DADOS/Dashboard/Eficiencia',
+          '/Regulacao/DADOS/Pacientes',
+          '/Regulacao/DADOS/Exames',
+          '/Regulacao/DADOS/Historico',
+          '/Regulacao/DADOS/Gestor',
+          '/Regulacao/DADOS/AgentesSaude',
           '/Consultas/DADOS',
           '/Consultas/DADOS/Dashboard',
           '/Consultas/DADOS/Dashboard/VisaoGeral',
@@ -290,10 +308,10 @@ export const MODULE_ACCESS_TREE: ModuleItemDefinition[] = [
       },
       {
         key: 'sub_consultas_gestor',
-        legacyKeys: ['parent_consultas_gestor'],
+        legacyKeys: ['parent_consultas_gestor', 'sub_regulacao_gestor'],
         label: 'Gestor',
         description: 'Gestão de permissões operacionais do módulo de regulação',
-        routes: ['/Consultas/Gestor']
+        routes: ['/Regulacao/Gestor', '/Consultas/Gestor']
       }
     ]
   },

@@ -111,7 +111,7 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
                             <Activity className="w-8 h-8 md:w-9 md:h-9 text-sky-600 drop-shadow-xs animate-pulse" />
                         </div>
                         <h1 className="text-2xl md:text-3xl lg:text-4xl font-extrabold text-slate-900 tracking-tight mb-1 uppercase">
-                            Regulação & Consultas
+                            Regulação
                         </h1>
                         <p className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-widest leading-relaxed">
                             Agendamento de exames e consultas municipais
@@ -234,7 +234,7 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
                         {canAccessDados && (
                             <button
                                 onClick={() => onNavigate('consultas:dados-dashboard')}
-                                className="group relative w-full min-h-[115px] md:min-h-[135px] rounded-[2rem] bg-gradient-to-br from-white to-slate-50 border border-slate-100 shadow-[0_10px_35px_rgba(0,0,0,0.03)] hover:shadow-[0_25px_60px_rgba(16,185,129,0.15)] hover:border-emerald-200 hover:from-white hover:to-emerald-50/20 hover:-translate-y-1.5 active:scale-95 transition-all duration-300 ease-out flex flex-col items-center justify-center text-center overflow-hidden p-3.5 md:p-4 cursor-pointer shrink-0"
+                                className="group relative w-full min-h-[115px] md:min-h-[135px] rounded-[2rem] bg-gradient-to-br from-white to-slate-50 border border-slate-100 shadow-[0_10px_35px_rgba(0,0,0,0.03)] hover:shadow-[0_25px_60px_rgba(160,185,129,0.15)] hover:border-emerald-200 hover:from-white hover:to-emerald-50/20 hover:-translate-y-1.5 active:scale-95 transition-all duration-300 ease-out flex flex-col items-center justify-center text-center overflow-hidden p-3.5 md:p-4 cursor-pointer shrink-0"
                             >
                                 <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-bl-[100%] -mr-10 -mt-10 transition-transform duration-700 ease-out group-hover:scale-150"></div>
                                 <div className="absolute bottom-0 left-0 w-20 h-20 bg-emerald-500/5 rounded-tr-[100%] -ml-10 -mb-10 transition-transform duration-700 ease-out group-hover:scale-125 opacity-0 group-hover:opacity-100"></div>
@@ -278,7 +278,7 @@ export const ConsultasModule: React.FC<ConsultasModuleProps> = ({
                         {!canAccessNovoAgendamento && !canAccessLiberarVagas && !canAccessAcompanhar && !canAccessProcedimentos && !canAccessPacientes && !canAccessDados && !canAccessGestor && (
                             <div className="col-span-full text-center p-8 bg-white border border-slate-200 rounded-[2rem] shadow-sm max-w-md mx-auto">
                                 <Activity className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                                <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Regulação & Consultas</h3>
+                                <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Regulação</h3>
                                 <p className="text-xs text-slate-500 mt-2">Nenhuma funcionalidade deste módulo está disponível no momento.</p>
                             </div>
                         )}

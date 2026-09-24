@@ -292,7 +292,7 @@ export const DefinirDataModal: React.FC<DefinirDataModalProps> = ({
                                 Nenhuma Vaga Livre Encontrada
                             </h4>
                             <p className="text-xs text-slate-500 max-w-sm mx-auto font-medium">
-                                Todas as vagas liberadas para este procedimento já foram preenchidas por outros pacientes ou pausadas. Libere novas vagas em <strong>/Consultas/LiberarVagas</strong>.
+                                Todas as vagas liberadas para este procedimento já foram preenchidas por outros pacientes ou pausadas. Libere novas vagas em <strong>/Regulacao/LiberarVagas</strong>.
                             </p>
                         </div>
                     ) : (
