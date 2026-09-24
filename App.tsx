@@ -230,6 +230,7 @@ const VIEW_TO_PATH: Record<string, string> = {
   'farmacia:historico': '/FarmaciaPopular/Historico',
   'farmacia:dashboard': '/FarmaciaPopular/Dashboard',
   'farmacia:dashboard-geral': '/FarmaciaPopular/Dashboard/VisaoGeral',
+  'farmacia:dashboard-medicos': '/FarmaciaPopular/Dashboard/VisaoGeral/Medicos',
   'farmacia:dashboard-medicamentos': '/FarmaciaPopular/Dashboard/Medicamentos',
   'farmacia:dashboard-pacientes': '/FarmaciaPopular/Dashboard/Pacientes',
   'farmacia:dashboard-operacoes': '/FarmaciaPopular/Dashboard/Operacoes',
@@ -5540,6 +5541,9 @@ const App: React.FC = () => {
                   } else if (view === 'farmacia:dashboard-geral') {
                     setAppState(prev => ({ ...prev, view: 'dashboard-geral' }));
                     window.history.pushState({}, '', '/FarmaciaPopular/Dashboard/VisaoGeral');
+                  } else if (view === 'farmacia:dashboard-medicos') {
+                    setAppState(prev => ({ ...prev, view: 'dashboard-medicos' }));
+                    window.history.pushState({}, '', '/FarmaciaPopular/Dashboard/VisaoGeral/Medicos');
                   } else if (view === 'farmacia:dashboard-medicamentos') {
                     setAppState(prev => ({ ...prev, view: 'dashboard-medicamentos' }));
                     window.history.pushState({}, '', '/FarmaciaPopular/Dashboard/Medicamentos');

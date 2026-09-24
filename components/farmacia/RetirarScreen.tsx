@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { User, FarmaciaMedicamento, FarmaciaMovimentacao, ConsultaPaciente, AppState, AGENTES_DE_SAUDE } from '../../types';
-import { ArrowLeft, User as UserIcon, Calendar, ClipboardList, CheckCircle2, AlertTriangle, Search, Loader2, History, X, FileDown, Pill, ShieldCheck, FileText, Plus, Trash2, Minus, UserPlus, ChevronDown, Sparkles, Check, Stethoscope } from 'lucide-react';
+import { User, FarmaciaMedicamento, FarmaciaMovimentacao, FarmaciaMedico, ConsultaPaciente, AppState, AGENTES_DE_SAUDE } from '../../types';
+import { ArrowLeft, User as UserIcon, Calendar, ClipboardList, CheckCircle2, AlertTriangle, Search, Loader2, History, X, FileDown, Pill, ShieldCheck, FileText, Plus, Trash2, Minus, UserPlus, ChevronDown, Sparkles, Check, Stethoscope, UserCheck } from 'lucide-react';
 import * as db from '../../services/farmaciaService';
+import { normalizeCrmAndUf } from './dashboard/MedicosDashboardTab';
 import { getPacientes, createPaciente } from '../../services/consultasService';
 import { useAgentesSaude } from '../../services/agentesSaudeService';
 import { jsPDF } from 'jspdf';
@@ -52,9 +53,13 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
     const [withdrawalDate, setWithdrawalDate] = useState(getFormattedDateTimeLocal());
     const [observacoes, setObservacoes] = useState('');
 
-    // CRM do Médico
+    // CRM & Prescritor com Autocomplete Dinâmico
     const [medicoCrm, setMedicoCrm] = useState('');
     const [medicoUf, setMedicoUf] = useState('MG');
+    const [medicoNome, setMedicoNome] = useState('');
+    const [medicoSearchQuery, setMedicoSearchQuery] = useState('');
+    const [showMedicoDropdown, setShowMedicoDropdown] = useState(false);
+    const [medicosCadastrados, setMedicosCadastrados] = useState<Record<string, FarmaciaMedico>>({});
 
     // Autocomplete dropdown UI states
     const [showPatientDropdown, setShowPatientDropdown] = useState(false);
@@ -139,15 +144,29 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
     useEffect(() => {
         loadData();
 
+        const carregarMedicos = async () => {
+            try {
+                const map = await db.getMedicosCadastrados();
+                setMedicosCadastrados(map);
+            } catch (e) {
+                console.error('[RetirarScreen] Erro ao carregar médicos cadastrados:', e);
+            }
+        };
+
+        carregarMedicos();
+
         const handleMedChange = () => loadData(true);
         const handleMovChange = () => loadData(true);
+        const handleMedicosChange = () => carregarMedicos();
 
         window.addEventListener('farmacia-medicamentos-changed', handleMedChange);
         window.addEventListener('farmacia-movimentacoes-changed', handleMovChange);
+        window.addEventListener('farmacia-medicos-changed', handleMedicosChange);
 
         return () => {
             window.removeEventListener('farmacia-medicamentos-changed', handleMedChange);
             window.removeEventListener('farmacia-movimentacoes-changed', handleMovChange);
+            window.removeEventListener('farmacia-medicos-changed', handleMedicosChange);
         };
     }, []);
 
@@ -169,6 +188,66 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
             (p.sus_number && p.sus_number.replace(/\D/g, '').includes(cleanQuery))
         ).slice(0, 5);
     }, [pacientes, patientSearchQuery]);
+
+    // Lista consolidada de médicos conhecidos para sugestão no autocomplete
+    const allKnownDoctors = useMemo(() => {
+        const map: Record<string, { crm: string; uf: string; nome?: string; count: number; displayLabel: string }> = {};
+
+        // 1. Médicos explicitamente cadastrados no sistema
+        Object.values(medicosCadastrados).forEach(med => {
+            if (!med.crm) return;
+            const cleanCrm = med.crm.replace(/\D/g, '');
+            const cleanUf = (med.uf || 'MG').toUpperCase();
+            const key = `${cleanCrm}_${cleanUf}`;
+            map[key] = {
+                crm: cleanCrm,
+                uf: cleanUf,
+                nome: med.nome || undefined,
+                count: 0,
+                displayLabel: med.nome ? `${med.nome} — CRM ${cleanCrm}/${cleanUf}` : `CRM ${cleanCrm} / ${cleanUf}`
+            };
+        });
+
+        // 2. Médicos identificados a partir do histórico de dispensações
+        recentWithdrawals.forEach(m => {
+            const norm = normalizeCrmAndUf(m.medico_crm, m.medico_uf, m.observacoes);
+            if (!norm) return;
+            const key = `${norm.crm}_${norm.uf}`;
+            const cadastrado = medicosCadastrados[key];
+            const nomeFinal = cadastrado?.nome || (m.medico_nome && !m.medico_nome.startsWith('MÉDICO PRESCRITOR') ? m.medico_nome : undefined);
+            if (!map[key]) {
+                map[key] = {
+                    crm: norm.crm,
+                    uf: norm.uf,
+                    nome: nomeFinal,
+                    count: 0,
+                    displayLabel: nomeFinal ? `${nomeFinal} — CRM ${norm.crm}/${norm.uf}` : `CRM ${norm.crm} / ${norm.uf}`
+                };
+            }
+            map[key].count += 1;
+        });
+
+        return Object.values(map);
+    }, [medicosCadastrados, recentWithdrawals]);
+
+    // Sugestões filtradas dinamicamente com base na busca (Nome, CRM, UF)
+    const medicoSuggestions = useMemo(() => {
+        const q = medicoSearchQuery.trim().toLowerCase();
+        if (!q) return [];
+        const cleanQ = q.replace(/\D/g, '');
+
+        return allKnownDoctors.filter(doc => {
+            const matchCrm = cleanQ ? doc.crm.includes(cleanQ) : false;
+            const matchNome = doc.nome ? doc.nome.toLowerCase().includes(q) : false;
+            const matchUf = doc.uf.toLowerCase().includes(q);
+            const matchCombined = `${doc.crm}/${doc.uf}`.toLowerCase().includes(q) || `${doc.crm} ${doc.uf}`.toLowerCase().includes(q) || doc.displayLabel.toLowerCase().includes(q);
+            return matchCrm || matchNome || matchUf || matchCombined;
+        }).sort((a, b) => {
+            if (a.nome && !b.nome) return -1;
+            if (!a.nome && b.nome) return 1;
+            return b.count - a.count;
+        }).slice(0, 6);
+    }, [allKnownDoctors, medicoSearchQuery]);
 
     // Multi-item management helpers
     const handleAddItem = (med: FarmaciaMedicamento, qty: number = 1) => {
@@ -471,6 +550,8 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
         // Create mock local movement logs for optimistic UI
         const isoDate = new Date(withdrawalDate).toISOString();
         const cleanCpf = patientCpf.replace(/\D/g, '');
+        const finalMedicoNome = medicoNome || medicosCadastrados[`${cleanCrm}_${medicoUf}`]?.nome || `MÉDICO PRESCRITOR (CRM ${cleanCrm}/${medicoUf})`;
+
         const optimisticLogs: FarmaciaMovimentacao[] = selectedItems.map((item, idx) => ({
             id: 'optimistic-id-' + Date.now() + '-' + idx,
             medicamento_id: item.med.id,
@@ -486,7 +567,7 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
             paciente_cpf: cleanCpf,
             medico_crm: cleanCrm,
             medico_uf: medicoUf,
-            medico_nome: `MÉDICO PRESCRITOR (CRM ${cleanCrm}/${medicoUf})`,
+            medico_nome: finalMedicoNome,
             medico_consulta_data: new Date().toISOString(),
             responsavel_nome: currentUser?.name || '',
             responsavel_id: currentUser?.id || '',
@@ -501,6 +582,7 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
         const savedPatientCpf = patientCpf;
         const savedMedicoCrm = cleanCrm;
         const savedMedicoUf = medicoUf;
+        const savedMedicoNome = finalMedicoNome;
         const savedSelectedItems = [...selectedItems];
         const savedWithdrawalDate = withdrawalDate;
         const savedObservacoes = observacoes;
@@ -512,6 +594,9 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
         setPatientCpf('');
         setMedicoCrm('');
         setMedicoUf('MG');
+        setMedicoNome('');
+        setMedicoSearchQuery('');
+        setShowMedicoDropdown(false);
         setIsPatientUnlocked(false);
 
         try {
@@ -530,7 +615,7 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                     paciente_cpf: cleanCpf,
                     medico_crm: savedMedicoCrm,
                     medico_uf: savedMedicoUf,
-                    medico_nome: `MÉDICO PRESCRITOR (CRM ${savedMedicoCrm}/${savedMedicoUf})`,
+                    medico_nome: savedMedicoNome,
                     medico_consulta_data: new Date().toISOString(),
                     responsavel_nome: currentUser?.name || '',
                     responsavel_id: currentUser?.id || '',
@@ -725,36 +810,133 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                             )}
                         </div>
 
-                        {/* CRM & UF do Médico */}
-                        <div>
-                            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-700 mb-0.5 ml-0.5">
-                                CRM & UF do Médico Prescritor *
-                            </label>
+                        {/* CRM & UF do Médico Prescritor (Campo com Autocomplete Dinâmico) */}
+                        <div className="relative">
+                            <div className="flex items-center justify-between mb-0.5 ml-0.5">
+                                <label className="text-[10px] font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                                    <Stethoscope className="w-3.5 h-3.5 text-pink-600" />
+                                    <span>CRM & UF do Médico Prescritor *</span>
+                                </label>
+                                {medicoCrm && (
+                                    <span className="text-[9px] font-bold text-pink-600 font-mono">
+                                        CRM {medicoCrm}/{medicoUf}
+                                    </span>
+                                )}
+                            </div>
+
                             <div className="flex gap-2 items-center">
+                                {/* Campo Principal de Autocomplete */}
                                 <div className="relative flex-1">
                                     <input
                                         type="text"
+                                        className="w-full rounded-xl border-2 border-slate-300 bg-white py-1.5 pl-8 pr-8 text-xs font-bold text-slate-900 outline-none focus:border-pink-600 focus:ring-4 focus:ring-pink-500/10 transition-all placeholder:text-slate-400 shadow-inner"
+                                        placeholder="Pesquise por Nome, CRM ou UF (Ex: João, 12345/MG)..."
+                                        value={medicoSearchQuery}
+                                        onFocus={() => setShowMedicoDropdown(true)}
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            setMedicoSearchQuery(val);
+                                            setShowMedicoDropdown(true);
+
+                                            // Se o usuário digitar números, atualiza o CRM automaticamente
+                                            const onlyDigits = val.replace(/\D/g, '');
+                                            if (onlyDigits) {
+                                                setMedicoCrm(onlyDigits);
+                                            }
+                                        }}
+                                        required={!medicoCrm}
+                                    />
+                                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                                    {medicoSearchQuery && (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setMedicoSearchQuery('');
+                                                setMedicoCrm('');
+                                                setMedicoNome('');
+                                                setShowMedicoDropdown(false);
+                                            }}
+                                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                                        >
+                                            <X className="w-3.5 h-3.5" />
+                                        </button>
+                                    )}
+
+                                    {/* Dropdown de Sugestões de Médicos */}
+                                    {showMedicoDropdown && medicoSuggestions.length > 0 && (
+                                        <div className="absolute left-0 top-full mt-1 w-full bg-white rounded-xl shadow-2xl border-2 border-slate-200 max-h-48 overflow-y-auto z-50 custom-scrollbar divide-y divide-slate-100 animate-in fade-in zoom-in-95 duration-150">
+                                            {medicoSuggestions.map((sug, idx) => (
+                                                <button
+                                                    key={`${sug.crm}_${sug.uf}_${idx}`}
+                                                    type="button"
+                                                    onMouseDown={() => {
+                                                        setMedicoCrm(sug.crm);
+                                                        setMedicoUf(sug.uf);
+                                                        setMedicoNome(sug.nome || '');
+                                                        setMedicoSearchQuery(sug.displayLabel);
+                                                        setShowMedicoDropdown(false);
+                                                    }}
+                                                    className="w-full text-left px-3 py-2 hover:bg-pink-50 text-slate-800 text-xs font-bold flex items-center justify-between transition-colors group cursor-pointer"
+                                                >
+                                                    <div className="flex items-center gap-2 min-w-0">
+                                                        <div className="w-7 h-7 rounded-lg bg-pink-100 group-hover:bg-pink-600 group-hover:text-white text-pink-700 flex items-center justify-center shrink-0 transition-colors">
+                                                            <Stethoscope className="w-3.5 h-3.5" />
+                                                        </div>
+                                                        <div className="min-w-0">
+                                                            <span className="font-extrabold text-slate-900 block truncate">
+                                                                {sug.nome || `CRM ${sug.crm}/${sug.uf}`}
+                                                            </span>
+                                                            <span className="text-[10px] text-slate-500 font-mono font-bold">
+                                                                CRM {sug.crm}/{sug.uf} {sug.count > 0 ? `• ${sug.count} receitas` : ''}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                    <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[9px] font-black uppercase font-mono shrink-0">
+                                                        {sug.uf}
+                                                    </span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Campo CRM Numérico para digitação direta */}
+                                <div className="w-24">
+                                    <input
+                                        type="text"
                                         pattern="[0-9]*"
-                                        className="w-full rounded-xl border-2 border-slate-300 bg-white py-1.5 px-3 text-xs font-mono font-black text-slate-900 outline-none focus:border-purple-600 focus:ring-4 focus:ring-purple-500/10 transition-all placeholder:text-slate-400 shadow-inner"
-                                        placeholder="Ex: 12345"
+                                        className="w-full rounded-xl border-2 border-slate-300 bg-white py-1.5 px-2 text-xs font-mono font-black text-slate-900 outline-none focus:border-pink-600 focus:ring-4 focus:ring-pink-500/10 transition-all placeholder:text-slate-400 text-center shadow-inner"
+                                        placeholder="CRM"
                                         value={medicoCrm}
                                         onChange={(e) => {
                                             const clean = e.target.value.replace(/\D/g, '');
                                             setMedicoCrm(clean);
                                         }}
                                         required
+                                        title="Número do CRM"
                                     />
                                 </div>
+
+                                {/* Select UF */}
                                 <select
-                                    className="w-20 rounded-xl border-2 border-slate-300 bg-white py-1.5 px-2 text-xs font-black text-slate-900 outline-none focus:border-purple-600 focus:ring-4 focus:ring-purple-500/10 transition-all uppercase cursor-pointer shadow-inner"
+                                    className="w-16 rounded-xl border-2 border-slate-300 bg-white py-1.5 px-1.5 text-xs font-black text-slate-900 outline-none focus:border-pink-600 focus:ring-4 focus:ring-pink-500/10 transition-all uppercase cursor-pointer text-center shadow-inner"
                                     value={medicoUf}
                                     onChange={(e) => setMedicoUf(e.target.value)}
+                                    title="UF do CRM"
                                 >
                                     {['AC', 'AL', 'AM', 'AP', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MG', 'MS', 'MT', 'PA', 'PB', 'PE', 'PI', 'PR', 'RJ', 'RN', 'RO', 'RR', 'RS', 'SC', 'SE', 'SP', 'TO'].map(uf => (
                                         <option key={uf} value={uf}>{uf}</option>
                                     ))}
                                 </select>
                             </div>
+
+                            {/* Badge do Médico Selecionado */}
+                            {medicoNome && (
+                                <div className="mt-1.5 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10px] font-bold animate-in fade-in">
+                                    <UserCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                    <span className="truncate">Médico Vinculado: <strong>{medicoNome}</strong> (CRM {medicoCrm}/{medicoUf})</span>
+                                </div>
+                            )}
                         </div>
                     </div>
 

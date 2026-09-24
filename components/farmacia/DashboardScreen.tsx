@@ -18,6 +18,7 @@ import { FarmaciaPdfGenerator } from './FarmaciaPdfGenerator';
 import { savePurchaseOrder } from '../../services/comprasService';
 import { useNotification } from '../../contexts/NotificationContext';
 import { PacientesTab } from '../common/PacientesTab';
+import { MedicosDashboardTab } from './dashboard/MedicosDashboardTab';
 
 interface DashboardScreenProps {
     currentUser?: User | null;
@@ -617,17 +618,17 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         });
     }, [movimentacoes, lastMonthStart, lastMonthEnd]);
 
-    // KPI 1: Total Medicamentos Entregues
+    // KPI 1: Total Medicamentos Entregues (por medicamento/item dispensado, não por unidade física de comprimido)
     const totalMedsCurrentMonth = useMemo(() => {
-        return currentMonthDispenses.reduce((acc, curr) => acc + (curr.quantidade || 0), 0);
+        return currentMonthDispenses.length;
     }, [currentMonthDispenses]);
 
     const totalMedsAllTime = useMemo(() => {
-        return allSaidaMovimentacoes.reduce((acc, curr) => acc + (curr.quantidade || 0), 0);
+        return allSaidaMovimentacoes.length;
     }, [allSaidaMovimentacoes]);
 
     const totalMedsLastMonth = useMemo(() => {
-        return lastMonthDispenses.reduce((acc, curr) => acc + (curr.quantidade || 0), 0);
+        return lastMonthDispenses.length;
     }, [lastMonthDispenses]);
 
     const varMeds = useMemo(() => {
@@ -1211,7 +1212,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
             {/* Tabs */}
             <div className="flex overflow-x-auto gap-2 mb-6 pb-2 custom-scrollbar">
-                {['geral', 'medicamentos', 'pacientes', 'operacoes', 'relatorios', 'rename', 'alto-custo', 'configuracao'].map(tab => (
+                {['geral', 'medicos', 'medicamentos', 'pacientes', 'operacoes', 'relatorios', 'rename', 'alto-custo', 'configuracao'].map(tab => (
                     <button
                         key={tab}
                         onClick={() => handleTabChange(tab)}
@@ -1221,7 +1222,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                                 : 'bg-white text-slate-500 hover:bg-slate-50 border border-slate-200/60 hover:text-slate-900'
                         }`}
                     >
-                        {tab === 'geral' ? 'Visão Geral' : tab === 'operacoes' ? 'Operações' : tab === 'relatorios' ? 'Relatórios' : tab === 'rename' ? 'RENAME' : tab === 'alto-custo' ? 'ALTO CUSTO' : tab === 'configuracao' ? 'Configuração' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                        {tab === 'geral' ? 'Visão Geral' : tab === 'medicos' ? 'Médicos' : tab === 'operacoes' ? 'Operações' : tab === 'relatorios' ? 'Relatórios' : tab === 'rename' ? 'RENAME' : tab === 'alto-custo' ? 'ALTO CUSTO' : tab === 'configuracao' ? 'Configuração' : tab.charAt(0).toUpperCase() + tab.slice(1)}
                     </button>
                 ))}
             </div>
@@ -1239,7 +1240,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                     </div>
                     <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Medicamentos Entregues</h3>
                     <div className="text-3xl font-black text-slate-800 mb-2">
-                        {totalMedsCurrentMonth.toLocaleString('pt-BR')} <span className="text-sm font-medium text-slate-400">unidades</span>
+                        {totalMedsCurrentMonth.toLocaleString('pt-BR')} <span className="text-sm font-medium text-slate-400">medicamentos</span>
                     </div>
                     {varMeds !== null ? (
                         <div className={`flex items-center gap-1 text-xs font-bold ${varMeds >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
@@ -1248,7 +1249,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                         </div>
                     ) : (
                         <div className="text-xs font-bold text-slate-400">
-                            {totalMedsAllTime > 0 ? `Total acumulado: ${totalMedsAllTime.toLocaleString('pt-BR')} un` : 'Sem registros no mês anterior'}
+                            {totalMedsAllTime > 0 ? `Total acumulado: ${totalMedsAllTime.toLocaleString('pt-BR')} medicamentos` : 'Sem registros no mês anterior'}
                         </div>
                     )}
                 </div>
@@ -1713,6 +1714,14 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 </div>
             </div>
             </>
+            )}
+
+            {activeTab === 'medicos' && (
+                <MedicosDashboardTab
+                    medicamentos={medicamentos}
+                    movimentacoes={movimentacoes}
+                    onNavigate={onNavigate}
+                />
             )}
 
             {activeTab === 'operacoes' && (

@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient';
-import { FarmaciaMedicamento, FarmaciaMovimentacao, FarmaciaConfig } from '../types';
+import { FarmaciaMedicamento, FarmaciaMovimentacao, FarmaciaConfig, FarmaciaMedico } from '../types';
 import { handleSupabaseError } from '../utils/errorUtils';
 
 // --- MEDICAMENTOS ---
@@ -278,7 +278,7 @@ export const getMovimentacoes = async (filters?: MovimentacaoFilters): Promise<F
         // Tenta remover em background quaisquer operações de teste do Guilherme se existirem no banco
         removeGuilhermeOperations().catch(() => {});
 
-        const MOVIMENTACAO_COLUMNS = 'id, medicamento_id, medicamento_nome, medicamento_categoria, quantidade, tipo, data, responsavel_id, responsavel_nome, paciente_nome, paciente_cpf, lote, validade, observacoes, criado_em';
+        const MOVIMENTACAO_COLUMNS = 'id, medicamento_id, medicamento_nome, medicamento_categoria, quantidade, tipo, data, responsavel_id, responsavel_nome, paciente_nome, paciente_cpf, lote, validade, observacoes, criado_em, medico_crm, medico_uf, medico_nome, medico_consulta_data';
 
         let allData: FarmaciaMovimentacao[] = [];
         let from = 0;
@@ -556,5 +556,99 @@ export const consultarMedicoCFM = async (crm: string, uf: string = 'MG'): Promis
         situacao: 'ATIVO',
         data_consulta: new Date().toISOString()
     };
+};
+
+// --- CADASTRO E IDENTIFICAÇÃO DE MÉDICOS PRESCRITORES (CRM + UF) ---
+
+let cachedMedicos: Record<string, FarmaciaMedico> | null = null;
+let cachedMedicosExpiry = 0;
+
+export const getMedicosCadastrados = async (forceRefresh = false): Promise<Record<string, FarmaciaMedico>> => {
+    try {
+        const now = Date.now();
+        if (!forceRefresh && cachedMedicos && now < cachedMedicosExpiry) {
+            return cachedMedicos;
+        }
+
+        let map: Record<string, FarmaciaMedico> = {};
+
+        // 1. Tenta carregar do localStorage para resposta imediata
+        try {
+            const local = localStorage.getItem('farmacia_medicos_cadastrados');
+            if (local) {
+                const parsed = JSON.parse(local);
+                if (parsed && typeof parsed === 'object') {
+                    map = { ...parsed };
+                }
+            }
+        } catch (e) {
+            console.warn('[farmaciaService] Erro ao ler farmacia_medicos_cadastrados do localStorage:', e);
+        }
+
+        // 2. Tenta carregar do Supabase (farmacia_config chave 'farmacia_medicos_cadastrados')
+        try {
+            const dbValue = await getFarmaciaConfig('farmacia_medicos_cadastrados');
+            if (dbValue && typeof dbValue === 'object') {
+                map = { ...map, ...dbValue };
+                localStorage.setItem('farmacia_medicos_cadastrados', JSON.stringify(map));
+            }
+        } catch (e) {
+            console.warn('[farmaciaService] Erro ao buscar farmacia_medicos_cadastrados do Supabase:', e);
+        }
+
+        cachedMedicos = map;
+        cachedMedicosExpiry = now + 1000 * 60 * 5; // 5 min cache
+        return map;
+    } catch (error) {
+        console.error('[farmaciaService] getMedicosCadastrados error:', error);
+        return cachedMedicos || {};
+    }
+};
+
+export const saveMedicoCadastrado = async (data: { crm: string; uf: string; nome: string }): Promise<FarmaciaMedico> => {
+    const cleanCrm = data.crm.replace(/\D/g, '').trim();
+    let cleanUf = (data.uf || 'MG').trim().toUpperCase();
+    if (cleanUf.length !== 2) cleanUf = 'MG';
+
+    const cleanNome = (data.nome || '').trim().replace(/\s+/g, ' ');
+    const key = `${cleanCrm}_${cleanUf}`;
+
+    if (!cleanCrm) {
+        throw new Error('O número do CRM é obrigatório.');
+    }
+
+    const currentMap = await getMedicosCadastrados(true);
+    const existing = currentMap[key];
+
+    const updatedMedico: FarmaciaMedico = {
+        crm: cleanCrm,
+        uf: cleanUf,
+        nome: cleanNome,
+        criado_em: existing?.criado_em || new Date().toISOString(),
+        atualizado_em: new Date().toISOString()
+    };
+
+    currentMap[key] = updatedMedico;
+    cachedMedicos = currentMap;
+    cachedMedicosExpiry = Date.now() + 1000 * 60 * 5;
+
+    // 1. Salva no localStorage
+    try {
+        localStorage.setItem('farmacia_medicos_cadastrados', JSON.stringify(currentMap));
+    } catch (e) {
+        console.error('Erro ao gravar farmacia_medicos_cadastrados no localStorage:', e);
+    }
+
+    // 2. Salva no Supabase config
+    try {
+        await saveFarmaciaConfig('farmacia_medicos_cadastrados', currentMap);
+    } catch (e) {
+        console.warn('Erro ao sincronizar médico no Supabase config:', e);
+    }
+
+    // 3. Dispara evento para atualização dinâmica de todas as telas abertas
+    window.dispatchEvent(new CustomEvent('farmacia-medicos-changed', { detail: updatedMedico }));
+
+    return updatedMedico;
 };
 

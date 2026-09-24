@@ -274,6 +274,15 @@ export interface FarmaciaConfig {
   valor: any;
 }
 
+export interface FarmaciaMedico {
+  id?: string;
+  crm: string;
+  uf: string;
+  nome: string;
+  criado_em?: string;
+  atualizado_em?: string;
+}
+
 
 export interface User {
   id: string;

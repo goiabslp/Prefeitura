@@ -352,6 +352,8 @@ export const MODULE_ACCESS_TREE: ModuleItemDefinition[] = [
         routes: [
           '/FarmaciaPopular/Dashboard',
           '/FarmaciaPopular/Dashboard/VisaoGeral',
+          '/FarmaciaPopular/Dashboard/VisaoGeral/Medicos',
+          '/FarmaciaPopular/Dashboard/Medicos',
           '/FarmaciaPopular/Dashboard/Medicamentos',
           '/FarmaciaPopular/Dashboard/Pacientes',
           '/FarmaciaPopular/Dashboard/Operacoes',
