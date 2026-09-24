@@ -2275,473 +2275,575 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 w-full relative">
+    <div className="h-[calc(100vh-50px)] max-h-screen flex flex-col bg-slate-50 w-full relative overflow-hidden">
       
-      {/* NEW HEADER LAYOUT: Back Button | Stepper | Action Button */}
-      <div className="sticky top-0 z-40 bg-white border-b border-slate-200 px-3 sm:px-6 py-1 flex items-center justify-between gap-2 sm:gap-6 shadow-sm min-h-[50px]">
-          {/* 1. Voltar (Padrão) */}
-          <button onClick={onBack} disabled={isLoading} className={`flex items-center gap-1 sm:gap-2 group px-2 sm:px-3 py-2 transition-all font-black uppercase tracking-tighter text-[10px] sm:text-[11px] ${isLoading ? 'text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-slate-900'}`} title="Voltar para Diárias">
-              <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-              <span className="hidden xs:inline">Voltar</span>
+      {/* HEADER COMPACTO: Voltar + Título | Stepper Pills | Ação */}
+      <div className="sticky top-0 z-40 bg-white border-b border-slate-200 px-3 sm:px-6 py-2 flex items-center justify-between gap-3 shadow-xs shrink-0 min-h-[50px]">
+        {/* Lado Esquerdo: Voltar + Título */}
+        <div className="flex items-center gap-2.5 shrink-0">
+          <button
+            onClick={onBack}
+            disabled={isLoading}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200 transition-all font-bold text-xs ${
+              isLoading
+                ? 'text-slate-300 border-slate-100 cursor-not-allowed'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50 hover:border-slate-300 active:scale-95'
+            }`}
+            title="Voltar para Diárias"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Voltar</span>
           </button>
 
-          {/* 2. Stepper */}
-          <div className="flex-1 flex justify-center max-w-[200px] xs:max-w-xs sm:max-w-lg">
-              <div className="w-full py-2 sm:py-4">
-                  <div className="flex items-center justify-between w-full relative">
-                      {steps.map((step, index) => {
-                          const status = stepsStatus[step.id] || 'empty';
-                          const Icon = step.icon;
-                          const isLast = index === steps.length - 1;
+          <div className="h-4 w-px bg-slate-200 hidden sm:block" />
 
-                          let circleClass = 'bg-white border-2 border-slate-200 text-slate-300';
-                          let labelClass = 'text-slate-400';
-
-                          if (status === 'completed') {
-                              circleClass = 'bg-emerald-500 border-emerald-500 text-white';
-                              labelClass = 'text-emerald-600 font-bold';
-                          } else if (status === 'current') {
-                              circleClass = 'bg-blue-600 border-blue-600 text-white ring-4 ring-blue-100';
-                              labelClass = 'text-blue-600 font-bold';
-                          }
-
-                          return (
-                              <React.Fragment key={step.id}>
-                                  <div
-                                      onClick={() => {
-                                          if (step.id === 1) setCurrentStep(1);
-                                          if (step.id === 2 && isStep1Valid) setCurrentStep(2);
-                                      }}
-                                      className={`flex flex-col items-center gap-1 sm:gap-2 relative z-10 cursor-pointer group px-1 sm:px-2 bg-white rounded-xl transition-all duration-300 ${status === 'current' ? 'scale-105' : 'hover:scale-102'}`}
-                                  >
-                                      <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-all shadow-sm ${circleClass}`}>
-                                          <Icon className="w-4.5 h-4.5 sm:w-5 sm:h-5" />
-                                      </div>
-                                      <span className={`text-[9px] sm:text-[10px] uppercase tracking-wider transition-colors bg-white ${labelClass}`}>
-                                          {step.label}
-                                      </span>
-                                  </div>
-
-                                  {!isLast && (
-                                      <div className="flex-1 h-1 mx-1 sm:mx-2 rounded-full overflow-hidden bg-slate-100 relative -z-10">
-                                          <div
-                                              className={`h-full transition-all duration-500 ${status === 'completed' || currentStep > step.id ? 'bg-emerald-500' : 'bg-transparent'}`}
-                                          />
-                                      </div>
-                                  )}
-                              </React.Fragment>
-                          );
-                      })}
-                  </div>
-              </div>
+          <div className="flex items-center gap-2">
+            <h1 className="text-sm sm:text-base font-black text-slate-900 tracking-tight whitespace-nowrap">
+              {loadedEditingEvento ? 'Editar Viagem' : 'Registrar Nova Viagem'}
+            </h1>
+            {loadedEditingEvento && (
+              <span className="font-mono text-[10px] font-black text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-300">
+                EVT-{String(loadedEditingEvento.id).slice(0, 6).toUpperCase()}
+              </span>
+            )}
           </div>
+        </div>
 
-          {/* 3. Botão de Ação (Avançar/Finalizar) */}
-          <div className="min-w-0 sm:min-w-[140px] flex justify-end shrink-0">
-              {currentStep === 1 ? (
-                  <button
-                      onClick={() => {
-                        if (returnDateTime && isDateExpired(returnDateTime) && !isGestorOrAdmin) {
-                          setIsExpiredModalOpen(true);
-                          return;
-                        }
-                        setCurrentStep(2);
-                      }}
-                      disabled={!isStep1Valid || isLoading}
-                      className="flex items-center gap-1 sm:gap-2 px-3 sm:px-6 py-2 sm:py-2.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 shadow-lg shadow-slate-900/20 active:scale-95 transition-all text-xs sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                      <span>Avançar</span>
-                      <ChevronRight className="w-4 h-4" />
-                  </button>
-              ) : (
-                  <button
-                      onClick={handleSubmit}
-                      disabled={!isFormValid || isLoading || isSuccess}
-                      className="flex items-center gap-1 sm:gap-2 px-3 sm:px-6 py-2 sm:py-2.5 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 shadow-lg shadow-emerald-600/20 active:scale-95 transition-all text-xs sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-                  >
-                      {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                      <span>{isLoading ? 'Salvando...' : (loadedEditingEvento ? 'Salvar Alterações' : 'Finalizar')}</span>
-                  </button>
-              )}
-          </div>
+        {/* Centro: Stepper Pills Compacto */}
+        <div className="flex items-center gap-1.5 bg-slate-100/90 p-1 rounded-xl border border-slate-200/80">
+          {steps.map((step) => {
+            const status = stepsStatus[step.id] || 'empty';
+            const Icon = step.icon;
+            const isCompleted = status === 'completed';
+            const isCurrent = status === 'current';
+            const canClick = step.id === 1 || (step.id === 2 && isStep1Valid);
+
+            return (
+              <button
+                key={step.id}
+                type="button"
+                onClick={() => {
+                  if (canClick) setCurrentStep(step.id);
+                }}
+                disabled={!canClick}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                  isCurrent
+                    ? 'bg-white text-indigo-700 shadow-xs ring-1 ring-slate-200/60'
+                    : isCompleted
+                    ? 'text-emerald-700 hover:bg-white/60'
+                    : 'text-slate-400 hover:text-slate-600 disabled:opacity-50 disabled:cursor-not-allowed'
+                }`}
+              >
+                {isCompleted ? (
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                ) : (
+                  <Icon className={`w-3.5 h-3.5 shrink-0 ${isCurrent ? 'text-indigo-600' : 'text-slate-400'}`} />
+                )}
+                <span>{step.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Lado Direito: Botão de Ação */}
+        <div className="flex items-center justify-end shrink-0">
+          {currentStep === 1 ? (
+            <button
+              onClick={() => {
+                if (returnDateTime && isDateExpired(returnDateTime) && !isGestorOrAdmin) {
+                  setIsExpiredModalOpen(true);
+                  return;
+                }
+                setCurrentStep(2);
+              }}
+              disabled={!isStep1Valid || isLoading}
+              className="flex items-center gap-1.5 px-3.5 sm:px-4 py-1.5 bg-slate-900 text-white font-bold rounded-xl hover:bg-slate-800 shadow-sm active:scale-95 transition-all text-xs disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <span>Avançar</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          ) : (
+            <button
+              onClick={handleSubmit}
+              disabled={!isFormValid || isLoading || isSuccess}
+              className="flex items-center gap-1.5 px-3.5 sm:px-4 py-1.5 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 shadow-sm active:scale-95 transition-all text-xs disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+            >
+              {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+              <span>{isLoading ? 'Salvando...' : (loadedEditingEvento ? 'Salvar Alterações' : 'Finalizar')}</span>
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto p-4 md:p-8 lg:p-12 bg-slate-50">
-        <div className="w-full max-w-4xl mx-auto space-y-6">
+      {/* Content Area - Sem Rolagem no Desktop */}
+      <div className="flex-1 p-4 sm:p-6 bg-slate-50 flex flex-col justify-center overflow-y-auto">
+        <div className="w-full max-w-6xl mx-auto space-y-4 my-auto">
           
-          <div className="space-y-3 mb-6">
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-                {loadedEditingEvento ? 'Editar Cadastro da Viagem' : 'Registrar Nova Viagem'}
-              </h1>
-              {loadedEditingEvento && (
-                <span className="font-mono text-xs font-black text-amber-800 bg-amber-100 px-3 py-1 rounded-full border border-amber-300 shadow-xs">
-                  EVT-{String(loadedEditingEvento.id).slice(0, 6).toUpperCase()}
-                </span>
-              )}
+          {/* TÍTULO DA PÁGINA */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-200/80">
+            <div>
+              <div className="flex items-center gap-3">
+                <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                  {loadedEditingEvento ? 'Editar Cadastro da Viagem' : 'Registrar Nova Viagem'}
+                </h1>
+                {loadedEditingEvento && (
+                  <span className="font-mono text-xs font-black text-amber-800 bg-amber-100 px-3 py-1 rounded-full border border-amber-300 shadow-2xs">
+                    EVT-{String(loadedEditingEvento.id).slice(0, 6).toUpperCase()}
+                  </span>
+                )}
+              </div>
+              <p className="text-slate-500 font-medium text-xs sm:text-sm mt-0.5">
+                {loadedEditingEvento 
+                  ? 'Atualize os dados e parâmetros da viagem permanentemente (Servidores, Destino, Datas/Horários, Veículo, Motivo).' 
+                  : 'Preencha os detalhes e o cronograma abaixo para solicitar a autorização da viagem oficial.'}
+              </p>
             </div>
-            <p className="text-slate-500 font-medium text-sm">
-              {loadedEditingEvento 
-                ? 'Atualize os dados e parâmetros da viagem permanentemente (Servidores, Destino, Datas/Horários, Veículo, Motivo).' 
-                : 'Preencha os detalhes abaixo para solicitar a autorização do evento e viagem oficial.'}
-            </p>
           </div>
 
-          <div className="w-full bg-white p-6 md:p-8 rounded-2xl border border-slate-200 shadow-sm space-y-6">
-            
-            
-            {currentStep === 1 && (
-              <div className="space-y-6 animate-fade-in">
-                
-                {/* Pessoas */}
-                {(() => {
-                  const canChangePerson = canAddExtraServer;
-
-                  return (
-                    <div className="space-y-4 border-b border-slate-150 pb-6">
-                      <div className="flex items-center justify-between">
-                        <label className={labelClass}>Servidores na Viagem</label>
-                        <span className="text-[10px] font-bold text-slate-400">
-                          {selectedPersons.length} {selectedPersons.length === 1 ? 'servidor' : 'servidores'}
-                        </span>
-                      </div>
-
-                      <div className="space-y-3">
-                        {selectedPersons.map((pItem, idx) => {
-                          const personData = persons.find(p => p.id === pItem.id);
-                          const personJob = personData
-                            ? (jobs.find(j => j.id === personData.jobId)?.name || 'Sem Cargo')
-                            : 'Sem Cargo';
-
-                          return (
-                            <div key={pItem.id || idx} className="p-4 rounded-2xl border border-slate-200 bg-slate-50/80 space-y-3 relative group hover:border-indigo-200 transition-all">
-                              <div className="flex items-center justify-between">
-                                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                                  Servidor {idx + 1}
-                                </span>
-                                {selectedPersons.length > 1 && canChangePerson && (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemovePerson(idx)}
-                                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
-                                    title="Remover servidor da viagem"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                )}
-                              </div>
-
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {/* Campo Servidor */}
-                                <div className="space-y-1.5">
-                                  <label className="text-[9px] font-bold text-slate-400 uppercase">Nome do Servidor</label>
-                                  <div
-                                    onClick={() => {
-                                      if (canChangePerson) {
-                                        setEditingPersonIndex(idx);
-                                        setIsPersonsOpen(true);
-                                      }
-                                    }}
-                                    className={`${inputContainerClass} ${canChangePerson ? 'cursor-pointer' : 'bg-slate-100/80 border-slate-200 cursor-not-allowed'}`}
-                                  >
-                                    <Users className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                                    <span className={`w-full bg-transparent pl-11 pr-10 py-3 text-sm font-medium outline-none truncate ${pItem.name ? 'text-slate-900 font-bold' : 'text-slate-400'}`}>
-                                      {pItem.name || 'Clique para selecionar servidor...'}
-                                    </span>
-                                    {canChangePerson && (
-                                      <div className="absolute right-4 top-1/2 -translate-y-1/2">
-                                        <ChevronDown className="w-4 h-4 text-slate-400" />
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-
-                                {/* Campo Cargo */}
-                                <div className="space-y-1.5">
-                                  <label className="text-[9px] font-bold text-slate-400 uppercase">Cargo</label>
-                                  <div className={`${inputContainerClass} bg-slate-100/80 border-slate-200 cursor-not-allowed`}>
-                                    <Users className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                                    <input
-                                      type="text"
-                                      readOnly
-                                      value={personJob}
-                                      className={`${inputClass} text-slate-500 cursor-not-allowed`}
-                                    />
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      {canChangePerson && (
-                        <button
-                          type="button"
-                          onClick={handleAddPerson}
-                          className="w-full py-3 px-4 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-extrabold text-xs uppercase tracking-wider rounded-2xl border border-indigo-200/80 flex items-center justify-center gap-2 transition-all active:scale-95 shadow-xs"
-                        >
-                          <Plus className="w-4 h-4" />
-                          <span>Adicionar outro Servidor nesta viagem</span>
-                        </button>
-                      )}
-                    </div>
-                  );
-                })()}
-
-                {/* Destino */}
-                <div className="relative space-y-3">
-                  <label className={labelClass}>Destino (Cidade / UF)</label>
-                  <div
-                    onClick={() => setIsCityOpen(true)}
-                    className={`${inputContainerClass} cursor-pointer ${isCityOpen ? 'bg-white border-indigo-500 ring-4 ring-indigo-500/5' : ''}`}
-                  >
-                    <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                    <span className={`w-full bg-transparent pl-11 pr-10 py-3 text-sm font-medium outline-none truncate ${destination ? 'text-slate-900' : 'text-slate-500'}`}>
-                      {destination || 'Clique para selecionar a cidade de destino...'}
+          {currentStep === 1 && (
+            <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/90 shadow-sm space-y-4 animate-fade-in">
+              
+              {/* 1. SEÇÃO SERVIDORES (Largura Ampla - Nome e Cargo Nunca Cortam!) */}
+              <div className="space-y-2.5 pb-4 border-b border-slate-150">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Users className="w-5 h-5 text-indigo-600" />
+                    <label className="text-xs sm:text-sm font-black uppercase tracking-wider text-slate-800">
+                      Servidores na Viagem
+                    </label>
+                    <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full">
+                      {selectedPersons.length} {selectedPersons.length === 1 ? 'servidor' : 'servidores'}
                     </span>
-                    <div className="absolute right-4 top-1/2 -translate-y-1/2">
-                      {isCityLoading ? (
-                        <Loader2 className="w-4 h-4 text-indigo-500 animate-spin" />
-                      ) : (
-                        <ChevronDown className="w-4 h-4 text-slate-400" />
-                      )}
-                    </div>
                   </div>
-                  {/* Datas */}
-            <div className={`grid grid-cols-1 ${isGestorOrAdmin ? 'md:grid-cols-2' : ''} gap-6`}>
-              <div className="space-y-3">
-                <label className={labelClass}>Saída</label>
-                <div 
-                  onClick={() => setActiveDateModal('departure')}
-                  className={`${inputContainerClass} cursor-pointer ${activeDateModal === 'departure' ? 'bg-white border-indigo-500 ring-4 ring-indigo-500/5' : ''}`}
-                >
-                  <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                  <span className={`w-full bg-transparent pl-11 pr-10 py-3 text-sm font-medium outline-none truncate ${departureDateTime ? 'text-slate-900' : 'text-slate-500'}`}>
-                    {departureDateTime ? format(parseISO(departureDateTime), "dd/MM/yyyy 'às' HH:mm") : 'Selecione a data de saída'}
-                  </span>
-                  <div className="absolute right-4 top-1/2 -translate-y-1/2">
-                    <ChevronDown className="w-4 h-4 text-slate-400" />
-                  </div>
+
+                  {canAddExtraServer && (
+                    <button
+                      type="button"
+                      onClick={handleAddPerson}
+                      className="px-3.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-extrabold text-xs uppercase tracking-wider rounded-xl border border-indigo-200/90 flex items-center gap-1.5 transition-all active:scale-95 shadow-2xs"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Adicionar Outro Servidor</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Lista de Servidores com largura total */}
+                <div className="space-y-2 max-h-[140px] overflow-y-auto pr-1">
+                  {selectedPersons.map((pItem, idx) => {
+                    const personData = persons.find(p => p.id === pItem.id);
+                    const personJob = personData
+                      ? (jobs.find(j => j.id === personData.jobId)?.name || 'Sem Cargo')
+                      : 'Sem Cargo';
+
+                    return (
+                      <div key={pItem.id || idx} className="p-2.5 sm:p-3 rounded-2xl border border-slate-200/80 bg-slate-50/70 space-y-1.5 relative group hover:border-indigo-200 transition-all">
+                        {selectedPersons.length > 1 && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                              Servidor {idx + 1}
+                            </span>
+                            {canAddExtraServer && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemovePerson(idx)}
+                                className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+                                title="Remover servidor da viagem"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        )}
+
+                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-center">
+                          {/* Nome do Servidor (7 Colunas - Espaço Amplo para Nomes Longos) */}
+                          <div className="lg:col-span-7 space-y-1.5">
+                            <label className="block text-xs font-black uppercase tracking-wider text-slate-600">Nome do Servidor</label>
+                            <div
+                              onClick={() => {
+                                if (canAddExtraServer) {
+                                  setEditingPersonIndex(idx);
+                                  setIsPersonsOpen(true);
+                                }
+                              }}
+                              className={`flex items-center w-full h-11 bg-white border border-slate-200 rounded-xl px-3.5 transition-all ${canAddExtraServer ? 'cursor-pointer hover:border-indigo-300 hover:shadow-2xs' : 'bg-slate-100/80 cursor-not-allowed'}`}
+                            >
+                              <Users className="w-4.5 h-4.5 text-slate-400 shrink-0" />
+                              <span className={`flex-1 pl-2.5 pr-2 text-sm font-semibold truncate ${pItem.name ? 'text-slate-900' : 'text-slate-400'}`}>
+                                {pItem.name || 'Clique para selecionar servidor...'}
+                              </span>
+                              {canAddExtraServer && (
+                                <ChevronDown className="w-4.5 h-4.5 text-slate-400 shrink-0" />
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Cargo do Servidor (5 Colunas - Espaço Amplo para Cargos Longos) */}
+                          <div className="lg:col-span-5 space-y-1.5">
+                            <label className="block text-xs font-black uppercase tracking-wider text-slate-600">Cargo / Função</label>
+                            <div className="flex items-center w-full h-11 bg-slate-100/80 border border-slate-200 rounded-xl px-3.5 cursor-not-allowed">
+                              <Users className="w-4.5 h-4.5 text-slate-400 shrink-0" />
+                              <input
+                                type="text"
+                                readOnly
+                                value={personJob}
+                                title={personJob}
+                                className="flex-1 bg-transparent pl-2.5 pr-2 text-sm font-semibold text-slate-600 cursor-not-allowed outline-none truncate"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
-              {isGestorOrAdmin && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <label className={labelClass}>Retorno (Opcional)</label>
-                    {returnDateTime && (
-                      <button
-                        type="button"
-                        onClick={() => setReturnDateTime('')}
-                        className="text-[10px] font-bold text-rose-600 hover:text-rose-700 flex items-center gap-1 transition-colors"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                        <span>Limpar (Ativa Viajar)</span>
-                      </button>
+
+              {/* 2. GRID PRINCIPAL DE DADOS DA VIAGEM (4 CAMPOS EM GRID 2x2 UNIFICADO E 100% ALINHADOS) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 pb-2">
+                {/* 1. DESTINO */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between min-h-[22px]">
+                    <label className="text-xs font-black uppercase tracking-wider text-slate-600">
+                      Destino (Cidade / UF)
+                    </label>
+                    {distancia !== '' && typeof distancia === 'number' && distancia > 0 && (
+                      <span className="text-[11px] font-bold text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-lg border border-indigo-100 shadow-2xs">
+                        🚗 ~{distancia} km (ida)
+                      </span>
                     )}
                   </div>
-                  <div 
-                    onClick={() => setActiveDateModal('return')}
-                    className={`${inputContainerClass} cursor-pointer ${activeDateModal === 'return' ? 'bg-white border-indigo-500 ring-4 ring-indigo-500/5' : ''}`}
+                  <div
+                    onClick={() => setIsCityOpen(true)}
+                    className={`flex items-center w-full h-12 bg-slate-50/90 hover:bg-white border border-slate-200 rounded-2xl px-3.5 transition-all cursor-pointer hover:border-indigo-300 shadow-2xs ${isCityOpen ? 'bg-white border-indigo-500 ring-4 ring-indigo-500/10' : ''}`}
                   >
-                    <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                    <span className={`w-full bg-transparent pl-11 pr-10 py-3 text-sm font-medium outline-none truncate ${returnDateTime ? 'text-slate-900' : 'text-slate-400 italic'}`}>
-                      {returnDateTime ? format(parseISO(returnDateTime), "dd/MM/yyyy 'às' HH:mm") : 'Deixar em branco para registrar em /Diarias/Viajar'}
+                    <MapPin className="w-5 h-5 text-slate-400 shrink-0" />
+                    <span className={`flex-1 pl-2.5 pr-2 text-sm font-semibold truncate ${destination ? 'text-slate-900' : 'text-slate-400'}`}>
+                      {destination || 'Clique para selecionar a cidade de destino...'}
                     </span>
-                    <div className="absolute right-4 top-1/2 -translate-y-1/2">
-                      <ChevronDown className="w-4 h-4 text-slate-400" />
-                    </div>
+                    {isCityLoading ? (
+                      <Loader2 className="w-4.5 h-4.5 text-indigo-500 animate-spin shrink-0" />
+                    ) : (
+                      <ChevronDown className="w-4.5 h-4.5 text-slate-400 shrink-0" />
+                    )}
                   </div>
                 </div>
-              )}
-            </div>
-          </div>
 
-              {/* Hospedagem */}
-              {shouldShowHospedagem && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-3">
-                    <label className={labelClass}>Hospedagem</label>
-                    <div className="flex gap-3">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setHospedagem(true);
-                          setHospedagemDias(1);
-                        }}
-                        className={`flex-1 py-3 text-sm font-bold rounded-xl border transition-all ${
-                          hospedagem 
-                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-600/10' 
-                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                        }`}
-                      >
-                        Sim
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setHospedagem(false);
-                          setHospedagemDias(0);
-                        }}
-                        className={`flex-1 py-3 text-sm font-bold rounded-xl border transition-all ${
-                          !hospedagem 
-                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-600/10' 
-                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                        }`}
-                      >
-                        Não
-                      </button>
-                    </div>
+                {/* 2. VEÍCULO */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between min-h-[22px]">
+                    <label className="text-xs font-black uppercase tracking-wider text-slate-600">
+                      Veículo da Frota
+                    </label>
+                  </div>
+                  <div
+                    onClick={() => setIsVehiclesOpen(true)}
+                    className={`flex items-center w-full h-12 bg-slate-50/90 hover:bg-white border border-slate-200 rounded-2xl px-3.5 transition-all cursor-pointer hover:border-indigo-300 shadow-2xs ${isVehiclesOpen ? 'bg-white border-indigo-500 ring-4 ring-indigo-500/10' : ''}`}
+                  >
+                    <Car className="w-5 h-5 text-slate-400 shrink-0" />
+                    <span className={`flex-1 pl-2.5 pr-2 text-sm font-semibold truncate ${selectedVehicle ? 'text-slate-900' : 'text-slate-400'}`}>
+                      {selectedVehicle === 'OUTRO'
+                        ? 'OUTROS (Especificar veículo)'
+                        : (selectedVehicle || 'Clique para selecionar o veículo...')}
+                    </span>
+                    <ChevronDown className="w-4.5 h-4.5 text-slate-400 shrink-0" />
                   </div>
 
-                  {hospedagem && (
-                    <div className="space-y-3 animate-fade-in">
-                      <label className={labelClass}>Quantas Noites?</label>
-                      <div className={inputContainerClass}>
-                        <Clock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                  {selectedVehicle === 'OUTRO' && (
+                    <div className="mt-2 animate-fade-in">
+                      <div className="flex items-center w-full h-11 bg-white border border-slate-200 rounded-xl px-3.5 transition-all shadow-2xs">
+                        <Car className="w-4.5 h-4.5 text-slate-400 shrink-0" />
                         <input
-                          type="number"
-                          min="1"
-                          value={hospedagemDias}
-                          onChange={(e) => setHospedagemDias(Math.max(1, parseInt(e.target.value) || 1))}
-                          className={inputClass}
-                          placeholder="Número de noites"
+                          type="text"
+                          value={customVehicle}
+                          onChange={(e) => setCustomVehicle(e.target.value)}
+                          placeholder="Digite marca, modelo e placa do veículo..."
+                          className="flex-1 bg-transparent pl-2.5 pr-2 text-sm font-semibold text-slate-900 outline-none"
                         />
                       </div>
                     </div>
                   )}
                 </div>
-              )}
 
-              {/* Veículo */}
-              <div className="space-y-3">
-                <label className={labelClass}>Veículo</label>
-                <div 
-                  onClick={() => setIsVehiclesOpen(true)}
-                  className={`${inputContainerClass} cursor-pointer ${isVehiclesOpen ? 'bg-white border-indigo-500 ring-4 ring-indigo-500/5' : ''}`}
-                >
-                  <Car className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                  <span className={`w-full bg-transparent pl-11 pr-10 py-3 text-sm font-medium outline-none truncate ${selectedVehicle ? 'text-slate-900' : 'text-slate-500'}`}>
-                    {selectedVehicle === 'OUTRO' 
-                      ? 'OUTROS (Especificar...)' 
-                      : (selectedVehicle || 'Clique para selecionar o veículo...')}
-                  </span>
-                  <div className="absolute right-4 top-1/2 -translate-y-1/2">
-                    <ChevronDown className="w-4 h-4 text-slate-400" />
+                {/* 3. DATA E HORA DE SAÍDA */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between min-h-[22px]">
+                    <label className="text-xs font-black uppercase tracking-wider text-slate-600">
+                      Data e Hora de Saída
+                    </label>
+                  </div>
+                  <div
+                    onClick={() => setActiveDateModal('departure')}
+                    className={`flex items-center w-full h-12 bg-slate-50/90 hover:bg-white border border-slate-200 rounded-2xl px-3.5 transition-all cursor-pointer hover:border-indigo-300 shadow-2xs ${activeDateModal === 'departure' ? 'bg-white border-indigo-500 ring-4 ring-indigo-500/10' : ''}`}
+                  >
+                    <Calendar className="w-5 h-5 text-slate-400 shrink-0" />
+                    <span className={`flex-1 pl-2.5 pr-2 text-sm font-semibold truncate ${departureDateTime ? 'text-slate-900' : 'text-slate-400'}`}>
+                      {departureDateTime ? format(parseISO(departureDateTime), "dd/MM/yyyy 'às' HH:mm") : 'Clique para selecionar a saída...'}
+                    </span>
+                    <ChevronDown className="w-4.5 h-4.5 text-slate-400 shrink-0" />
                   </div>
                 </div>
 
-                {selectedVehicle === 'OUTRO' && (
-                  <div className="space-y-2 mt-2 animate-fade-in">
-                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400">Especificar Veículo (Pesados / Outros)</label>
-                    <div className={inputContainerClass}>
-                      <Car className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                      <input
-                        type="text"
-                        value={customVehicle}
-                        onChange={(e) => setCustomVehicle(e.target.value)}
-                        placeholder="Digite a marca, modelo e placa do veículo..."
-                        className={inputClass}
-                      />
-                    </div>
+                {/* 4. RETORNO (OPCIONAL) */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between min-h-[22px]">
+                    <label className="text-xs font-black uppercase tracking-wider text-slate-600">
+                      Data e Hora de Retorno (Opcional)
+                    </label>
+                    {isGestorOrAdmin && returnDateTime && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setReturnDateTime('');
+                        }}
+                        className="text-[11px] font-bold text-rose-600 hover:text-rose-700 flex items-center gap-1 transition-colors"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                        <span>Limpar</span>
+                      </button>
+                    )}
                   </div>
-                )}
-              </div>
-            </div>
-            )}
-
-            {currentStep === 2 && (
-            <div className="space-y-8 animate-fade-in">
-              {/* Motivo */}
-              <div className="space-y-3">
-                <label className={labelClass}>Motivo da Viagem</label>
-                
-                <div className="flex items-center justify-between gap-2 bg-slate-100/90 p-1.5 rounded-2xl border border-slate-200/80">
-                  <button
-                    type="button"
-                    onClick={handleToggleMic}
-                    disabled={isPolishingAI}
-                    className={`flex-1 py-2.5 px-3 rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-xs ${
-                      isRecording 
-                        ? 'bg-rose-600 text-white animate-pulse shadow-rose-600/30' 
-                        : 'bg-white text-slate-700 hover:bg-slate-50 border border-slate-200'
+                  <div
+                    onClick={() => {
+                      if (isGestorOrAdmin) {
+                        setActiveDateModal('return');
+                      }
+                    }}
+                    className={`flex items-center w-full h-12 bg-slate-50/90 hover:bg-white border border-slate-200 rounded-2xl px-3.5 transition-all shadow-2xs ${
+                      isGestorOrAdmin
+                        ? `cursor-pointer hover:border-indigo-300 ${activeDateModal === 'return' ? 'bg-white border-indigo-500 ring-4 ring-indigo-500/10' : ''}`
+                        : 'opacity-60 cursor-not-allowed'
                     }`}
                   >
-                    {isRecording ? (
-                      <>
-                        <MicOff className="w-4 h-4 text-white" />
-                        <span>Parar & Lapidar IA</span>
-                      </>
-                    ) : (
-                      <>
-                        <Mic className="w-4 h-4 text-indigo-600" />
-                        <span>Falar Motivo por Voz</span>
-                      </>
-                    )}
-                  </button>
+                    <Calendar className="w-5 h-5 text-slate-400 shrink-0" />
+                    <span className={`flex-1 pl-2.5 pr-2 text-sm font-semibold truncate ${returnDateTime ? 'text-slate-900' : 'text-slate-400'}`}>
+                      {returnDateTime
+                        ? format(parseISO(returnDateTime), "dd/MM/yyyy 'às' HH:mm")
+                        : (isGestorOrAdmin ? 'Deixar em aberto (opcional)' : 'Definido pelo gestor')}
+                    </span>
+                    {isGestorOrAdmin && <ChevronDown className="w-4.5 h-4.5 text-slate-400 shrink-0" />}
+                  </div>
+                </div>
+              </div>
 
-                  <button
-                    type="button"
-                    onClick={handleManualPolishing}
-                    disabled={isRecording || isPolishingAI || !reason.trim()}
-                    className="py-2.5 px-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all disabled:opacity-40 flex items-center justify-center gap-1.5 shadow-xs shrink-0"
-                    title="Formatar texto com IA Gemini"
-                  >
-                    <Sparkles className="w-4 h-4 text-amber-300" />
-                    <span>Lapidar IA</span>
-                  </button>
+              {/* 3. SEÇÃO HOSPEDAGEM (Se aplicável, ocupando a largura total de forma harmônica) */}
+              {shouldShowHospedagem && (
+                <div className="pt-2 border-t border-slate-150">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/90 p-3 sm:p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 border border-indigo-100 shrink-0">
+                        <Bed className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <span className="block text-xs font-black uppercase tracking-wider text-slate-800">Hospedagem Necessária?</span>
+                        <span className="block text-[11px] font-medium text-slate-500">Viagem com duração superior a 12 horas ou pernoite</span>
+                      </div>
+                    </div>
 
-                  {reason.trim().length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setReason('')}
-                      disabled={isRecording || isPolishingAI}
-                      className="py-2.5 px-3 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200/80 rounded-xl text-xs font-black uppercase tracking-wider transition-all disabled:opacity-40 flex items-center justify-center gap-1.5 shadow-xs shrink-0 active:scale-95"
-                      title="Apagar todo o texto inserido de uma vez"
-                    >
-                      <Trash2 className="w-4 h-4 text-rose-600" />
-                      <span>Apagar</span>
-                    </button>
+                    <div className="flex items-center gap-3 self-end sm:self-auto">
+                      <div className="flex bg-white rounded-xl border border-slate-200 p-1 shadow-2xs">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setHospedagem(true);
+                            setHospedagemDias(prev => prev > 0 ? prev : 1);
+                          }}
+                          className={`px-4 py-1.5 text-xs font-extrabold rounded-lg transition-all ${
+                            hospedagem ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          Sim
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setHospedagem(false);
+                            setHospedagemDias(0);
+                          }}
+                          className={`px-4 py-1.5 text-xs font-extrabold rounded-lg transition-all ${
+                            !hospedagem ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                          }`}
+                        >
+                          Não
+                        </button>
+                      </div>
+
+                      {hospedagem && (
+                        <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-2xs animate-fade-in">
+                          <span className="text-xs font-bold text-slate-600">Noites:</span>
+                          <input
+                            type="number"
+                            min="1"
+                            value={hospedagemDias}
+                            onChange={(e) => setHospedagemDias(Math.max(1, parseInt(e.target.value) || 1))}
+                            className="w-12 text-center text-sm font-extrabold text-slate-900 outline-none bg-slate-50 rounded-lg py-1 border border-slate-200"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+            </div>
+          )}
+
+          {currentStep === 2 && (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 animate-fade-in items-stretch">
+              
+              {/* Textarea e Ferramentas (2 Colunas) */}
+              <div className="lg:col-span-2 bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/90 shadow-sm flex flex-col justify-between gap-4">
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <label className="text-xs font-black uppercase tracking-wider text-slate-800">
+                      Motivo e Agenda da Viagem
+                    </label>
+
+                    {/* Toolbar Moderna */}
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleToggleMic}
+                        disabled={isPolishingAI}
+                        className={`px-3 py-1.5 rounded-xl font-bold text-xs uppercase tracking-wider transition-all flex items-center gap-2 shadow-2xs ${
+                          isRecording
+                            ? 'bg-rose-600 text-white animate-pulse shadow-rose-600/30'
+                            : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200'
+                        }`}
+                      >
+                        {isRecording ? (
+                          <>
+                            <MicOff className="w-4 h-4 text-white" />
+                            <span>Parar & Lapidar</span>
+                          </>
+                        ) : (
+                          <>
+                            <Mic className="w-4 h-4 text-indigo-600" />
+                            <span>Gravar Voz</span>
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleManualPolishing}
+                        disabled={isRecording || isPolishingAI || !reason.trim()}
+                        className="px-3.5 py-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all disabled:opacity-40 flex items-center gap-1.5 shadow-2xs active:scale-95"
+                        title="Formatar texto com IA Gemini"
+                      >
+                        <Sparkles className="w-4 h-4 text-amber-300" />
+                        <span>Lapidar IA</span>
+                      </button>
+
+                      {reason.trim().length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setReason('')}
+                          disabled={isRecording || isPolishingAI}
+                          className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-all disabled:opacity-40 flex items-center gap-1 active:scale-95"
+                          title="Limpar texto"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {isRecording && (
+                    <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-2xl text-rose-700 text-xs font-bold flex items-center justify-center gap-2 animate-fade-in">
+                      <span className="w-2.5 h-2.5 bg-rose-600 rounded-full animate-ping"></span>
+                      <span>Ouvindo sua voz... Fale o motivo da viagem e clique em Parar.</span>
+                    </div>
                   )}
+
+                  {isPolishingAI && (
+                    <div className="p-2.5 bg-indigo-50 border border-indigo-200 rounded-2xl text-indigo-700 text-xs font-bold flex items-center justify-center gap-2 animate-fade-in">
+                      <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
+                      <span>Inteligência Artificial Gemini lapidando a justificativa...</span>
+                    </div>
+                  )}
+
+                  <div className="relative flex items-start w-full bg-slate-50/90 border border-slate-200 rounded-2xl transition-all focus-within:bg-white focus-within:border-indigo-500 focus-within:ring-4 focus-within:ring-indigo-500/10">
+                    <FileText className="absolute left-3.5 top-3.5 w-4.5 h-4.5 text-slate-400 pointer-events-none" />
+                    <textarea
+                      value={reason}
+                      onChange={(e) => setReason(e.target.value)}
+                      placeholder="Descreva detalhadamente o objetivo, compromissos oficiais e a agenda da viagem..."
+                      className="w-full bg-transparent pl-11 pr-4 py-3.5 text-sm font-medium text-slate-900 outline-none min-h-[160px] max-h-[200px] resize-none leading-relaxed"
+                    />
+                  </div>
                 </div>
 
-                {isRecording && (
-                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-bold flex items-center justify-center gap-2 animate-fade-in">
-                    <span className="w-2.5 h-2.5 bg-rose-600 rounded-full animate-ping"></span>
-                    <span>Ouvindo sua voz... Fale o motivo e clique em Parar.</span>
-                  </div>
-                )}
-
-                {isPolishingAI && (
-                  <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-xl text-indigo-700 text-xs font-bold flex items-center justify-center gap-2 animate-fade-in">
-                    <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
-                    <span>Inteligência Artificial Gemini lapidando a justificativa...</span>
-                  </div>
-                )}
-
-                <div className={`${inputContainerClass} items-start`}>
-                  <FileText className="absolute left-4 top-4 w-4 h-4 text-slate-400 pointer-events-none" />
-                  <textarea
-                    value={reason}
-                    onChange={(e) => setReason(e.target.value)}
-                    placeholder="Descreva detalhadamente o objetivo da viagem ou clique no botão de voz acima..."
-                    className={`${inputClass} min-h-[160px] resize-none leading-relaxed`}
-                  />
-                </div>
-                <div className="flex justify-between items-center text-[10px] font-bold mt-1 px-1">
+                <div className="flex justify-between items-center text-xs font-bold pt-2 border-t border-slate-100">
                   <span className={reason.trim().length >= 50 ? "text-emerald-600" : "text-amber-600"}>
-                    {reason.trim().length >= 50 ? "Requisito mínimo de caracteres atingido!" : `Mínimo de 50 caracteres necessário (faltam ${50 - reason.trim().length} caracteres)`}
+                    {reason.trim().length >= 50
+                      ? "✓ Requisito mínimo de caracteres atingido!"
+                      : `Mínimo de 50 caracteres necessário (faltam ${50 - reason.trim().length} caracteres)`}
                   </span>
                   <span className="text-slate-400 font-mono">
                     {reason.trim().length} / 50
                   </span>
                 </div>
               </div>
-            </div>
-            )}
 
-          </div>
+              {/* Resumo da Viagem (1 Coluna) */}
+              <div className="bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/90 shadow-sm flex flex-col justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2 mb-3 pb-2.5 border-b border-slate-100">
+                    <CheckCircle2 className="w-5 h-5 text-indigo-600" />
+                    <span className="text-xs font-black uppercase tracking-wider text-slate-800">Resumo dos Dados</span>
+                  </div>
+
+                  <div className="space-y-2 text-xs">
+                    <div className="bg-slate-50 p-2.5 rounded-2xl border border-slate-100">
+                      <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-0.5">Servidor(es)</span>
+                      <p className="font-bold text-slate-800 text-xs sm:text-sm truncate">{selectedPersons.map(p => p.name).join(', ')}</p>
+                    </div>
+
+                    <div className="bg-slate-50 p-2.5 rounded-2xl border border-slate-100">
+                      <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-0.5">Destino</span>
+                      <p className="font-bold text-slate-800 text-xs sm:text-sm truncate">{destination || '-'}</p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="bg-slate-50 p-2.5 rounded-2xl border border-slate-100">
+                        <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-0.5">Saída</span>
+                        <p className="font-bold text-slate-800 text-xs truncate">
+                          {departureDateTime ? format(parseISO(departureDateTime), "dd/MM HH:mm") : '-'}
+                        </p>
+                      </div>
+
+                      <div className="bg-slate-50 p-2.5 rounded-2xl border border-slate-100">
+                        <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-0.5">Retorno</span>
+                        <p className="font-bold text-slate-800 text-xs truncate">
+                          {returnDateTime ? format(parseISO(returnDateTime), "dd/MM HH:mm") : 'A definir'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-50 p-2.5 rounded-2xl border border-slate-100">
+                      <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-0.5">Veículo</span>
+                      <p className="font-bold text-slate-800 text-xs truncate">
+                        {selectedVehicle === 'OUTRO' ? (customVehicle || 'Outro') : (selectedVehicle || '-')}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setCurrentStep(1)}
+                  className="w-full py-2.5 text-center text-xs font-bold text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-xl transition-all border border-indigo-100 shadow-2xs"
+                >
+                  ← Editar Dados do Passo 1
+                </button>
+              </div>
+
+            </div>
+          )}
+
         </div>
       </div>
 
