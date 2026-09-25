@@ -152,10 +152,15 @@ export const FarmaciaPdfGenerator: React.FC<FarmaciaPdfGeneratorProps> = ({
                             </div>
 
                             <div className="bg-white border border-slate-200 rounded-xl p-4">
-                                <span className="block text-[7pt] font-bold uppercase text-slate-400 tracking-wider">Médico Prescritor</span>
+                                <span className="block text-[7pt] font-bold uppercase text-slate-400 tracking-wider">Profissional Prescritor</span>
                                 <span className="font-extrabold text-purple-950 text-xs uppercase block truncate">
-                                    {medicoCrm ? `CRM: ${medicoCrm}${medicoUf ? '/' + medicoUf : ''}` : 'NÃO INFORMADO'}
+                                    {medicoNome || (medicoCrm ? `REGISTRO: ${medicoCrm}${medicoUf ? '/' + medicoUf : ''}` : 'NÃO INFORMADO')}
                                 </span>
+                                {medicoNome && medicoCrm && (
+                                    <span className="text-[8pt] font-bold text-slate-500 font-mono block mt-0.5">
+                                        REGISTRO: {medicoCrm}{medicoUf ? `/${medicoUf}` : ''}
+                                    </span>
+                                )}
                             </div>
                         </div>
 

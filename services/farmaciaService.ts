@@ -605,30 +605,44 @@ export const getMedicosCadastrados = async (forceRefresh = false): Promise<Recor
     }
 };
 
-export const saveMedicoCadastrado = async (data: { crm: string; uf: string; nome: string }): Promise<FarmaciaMedico> => {
+export const saveMedicoCadastrado = async (data: { 
+    crm: string; 
+    uf: string; 
+    nome: string; 
+    tipo_profissional?: string; 
+    conselho?: string; 
+    especialidade?: string;
+}): Promise<FarmaciaMedico> => {
     const cleanCrm = data.crm.replace(/\D/g, '').trim();
     let cleanUf = (data.uf || 'MG').trim().toUpperCase();
     if (cleanUf.length !== 2) cleanUf = 'MG';
 
     const cleanNome = (data.nome || '').trim().replace(/\s+/g, ' ');
+    const conselho = (data.conselho || 'CRM').trim().toUpperCase();
+    const tipo = (data.tipo_profissional || 'medico').trim().toLowerCase();
     const key = `${cleanCrm}_${cleanUf}`;
+    const keyWithConselho = `${conselho}_${cleanCrm}_${cleanUf}`;
 
     if (!cleanCrm) {
-        throw new Error('O número do CRM é obrigatório.');
+        throw new Error('O número do registro profissional no conselho é obrigatório.');
     }
 
     const currentMap = await getMedicosCadastrados(true);
-    const existing = currentMap[key];
+    const existing = currentMap[keyWithConselho] || currentMap[key];
 
     const updatedMedico: FarmaciaMedico = {
         crm: cleanCrm,
         uf: cleanUf,
         nome: cleanNome,
+        tipo_profissional: tipo,
+        conselho: conselho,
+        especialidade: data.especialidade || existing?.especialidade,
         criado_em: existing?.criado_em || new Date().toISOString(),
         atualizado_em: new Date().toISOString()
     };
 
     currentMap[key] = updatedMedico;
+    currentMap[keyWithConselho] = updatedMedico;
     cachedMedicos = currentMap;
     cachedMedicosExpiry = Date.now() + 1000 * 60 * 5;
 

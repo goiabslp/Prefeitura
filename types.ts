@@ -258,6 +258,8 @@ export interface FarmaciaMovimentacao {
   validade: string;
   paciente_nome?: string;
   paciente_cpf?: string;
+  tipo_profissional?: string;
+  conselho_profissional?: string;
   medico_crm?: string;
   medico_uf?: string;
   medico_nome?: string;
@@ -276,9 +278,12 @@ export interface FarmaciaConfig {
 
 export interface FarmaciaMedico {
   id?: string;
+  tipo_profissional?: string;
+  conselho?: string;
   crm: string;
   uf: string;
   nome: string;
+  especialidade?: string;
   criado_em?: string;
   atualizado_em?: string;
 }

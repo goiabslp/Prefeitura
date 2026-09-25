@@ -1920,6 +1920,71 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, u
                 </div>
             )}
 
+            {isViewOnly && (
+                <header className="bg-white border-b border-slate-200/90 px-3 md:px-6 py-2 md:py-2.5 shadow-xs shrink-0 z-20 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 md:w-10 md:h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white flex items-center justify-center shadow-md shadow-indigo-500/20 shrink-0">
+                            <Tv className="w-4 h-4 md:w-5 md:h-5" />
+                        </div>
+                        <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <h1 className="text-base md:text-xl 2xl:text-2xl font-black text-slate-800 tracking-tight truncate">
+                                    Quadro Kanban de Licitações
+                                </h1>
+                                <span className="px-2 py-0.5 rounded-full text-[9px] md:text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1 shrink-0 shadow-2xs">
+                                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                    Ao Vivo na TV
+                                </span>
+                            </div>
+                            <p className="text-[10px] md:text-xs text-slate-400 font-semibold truncate hidden sm:block">
+                                Acompanhamento visual dos processos em tempo real
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+                        <div className="hidden lg:flex items-center gap-2">
+                            <div className="bg-slate-50 border border-slate-200/80 px-3 py-1 2xl:px-3.5 2xl:py-1.5 rounded-xl text-center min-w-[60px]">
+                                <span className="text-[8.5px] 2xl:text-[9.5px] font-black uppercase text-slate-400 block tracking-wider">Total</span>
+                                <span className="text-xs 2xl:text-base font-black text-slate-800">{stats.total}</span>
+                            </div>
+                            <div className="bg-amber-50 border border-amber-200/80 px-3 py-1 2xl:px-3.5 2xl:py-1.5 rounded-xl text-center min-w-[60px]">
+                                <span className="text-[8.5px] 2xl:text-[9.5px] font-black uppercase text-amber-600/80 block tracking-wider">Em Andamento</span>
+                                <span className="text-xs 2xl:text-base font-black text-amber-700">{stats.emAndamento}</span>
+                            </div>
+                            <div className="bg-rose-50 border border-rose-200/80 px-3 py-1 2xl:px-3.5 2xl:py-1.5 rounded-xl text-center min-w-[60px]">
+                                <span className="text-[8.5px] 2xl:text-[9.5px] font-black uppercase text-rose-600/80 block tracking-wider">Urgentes</span>
+                                <span className="text-xs 2xl:text-base font-black text-rose-700">{stats.urgentes}</span>
+                            </div>
+                            <div className="bg-emerald-50 border border-emerald-200/80 px-3 py-1 2xl:px-3.5 2xl:py-1.5 rounded-xl text-center min-w-[60px]">
+                                <span className="text-[8.5px] 2xl:text-[9.5px] font-black uppercase text-emerald-600/80 block tracking-wider">Finalizados</span>
+                                <span className="text-xs 2xl:text-base font-black text-emerald-700">{stats.finalizados}</span>
+                            </div>
+                        </div>
+
+                        {/* TEMPO MÉDIO ATUAL */}
+                        <div className="bg-[#EEF2FF] border-2 border-[#C7D2FE] px-3.5 py-1 md:py-1.5 2xl:px-5 2xl:py-2 rounded-2xl text-center shadow-xs min-w-[105px] 2xl:min-w-[130px]">
+                            <span className="text-[9px] md:text-[10px] 2xl:text-xs font-black uppercase text-[#4F46E5] block tracking-wider whitespace-nowrap">
+                                Tempo Médio Atual
+                            </span>
+                            <span className="text-sm md:text-lg 2xl:text-2xl font-black text-[#1E1B4B] block leading-tight whitespace-nowrap">
+                                {stats.tempoMedioAtual} {stats.tempoMedioAtual === 1 ? 'dia' : 'dias'}
+                            </span>
+                        </div>
+
+                        {/* TEMPO IDEAL */}
+                        <div className="bg-[#ECFDF5] border-2 border-[#A7F3D0] px-3.5 py-1 md:py-1.5 2xl:px-5 2xl:py-2 rounded-2xl text-center shadow-xs min-w-[95px] 2xl:min-w-[115px]">
+                            <span className="text-[9px] md:text-[10px] 2xl:text-xs font-black uppercase text-[#059669] block tracking-wider whitespace-nowrap">
+                                Tempo Ideal
+                            </span>
+                            <span className="text-sm md:text-lg 2xl:text-2xl font-black text-[#064E3B] block leading-tight whitespace-nowrap">
+                                {stats.tempoIdeal} dias
+                            </span>
+                        </div>
+                    </div>
+                </header>
+            )}
+
             {!isViewOnly && (
                 <header className="bg-white border-b border-slate-200 px-3 md:px-6 py-2.5 md:py-3.5 shadow-xs shrink-0 z-20">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 md:gap-3">
@@ -1964,15 +2029,23 @@ export const LicitacaoKanban: React.FC<LicitacaoKanbanProps> = ({ currentUser, u
                             </div>
 
                             {/* TEMPO MÉDIO ATUAL */}
-                            <div className="bg-indigo-50/80 border border-indigo-200/90 px-3 py-1 2xl:px-4 2xl:py-2 rounded-xl text-center min-w-[85px] shadow-2xs">
-                                <span className="text-[9px] 2xl:text-xs font-extrabold uppercase text-indigo-600/90 block tracking-wider whitespace-nowrap">Tempo Médio Atual</span>
-                                <span className="text-sm 2xl:text-xl font-black text-indigo-900 block whitespace-nowrap">{stats.tempoMedioAtual} {stats.tempoMedioAtual === 1 ? 'dia' : 'dias'}</span>
+                            <div className="bg-[#EEF2FF] border-2 border-[#C7D2FE] px-3.5 py-1.5 2xl:px-4 2xl:py-2 rounded-2xl text-center shadow-xs min-w-[100px]">
+                                <span className="text-[9.5px] 2xl:text-xs font-black uppercase text-[#4F46E5] block tracking-wider whitespace-nowrap">
+                                    Tempo Médio Atual
+                                </span>
+                                <span className="text-sm 2xl:text-xl font-black text-[#1E1B4B] block leading-tight whitespace-nowrap">
+                                    {stats.tempoMedioAtual} {stats.tempoMedioAtual === 1 ? 'dia' : 'dias'}
+                                </span>
                             </div>
 
                             {/* TEMPO IDEAL */}
-                            <div className="bg-emerald-50/80 border border-emerald-200/90 px-3 py-1 2xl:px-4 2xl:py-2 rounded-xl text-center min-w-[75px] shadow-2xs">
-                                <span className="text-[9px] 2xl:text-xs font-extrabold uppercase text-emerald-600/90 block tracking-wider whitespace-nowrap">Tempo Ideal</span>
-                                <span className="text-sm 2xl:text-xl font-black text-emerald-900 block whitespace-nowrap">{stats.tempoIdeal} dias</span>
+                            <div className="bg-[#ECFDF5] border-2 border-[#A7F3D0] px-3.5 py-1.5 2xl:px-4 2xl:py-2 rounded-2xl text-center shadow-xs min-w-[90px]">
+                                <span className="text-[9.5px] 2xl:text-xs font-black uppercase text-[#059669] block tracking-wider whitespace-nowrap">
+                                    Tempo Ideal
+                                </span>
+                                <span className="text-sm 2xl:text-xl font-black text-[#064E3B] block leading-tight whitespace-nowrap">
+                                    {stats.tempoIdeal} dias
+                                </span>
                             </div>
 
                             <button

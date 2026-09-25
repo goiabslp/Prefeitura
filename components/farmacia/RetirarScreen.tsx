@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { User, FarmaciaMedicamento, FarmaciaMovimentacao, FarmaciaMedico, ConsultaPaciente, AppState, AGENTES_DE_SAUDE } from '../../types';
-import { ArrowLeft, User as UserIcon, Calendar, ClipboardList, CheckCircle2, AlertTriangle, Search, Loader2, History, X, FileDown, Pill, ShieldCheck, FileText, Plus, Trash2, Minus, UserPlus, ChevronDown, Sparkles, Check, Stethoscope, UserCheck, ArrowRight, ClipboardCheck, Edit3, RefreshCw } from 'lucide-react';
+import { ArrowLeft, User as UserIcon, Calendar, ClipboardList, CheckCircle2, AlertTriangle, Search, Loader2, History, X, FileDown, Pill, ShieldCheck, FileText, Plus, Trash2, Minus, UserPlus, ChevronDown, Sparkles, Check, Stethoscope, UserCheck, ArrowRight, ClipboardCheck, Edit3, RefreshCw, Activity, Brain, HeartPulse } from 'lucide-react';
 import * as db from '../../services/farmaciaService';
 import { normalizeCrmAndUf } from './dashboard/MedicosDashboardTab';
 import { getPacientes, createPaciente, updatePaciente } from '../../services/consultasService';
@@ -17,12 +17,74 @@ export interface SelectedItem {
     quantity: number;
 }
 
-const ESTADOS_BRASIL = [
+export const ESTADOS_BRASIL = [
     'MG', 'SP', 'RJ', 'ES', 'BA', 'DF', 'GO', 'AC', 'AL', 'AP', 'AM', 'CE', 'MA', 
     'MT', 'MS', 'PA', 'PB', 'PR', 'PE', 'PI', 'RN', 'RS', 'RO', 'RR', 'SC', 'SE', 'TO'
 ];
 
 export type RetirarTab = 'localizar' | 'paciente' | 'medicamentos' | 'medico' | 'revisar';
+
+export type TipoProfissionalPrescritor = 'medico' | 'enfermeiro' | 'dentista' | 'farmaceutico' | 'psicologo' | 'fisioterapeuta';
+
+export interface ProfissionalPrescritorConfig {
+    id: TipoProfissionalPrescritor;
+    label: string;
+    artigo: string;
+    conselho: string;
+    icon: React.ComponentType<{ className?: string }>;
+    placeholder: string;
+}
+
+export const PROFISSIONAIS_PRESCRITORES: ProfissionalPrescritorConfig[] = [
+    {
+        id: 'medico',
+        label: 'Médico',
+        artigo: 'do',
+        conselho: 'CRM',
+        icon: Stethoscope,
+        placeholder: 'Ex: 12345 ou busque por nome do médico...'
+    },
+    {
+        id: 'enfermeiro',
+        label: 'Enfermeiro',
+        artigo: 'do',
+        conselho: 'COREN',
+        icon: UserCheck,
+        placeholder: 'Ex: 123456 ou busque por nome do enfermeiro...'
+    },
+    {
+        id: 'dentista',
+        label: 'Dentista',
+        artigo: 'do',
+        conselho: 'CRO',
+        icon: Activity,
+        placeholder: 'Ex: 12345 ou busque por nome do dentista...'
+    },
+    {
+        id: 'farmaceutico',
+        label: 'Farmacêutico',
+        artigo: 'do',
+        conselho: 'CRF',
+        icon: Pill,
+        placeholder: 'Ex: 12345 ou busque por nome do farmacêutico...'
+    },
+    {
+        id: 'psicologo',
+        label: 'Psicólogo',
+        artigo: 'do',
+        conselho: 'CRP',
+        icon: Brain,
+        placeholder: 'Ex: 12345 ou busque por nome do psicólogo...'
+    },
+    {
+        id: 'fisioterapeuta',
+        label: 'Fisioterapeuta',
+        artigo: 'do',
+        conselho: 'CREFITO',
+        icon: HeartPulse,
+        placeholder: 'Ex: 12345 ou busque por nome do fisioterapeuta...'
+    }
+];
 
 interface FloatingPortalProps {
     isOpen: boolean;
@@ -202,7 +264,11 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
     const [withdrawalDate, setWithdrawalDate] = useState(getFormattedDateTimeLocal());
     const [observacoes, setObservacoes] = useState('');
 
-    // CRM & Prescritor com Autocomplete Dinâmico
+    // Prescritor & Conselho com Autocomplete Dinâmico
+    const [tipoProfissional, setTipoProfissional] = useState<TipoProfissionalPrescritor>('medico');
+    const selectedProfissional = useMemo(() => {
+        return PROFISSIONAIS_PRESCRITORES.find(p => p.id === tipoProfissional) || PROFISSIONAIS_PRESCRITORES[0];
+    }, [tipoProfissional]);
     const [medicoCrm, setMedicoCrm] = useState('');
     const [medicoUf, setMedicoUf] = useState('MG');
     const [medicoNome, setMedicoNome] = useState('');
@@ -654,6 +720,12 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
         setMatchedPatient(null);
         setSearchNotFound(false);
         setIsPatientUnlocked(false);
+        setSelectedItems([]);
+        setTipoProfissional('medico');
+        setMedicoCrm('');
+        setMedicoNome('');
+        setMedicoSearchQuery('');
+        setObservacoes('');
         navigateToTab('localizar');
     };
 
@@ -743,7 +815,7 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
         }
 
         if (!cleanCrm) {
-            showAlert('Por favor, informe o número do CRM do médico prescritor.', 'error');
+            showAlert(`Por favor, informe o número do ${selectedProfissional.conselho} ${selectedProfissional.artigo} ${selectedProfissional.label.toLowerCase()} prescritor.`, 'error');
             navigateToTab('medico');
             return;
         }
@@ -781,7 +853,7 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                     paciente_cpf: cleanCpf,
                     medico_crm: cleanCrm,
                     medico_uf: effectiveUf,
-                    medico_nome: medicoNome ? medicoNome : `MÉDICO PRESCRITOR (CRM ${cleanCrm}/${effectiveUf})`,
+                    medico_nome: medicoNome ? medicoNome : `${selectedProfissional.label.toUpperCase()} PRESCRITOR (${selectedProfissional.conselho} ${cleanCrm}/${effectiveUf})`,
                     observacoes: observacoes || undefined,
                     responsavel_id: currentUser?.id,
                     responsavel_nome: currentUser?.name || 'Farmacêutico(a)',
@@ -1002,11 +1074,11 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
 
                         <span className="text-slate-300 font-bold text-xs shrink-0">→</span>
 
-                        {/* Aba 3: Médico & Receita */}
+                        {/* Aba 3: Profissional Prescritor & Receita */}
                         <button
                             type="button"
                             onClick={() => navigateToTab('medico')}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer shrink-0 ${
+                            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer shrink-0 ${
                                 activeTab === 'medico'
                                     ? 'bg-pink-600 text-white shadow-sm shadow-pink-600/25'
                                     : (medicoCrm || medicoSearchQuery)
@@ -1014,8 +1086,9 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                         : 'bg-slate-50 hover:bg-pink-50 text-slate-700 hover:text-pink-700 border border-slate-200/70'
                             }`}
                         >
-                            <Stethoscope className="w-3.5 h-3.5" />
-                            <span>3. Médico & Receita</span>
+                            <selectedProfissional.icon className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">3. {selectedProfissional.label} & Receita</span>
+                            <span className="sm:hidden">3. {selectedProfissional.label}</span>
                             {(medicoCrm || medicoSearchQuery) && (
                                 <span className="w-4 h-4 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[8px] font-black">
                                     ✓
@@ -1029,14 +1102,15 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                         <button
                             type="button"
                             onClick={() => navigateToTab('revisar')}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer shrink-0 ${
+                            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer shrink-0 ${
                                 activeTab === 'revisar'
                                     ? 'bg-pink-600 text-white shadow-sm shadow-pink-600/25'
                                     : 'bg-slate-50 hover:bg-pink-50 text-slate-700 hover:text-pink-700 border border-slate-200/70'
                             }`}
                         >
                             <ClipboardCheck className="w-3.5 h-3.5" />
-                            <span>4. Revisar & Finalizar</span>
+                            <span className="hidden sm:inline">4. Revisar & Finalizar</span>
+                            <span className="sm:hidden">4. Revisar</span>
                         </button>
                     </div>
 
@@ -1570,41 +1644,98 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                 )}
 
                 {/* ========================================================================= */}
-                {/* 4. ABA: MÉDICO & RECEITA */}
+                {/* 4. ABA: PROFISSIONAL PRESCRITOR & RECEITA */}
                 {/* ========================================================================= */}
                 {selectedPatientObj && activeTab === 'medico' && (
-                    <div className="flex-1 h-full min-h-0 bg-white rounded-2xl border border-slate-200/90 p-4 sm:p-5 shadow-2xs flex flex-col justify-between gap-3 overflow-hidden animate-in fade-in duration-200">
-                        <div className="space-y-3.5 flex-1 overflow-y-auto pr-1 custom-scrollbar">
+                    <div className="flex-1 h-full min-h-0 bg-white rounded-2xl border border-slate-200/90 p-2 sm:p-3 lg:p-3.5 shadow-2xs flex flex-col justify-between gap-1.5 sm:gap-2 overflow-hidden animate-in fade-in duration-200">
+                        <div className="space-y-1.5 sm:space-y-2 flex-1 overflow-y-auto lg:overflow-y-hidden pr-0.5 custom-scrollbar flex flex-col justify-between">
                             {/* Header da Aba */}
-                            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                            <div className="flex items-center justify-between pb-1 sm:pb-1.5 border-b border-slate-100 shrink-0">
                                 <div className="flex items-center gap-2">
-                                    <div className="p-1.5 rounded-xl bg-pink-50 text-pink-600 border border-pink-100 shadow-2xs">
-                                        <Stethoscope className="w-4 h-4" />
+                                    <div className="p-1 sm:p-1.5 rounded-xl bg-pink-50 text-pink-600 border border-pink-100 shadow-2xs">
+                                        <selectedProfissional.icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                                     </div>
-                                    <div>
-                                        <h3 className="font-black text-slate-900 text-xs sm:text-sm uppercase tracking-tight">
-                                            Médico Prescritor & Receita
+                                    <div className="min-w-0">
+                                        <h3 className="font-black text-slate-900 text-xs sm:text-sm uppercase tracking-tight truncate">
+                                            Profissional Prescritor & Receita
                                         </h3>
-                                        <p className="text-[10px] text-slate-400 font-semibold">
-                                            Informe o CRM do médico prescritor e as instruções da receita
+                                        <p className="text-[9px] sm:text-[10px] text-slate-400 font-semibold truncate hidden sm:block">
+                                            Selecione a categoria, informe o {selectedProfissional.conselho} e as instruções da receita
                                         </p>
                                     </div>
                                 </div>
                             </div>
 
-                            {/* Card 1: CRM do Médico e UF */}
-                            <div className="bg-slate-50/70 border border-slate-200/80 rounded-2xl p-3.5 space-y-2">
-                                <div className="grid grid-cols-12 gap-2.5">
-                                    {/* CRM / Busca */}
+                            {/* Seletor de Categoria de Profissional Prescritor */}
+                            <div className="bg-slate-50/70 border border-slate-200/80 rounded-xl sm:rounded-2xl p-1.5 sm:p-2 space-y-1 shrink-0">
+                                <div className="flex items-center justify-between">
+                                    <label className="text-[9px] sm:text-[9.5px] font-black uppercase tracking-wider text-slate-700 flex items-center gap-1">
+                                        <Sparkles className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-pink-600" />
+                                        <span>Tipo de Profissional Prescritor *</span>
+                                    </label>
+                                    <span className="text-[8px] sm:text-[8.5px] font-bold text-slate-400 uppercase hidden sm:inline">
+                                        Selecione o conselho de classe
+                                    </span>
+                                </div>
+
+                                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-1 sm:gap-1.5">
+                                    {PROFISSIONAIS_PRESCRITORES.map(prof => {
+                                        const Icon = prof.icon;
+                                        const isSelected = tipoProfissional === prof.id;
+                                        return (
+                                            <button
+                                                key={prof.id}
+                                                type="button"
+                                                onClick={() => setTipoProfissional(prof.id)}
+                                                className={`p-1.5 sm:p-2 rounded-xl border text-left transition-all flex items-center justify-between gap-1.5 cursor-pointer relative group ${
+                                                    isSelected
+                                                        ? 'bg-pink-50/80 border-pink-500 shadow-xs ring-1.5 ring-pink-500/20'
+                                                        : 'bg-white hover:bg-slate-50 border-slate-200 hover:border-pink-300 text-slate-600'
+                                                }`}
+                                            >
+                                                <div className="flex items-center gap-1.5 min-w-0">
+                                                    <div className={`w-5.5 h-5.5 sm:w-6 sm:h-6 rounded-lg flex items-center justify-center transition-colors shrink-0 ${
+                                                        isSelected 
+                                                            ? 'bg-pink-600 text-white shadow-2xs' 
+                                                            : 'bg-slate-100 text-slate-600 group-hover:bg-pink-50 group-hover:text-pink-600'
+                                                    }`}>
+                                                        <Icon className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <span className={`block text-[10px] sm:text-[11px] font-black uppercase truncate leading-tight ${
+                                                            isSelected ? 'text-pink-900' : 'text-slate-800'
+                                                        }`}>
+                                                            {prof.label}
+                                                        </span>
+                                                    </div>
+                                                </div>
+
+                                                <span className={`text-[7.5px] sm:text-[8px] font-mono font-black px-1.5 py-0.5 rounded uppercase tracking-wider shrink-0 ${
+                                                    isSelected
+                                                        ? 'bg-pink-600 text-white shadow-2xs'
+                                                        : 'bg-slate-100 text-slate-600 group-hover:bg-pink-50 group-hover:text-pink-700'
+                                                }`}>
+                                                    {prof.conselho}
+                                                </span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* Card 1: Registro do Profissional e UF */}
+                            <div className="bg-slate-50/70 border border-slate-200/80 rounded-xl sm:rounded-2xl p-1.5 sm:p-2 space-y-1 shrink-0">
+                                <div className="grid grid-cols-12 gap-2">
+                                    {/* Registro / Busca */}
                                     <div className="col-span-8 sm:col-span-9 relative">
-                                        <div className="flex items-center justify-between mb-1 ml-0.5">
-                                            <label className="text-[10px] font-black uppercase tracking-wider text-slate-700 flex items-center gap-1">
-                                                <Stethoscope className="w-3.5 h-3.5 text-pink-600" />
-                                                <span>CRM do Médico Prescritor *</span>
+                                        <div className="flex items-center justify-between mb-0.5 ml-0.5">
+                                            <label className="text-[8.5px] sm:text-[9.5px] font-black uppercase tracking-wider text-slate-700 flex items-center gap-1 truncate">
+                                                <selectedProfissional.icon className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-pink-600 shrink-0" />
+                                                <span className="truncate">{selectedProfissional.conselho} {selectedProfissional.artigo} {selectedProfissional.label} Prescritor *</span>
                                             </label>
                                             {medicoCrm && (
-                                                <span className="text-[9px] font-black text-pink-600 font-mono bg-pink-50 px-1.5 py-0.2 rounded border border-pink-100 shadow-2xs">
-                                                    CRM {medicoCrm}
+                                                <span className="text-[8px] sm:text-[8.5px] font-black text-pink-600 font-mono bg-pink-50 px-1.5 py-0.2 rounded border border-pink-100 shadow-2xs shrink-0">
+                                                    {selectedProfissional.conselho} {medicoCrm}
                                                 </span>
                                             )}
                                         </div>
@@ -1612,8 +1743,8 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                         <div ref={medicoInputContainerRef} className="relative w-full">
                                             <input
                                                 type="text"
-                                                className="w-full rounded-xl border border-slate-300/90 bg-white py-2 pl-8 pr-7 text-xs font-bold text-slate-900 outline-none focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 transition-all placeholder:text-slate-400 shadow-2xs font-mono"
-                                                placeholder="Ex: 12345 ou busque por nome do médico..."
+                                                className="w-full rounded-xl border border-slate-300/90 bg-white py-1 sm:py-1.5 pl-7 sm:pl-8 pr-7 text-[11px] sm:text-xs font-bold text-slate-900 outline-none focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 transition-all placeholder:text-slate-400 shadow-2xs font-mono"
+                                                placeholder={selectedProfissional.placeholder}
                                                 value={medicoSearchQuery}
                                                 onFocus={() => setShowMedicoDropdown(true)}
                                                 onChange={(e) => {
@@ -1629,7 +1760,7 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                                 }}
                                                 required
                                             />
-                                            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                            <Search className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                                             {medicoSearchQuery && (
                                                 <button
                                                     type="button"
@@ -1640,14 +1771,14 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                                         setShowMedicoDropdown(false);
                                                     }}
                                                     className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
-                                                    title="Limpar CRM"
+                                                    title={`Limpar ${selectedProfissional.conselho}`}
                                                 >
                                                     <X className="w-3.5 h-3.5" />
                                                 </button>
                                             )}
                                         </div>
 
-                                        {/* Dropdown de Sugestões de Médicos via Portal */}
+                                        {/* Dropdown de Sugestões de Profissionais via Portal */}
                                         <FloatingDropdownPortal
                                             isOpen={showMedicoDropdown && medicoSuggestions.length > 0}
                                             targetRef={medicoInputContainerRef}
@@ -1663,25 +1794,25 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                                             setMedicoCrm(sug.crm);
                                                             setMedicoUf(sug.uf || 'MG');
                                                             setMedicoNome(sug.nome || '');
-                                                            setMedicoSearchQuery(sug.nome ? `${sug.nome} (CRM ${sug.crm})` : sug.crm);
+                                                            setMedicoSearchQuery(sug.nome ? `${sug.nome} (${selectedProfissional.conselho} ${sug.crm})` : sug.crm);
                                                             setShowMedicoDropdown(false);
                                                         }}
-                                                        className="w-full text-left px-3 py-2.5 hover:bg-pink-50 text-slate-800 text-xs font-bold flex items-center justify-between transition-colors group cursor-pointer"
+                                                        className="w-full text-left px-3 py-2 hover:bg-pink-50 text-slate-800 text-xs font-bold flex items-center justify-between transition-colors group cursor-pointer"
                                                     >
-                                                        <div className="flex items-center gap-2.5 min-w-0">
-                                                            <div className="w-7 h-7 rounded-lg bg-pink-50 group-hover:bg-pink-600 group-hover:text-white text-pink-700 flex items-center justify-center shrink-0 transition-colors border border-pink-100">
-                                                                <Stethoscope className="w-3.5 h-3.5" />
+                                                        <div className="flex items-center gap-2 min-w-0">
+                                                            <div className="w-6 h-6 rounded-lg bg-pink-50 group-hover:bg-pink-600 group-hover:text-white text-pink-700 flex items-center justify-center shrink-0 transition-colors border border-pink-100">
+                                                                <selectedProfissional.icon className="w-3 h-3" />
                                                             </div>
                                                             <div className="min-w-0">
                                                                 <span className="font-black text-slate-900 block truncate group-hover:text-pink-900 text-xs uppercase">
-                                                                    {sug.nome || `CRM ${sug.crm}/${sug.uf}`}
+                                                                    {sug.nome || `${selectedProfissional.conselho} ${sug.crm}/${sug.uf}`}
                                                                 </span>
-                                                                <span className="text-[10px] text-slate-500 font-mono font-semibold block mt-0.5">
-                                                                    CRM {sug.crm}/{sug.uf} {sug.count > 0 ? `• ${sug.count} prescrições anteriores` : ''}
+                                                                <span className="text-[9.5px] text-slate-500 font-mono font-semibold block">
+                                                                    {selectedProfissional.conselho} {sug.crm}/${sug.uf} {sug.count > 0 ? `• ${sug.count} ant.` : ''}
                                                                 </span>
                                                             </div>
                                                         </div>
-                                                        <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[9px] font-black uppercase font-mono shrink-0 group-hover:bg-pink-100 group-hover:text-pink-800">
+                                                        <span className="px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 text-[8.5px] font-black uppercase font-mono shrink-0 group-hover:bg-pink-100 group-hover:text-pink-800">
                                                             {sug.uf}
                                                         </span>
                                                     </button>
@@ -1692,14 +1823,14 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
 
                                     {/* Campo UF */}
                                     <div className="col-span-4 sm:col-span-3">
-                                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-700 mb-1 block ml-0.5">
+                                        <label className="text-[8.5px] sm:text-[9.5px] font-black uppercase tracking-wider text-slate-700 mb-0.5 block ml-0.5">
                                             UF *
                                         </label>
                                         <div className="relative">
                                             <select
                                                 value={medicoUf}
                                                 onChange={(e) => setMedicoUf(e.target.value.toUpperCase())}
-                                                className="w-full rounded-xl border border-slate-300/90 bg-white py-2 pl-2.5 pr-6 text-xs font-black text-slate-900 outline-none focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 transition-all cursor-pointer font-mono uppercase shadow-2xs appearance-none"
+                                                className="w-full rounded-xl border border-slate-300/90 bg-white py-1 sm:py-1.5 pl-2 sm:pl-2.5 pr-5 sm:pr-6 text-[11px] sm:text-xs font-black text-slate-900 outline-none focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 transition-all cursor-pointer font-mono uppercase shadow-2xs appearance-none"
                                                 required
                                             >
                                                 {ESTADOS_BRASIL.map(uf => (
@@ -1708,34 +1839,34 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                                     </option>
                                                 ))}
                                             </select>
-                                            <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                            <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-1.5 sm:right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* Badge do Médico Selecionado */}
+                                {/* Badge do Profissional Selecionado */}
                                 {medicoNome && (
-                                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-50 border border-emerald-200/80 text-emerald-800 text-[10px] font-bold animate-in fade-in shadow-2xs">
-                                        <UserCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                                        <span className="truncate">Médico Vinculado: <strong>{medicoNome}</strong> (CRM {medicoCrm}/{medicoUf})</span>
+                                    <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-xl bg-emerald-50 border border-emerald-200/80 text-emerald-800 text-[8.5px] sm:text-[9px] font-bold animate-in fade-in shadow-2xs">
+                                        <UserCheck className="w-3 h-3 text-emerald-600 shrink-0" />
+                                        <span className="truncate">Profissional Vinculado ({selectedProfissional.label}): <strong>{medicoNome}</strong> ({selectedProfissional.conselho} {medicoCrm}/{medicoUf})</span>
                                     </div>
                                 )}
                             </div>
 
                             {/* Card 2: Observações / Receita */}
-                            <div className="bg-slate-50/70 border border-slate-200/80 rounded-2xl p-3.5 space-y-2">
+                            <div className="bg-slate-50/70 border border-slate-200/80 rounded-xl sm:rounded-2xl p-1.5 sm:p-2 space-y-1 shrink-0">
                                 <div className="flex items-center justify-between">
-                                    <label className="text-[10px] font-black uppercase tracking-wider text-slate-700 flex items-center gap-1">
-                                        <FileText className="w-3.5 h-3.5 text-pink-600" />
+                                    <label className="text-[8.5px] sm:text-[9.5px] font-black uppercase tracking-wider text-slate-700 flex items-center gap-1">
+                                        <FileText className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-pink-600" />
                                         <span>Observações / Receita</span>
                                     </label>
-                                    <span className="text-[9px] font-bold text-slate-400 uppercase">
+                                    <span className="text-[8px] sm:text-[8.5px] font-bold text-slate-400 uppercase hidden sm:inline">
                                         Instruções e posologia
                                     </span>
                                 </div>
 
                                 {/* Atalhos Rápidos */}
-                                <div className="flex flex-wrap gap-1.5">
+                                <div className="flex flex-wrap gap-1">
                                     {[
                                         'Uso Contínuo',
                                         'Receita Retida',
@@ -1752,7 +1883,7 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                                         setObservacoes(prev => prev ? `${prev} • ${tag}` : tag);
                                                     }
                                                 }}
-                                                className={`px-2.5 py-1 rounded-lg text-[9px] font-extrabold uppercase tracking-wider transition-all border active:scale-95 cursor-pointer flex items-center gap-1 ${
+                                                className={`px-1.5 sm:px-2 py-0.5 rounded-lg text-[8px] sm:text-[8.5px] font-extrabold uppercase tracking-wider transition-all border active:scale-95 cursor-pointer flex items-center gap-0.5 ${
                                                     isIncluded 
                                                         ? 'bg-pink-100 border-pink-300 text-pink-800 shadow-2xs' 
                                                         : 'bg-white hover:bg-pink-50 hover:text-pink-700 text-slate-600 border-slate-200/80'
@@ -1766,7 +1897,7 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                 </div>
 
                                 <textarea
-                                    className="w-full min-h-[70px] rounded-xl border border-slate-300/90 bg-white p-2.5 text-xs text-slate-900 focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-medium placeholder:text-slate-400 resize-none custom-scrollbar shadow-2xs"
+                                    className="w-full h-11 sm:h-13 lg:h-14 min-h-[38px] max-h-[58px] rounded-xl border border-slate-300/90 bg-white p-2 text-xs text-slate-900 focus:border-pink-500 focus:ring-2 focus:ring-pink-500/10 outline-none transition-all font-medium placeholder:text-slate-400 resize-none custom-scrollbar shadow-2xs"
                                     placeholder="Digite anotações da receita, dosagens prescritas, recomendações repassadas ao paciente..."
                                     value={observacoes}
                                     onChange={(e) => setObservacoes(e.target.value)}
@@ -1775,34 +1906,35 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                         </div>
 
                         {/* Barra de Navegação Inferior */}
-                        <div className="pt-2 border-t border-slate-100 flex items-center justify-between shrink-0">
+                        <div className="pt-1.5 sm:pt-2 border-t border-slate-100 flex items-center justify-between shrink-0 gap-2">
                             <button
                                 type="button"
                                 onClick={() => navigateToTab('medicamentos')}
-                                className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all flex items-center gap-1 cursor-pointer"
+                                className="px-2.5 sm:px-3 py-1.5 sm:py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-[11px] sm:text-xs uppercase tracking-wider rounded-xl transition-all flex items-center gap-1 cursor-pointer shrink-0"
                             >
                                 <ArrowLeft className="w-3.5 h-3.5" />
-                                <span>Voltar: Medicamentos</span>
+                                <span className="hidden sm:inline">Voltar: Medicamentos</span>
+                                <span className="sm:hidden">Voltar</span>
                             </button>
 
                             <button
                                 type="button"
                                 onClick={() => {
                                     if (!medicoCrm && !medicoSearchQuery) {
-                                        showAlert('Informe o CRM do médico prescritor para continuar.', 'error');
+                                        showAlert(`Informe o ${selectedProfissional.conselho} ${selectedProfissional.artigo} ${selectedProfissional.label.toLowerCase()} prescritor para continuar.`, 'error');
                                         return;
                                     }
                                     navigateToTab('revisar');
                                 }}
                                 disabled={!medicoCrm && !medicoSearchQuery}
-                                className={`px-5 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer shadow-md ${
+                                className={`px-4 sm:px-5 py-1.5 sm:py-2 rounded-xl font-black text-[11px] sm:text-xs uppercase tracking-wider transition-all flex items-center gap-1.5 sm:gap-2 cursor-pointer shadow-md ${
                                     !medicoCrm && !medicoSearchQuery
                                         ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed shadow-none'
                                         : 'bg-gradient-to-r from-pink-600 via-rose-600 to-pink-600 hover:from-pink-500 hover:via-rose-500 hover:to-pink-500 text-white shadow-pink-600/25 active:scale-95 border border-pink-700/20'
                                 }`}
                             >
                                 <span>Avançar para Revisão</span>
-                                <ArrowRight className="w-4 h-4" />
+                                <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                             </button>
                         </div>
                     </div>
@@ -1847,14 +1979,19 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                                     </p>
                                 </div>
 
-                                {/* Médico */}
+                                {/* Profissional Prescritor */}
                                 <div className="bg-slate-50/80 border border-slate-200/80 rounded-2xl p-3.5 space-y-1">
-                                    <span className="text-[9px] font-black uppercase text-pink-600 tracking-wider">Médico Prescritor</span>
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-[9px] font-black uppercase text-pink-600 tracking-wider">Profissional Prescritor</span>
+                                        <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-pink-50 text-pink-700 border border-pink-100 font-mono">
+                                            {selectedProfissional.label} ({selectedProfissional.conselho})
+                                        </span>
+                                    </div>
                                     <h4 className="font-black text-sm text-slate-900 uppercase truncate">
-                                        {medicoNome || `CRM ${medicoCrm || medicoSearchQuery}/${medicoUf}`}
+                                        {medicoNome || `${selectedProfissional.label.toUpperCase()} (${selectedProfissional.conselho} ${medicoCrm || medicoSearchQuery}/${medicoUf})`}
                                     </h4>
                                     <p className="text-xs font-mono font-bold text-slate-600">
-                                        CRM: {medicoCrm || medicoSearchQuery} / {medicoUf}
+                                        {selectedProfissional.conselho}: {medicoCrm || medicoSearchQuery} / {medicoUf}
                                     </p>
                                     <p className="text-[10px] font-semibold text-slate-500">
                                         Data do Atendimento: {formatDateTimeBr(withdrawalDate)}
@@ -2338,6 +2475,9 @@ export const RetirarScreen: React.FC<RetirarScreenProps> = ({
                             return p?.nickname;
                         })()
                     }
+                    medicoNome={printingMov.medico_nome}
+                    medicoCrm={printingMov.medico_crm}
+                    medicoUf={printingMov.medico_uf}
                     itens={
                         createdMovs.length > 0
                             ? createdMovs.map(m => ({

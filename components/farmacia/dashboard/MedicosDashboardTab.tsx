@@ -5,11 +5,11 @@ import {
     Stethoscope, Search, Filter, Calendar, Users, Package, FileText, Activity,
     TrendingUp, ArrowUpDown, ChevronRight, X, Download, ShieldCheck, MapPin,
     BarChart3, PieChart as PieIcon, Clock, CheckCircle2, AlertCircle, Pill, ChevronDown,
-    RefreshCw, Edit3, Save, Check, UserCheck, Plus, Sparkles, Info, Layers
+    RefreshCw, Edit3, Save, Check, UserCheck, Plus, Sparkles, Info, Layers, Brain
 } from 'lucide-react';
 import {
     ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid,
-    PieChart, Pie, Cell, AreaChart, Area
+    PieChart, Pie, Cell
 } from 'recharts';
 import { format, isWithinInterval, parseISO, subDays, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -20,9 +20,105 @@ interface MedicosDashboardTabProps {
     onNavigate?: (view: string) => void;
 }
 
+export type TipoProfissionalPrescritor = 'medico' | 'enfermeiro' | 'dentista' | 'farmaceutico' | 'psicologo' | 'fisioterapeuta';
+
+export interface ProfissionalConfig {
+    id: TipoProfissionalPrescritor;
+    label: string;
+    conselho: string;
+    artigo: string;
+    icon: any;
+    color: string;
+    badgeBg: string;
+    badgeText: string;
+    badgeBorder: string;
+    ringColor: string;
+}
+
+export const PROFISSIONAIS_CONFIG: Record<TipoProfissionalPrescritor, ProfissionalConfig> = {
+    medico: {
+        id: 'medico',
+        label: 'Médico',
+        conselho: 'CRM',
+        artigo: 'do',
+        icon: Stethoscope,
+        color: 'pink',
+        badgeBg: 'bg-pink-50',
+        badgeText: 'text-pink-700',
+        badgeBorder: 'border-pink-200/80',
+        ringColor: 'ring-pink-500/20'
+    },
+    enfermeiro: {
+        id: 'enfermeiro',
+        label: 'Enfermeiro',
+        conselho: 'COREN',
+        artigo: 'do',
+        icon: UserCheck,
+        color: 'blue',
+        badgeBg: 'bg-blue-50',
+        badgeText: 'text-blue-700',
+        badgeBorder: 'border-blue-200/80',
+        ringColor: 'ring-blue-500/20'
+    },
+    dentista: {
+        id: 'dentista',
+        label: 'Dentista',
+        conselho: 'CRO',
+        artigo: 'do',
+        icon: Activity,
+        color: 'indigo',
+        badgeBg: 'bg-indigo-50',
+        badgeText: 'text-indigo-700',
+        badgeBorder: 'border-indigo-200/80',
+        ringColor: 'ring-indigo-500/20'
+    },
+    farmaceutico: {
+        id: 'farmaceutico',
+        label: 'Farmacêutico',
+        conselho: 'CRF',
+        artigo: 'do',
+        icon: Pill,
+        color: 'emerald',
+        badgeBg: 'bg-emerald-50',
+        badgeText: 'text-emerald-700',
+        badgeBorder: 'border-emerald-200/80',
+        ringColor: 'ring-emerald-500/20'
+    },
+    psicologo: {
+        id: 'psicologo',
+        label: 'Psicólogo',
+        conselho: 'CRP',
+        artigo: 'do',
+        icon: Brain,
+        color: 'purple',
+        badgeBg: 'bg-purple-50',
+        badgeText: 'text-purple-700',
+        badgeBorder: 'border-purple-200/80',
+        ringColor: 'ring-purple-500/20'
+    },
+    fisioterapeuta: {
+        id: 'fisioterapeuta',
+        label: 'Fisioterapeuta',
+        conselho: 'CREFITO',
+        artigo: 'do',
+        icon: Sparkles,
+        color: 'amber',
+        badgeBg: 'bg-amber-50',
+        badgeText: 'text-amber-800',
+        badgeBorder: 'border-amber-200/80',
+        ringColor: 'ring-amber-500/20'
+    }
+};
+
+export const LISTA_PROFISSIONAIS_PRESCRITORES = Object.values(PROFISSIONAIS_CONFIG);
+
 export interface NormalizedMedico {
-    key: string; // "12345_MG"
-    crm: string; // "12345"
+    key: string; // "CRM_12345_MG" ou "12345_MG"
+    tipoProfissional: TipoProfissionalPrescritor;
+    conselho: string; // "CRM", "COREN", "CRO", "CRF", "CRP", "CREFITO"
+    labelProfissional: string; // "Médico", "Enfermeiro", etc.
+    crm: string; // "12345" (número de registro)
+    registro: string; // "12345"
     uf: string; // "MG"
     nomeCadastrado?: string; // "Dr. João da Silva"
     displayCrmUf: string; // "CRM 12345 / MG"
@@ -52,53 +148,107 @@ export interface NormalizedMedico {
     }>;
 }
 
-export function normalizeCrmAndUf(rawCrm?: string, rawUf?: string, observacoes?: string): { crm: string; uf: string; displayCrmUf: string } | null {
-    let crm = (rawCrm || '').trim();
+export function detectTipoProfissional(
+    rawCrm?: string,
+    rawUf?: string,
+    observacoes?: string,
+    explicitTipo?: string,
+    explicitConselho?: string
+): { 
+    tipo: TipoProfissionalPrescritor; 
+    conselho: string; 
+    registro: string; 
+    uf: string; 
+    displayRegistroUf: string;
+    key: string;
+} | null {
+    let str = (rawCrm || '').trim();
     let uf = (rawUf || '').trim().toUpperCase();
+    let tipo: TipoProfissionalPrescritor = 'medico';
+    let conselho = 'CRM';
 
-    if (!crm && !uf && !observacoes) return null;
+    if (!str && !uf && !observacoes && !explicitTipo && !explicitConselho) return null;
 
-    // Se o CRM contiver formato com UF embutida: "CRM-MG 12345", "12345/MG", "CRM 12345 MG", "12345-MG", "MG 12345"
-    const embeddedUfMatch = crm.match(/(?:CRM\s*[-/.]?\s*)?([A-Za-z]{2})\s*[-/.]?\s*(\d+)/i) ||
-                            crm.match(/(\d+)\s*[-/.]?\s*([A-Za-z]{2})/i);
+    if (explicitConselho) {
+        const c = explicitConselho.toUpperCase();
+        if (c === 'COREN') { tipo = 'enfermeiro'; conselho = 'COREN'; }
+        else if (c === 'CRO') { tipo = 'dentista'; conselho = 'CRO'; }
+        else if (c === 'CRF') { tipo = 'farmaceutico'; conselho = 'CRF'; }
+        else if (c === 'CRP') { tipo = 'psicologo'; conselho = 'CRP'; }
+        else if (c === 'CREFITO') { tipo = 'fisioterapeuta'; conselho = 'CREFITO'; }
+        else { tipo = 'medico'; conselho = 'CRM'; }
+    } else if (explicitTipo) {
+        const t = explicitTipo.toLowerCase();
+        if (t === 'enfermeiro' || t === 'coren') { tipo = 'enfermeiro'; conselho = 'COREN'; }
+        else if (t === 'dentista' || t === 'cro') { tipo = 'dentista'; conselho = 'CRO'; }
+        else if (t === 'farmaceutico' || t === 'crf') { tipo = 'farmaceutico'; conselho = 'CRF'; }
+        else if (t === 'psicologo' || t === 'crp') { tipo = 'psicologo'; conselho = 'CRP'; }
+        else if (t === 'fisioterapeuta' || t === 'crefito') { tipo = 'fisioterapeuta'; conselho = 'CREFITO'; }
+        else { tipo = 'medico'; conselho = 'CRM'; }
+    }
+
+    const fullText = `${str} ${observacoes || ''}`.toUpperCase();
+    if (!explicitConselho && !explicitTipo) {
+        if (fullText.includes('COREN')) { tipo = 'enfermeiro'; conselho = 'COREN'; }
+        else if (fullText.includes('CREFITO')) { tipo = 'fisioterapeuta'; conselho = 'CREFITO'; }
+        else if (fullText.includes('CRO')) { tipo = 'dentista'; conselho = 'CRO'; }
+        else if (fullText.includes('CRF')) { tipo = 'farmaceutico'; conselho = 'CRF'; }
+        else if (fullText.includes('CRP')) { tipo = 'psicologo'; conselho = 'CRP'; }
+    }
+
+    // Extrair UF embutida: "CRM-MG 12345", "12345/MG", "MG 12345"
+    const embeddedUfMatch = str.match(/(?:CRM|COREN|CRO|CRF|CRP|CREFITO)?\s*[-/.]?\s*([A-Za-z]{2})\s*[-/.]?\s*(\d+)/i) ||
+                            str.match(/(\d+)\s*[-/.]?\s*([A-Za-z]{2})/i);
 
     if (embeddedUfMatch) {
         if (isNaN(Number(embeddedUfMatch[1]))) {
             uf = embeddedUfMatch[1].toUpperCase();
-            crm = embeddedUfMatch[2];
+            str = embeddedUfMatch[2];
         } else {
-            crm = embeddedUfMatch[1];
+            str = embeddedUfMatch[1];
             uf = embeddedUfMatch[2].toUpperCase();
         }
     }
 
-    // Limpar prefixos "CRM", pontuações e manter apenas dígitos no CRM
-    crm = crm.replace(/CRM/gi, '').replace(/[^\d]/g, '');
+    // Limpar prefixos e manter apenas números do registro
+    let registro = str.replace(/(?:CRM|COREN|CRO|CRF|CRP|CREFITO)/gi, '').replace(/[^\d]/g, '');
 
-    // Se ainda não temos CRM, tenta procurar no campo observações
-    if (!crm && observacoes) {
-        const obsMatch = observacoes.match(/CRM\s*[:.-]?\s*(\d+)(?:\s*[-/]?\s*([A-Za-z]{2}))?/i);
+    // Se ainda não temos registro, tenta procurar no campo observações
+    if (!registro && observacoes) {
+        const obsMatch = observacoes.match(/(?:CRM|COREN|CRO|CRF|CRP|CREFITO)\s*[:.-]?\s*(\d+)(?:\s*[-/]?\s*([A-Za-z]{2}))?/i);
         if (obsMatch) {
-            crm = obsMatch[1];
+            registro = obsMatch[1];
             if (obsMatch[2]) uf = obsMatch[2].toUpperCase();
         }
     }
 
-    if (!crm) return null;
+    if (!registro) return null;
 
-    // Validação e fallback da UF (padrão 'MG' se não especificada ou inválida)
     if (!uf || uf.length !== 2 || !/^[A-Z]{2}$/.test(uf)) {
         uf = 'MG';
     }
 
     return {
-        crm,
+        tipo,
+        conselho,
+        registro,
         uf,
-        displayCrmUf: `CRM ${crm} / ${uf}`
+        displayRegistroUf: `${conselho} ${registro} / ${uf}`,
+        key: `${conselho}_${registro}_${uf}`
     };
 }
 
-const COLORS = ['#ec4899', '#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#8b5cf6', '#14b8a6', '#f43f5e'];
+export function normalizeCrmAndUf(rawCrm?: string, rawUf?: string, observacoes?: string): { crm: string; uf: string; displayCrmUf: string } | null {
+    const res = detectTipoProfissional(rawCrm, rawUf, observacoes);
+    if (!res) return null;
+    return {
+        crm: res.registro,
+        uf: res.uf,
+        displayCrmUf: res.displayRegistroUf
+    };
+}
+
+const COLORS = ['#ec4899', '#3b82f6', '#6366f1', '#10b981', '#8b5cf6', '#f59e0b', '#0ea5e9', '#f43f5e'];
 
 const UFS_LIST = [
     'AC', 'AL', 'AM', 'AP', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA',
@@ -111,7 +261,7 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
     movimentacoes,
     onNavigate
 }) => {
-    // --- ESTADO DE MÉDICOS CADASTRADOS (CRM + UF -> NOME) ---
+    // --- ESTADO DE MÉDICOS E PROFISSIONAIS CADASTRADOS ---
     const [medicosCadastrados, setMedicosCadastrados] = useState<Record<string, FarmaciaMedico>>({});
 
     useEffect(() => {
@@ -120,7 +270,7 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
                 const map = await db.getMedicosCadastrados();
                 setMedicosCadastrados(map);
             } catch (e) {
-                console.error('[MedicosDashboardTab] Erro ao carregar médicos cadastrados:', e);
+                console.error('[MedicosDashboardTab] Erro ao carregar prescritores cadastrados:', e);
             }
         };
 
@@ -133,6 +283,7 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
 
     // --- ESTADOS DE FILTROS ---
     const [searchTerm, setSearchTerm] = useState('');
+    const [selectedTipoProfissional, setSelectedTipoProfissional] = useState<'TODOS' | TipoProfissionalPrescritor>('TODOS');
     const [selectedUf, setSelectedUf] = useState<string>('TODAS');
     const [selectedMed, setSelectedMed] = useState<string>('TODOS');
     const [selectedCategoria, setSelectedCategoria] = useState<'TODAS' | 'CBAF' | 'CESAF' | 'CEAF'>('TODAS');
@@ -141,27 +292,30 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
     const [customEndDate, setCustomEndDate] = useState('');
 
     // --- ESTADO DA TABELA E MODAL ---
-    // Padrão de ordenação: 'itens' (Total de Itens Entregues)
-    const [sortField, setSortField] = useState<'itens' | 'receitas' | 'fisico' | 'meds' | 'recente' | 'crm' | 'nome'>('itens');
+    const [sortField, setSortField] = useState<'itens' | 'receitas' | 'fisico' | 'meds' | 'recente' | 'crm' | 'nome' | 'tipo'>('itens');
     const [sortAsc, setSortAsc] = useState(false);
     const [selectedMedico, setSelectedMedico] = useState<NormalizedMedico | null>(null);
     const [medDetailsSearch, setMedDetailsSearch] = useState('');
 
     // --- FORMULÁRIO DE CADASTRO/EDIÇÃO MANUAL NO MODAL ---
+    const [editTipo, setEditTipo] = useState<TipoProfissionalPrescritor>('medico');
     const [editNome, setEditNome] = useState('');
     const [editCrm, setEditCrm] = useState('');
     const [editUf, setEditUf] = useState('MG');
+    const [editEspecialidade, setEditEspecialidade] = useState('');
     const [savingMedico, setSavingMedico] = useState(false);
     const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
 
-    // Sincroniza formulário ao selecionar um médico
+    // Sincroniza formulário ao selecionar um prescritor
     useEffect(() => {
         if (selectedMedico) {
-            const registered = medicosCadastrados[selectedMedico.key];
+            const registered = medicosCadastrados[selectedMedico.key] || medicosCadastrados[`${selectedMedico.crm}_${selectedMedico.uf}`];
             const nomeInicial = registered?.nome || selectedMedico.nomeCadastrado || Array.from(selectedMedico.rawNomes)[0] || '';
+            setEditTipo(selectedMedico.tipoProfissional || 'medico');
             setEditNome(nomeInicial);
             setEditCrm(selectedMedico.crm);
             setEditUf(selectedMedico.uf);
+            setEditEspecialidade(registered?.especialidade || '');
             setSaveSuccessMsg(null);
         }
     }, [selectedMedico, medicosCadastrados]);
@@ -196,11 +350,19 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
         return null;
     }, [periodPreset, customStartDate, customEndDate]);
 
-    // --- PROCESSAMENTO E NORMALIZAÇÃO DE MÉDICOS ---
-    const { medicosList, allAvailableUfs, allAvailableMeds } = useMemo(() => {
+    // --- PROCESSAMENTO E NORMALIZAÇÃO DE PROFISSIONAIS PRESCRITORES ---
+    const { medicosList, allAvailableUfs, allAvailableMeds, countByTipo } = useMemo(() => {
         const medicosMap: Record<string, NormalizedMedico> = {};
         const ufsSet = new Set<string>();
         const medsSet = new Set<string>();
+        const tipoCounters: Record<TipoProfissionalPrescritor, number> = {
+            medico: 0,
+            enfermeiro: 0,
+            dentista: 0,
+            farmaceutico: 0,
+            psicologo: 0,
+            fisioterapeuta: 0
+        };
 
         // Filtra movimentações válidas de saída (dispensação)
         const saidas = movimentacoes.filter(m => {
@@ -209,7 +371,9 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
         });
 
         saidas.forEach(mov => {
-            const norm = normalizeCrmAndUf(mov.medico_crm, mov.medico_uf, mov.observacoes);
+            const explicitTipo = mov.tipo_profissional;
+            const explicitConselho = mov.conselho_profissional;
+            const norm = detectTipoProfissional(mov.medico_crm, mov.medico_uf, mov.observacoes, explicitTipo, explicitConselho);
             if (!norm) return;
 
             ufsSet.add(norm.uf);
@@ -237,23 +401,29 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
                 return;
             }
 
-            const key = `${norm.crm}_${norm.uf}`;
-            const cadastrado = medicosCadastrados[key];
+            const key = `${norm.conselho}_${norm.registro}_${norm.uf}`;
+            const fallbackKey = `${norm.registro}_${norm.uf}`;
+            const cadastrado = medicosCadastrados[key] || medicosCadastrados[fallbackKey];
             const nomeCadastrado = cadastrado?.nome || undefined;
+            const configProf = PROFISSIONAIS_CONFIG[norm.tipo] || PROFISSIONAIS_CONFIG.medico;
             const fullDisplayName = nomeCadastrado 
-                ? `${nomeCadastrado} — CRM ${norm.crm}/${norm.uf}`
-                : norm.displayCrmUf;
+                ? `${nomeCadastrado} — ${norm.conselho} ${norm.registro}/${norm.uf}`
+                : norm.displayRegistroUf;
 
             // Identificador de receita/retirada distinta
-            const receitaKey = (mov as any).receita_numero || (mov as any).grupo_id || `${norm.crm}_${norm.uf}_${(mov.paciente_cpf || mov.paciente_nome || 'PACIENTE').trim().toLowerCase()}_${(mov.data || '').substring(0, 16)}`;
+            const receitaKey = (mov as any).receita_numero || (mov as any).grupo_id || `${norm.conselho}_${norm.registro}_${norm.uf}_${(mov.paciente_cpf || mov.paciente_nome || 'PACIENTE').trim().toLowerCase()}_${(mov.data || '').substring(0, 16)}`;
 
             if (!medicosMap[key]) {
                 medicosMap[key] = {
                     key,
-                    crm: norm.crm,
+                    tipoProfissional: norm.tipo,
+                    conselho: norm.conselho,
+                    labelProfissional: configProf.label,
+                    crm: norm.registro,
+                    registro: norm.registro,
                     uf: norm.uf,
                     nomeCadastrado,
-                    displayCrmUf: norm.displayCrmUf,
+                    displayCrmUf: norm.displayRegistroUf,
                     fullDisplayName,
                     rawCrms: new Set(),
                     rawUfs: new Set(),
@@ -275,20 +445,19 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
             const target = medicosMap[key];
             if (nomeCadastrado) {
                 target.nomeCadastrado = nomeCadastrado;
-                target.fullDisplayName = `${nomeCadastrado} — CRM ${norm.crm}/${norm.uf}`;
+                target.fullDisplayName = `${nomeCadastrado} — ${norm.conselho} ${norm.registro}/${norm.uf}`;
             }
 
             if (mov.medico_crm) target.rawCrms.add(mov.medico_crm);
             if (mov.medico_uf) target.rawUfs.add(mov.medico_uf);
             if (mov.medico_nome) target.rawNomes.add(mov.medico_nome);
 
-            // Contabilização de Itens Entregues (1 medicamento registrado na receita = 1 item)
+            // Contabilização de Itens Entregues
             target.totalItensEntregues += 1;
             target.totalQuantidadeFisica += (mov.quantidade || 0);
             target.receitasSet.add(receitaKey);
             target.totalReceitas = target.receitasSet.size;
             
-            // Compatibilidade retroativa
             target.totalPrescricoes = target.totalReceitas;
             target.totalUnidades = target.totalQuantidadeFisica;
 
@@ -314,7 +483,6 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
             target.medsMap[medName].receitas.add(receitaKey);
             target.medsMap[medName].datas.push(mov.data);
 
-            // Compatibilidade no medsMap
             target.medsMap[medName].prescricoes = target.medsMap[medName].totalItens;
             target.medsMap[medName].unidades = target.medsMap[medName].quantidadeFisica;
 
@@ -328,21 +496,34 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
 
         const list = Object.values(medicosMap);
 
+        list.forEach(m => {
+            if (tipoCounters[m.tipoProfissional] !== undefined) {
+                tipoCounters[m.tipoProfissional]++;
+            }
+        });
+
         return {
             medicosList: list,
             allAvailableUfs: Array.from(ufsSet).sort(),
-            allAvailableMeds: Array.from(medsSet).sort()
+            allAvailableMeds: Array.from(medsSet).sort(),
+            countByTipo: tipoCounters
         };
     }, [movimentacoes, dateInterval, selectedCategoria, selectedMed, selectedUf, medicosCadastrados]);
 
-    // --- FILTRAGEM POR TERMO DE BUSCA (NOME / CRM / UF / COMBINAÇÃO) ---
+    // --- FILTRAGEM POR CATEGORIA PROFISSIONAL E TERMO DE BUSCA ---
     const filteredMedicos = useMemo(() => {
         const q = searchTerm.toLowerCase().trim();
         let result = [...medicosList];
 
+        if (selectedTipoProfissional !== 'TODOS') {
+            result = result.filter(m => m.tipoProfissional === selectedTipoProfissional);
+        }
+
         if (q) {
             result = result.filter(m => {
-                const matchCrm = m.crm.includes(q);
+                const matchCrm = m.crm.includes(q) || m.registro.includes(q);
+                const matchConselho = m.conselho.toLowerCase().includes(q);
+                const matchTipo = m.labelProfissional.toLowerCase().includes(q);
                 const matchUf = m.uf.toLowerCase().includes(q);
                 const matchDisplay = m.displayCrmUf.toLowerCase().includes(q);
                 const matchFull = m.fullDisplayName.toLowerCase().includes(q);
@@ -351,7 +532,7 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
                 const matchRawNomes = Array.from(m.rawNomes).some(n => n.toLowerCase().includes(q));
                 const matchMeds = Array.from(m.medicamentosDistintos).some(md => md.toLowerCase().includes(q));
 
-                return matchCrm || matchUf || matchDisplay || matchFull || matchNomeCad || matchRawCrm || matchRawNomes || matchMeds;
+                return matchCrm || matchConselho || matchTipo || matchUf || matchDisplay || matchFull || matchNomeCad || matchRawCrm || matchRawNomes || matchMeds;
             });
         }
 
@@ -364,12 +545,13 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
             else if (sortField === 'meds') comp = b.medicamentosDistintos.size - a.medicamentosDistintos.size;
             else if (sortField === 'crm') comp = Number(a.crm) - Number(b.crm);
             else if (sortField === 'nome') comp = (a.nomeCadastrado || a.crm).localeCompare(b.nomeCadastrado || b.crm);
+            else if (sortField === 'tipo') comp = a.labelProfissional.localeCompare(b.labelProfissional);
             else if (sortField === 'recente') comp = new Date(b.ultimaPrescricao).getTime() - new Date(a.ultimaPrescricao).getTime();
             return sortAsc ? -comp : comp;
         });
 
         return result;
-    }, [medicosList, searchTerm, sortField, sortAsc]);
+    }, [medicosList, selectedTipoProfissional, searchTerm, sortField, sortAsc]);
 
     // --- INDICADORES CONSOLIDADOS (KPIS) ---
     const kpis = useMemo(() => {
@@ -382,10 +564,7 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
         });
         const totalReceitas = allUniqueReceitas.size;
 
-        // Total de itens entregues (medicamentos dispensados nas receitas)
         const totalItensEntregues = filteredMedicos.reduce((acc, curr) => acc + curr.totalItensEntregues, 0);
-
-        // Quantidade física dispensada (comprimidos, cápsulas, ml)
         const totalQuantidadeFisica = filteredMedicos.reduce((acc, curr) => acc + curr.totalQuantidadeFisica, 0);
 
         const allDistinctMeds = new Set<string>();
@@ -393,10 +572,35 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
             m.medicamentosDistintos.forEach(med => allDistinctMeds.add(med));
         });
 
-        // Média de itens por receita
         const mediaItensPorReceita = totalReceitas > 0 ? (totalItensEntregues / totalReceitas) : 0;
 
-        // Distribuição por UF (por Itens Entregues e Receitas)
+        // Distribuição por Categoria de Profissional Prescritor
+        const tipoDistMap: Record<string, { label: string; count: number; itens: number; receitas: Set<string> }> = {};
+        LISTA_PROFISSIONAIS_PRESCRITORES.forEach(p => {
+            tipoDistMap[p.id] = { label: `${p.label} (${p.conselho})`, count: 0, itens: 0, receitas: new Set() };
+        });
+
+        filteredMedicos.forEach(m => {
+            if (tipoDistMap[m.tipoProfissional]) {
+                tipoDistMap[m.tipoProfissional].count++;
+                tipoDistMap[m.tipoProfissional].itens += m.totalItensEntregues;
+                m.receitasSet.forEach(r => tipoDistMap[m.tipoProfissional].receitas.add(r));
+            }
+        });
+
+        const tipoChartData = Object.entries(tipoDistMap)
+            .map(([tipo, data]) => ({
+                name: data.label,
+                tipo,
+                value: data.itens,
+                profissionais: data.count,
+                receitas: data.receitas.size,
+                itens: data.itens
+            }))
+            .filter(d => d.value > 0)
+            .sort((a, b) => b.value - a.value);
+
+        // Distribuição por UF
         const ufDistMap: Record<string, { receitas: Set<string>; itens: number; fisico: number }> = {};
         filteredMedicos.forEach(m => {
             if (!ufDistMap[m.uf]) {
@@ -415,12 +619,14 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
             fisico: data.fisico
         })).sort((a, b) => b.value - a.value);
 
-        // Top 5 Médicos ordenados por Total de Itens Entregues
+        // Top 5 Prescritores
         const top5 = [...filteredMedicos]
             .sort((a, b) => b.totalItensEntregues - a.totalItensEntregues)
             .slice(0, 5)
             .map(m => ({
-                name: m.nomeCadastrado ? `${m.nomeCadastrado} (${m.crm}/${m.uf})` : m.displayCrmUf,
+                name: m.nomeCadastrado ? `${m.nomeCadastrado} (${m.conselho} ${m.crm}/${m.uf})` : `${m.conselho} ${m.crm}/${m.uf}`,
+                conselho: m.conselho,
+                tipo: m.labelProfissional,
                 itens: m.totalItensEntregues,
                 receitas: m.totalReceitas,
                 fisico: m.totalQuantidadeFisica
@@ -433,16 +639,16 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
             totalMedsDiferentes: allDistinctMeds.size,
             totalQuantidadeFisica,
             mediaItensPorReceita,
+            tipoChartData,
             ufChartData,
             top5,
-            // Retrocompatibilidade
             totalPrescricoes: totalReceitas,
             totalUnidades: totalQuantidadeFisica,
             mediaPorPrescricao: mediaItensPorReceita
         };
     }, [filteredMedicos]);
 
-    const handleSort = (field: 'itens' | 'receitas' | 'fisico' | 'meds' | 'recente' | 'crm' | 'nome') => {
+    const handleSort = (field: 'itens' | 'receitas' | 'fisico' | 'meds' | 'recente' | 'crm' | 'nome' | 'tipo') => {
         if (sortField === field) {
             setSortAsc(!sortAsc);
         } else {
@@ -453,6 +659,7 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
 
     const clearFilters = () => {
         setSearchTerm('');
+        setSelectedTipoProfissional('TODOS');
         setSelectedUf('TODAS');
         setSelectedMed('TODOS');
         setSelectedCategoria('TODAS');
@@ -461,17 +668,18 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
         setCustomEndDate('');
     };
 
-    const hasActiveFilters = searchTerm || selectedUf !== 'TODAS' || selectedMed !== 'TODOS' || selectedCategoria !== 'TODAS' || periodPreset !== 'all';
+    const hasActiveFilters = searchTerm || selectedTipoProfissional !== 'TODOS' || selectedUf !== 'TODAS' || selectedMed !== 'TODOS' || selectedCategoria !== 'TODAS' || periodPreset !== 'all';
 
-    // Salvar cadastro manual do médico no modal
+    // Salvar cadastro manual do profissional no modal
     const handleSaveMedico = async (e: React.FormEvent) => {
         e.preventDefault();
         const cleanCrm = editCrm.replace(/\D/g, '').trim();
         const cleanUf = (editUf || 'MG').trim().toUpperCase();
         const cleanNome = editNome.trim();
+        const selectedProf = PROFISSIONAIS_CONFIG[editTipo] || PROFISSIONAIS_CONFIG.medico;
 
         if (!cleanCrm) {
-            alert('Por favor, informe o número do CRM.');
+            alert(`Por favor, informe o número do ${selectedProf.conselho}.`);
             return;
         }
 
@@ -482,11 +690,16 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
             const saved = await db.saveMedicoCadastrado({
                 crm: cleanCrm,
                 uf: cleanUf,
-                nome: cleanNome
+                nome: cleanNome,
+                tipo_profissional: editTipo,
+                conselho: selectedProf.conselho,
+                especialidade: editEspecialidade.trim() || undefined
             });
 
+            const key = `${selectedProf.conselho}_${cleanCrm}_${cleanUf}`;
             setMedicosCadastrados(prev => ({
                 ...prev,
+                [key]: saved,
                 [`${cleanCrm}_${cleanUf}`]: saved
             }));
 
@@ -495,16 +708,21 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
                 setSelectedMedico(prev => prev ? {
                     ...prev,
                     crm: cleanCrm,
+                    registro: cleanCrm,
                     uf: cleanUf,
+                    conselho: selectedProf.conselho,
+                    tipoProfissional: editTipo,
+                    labelProfissional: selectedProf.label,
                     nomeCadastrado: cleanNome || undefined,
-                    fullDisplayName: cleanNome ? `${cleanNome} — CRM ${cleanCrm}/${cleanUf}` : `CRM ${cleanCrm} / ${cleanUf}`
+                    displayCrmUf: `${selectedProf.conselho} ${cleanCrm} / ${cleanUf}`,
+                    fullDisplayName: cleanNome ? `${cleanNome} — ${selectedProf.conselho} ${cleanCrm}/${cleanUf}` : `${selectedProf.conselho} ${cleanCrm} / ${cleanUf}`
                 } : null);
             }
 
-            setSaveSuccessMsg(`Dados do médico salvos com sucesso! (${cleanNome ? `${cleanNome} — CRM ${cleanCrm}/${cleanUf}` : `CRM ${cleanCrm}/${cleanUf}`})`);
+            setSaveSuccessMsg(`Dados do ${selectedProf.label.toLowerCase()} salvos com sucesso! (${cleanNome ? `${cleanNome} — ${selectedProf.conselho} ${cleanCrm}/${cleanUf}` : `${selectedProf.conselho} ${cleanCrm}/${cleanUf}`})`);
             setTimeout(() => setSaveSuccessMsg(null), 4000);
         } catch (err: any) {
-            alert(err.message || 'Erro ao salvar dados do médico.');
+            alert(err.message || 'Erro ao salvar dados do profissional prescritor.');
         } finally {
             setSavingMedico(false);
         }
@@ -515,23 +733,23 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
             {/* Header & Descrição da Aba */}
             <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex items-center gap-4">
-                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-pink-500 to-rose-600 text-white flex items-center justify-center shadow-lg shadow-pink-500/20 shrink-0">
+                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-pink-500 via-rose-600 to-indigo-600 text-white flex items-center justify-center shadow-lg shadow-pink-500/20 shrink-0">
                         <Stethoscope className="w-7 h-7" />
                     </div>
                     <div>
                         <div className="flex items-center gap-2">
                             <span className="px-2.5 py-0.5 rounded-full bg-pink-50 text-pink-700 text-[10px] font-black uppercase tracking-wider border border-pink-200">
-                                Gestão de Prescrições
+                                Gestão de Prescrições & Conselhos
                             </span>
                             <span className="text-[10px] font-bold text-slate-400">
                                 Rota: /FarmaciaPopular/Dashboard/VisaoGeral/Medicos
                             </span>
                         </div>
                         <h2 className="text-xl md:text-2xl font-black text-slate-900 uppercase tracking-tight mt-0.5">
-                            Painel de Médicos & Prescritores (CRM/UF)
+                            Painel de Profissionais Prescritores
                         </h2>
                         <p className="text-xs text-slate-500 font-medium">
-                            Identificação por CRM + UF com vinculação de nome completo e contagem analítica por medicamento prescrito.
+                            Análise integrada de Médicos (CRM), Enfermeiros (COREN), Dentistas (CRO), Farmacêuticos (CRF), Psicólogos (CRP) e Fisioterapeutas (CREFITO).
                         </p>
                     </div>
                 </div>
@@ -547,6 +765,94 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
                 )}
             </div>
 
+            {/* Seletor Rápido de Categorias de Profissionais Prescritores */}
+            <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-100 shadow-sm space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                    <label className="text-[11px] font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-pink-600" />
+                        <span>Filtrar por Conselho / Categoria de Profissional</span>
+                    </label>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase">
+                        {filteredMedicos.length} profissionais localizados
+                    </span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+                    {/* Botão Todos */}
+                    <button
+                        type="button"
+                        onClick={() => setSelectedTipoProfissional('TODOS')}
+                        className={`p-2 sm:p-2.5 rounded-2xl border text-left transition-all flex items-center justify-between gap-2 cursor-pointer ${
+                            selectedTipoProfissional === 'TODOS'
+                                ? 'bg-pink-600 text-white border-pink-700 shadow-md shadow-pink-600/20 ring-2 ring-pink-500/20'
+                                : 'bg-slate-50/70 hover:bg-white text-slate-700 border-slate-200/80 hover:border-pink-300'
+                        }`}
+                    >
+                        <div className="flex items-center gap-2 min-w-0">
+                            <div className={`w-7 h-7 rounded-xl flex items-center justify-center shrink-0 ${
+                                selectedTipoProfissional === 'TODOS' ? 'bg-white/20 text-white' : 'bg-pink-100 text-pink-700'
+                            }`}>
+                                <Users className="w-3.5 h-3.5" />
+                            </div>
+                            <div className="min-w-0">
+                                <span className="block text-[11px] font-black uppercase truncate leading-tight">
+                                    Todos
+                                </span>
+                                <span className={`text-[9px] font-bold truncate block ${selectedTipoProfissional === 'TODOS' ? 'text-pink-100' : 'text-slate-400'}`}>
+                                    Conselhos
+                                </span>
+                            </div>
+                        </div>
+                        <span className={`text-[10px] font-mono font-black px-2 py-0.5 rounded-lg shrink-0 ${
+                            selectedTipoProfissional === 'TODOS' ? 'bg-white text-pink-700' : 'bg-slate-200/70 text-slate-800'
+                        }`}>
+                            {medicosList.length}
+                        </span>
+                    </button>
+
+                    {/* Botões dos 6 Conselhos */}
+                    {LISTA_PROFISSIONAIS_PRESCRITORES.map(prof => {
+                        const Icon = prof.icon;
+                        const isSelected = selectedTipoProfissional === prof.id;
+                        const count = countByTipo[prof.id] || 0;
+
+                        return (
+                            <button
+                                key={prof.id}
+                                type="button"
+                                onClick={() => setSelectedTipoProfissional(prof.id)}
+                                className={`p-2 sm:p-2.5 rounded-2xl border text-left transition-all flex items-center justify-between gap-2 cursor-pointer ${
+                                    isSelected
+                                        ? 'bg-gradient-to-r from-pink-600 to-rose-600 text-white border-pink-700 shadow-md shadow-pink-600/20 ring-2 ring-pink-500/20'
+                                        : 'bg-slate-50/70 hover:bg-white text-slate-700 border-slate-200/80 hover:border-pink-300'
+                                }`}
+                            >
+                                <div className="flex items-center gap-2 min-w-0">
+                                    <div className={`w-7 h-7 rounded-xl flex items-center justify-center shrink-0 ${
+                                        isSelected ? 'bg-white/20 text-white' : 'bg-pink-50 text-pink-600 border border-pink-100'
+                                    }`}>
+                                        <Icon className="w-3.5 h-3.5" />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <span className="block text-[11px] font-black uppercase truncate leading-tight">
+                                            {prof.label}
+                                        </span>
+                                        <span className={`text-[9px] font-mono font-bold truncate block uppercase ${isSelected ? 'text-pink-100' : 'text-slate-400'}`}>
+                                            {prof.conselho}
+                                        </span>
+                                    </div>
+                                </div>
+                                <span className={`text-[10px] font-mono font-black px-2 py-0.5 rounded-lg shrink-0 ${
+                                    isSelected ? 'bg-white text-pink-700' : 'bg-slate-200/70 text-slate-800'
+                                }`}>
+                                    {count}
+                                </span>
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
+
             {/* Painel de Filtros Avançados */}
             <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm space-y-4">
                 <div className="flex items-center gap-2 text-xs font-black text-slate-400 uppercase tracking-widest pb-2 border-b border-slate-100">
@@ -555,16 +861,16 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-                    {/* Busca CRM / Nome */}
+                    {/* Busca Registro / Nome */}
                     <div className="relative">
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
-                            Buscar Médico ou CRM
+                            Buscar Profissional ou Registro
                         </label>
                         <div className="relative">
                             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                             <input
                                 type="text"
-                                placeholder="Ex: João, 12345 ou MG..."
+                                placeholder="Ex: Nome, CRM, COREN, CRO..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                                 className="w-full pl-9 pr-3 py-2 text-xs font-bold rounded-xl border border-slate-200 bg-slate-50/50 focus:bg-white focus:border-pink-500 focus:outline-none transition-all"
@@ -575,7 +881,7 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
                     {/* Filtro por UF */}
                     <div>
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
-                            Estado (UF do CRM)
+                            Estado (UF do Conselho)
                         </label>
                         <select
                             value={selectedUf}
@@ -606,7 +912,7 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
                         </select>
                     </div>
 
-                    {/* Filtro por Categoria */}
+                    {/* Filtro por Categoria SUS */}
                     <div>
                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">
                             Categoria SUS
@@ -669,22 +975,22 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
                 )}
             </div>
 
-            {/* Grid de 6 Indicadores Consolidados (KPIs com Métricas Separadas) */}
+            {/* Grid de 6 Indicadores Consolidados (KPIs) */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
-                {/* KPI 1: Médicos Identificados */}
+                {/* KPI 1: Prescritores Identificados */}
                 <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm relative overflow-hidden group">
                     <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
                         <Users className="w-12 h-12 text-pink-600" />
                     </div>
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">
-                        Médicos Identificados
+                        Prescritores Identificados
                     </span>
                     <div className="text-2xl sm:text-3xl font-black text-slate-900">
                         {kpis.totalMedicos}
-                        <span className="text-xs font-bold text-slate-400 ml-1">CRMs</span>
+                        <span className="text-xs font-bold text-slate-400 ml-1">ativos</span>
                     </div>
                     <p className="text-[10px] font-bold text-pink-600 mt-1 uppercase tracking-wider">
-                        Prescritores Ativos
+                        Conselhos de Saúde
                     </p>
                 </div>
 
@@ -701,11 +1007,11 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
                         <span className="text-xs font-bold text-slate-400 ml-1">receitas</span>
                     </div>
                     <p className="text-[10px] font-bold text-indigo-600 mt-1 uppercase tracking-wider">
-                        Prescrições Distintas
+                        Prescrições Atendidas
                     </p>
                 </div>
 
-                {/* KPI 3: Total de Itens Entregues (Métrica Chave Corrigida) */}
+                {/* KPI 3: Total de Itens Entregues */}
                 <div className="bg-white rounded-3xl p-5 border-2 border-emerald-100/80 shadow-sm relative overflow-hidden group bg-gradient-to-br from-white to-emerald-50/20">
                     <div className="absolute top-0 right-0 p-4 opacity-15 group-hover:opacity-25 transition-opacity">
                         <Package className="w-12 h-12 text-emerald-600" />
@@ -776,22 +1082,22 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
 
             {/* Gráficos Estratégicos */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Gráfico 1: Top 5 Médicos Prescritores (por Itens Entregues) */}
+                {/* Gráfico 1: Top 5 Profissionais Prescritores (por Itens Entregues) */}
                 <div className="lg:col-span-2 bg-white rounded-3xl p-6 border border-slate-100 shadow-sm flex flex-col">
                     <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
                         <div className="flex items-center gap-2">
                             <BarChart3 className="w-5 h-5 text-pink-600" />
                             <div>
                                 <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-tight">
-                                    Top Médicos por Itens Entregues (Medicamentos)
+                                    Top Prescritores por Itens Entregues
                                 </h3>
                                 <p className="text-[11px] text-slate-400 font-medium">
-                                    Contagem de medicamentos prescritos e entregues aos pacientes
+                                    Contagem de medicamentos prescritos e dispensados aos pacientes por profissional
                                 </p>
                             </div>
                         </div>
                         <span className="text-[10px] font-bold text-pink-600 bg-pink-50 px-2.5 py-1 rounded-full uppercase">
-                            Ranking de Prescritores
+                            Ranking Geral
                         </span>
                     </div>
 
@@ -801,21 +1107,17 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
                                 <BarChart data={kpis.top5} layout="vertical" margin={{ top: 5, right: 30, left: 40, bottom: 5 }}>
                                     <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
                                     <XAxis type="number" tick={{ fill: '#94a3b8', fontSize: 11 }} />
-                                    <YAxis type="category" dataKey="name" tick={{ fill: '#475569', fontSize: 10, fontWeight: 'bold' }} width={140} />
+                                    <YAxis type="category" dataKey="name" tick={{ fill: '#475569', fontSize: 10, fontWeight: 'bold' }} width={160} />
                                     <Tooltip
-                                        formatter={(val: any, name: string) => [
-                                            name === 'itens' ? `${val.toLocaleString('pt-BR')} itens de medicamentos` : `${val}`,
-                                            name === 'itens' ? 'Itens Entregues' : name
-                                        ]}
                                         content={({ active, payload, label }) => {
                                             if (active && payload && payload.length) {
                                                 const data = payload[0].payload;
                                                 return (
                                                     <div className="bg-white p-3 rounded-2xl shadow-xl border border-slate-200 text-xs">
-                                                        <p className="font-extrabold text-slate-900 mb-1">{label}</p>
+                                                        <p className="font-extrabold text-slate-900 mb-1">{label} ({data.tipo})</p>
                                                         <p className="text-emerald-600 font-bold">📦 {data.itens.toLocaleString('pt-BR')} itens entregues</p>
                                                         <p className="text-indigo-600 font-bold">📄 {data.receitas.toLocaleString('pt-BR')} receitas atendidas</p>
-                                                        <p className="text-slate-400 font-medium text-[11px]">💊 {data.fisico.toLocaleString('pt-BR')} unidades físicas (comprimidos/ml)</p>
+                                                        <p className="text-slate-400 font-medium text-[11px]">💊 {data.fisico.toLocaleString('pt-BR')} unidades físicas</p>
                                                     </div>
                                                 );
                                             }
@@ -829,37 +1131,37 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
                     ) : (
                         <div className="flex-1 flex flex-col items-center justify-center py-12 text-slate-400">
                             <Stethoscope className="w-10 h-10 mb-2 stroke-[1.5] text-slate-300" />
-                            <p className="text-xs font-bold uppercase tracking-wider">Nenhum CRM com dispensação no período</p>
+                            <p className="text-xs font-bold uppercase tracking-wider">Nenhum profissional com dispensação no período</p>
                         </div>
                     )}
                 </div>
 
-                {/* Gráfico 2: Distribuição por UF */}
+                {/* Gráfico 2: Distribuição por Categoria de Profissional Prescritor */}
                 <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm flex flex-col">
                     <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
                         <div className="flex items-center gap-2">
-                            <MapPin className="w-5 h-5 text-indigo-600" />
+                            <PieIcon className="w-5 h-5 text-indigo-600" />
                             <div>
                                 <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-tight">
-                                    Distribuição por UF do CRM
+                                    Distribuição por Conselho
                                 </h3>
                                 <p className="text-[11px] text-slate-400 font-medium">
-                                    Itens de medicamentos por estado
+                                    Volume de itens por categoria
                                 </p>
                             </div>
                         </div>
                         <span className="text-[10px] font-bold text-slate-400 uppercase">
-                            Origem Estadual
+                            Conselhos
                         </span>
                     </div>
 
-                    {kpis.ufChartData.length > 0 ? (
+                    {kpis.tipoChartData.length > 0 ? (
                         <div className="flex-1 flex flex-col justify-between">
                             <div className="h-44 w-full">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <PieChart>
                                         <Pie
-                                            data={kpis.ufChartData}
+                                            data={kpis.tipoChartData}
                                             dataKey="value"
                                             nameKey="name"
                                             cx="50%"
@@ -868,13 +1170,13 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
                                             outerRadius={65}
                                             paddingAngle={4}
                                         >
-                                            {kpis.ufChartData.map((_, index) => (
+                                            {kpis.tipoChartData.map((_, index) => (
                                                 <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                             ))}
                                         </Pie>
                                         <Tooltip
                                             formatter={(val: any, name: string, props: any) => [
-                                                `${val.toLocaleString('pt-BR')} itens entregues (${props.payload.receitas} receitas)`,
+                                                `${val.toLocaleString('pt-BR')} itens entregues (${props.payload.profissionais} profissionais, ${props.payload.receitas} receitas)`,
                                                 'Volume'
                                             ]}
                                             contentStyle={{ backgroundColor: '#ffffff', borderRadius: '1rem', border: '1px solid #e2e8f0' }}
@@ -884,12 +1186,12 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
                             </div>
 
                             <div className="grid grid-cols-2 gap-2 mt-2">
-                                {kpis.ufChartData.slice(0, 4).map((entry, idx) => (
+                                {kpis.tipoChartData.slice(0, 4).map((entry, idx) => (
                                     <div key={entry.name} className="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-100">
                                         <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
                                         <div className="flex-1 min-w-0">
                                             <span className="text-xs font-black text-slate-800 block truncate">{entry.name}</span>
-                                            <span className="text-[10px] font-bold text-slate-400 block">{entry.itens} itens ({entry.receitas} rec)</span>
+                                            <span className="text-[10px] font-bold text-slate-400 block">{entry.itens} itens ({entry.profissionais} prof.)</span>
                                         </div>
                                     </div>
                                 ))}
@@ -898,22 +1200,22 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
                     ) : (
                         <div className="flex-1 flex flex-col items-center justify-center py-12 text-slate-400">
                             <PieIcon className="w-10 h-10 mb-2 stroke-[1.5] text-slate-300" />
-                            <p className="text-xs font-bold uppercase tracking-wider">Sem dados geográficos</p>
+                            <p className="text-xs font-bold uppercase tracking-wider">Sem dados de categorias</p>
                         </div>
                     )}
                 </div>
             </div>
 
-            {/* Listagem Dinâmica de Médicos */}
+            {/* Listagem Dinâmica de Profissionais Prescritores */}
             <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
                 <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
                         <h3 className="text-base font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
                             <Users className="w-5 h-5 text-pink-600" />
-                            Médicos Prescritores ({filteredMedicos.length})
+                            Profissionais Prescritores ({filteredMedicos.length})
                         </h3>
                         <p className="text-xs text-slate-500 font-medium">
-                            Clique em um CRM para visualizar o raio-x completo de medicamentos, quantidades e cadastrar/editar o nome.
+                            Clique em um profissional para visualizar o raio-x de prescrições, receitas vinculadas e cadastrar/editar os dados.
                         </p>
                     </div>
 
@@ -933,22 +1235,22 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
                                 Receitas
                             </button>
                             <button
-                                onClick={() => handleSort('fisico')}
-                                className={`px-2.5 py-1 text-[10px] font-black rounded-lg transition-all ${sortField === 'fisico' ? 'bg-white text-purple-600 shadow-xs' : 'text-slate-500 hover:text-slate-900'}`}
+                                onClick={() => handleSort('tipo')}
+                                className={`px-2.5 py-1 text-[10px] font-black rounded-lg transition-all ${sortField === 'tipo' ? 'bg-white text-pink-600 shadow-xs' : 'text-slate-500 hover:text-slate-900'}`}
                             >
-                                Qtd Física (un)
+                                Conselho
                             </button>
                             <button
                                 onClick={() => handleSort('nome')}
-                                className={`px-2.5 py-1 text-[10px] font-black rounded-lg transition-all ${sortField === 'nome' ? 'bg-white text-pink-600 shadow-xs' : 'text-slate-500 hover:text-slate-900'}`}
+                                className={`px-2.5 py-1 text-[10px] font-black rounded-lg transition-all ${sortField === 'nome' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-500 hover:text-slate-900'}`}
                             >
-                                Nome / CRM
+                                Nome
                             </button>
                             <button
-                                onClick={() => handleSort('meds')}
-                                className={`px-2.5 py-1 text-[10px] font-black rounded-lg transition-all ${sortField === 'meds' ? 'bg-white text-cyan-600 shadow-xs' : 'text-slate-500 hover:text-slate-900'}`}
+                                onClick={() => handleSort('fisico')}
+                                className={`px-2.5 py-1 text-[10px] font-black rounded-lg transition-all ${sortField === 'fisico' ? 'bg-white text-purple-600 shadow-xs' : 'text-slate-500 hover:text-slate-900'}`}
                             >
-                                Mix Meds
+                                Qtd Física
                             </button>
                             <button
                                 onClick={() => handleSort('recente')}
@@ -965,7 +1267,7 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
                         <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr className="bg-slate-50/75 border-b border-slate-100 text-[10px] font-black text-slate-400 uppercase tracking-wider">
-                                    <th className="py-3.5 px-6">Médico / CRM & UF</th>
+                                    <th className="py-3.5 px-6">Profissional / Conselho & Registro</th>
                                     <th className="py-3.5 px-6 text-center">Total de Receitas</th>
                                     <th className="py-3.5 px-6 text-center">Itens Entregues</th>
                                     <th className="py-3.5 px-6 text-center">Medicamentos Diferentes</th>
@@ -977,18 +1279,20 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
                             <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-700">
                                 {filteredMedicos.map((medico) => {
                                     const formattedLastDate = medico.ultimaPrescricao ? format(parseISO(medico.ultimaPrescricao), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR }) : 'N/A';
-                                    
+                                    const profConfig = PROFISSIONAIS_CONFIG[medico.tipoProfissional] || PROFISSIONAIS_CONFIG.medico;
+                                    const Icon = profConfig.icon;
+
                                     return (
                                         <tr
                                             key={medico.key}
                                             onClick={() => setSelectedMedico(medico)}
                                             className="hover:bg-pink-50/30 transition-colors cursor-pointer group"
                                         >
-                                            {/* Nome / CRM / UF */}
+                                            {/* Nome / Conselho / Registro / UF */}
                                             <td className="py-4 px-6">
                                                 <div className="flex items-center gap-3">
-                                                    <div className="w-10 h-10 rounded-xl bg-pink-100 text-pink-700 font-black text-xs flex items-center justify-center shrink-0 group-hover:scale-105 group-hover:bg-pink-600 group-hover:text-white transition-all shadow-xs">
-                                                        <Stethoscope className="w-5 h-5" />
+                                                    <div className={`w-10 h-10 rounded-xl ${profConfig.badgeBg} ${profConfig.badgeText} border ${profConfig.badgeBorder} font-black text-xs flex items-center justify-center shrink-0 group-hover:scale-105 group-hover:bg-pink-600 group-hover:text-white transition-all shadow-xs`}>
+                                                        <Icon className="w-5 h-5" />
                                                     </div>
                                                     <div>
                                                         {medico.nomeCadastrado ? (
@@ -997,8 +1301,11 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
                                                                     {medico.nomeCadastrado}
                                                                 </span>
                                                                 <div className="flex items-center gap-1.5 mt-0.5">
-                                                                    <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-black uppercase font-mono">
-                                                                        CRM {medico.crm}/{medico.uf}
+                                                                    <span className={`px-2 py-0.5 rounded-md ${profConfig.badgeBg} ${profConfig.badgeText} border ${profConfig.badgeBorder} text-[10px] font-black uppercase font-mono`}>
+                                                                        {medico.conselho} {medico.crm}/{medico.uf}
+                                                                    </span>
+                                                                    <span className="px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[9px] font-bold uppercase">
+                                                                        {profConfig.label}
                                                                     </span>
                                                                     <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-0.5">
                                                                         <UserCheck className="w-3 h-3" /> Cadastrado
@@ -1009,14 +1316,17 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
                                                             <>
                                                                 <div className="flex items-center gap-2">
                                                                     <span className="font-extrabold text-slate-900 text-sm font-mono">
-                                                                        CRM {medico.crm}
+                                                                        {medico.conselho} {medico.crm}
                                                                     </span>
                                                                     <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-black uppercase font-mono">
                                                                         {medico.uf}
                                                                     </span>
+                                                                    <span className={`px-1.5 py-0.5 rounded-md ${profConfig.badgeBg} ${profConfig.badgeText} border ${profConfig.badgeBorder} text-[9px] font-bold uppercase`}>
+                                                                        {profConfig.label}
+                                                                    </span>
                                                                 </div>
                                                                 <span className="text-[10px] font-bold text-pink-500 hover:underline block mt-0.5">
-                                                                    + Cadastrar nome do médico
+                                                                    + Cadastrar nome do {profConfig.label.toLowerCase()}
                                                                 </span>
                                                             </>
                                                         )}
@@ -1031,7 +1341,7 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
                                                 </span>
                                             </td>
 
-                                            {/* Total de Itens Entregues (1 por medicamento prescrito) */}
+                                            {/* Total de Itens Entregues */}
                                             <td className="py-4 px-6 text-center">
                                                 <span className="inline-flex items-center px-3.5 py-1 rounded-full bg-emerald-50 text-emerald-700 font-black text-xs border border-emerald-200">
                                                     {medico.totalItensEntregues} itens
@@ -1068,7 +1378,7 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
                                                         e.stopPropagation();
                                                         setSelectedMedico(medico);
                                                     }}
-                                                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-pink-50 hover:bg-pink-600 text-pink-700 hover:text-white font-extrabold text-xs uppercase tracking-wider transition-all shadow-xs"
+                                                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-pink-50 hover:bg-pink-600 text-pink-700 hover:text-white font-extrabold text-xs uppercase tracking-wider transition-all shadow-xs cursor-pointer"
                                                 >
                                                     <Edit3 className="w-3.5 h-3.5" />
                                                     <span>Detalhes</span>
@@ -1087,15 +1397,15 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
                             <Stethoscope className="w-7 h-7" />
                         </div>
                         <h4 className="text-base font-extrabold text-slate-800 uppercase tracking-tight">
-                            Nenhum médico prescritor encontrado
+                            Nenhum profissional prescritor encontrado
                         </h4>
                         <p className="text-xs text-slate-500 max-w-md mx-auto mt-1 font-medium">
-                            Não encontramos registros de dispensação com CRM ou nome que correspondam aos filtros selecionados.
+                            Não encontramos registros de dispensação correspondentes aos filtros selecionados.
                         </p>
                         {hasActiveFilters && (
                             <button
                                 onClick={clearFilters}
-                                className="mt-4 px-4 py-2 bg-pink-600 text-white rounded-xl text-xs font-black uppercase tracking-wider hover:bg-pink-700 transition-all shadow-md shadow-pink-500/20"
+                                className="mt-4 px-4 py-2 bg-pink-600 text-white rounded-xl text-xs font-black uppercase tracking-wider hover:bg-pink-700 transition-all shadow-md shadow-pink-500/20 cursor-pointer"
                             >
                                 Limpar Todos os Filtros
                             </button>
@@ -1104,7 +1414,7 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
                 )}
             </div>
 
-            {/* MODAL DETALHADO E DE EDIÇÃO DO MÉDICO SELECIONADO */}
+            {/* MODAL DETALHADO E DE EDIÇÃO DO PRESCRITOR SELECIONADO */}
             {selectedMedico && (
                 <div className="fixed inset-0 z-[999] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overflow-y-auto animate-in fade-in duration-200">
                     <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl border border-slate-100 overflow-hidden flex flex-col max-h-[92vh] my-auto animate-in zoom-in-95 duration-200">
@@ -1112,16 +1422,19 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
                         <div className="px-6 py-5 bg-gradient-to-r from-pink-600 via-rose-600 to-indigo-700 text-white flex items-center justify-between gap-4 shrink-0 shadow-md">
                             <div className="flex items-center gap-3.5">
                                 <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-white ring-4 ring-white/10 shadow-inner shrink-0">
-                                    <Stethoscope className="w-6 h-6" />
+                                    {React.createElement(PROFISSIONAIS_CONFIG[selectedMedico.tipoProfissional]?.icon || Stethoscope, { className: 'w-6 h-6' })}
                                 </div>
                                 <div>
                                     <div className="flex items-center gap-2">
                                         <h3 className="text-lg sm:text-xl font-black uppercase tracking-tight">
                                             {selectedMedico.nomeCadastrado ? `${selectedMedico.nomeCadastrado} — ${selectedMedico.displayCrmUf}` : selectedMedico.displayCrmUf}
                                         </h3>
+                                        <span className="px-2 py-0.5 rounded-full bg-white/20 text-white text-[10px] font-black uppercase">
+                                            {selectedMedico.labelProfissional}
+                                        </span>
                                     </div>
                                     <p className="text-xs text-pink-100 font-medium">
-                                        Cadastro, auditoria analítica e histórico de dispensações vinculadas
+                                        Cadastro de profissional, auditoria analítica e histórico de dispensações vinculadas
                                     </p>
                                 </div>
                             </div>
@@ -1137,29 +1450,70 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
 
                         {/* Corpo com Scroll */}
                         <div className="p-6 overflow-y-auto custom-scrollbar space-y-6 flex-1 min-h-0 bg-slate-50/40">
-                            {/* BLOCO DE CADASTRO / EDIÇÃO MANUAL DO MÉDICO */}
+                            {/* BLOCO DE CADASTRO / EDIÇÃO MANUAL DO PROFISSIONAL */}
                             <form onSubmit={handleSaveMedico} className="bg-white rounded-2xl p-5 border-2 border-pink-100 shadow-sm space-y-4">
                                 <div className="flex items-center justify-between pb-2 border-b border-slate-100">
                                     <div className="flex items-center gap-2">
                                         <Edit3 className="w-4 h-4 text-pink-600" />
                                         <h4 className="text-sm font-black text-slate-900 uppercase tracking-tight">
-                                            Identificação & Cadastro do Médico Prescritor
+                                            Identificação & Cadastro do Profissional Prescritor
                                         </h4>
                                     </div>
                                     <span className="text-[10px] font-bold text-slate-400 uppercase">
-                                        Identificador Principal: CRM + UF
+                                        Conselho: {PROFISSIONAIS_CONFIG[editTipo]?.conselho} + UF
                                     </span>
+                                </div>
+
+                                {/* Seletor de Categoria do Profissional no Formulário */}
+                                <div>
+                                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-700 mb-1.5">
+                                        Categoria / Conselho Profissional *
+                                    </label>
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+                                        {LISTA_PROFISSIONAIS_PRESCRITORES.map(prof => {
+                                            const Icon = prof.icon;
+                                            const isSelected = editTipo === prof.id;
+                                            return (
+                                                <button
+                                                    key={prof.id}
+                                                    type="button"
+                                                    onClick={() => setEditTipo(prof.id)}
+                                                    className={`p-2 rounded-xl border text-left transition-all flex items-center justify-between gap-1.5 cursor-pointer ${
+                                                        isSelected
+                                                            ? 'bg-pink-50 border-pink-500 shadow-xs ring-2 ring-pink-500/20'
+                                                            : 'bg-slate-50/70 hover:bg-white border-slate-200 text-slate-600'
+                                                    }`}
+                                                >
+                                                    <div className="flex items-center gap-1.5 min-w-0">
+                                                        <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${
+                                                            isSelected ? 'bg-pink-600 text-white' : 'bg-slate-200/70 text-slate-700'
+                                                        }`}>
+                                                            <Icon className="w-3.5 h-3.5" />
+                                                        </div>
+                                                        <span className={`text-[10px] font-black uppercase truncate ${isSelected ? 'text-pink-900' : 'text-slate-800'}`}>
+                                                            {prof.label}
+                                                        </span>
+                                                    </div>
+                                                    <span className={`text-[8px] font-mono font-black px-1.5 py-0.2 rounded uppercase ${
+                                                        isSelected ? 'bg-pink-600 text-white' : 'bg-slate-200 text-slate-700'
+                                                    }`}>
+                                                        {prof.conselho}
+                                                    </span>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
                                     {/* Nome Completo */}
                                     <div className="md:col-span-6">
                                         <label className="block text-[10px] font-black uppercase tracking-wider text-slate-700 mb-1">
-                                            Nome Completo do Médico *
+                                            Nome Completo do {PROFISSIONAIS_CONFIG[editTipo]?.label} *
                                         </label>
                                         <input
                                             type="text"
-                                            placeholder="Ex: Dr. João da Silva"
+                                            placeholder={`Ex: Dr.(a) Nome do ${PROFISSIONAIS_CONFIG[editTipo]?.label}`}
                                             value={editNome}
                                             onChange={(e) => setEditNome(e.target.value)}
                                             className="w-full px-3.5 py-2 text-xs font-bold rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-pink-500 focus:outline-none transition-all shadow-inner"
@@ -1167,10 +1521,10 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
                                         />
                                     </div>
 
-                                    {/* CRM */}
+                                    {/* Registro no Conselho */}
                                     <div className="md:col-span-3">
                                         <label className="block text-[10px] font-black uppercase tracking-wider text-slate-700 mb-1">
-                                            Número do CRM *
+                                            Número do {PROFISSIONAIS_CONFIG[editTipo]?.conselho} *
                                         </label>
                                         <input
                                             type="text"
@@ -1184,7 +1538,7 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
                                     {/* UF */}
                                     <div className="md:col-span-3">
                                         <label className="block text-[10px] font-black uppercase tracking-wider text-slate-700 mb-1">
-                                            UF do CRM *
+                                            UF do {PROFISSIONAIS_CONFIG[editTipo]?.conselho} *
                                         </label>
                                         <select
                                             value={editUf}
@@ -1200,7 +1554,7 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
 
                                 <div className="flex items-center justify-between pt-1">
                                     <p className="text-[11px] text-slate-400 font-medium">
-                                        💡 O nome salvo será associado automaticamente a todas as dispensações e dashboards deste CRM/UF sem alterar o histórico original do banco.
+                                        💡 O nome e conselho salvos serão associados automaticamente a todas as dispensações e relatórios deste registro.
                                     </p>
 
                                     <button
@@ -1213,7 +1567,7 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
                                         ) : (
                                             <>
                                                 <Save className="w-3.5 h-3.5" />
-                                                Salvar Identificação do Médico
+                                                Salvar Identificação do Profissional
                                             </>
                                         )}
                                     </button>
@@ -1227,7 +1581,7 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
                                 )}
                             </form>
 
-                            {/* Cards de Resumo do Médico */}
+                            {/* Cards de Resumo do Prescritor */}
                             <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                                 <div className="bg-white p-4 rounded-2xl border border-slate-200/70 shadow-xs">
                                     <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider block mb-0.5">Total Receitas</span>
@@ -1253,13 +1607,13 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
                                 </div>
                             </div>
 
-                            {/* Detalhe dos Medicamentos Prescritos pelo CRM */}
+                            {/* Detalhe dos Medicamentos Prescritos */}
                             <div className="bg-white rounded-2xl p-5 border border-slate-200/70 shadow-xs space-y-4">
                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100">
                                     <div>
                                         <h4 className="text-sm font-black text-slate-900 uppercase tracking-tight flex items-center gap-2">
                                             <Pill className="w-4 h-4 text-pink-600" />
-                                            Medicamentos Prescritos por este Médico ({Object.keys(selectedMedico.medsMap).length})
+                                            Medicamentos Prescritos por este Profissional ({Object.keys(selectedMedico.medsMap).length})
                                         </h4>
                                         <p className="text-[11px] text-slate-400 font-medium">
                                             Quantidade de itens prescritos nas receitas e total físico dispensado
@@ -1381,7 +1735,8 @@ export const MedicosDashboardTab: React.FC<MedicosDashboardTabProps> = ({
                                 <div>
                                     <span className="font-bold text-slate-800 block">Valores Originais Registrados para Auditoria:</span>
                                     <span className="text-slate-500 text-[10px]">
-                                        CRMs originais gravados nas receitas: {Array.from(selectedMedico.rawCrms).join(', ') || selectedMedico.crm} | 
+                                        Conselho: {selectedMedico.conselho} ({selectedMedico.labelProfissional}) | 
+                                        Registros gravados nas receitas: {Array.from(selectedMedico.rawCrms).join(', ') || selectedMedico.crm} | 
                                         UFs: {Array.from(selectedMedico.rawUfs).join(', ') || selectedMedico.uf}
                                     </span>
                                 </div>
