@@ -164,6 +164,43 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
     const [createdBooking, setCreatedBooking] = useState<ConsultaAgendamento | null>(null);
     const [isGenerating, setIsGenerating] = useState(false);
     const [gestorUserIds, setGestorUserIds] = useState<string[]>([]);
+    const [isUrgenciaModalOpen, setIsUrgenciaModalOpen] = useState(false);
+
+    // Carregar lista de gestores de regulação/consultas
+    useEffect(() => {
+        db.getConsultasGestores().then(setGestorUserIds).catch(() => {});
+    }, []);
+
+    // Identificação de permissão de Gestor ou Administrador
+    const isGestorOrAdmin = React.useMemo(() => {
+        return Boolean(
+            currentUser?.role === 'admin' ||
+            (currentUser?.role as string) === 'gestor' ||
+            (currentUser?.role as string) === 'manager' ||
+            currentUser?.permissions?.includes('admin' as any) ||
+            currentUser?.permissions?.includes('gestor' as any) ||
+            currentUser?.permissions?.includes('parent_consultas_gestor' as any) ||
+            currentUser?.permissions?.includes('sub_consultas_gestor' as any) ||
+            (currentUser?.id && gestorUserIds.includes(currentUser.id))
+        );
+    }, [currentUser, gestorUserIds]);
+
+    // Se o usuário não for gestor nem admin, não permite manter o status Especial
+    useEffect(() => {
+        if (!isGestorOrAdmin && bookingPriority === 'Especial') {
+            setBookingPriority('Normal');
+        }
+    }, [isGestorOrAdmin, bookingPriority]);
+
+    const handleSelectPriority = (priority: 'Normal' | 'Urgência' | 'Especial') => {
+        if (priority === 'Especial' && !isGestorOrAdmin) {
+            return;
+        }
+        setBookingPriority(priority);
+        if (priority === 'Urgência') {
+            setIsUrgenciaModalOpen(true);
+        }
+    };
 
     const [activeDateDropdownId, setActiveDateDropdownId] = useState<string | null>(null);
     const [activeTimeDropdownId, setActiveTimeDropdownId] = useState<string | null>(null);
@@ -1688,18 +1725,20 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
 
                                                 <div>
                                                     <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1 ml-1">Prioridade do Agendamento</label>
-                                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                                    <div className={`grid grid-cols-1 ${isGestorOrAdmin ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-2`}>
                                                         {[
                                                             { value: 'Normal', label: 'Normal', color: 'border-slate-200 hover:border-slate-300 text-slate-600 bg-white' },
                                                             { value: 'Urgência', label: 'Urgência', color: 'border-rose-200 bg-rose-50/30 text-rose-700 hover:bg-rose-50' },
-                                                            { value: 'Especial', label: 'Agendamento Especial', color: 'border-amber-300 bg-gradient-to-r from-amber-50 to-yellow-50 text-amber-800 hover:bg-amber-100/80 shadow-xs' }
+                                                            ...(isGestorOrAdmin ? [
+                                                                { value: 'Especial', label: 'Agendamento Especial', color: 'border-amber-300 bg-gradient-to-r from-amber-50 to-yellow-50 text-amber-800 hover:bg-amber-100/80 shadow-xs' }
+                                                            ] : [])
                                                         ].map((opt) => {
                                                             const isSel = bookingPriority === opt.value;
                                                             return (
                                                                 <button
                                                                     key={opt.value}
                                                                     type="button"
-                                                                    onClick={() => setBookingPriority(opt.value as 'Normal' | 'Urgência' | 'Especial')}
+                                                                    onClick={() => handleSelectPriority(opt.value as 'Normal' | 'Urgência' | 'Especial')}
                                                                     className={`py-2 px-3 rounded-xl border text-xs font-black uppercase tracking-wider transition-all duration-300 active:scale-95 text-center flex items-center justify-center gap-2 cursor-pointer ${
                                                                         isSel
                                                                         ? opt.value === 'Especial'
@@ -1721,6 +1760,16 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                                                             );
                                                         })}
                                                     </div>
+
+                                                    {/* Mensagem em destaque quando Urgência for selecionada */}
+                                                    {bookingPriority === 'Urgência' && (
+                                                        <div className="mt-2 p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs font-bold flex items-start gap-2 animate-in fade-in duration-200 shadow-2xs">
+                                                            <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                                                            <div className="text-[11px] leading-tight font-semibold">
+                                                                <strong className="text-rose-700 font-extrabold">Indicação Médica Obrigatória:</strong> A prioridade de <strong>URGÊNCIA</strong> só será válida caso a receita/pedido médico contenha expressamente a urgência definida pelo médico.
+                                                            </div>
+                                                        </div>
+                                                    )}
                                                 </div>
 
                                                 {/* BOTÃO E SELEÇÃO DE RETORNO */}
@@ -3120,6 +3169,43 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
                 accentColor="sky"
                 contextTitle="Regulação / Novo Agendamento"
             />
+
+            {/* MODAL DE AVISO DE PRIORIDADE DE URGÊNCIA */}
+            {isUrgenciaModalOpen && createPortal(
+                <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
+                    <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl border border-rose-200/90 p-6 sm:p-7 space-y-4 animate-in zoom-in-95 duration-200">
+                        <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-rose-500 to-red-600 text-white flex items-center justify-center mx-auto shadow-lg shadow-rose-500/25">
+                            <AlertTriangle className="w-7 h-7" />
+                        </div>
+                        <div className="text-center space-y-2">
+                            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 border border-rose-200 text-rose-700 text-[10px] font-black uppercase tracking-wider">
+                                <span>Aviso de Prioridade</span>
+                            </div>
+                            <h3 className="text-base sm:text-lg font-black text-slate-900 uppercase tracking-tight">
+                                Critério de Urgência Médica
+                            </h3>
+                            <p className="text-xs font-semibold text-slate-600 leading-relaxed max-w-xs mx-auto">
+                                A prioridade de <strong className="text-rose-600">URGÊNCIA</strong> só será válida caso a receita ou pedido contenha a <strong>urgência expressamente definida pelo médico</strong>.
+                            </p>
+                        </div>
+
+                        <div className="p-3.5 bg-rose-50/70 rounded-2xl border border-rose-100 text-[11px] text-rose-800 font-medium text-center leading-relaxed">
+                            Certifique-se de anexar ou conferir a receita médica no momento do atendimento.
+                        </div>
+
+                        <div className="pt-2">
+                            <button
+                                type="button"
+                                onClick={() => setIsUrgenciaModalOpen(false)}
+                                className="w-full py-3 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 active:scale-95 text-white font-black text-xs uppercase tracking-wider rounded-2xl shadow-lg shadow-rose-600/25 transition-all cursor-pointer text-center"
+                            >
+                                Entendido, Continuar com Urgência
+                            </button>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
         </div>
     );
 };

@@ -12,6 +12,7 @@ import { createDiariaEvento, updateDiariaEvento, getDiariasGestores, getAllDiari
 import { useCachedVehicles } from '../../hooks/useCachedVehicles';
 import { supabase } from '../../services/supabaseClient';
 import { polishMotivoWithAI } from '../../services/geminiService';
+import { DEFAULT_SECTORS } from '../../constants';
 import { motion, AnimatePresence } from 'framer-motion';
 
 
@@ -537,9 +538,16 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
     const normalize = (str: string) => str ? str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim() : "";
     const vPlate = normalize(vehicle.plate);
     const vBrandModel = normalize(`${vehicle.brand} ${vehicle.model}`);
+    const now = new Date();
 
     const activeEvt = diariaEvents.find(evt => {
-      if (evt.status === 'concluido' || evt.status === 'cancelado' || evt.status === 'rejeitado_gestor' || evt.status === 'rejeitado_administrador') {
+      // Ignora eventos concluídos, cancelados ou rejeitados
+      if (
+        evt.status === 'concluido' || 
+        evt.status === 'cancelado' || 
+        evt.status === 'rejeitado_gestor' || 
+        evt.status === 'rejeitado_administrador'
+      ) {
         return false;
       }
       // Se estivermos editando um evento, ele não deve conflitar consigo mesmo
@@ -552,22 +560,39 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
       const isSameVehicle = (vPlate && evtVeiculoStr.includes(vPlate)) || (vBrandModel && evtVeiculoStr.includes(vBrandModel));
       if (!isSameVehicle) return false;
 
-      // Validação de interseção de períodos
+      const evtSaida = evt.data_saida ? parseISO(evt.data_saida) : null;
+      const evtRetorno = evt.data_retorno ? parseISO(evt.data_retorno) : (evtSaida ? addHours(evtSaida, 4) : null);
+
+      // Se a viagem do evento já ocorreu no passado, o veículo físico já está livre na garagem
+      if (evtRetorno && evtRetorno.getTime() < now.getTime()) {
+        return false;
+      }
+
+      // Eventos em tramitação/aprovação documental (aguardando_gestor/administrador) do passado não bloqueiam o veículo físico
+      if (evt.status === 'aguardando_gestor' || evt.status === 'aguardando_administrador') {
+        if (!evtSaida || evtSaida.getTime() < now.getTime()) {
+          return false;
+        }
+      }
+
+      // Validação de interseção de períodos se a nova data já tiver sido informada
       if (departureDateTime) {
         try {
           const novaSaida = parseISO(departureDateTime);
           const novaRetorno = returnDateTime ? parseISO(returnDateTime) : addHours(novaSaida, 4);
 
-          const evtSaida = evt.data_saida ? parseISO(evt.data_saida) : null;
-          const evtRetorno = evt.data_retorno ? parseISO(evt.data_retorno) : (evtSaida ? addHours(evtSaida, 4) : null);
-
           if (evtSaida && evtRetorno) {
-            // Se houver sobreposição, o veículo fica indisponível para este período
+            // Se houver sobreposição de horários
             const hasOverlap = (novaSaida.getTime() < evtRetorno.getTime()) && (novaRetorno.getTime() > evtSaida.getTime());
             return hasOverlap;
           }
         } catch (e) {
           console.warn("Erro ao processar as datas na validação de disponibilidade:", e);
+        }
+      } else {
+        // Se ainda não escolheu data de saída, só indica conflito se a viagem estiver em andamento AGORA
+        if (evt.status === 'em_viagem' && evtSaida && evtRetorno) {
+          return (now.getTime() >= evtSaida.getTime() && now.getTime() <= evtRetorno.getTime());
         }
       }
 
@@ -603,11 +628,12 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
       };
     }
 
+    // Solicitações em revisão/aguardando aprovação não tornam o veículo indisponível
     return {
-      isAvailable: false,
+      isAvailable: true,
       statusKey: 'aguardando_aprovacao',
-      statusLabel: 'Em Revisão',
-      badgeClass: 'bg-blue-50 text-blue-700 border-blue-300',
+      statusLabel: 'Disponível',
+      badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-300',
       evento: activeEvt
     };
   };
@@ -2170,7 +2196,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
                               </span>
                             </div>
                             <span className={`text-[10px] font-normal ${isSelected ? 'text-indigo-500' : 'text-slate-400'}`}>
-                              Placa: {v.plate} | Cor: {v.color} | Setor: {sectors.find(s => s.id === (v.sector_id || v.sectorId))?.name || 'Sem Setor'}
+                              Placa: {v.plate} | Cor: {v.color} | Setor: {sectors.find(s => s.id === (v.sector_id || v.sectorId))?.name || DEFAULT_SECTORS.find(s => s.id === (v.sector_id || v.sectorId))?.name || 'Sem Setor'}
                             </span>
                           </div>
                           {isSelected && <Check className="w-5 h-5 text-indigo-600 shrink-0" />}
@@ -3143,7 +3169,7 @@ export const NovoEventoScreen: React.FC<NovoEventoScreenProps> = ({
                             </span>
                           </div>
                           <span className={`text-[10px] font-normal ${isSelected ? 'text-indigo-500' : 'text-slate-400'}`}>
-                            Placa: {v.plate} | Cor: {v.color} | Setor: {sectors.find(s => s.id === (v.sector_id || v.sectorId))?.name || 'Sem Setor'}
+                            Placa: {v.plate} | Cor: {v.color} | Setor: {sectors.find(s => s.id === (v.sector_id || v.sectorId))?.name || DEFAULT_SECTORS.find(s => s.id === (v.sector_id || v.sectorId))?.name || 'Sem Setor'}
                           </span>
                         </div>
                         {isSelected && <Check className="w-5 h-5 text-indigo-600 shrink-0" />}

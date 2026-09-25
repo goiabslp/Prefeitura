@@ -11,6 +11,8 @@ import {
 import { googleCalendarService } from '../services/googleCalendarService';
 import { ModuleAccessControlTree } from './admin/ModuleAccessControlTree';
 import { cleanPermissionsArray } from '../services/permissionService';
+import { supabase } from '../services/supabaseClient';
+import { triggerUserSystemUpdate, getUserUpdateRequests, UserUpdateRequest } from '../services/systemUpdateService';
 
 export type UserTab = 'dados' | 'modulos' | 'assinaturas';
 
@@ -126,12 +128,109 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
     targetUser: User | null;
   }>({ isOpen: false, targetUser: null });
 
+  // Estado para Atualização Individual de Usuário
+  const [userUpdateRequests, setUserUpdateRequests] = useState<Record<string, UserUpdateRequest>>({});
+  const [isTriggeringUserUpdate, setIsTriggeringUserUpdate] = useState(false);
+  const [userUpdateModal, setUserUpdateModal] = useState<{
+    isOpen: boolean;
+    targetUser: User | null;
+  }>({ isOpen: false, targetUser: null });
+
   const [toast, setToast] = useState<{ show: boolean, message: string, type: 'success' | 'error' }>({ show: false, message: '', type: 'success' });
   const [googleLoading, setGoogleLoading] = useState(false);
   const [isGoogleConnectModalOpen, setIsGoogleConnectModalOpen] = useState(false);
   const [connectGoogleEmail, setConnectGoogleEmail] = useState('');
 
   const isAdmin = currentUser.role === 'admin' || (!currentUser.impersonatedBy && currentUser.realRole === 'admin');
+
+  // Carrega e sincroniza em tempo real as solicitações de atualização de usuários
+  useEffect(() => {
+    let isMounted = true;
+    const loadRequests = async () => {
+      const reqs = await getUserUpdateRequests();
+      if (isMounted) setUserUpdateRequests(reqs);
+    };
+    loadRequests();
+
+    const channel = supabase.channel('user-screen-update-sync')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'organization_settings', filter: 'id=eq.global_config' },
+        (payload) => {
+          const reqs = (payload.new?.ui_config as any)?.user_update_requests;
+          if (reqs && isMounted) {
+            setUserUpdateRequests(reqs);
+          }
+        }
+      )
+      .on(
+        'broadcast',
+        { event: 'system_update' },
+        (payload) => {
+          const p = payload.payload;
+          if (p?.targetUserId && isMounted) {
+            setUserUpdateRequests(prev => ({
+              ...prev,
+              [p.targetUserId]: {
+                target: p.target,
+                version: p.version || p.target,
+                targetUserId: p.targetUserId,
+                targetUserName: p.targetUserName || 'Usuário',
+                targetUserUsername: p.targetUserUsername,
+                triggeredBy: p.triggeredBy || 'Administrador',
+                triggeredById: p.triggeredById,
+                triggeredAt: p.triggeredAt || new Date().toISOString(),
+                status: 'pending'
+              }
+            }));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      isMounted = false;
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const handleConfirmUserUpdate = async () => {
+    if (!userUpdateModal.targetUser) return;
+    setIsTriggeringUserUpdate(true);
+
+    try {
+      const res = await triggerUserSystemUpdate(
+        { id: currentUser.id, name: currentUser.name, role: currentUser.role },
+        userUpdateModal.targetUser
+      );
+
+      if (res.success) {
+        showToast(`Atualização solicitada com sucesso para ${userUpdateModal.targetUser.name}!`);
+        const nowIso = new Date().toISOString();
+        setUserUpdateRequests(prev => ({
+          ...prev,
+          [userUpdateModal.targetUser!.id]: {
+            target: res.target,
+            version: res.target,
+            targetUserId: userUpdateModal.targetUser!.id,
+            targetUserName: userUpdateModal.targetUser!.name,
+            targetUserUsername: userUpdateModal.targetUser!.username,
+            triggeredBy: currentUser.name || 'Administrador',
+            triggeredById: currentUser.id,
+            triggeredAt: nowIso,
+            status: 'pending'
+          }
+        }));
+        setUserUpdateModal({ isOpen: false, targetUser: null });
+      } else {
+        showToast(res.error || 'Erro ao solicitar atualização do usuário.', 'error');
+      }
+    } catch (err: any) {
+      showToast(err.message || 'Erro inesperado ao solicitar atualização.', 'error');
+    } finally {
+      setIsTriggeringUserUpdate(false);
+    }
+  };
 
   const [formData, setFormData] = useState<Partial<User>>({
     name: '',
@@ -777,12 +876,69 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                               • {user.jobTitle}
                             </span>
                           )}
+
+                          {/* Status Discreto de Atualização do Usuário */}
+                          {(() => {
+                            const req = userUpdateRequests[user.id];
+                            if (req?.status === 'pending') {
+                              return (
+                                <span 
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200 shadow-xs"
+                                  title={`Solicitação registrada em: ${new Date(req.triggeredAt).toLocaleString('pt-BR')}`}
+                                >
+                                  <Clock className="w-2.5 h-2.5 text-amber-500 animate-spin-slow" />
+                                  <span>Atualização pendente</span>
+                                </span>
+                              );
+                            }
+                            if (req?.status === 'completed' || req?.completedAt) {
+                              return (
+                                <span 
+                                  className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-[10px] font-medium text-slate-500 bg-slate-100/90 border border-slate-200/80"
+                                  title="Sistema atualizado"
+                                >
+                                  <span className="flex items-center gap-1 font-bold text-slate-600">
+                                    <CheckCircle2 className="w-2.5 h-2.5 text-emerald-500" />
+                                    Atualizado
+                                  </span>
+                                  {req.completedAt && (
+                                    <span className="text-[9px] text-slate-400 font-normal">
+                                      • Última atualização: {new Date(req.completedAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                  )}
+                                </span>
+                              );
+                            }
+                            return (
+                              <span 
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-medium text-slate-400 bg-slate-50 border border-slate-150"
+                                title="Sistema atualizado"
+                              >
+                                <Check className="w-2.5 h-2.5 text-slate-400" />
+                                <span>Atualizado</span>
+                              </span>
+                            );
+                          })()}
                         </div>
                       </div>
                     </div>
 
                     {/* Ações Rápidas à Direita */}
                     <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                      {/* Ação Exclusiva para Administradores: Atualizar Sistema do Usuário */}
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => setUserUpdateModal({ isOpen: true, targetUser: user })}
+                          className="p-2 sm:px-3 sm:py-1.5 rounded-xl bg-orange-50 hover:bg-orange-100 text-orange-700 border border-orange-200/80 transition-all flex items-center gap-1.5 text-xs font-bold cursor-pointer shadow-xs active:scale-95"
+                          title="Atualizar Sistema do Usuário"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5 text-orange-600" />
+                          <span className="hidden lg:inline">Atualizar Sistema do Usuário</span>
+                          <span className="hidden sm:inline lg:hidden">Atualizar</span>
+                        </button>
+                      )}
+
                       {isAdmin && user.id !== currentUser.id && onImpersonateUser && (
                         <button
                           type="button"
@@ -2013,6 +2169,58 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                   >
                     {googleLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Calendar className="w-4 h-4" />}
                     Autorizar e Conectar
+                  </button>
+                </div>
+              </div>
+            </div>,
+            document.body
+          )
+        }
+
+        {/* MODAL DE CONFIRMAÇÃO: ATUALIZAR SISTEMA DO USUÁRIO */}
+        {
+          userUpdateModal.isOpen && userUpdateModal.targetUser && createPortal(
+            <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-md animate-fade-in">
+              <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-md overflow-hidden border border-slate-100 p-8 sm:p-10 text-center relative animate-scale-up space-y-6">
+                {/* Faixa superior decorativa */}
+                <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-amber-400 via-orange-500 to-amber-600"></div>
+
+                <div className="w-20 h-20 bg-orange-50 rounded-3xl flex items-center justify-center mx-auto text-orange-600 ring-8 ring-orange-50/70">
+                  <RefreshCw className={`w-10 h-10 ${isTriggeringUserUpdate ? 'animate-spin' : ''}`} />
+                </div>
+
+                <div className="space-y-3">
+                  <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                    Atualizar sistema deste usuário?
+                  </h3>
+                  <p className="text-sm text-slate-600 font-medium leading-relaxed px-2">
+                    O usuário <b className="font-bold text-slate-800">{userUpdateModal.targetUser.name}</b> terá sua sessão atualizada e os arquivos temporários da aplicação serão renovados na próxima oportunidade segura.
+                  </p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                  <button
+                    type="button"
+                    disabled={isTriggeringUserUpdate}
+                    onClick={() => setUserUpdateModal({ isOpen: false, targetUser: null })}
+                    className="flex-1 py-3.5 px-5 bg-white hover:bg-slate-100 text-slate-600 font-bold text-xs uppercase tracking-wider rounded-2xl border border-slate-200 transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isTriggeringUserUpdate}
+                    onClick={handleConfirmUserUpdate}
+                    className="flex-1 py-3.5 px-5 bg-[#0f172a] hover:bg-[#ea580c] text-white font-black text-xs uppercase tracking-wider rounded-2xl shadow-lg shadow-slate-900/10 active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {isTriggeringUserUpdate ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <span>Atualizando...</span>
+                      </>
+                    ) : (
+                      <span>Atualizar Usuário</span>
+                    )}
                   </button>
                 </div>
               </div>

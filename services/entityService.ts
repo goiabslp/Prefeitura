@@ -298,6 +298,21 @@ export const getVehicleById = async (id: string): Promise<Vehicle | null> => {
 };
 
 export const createVehicle = async (vehicle: Vehicle): Promise<Vehicle | null> => {
+    // Validação de unicidade da placa
+    const cleanPlate = (vehicle.plate || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    if (cleanPlate) {
+        const { data: existingVehicles, error: checkError } = await supabase
+            .from('vehicles')
+            .select('id, plate, model, brand');
+
+        if (!checkError && existingVehicles && existingVehicles.length > 0) {
+            const duplicate = existingVehicles.find(v => (v.plate || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase() === cleanPlate);
+            if (duplicate) {
+                throw new Error(`A placa "${vehicle.plate}" já está cadastrada no veículo "${duplicate.model}" (${duplicate.brand || 'Frota'}). Não é permitido cadastrar a mesma placa em mais de um veículo.`);
+            }
+        }
+    }
+
     const dbVehicle = {
         type: vehicle.type,
         model: vehicle.model,
@@ -345,6 +360,22 @@ export const createVehicle = async (vehicle: Vehicle): Promise<Vehicle | null> =
 };
 
 export const updateVehicle = async (vehicle: Vehicle): Promise<Vehicle | null> => {
+    // Validação de unicidade da placa na atualização
+    const cleanPlate = (vehicle.plate || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    if (cleanPlate && vehicle.id) {
+        const { data: existingVehicles, error: checkError } = await supabase
+            .from('vehicles')
+            .select('id, plate, model, brand')
+            .neq('id', vehicle.id);
+
+        if (!checkError && existingVehicles && existingVehicles.length > 0) {
+            const duplicate = existingVehicles.find(v => (v.plate || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase() === cleanPlate);
+            if (duplicate) {
+                throw new Error(`A placa "${vehicle.plate}" já está cadastrada no veículo "${duplicate.model}" (${duplicate.brand || 'Frota'}). Não é permitido duplicar placas.`);
+            }
+        }
+    }
+
     const dbVehicle = {
         type: vehicle.type,
         model: vehicle.model,

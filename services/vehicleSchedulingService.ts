@@ -1,7 +1,7 @@
 import { supabase } from './supabaseClient';
 import { VehicleSchedule, ScheduleStatus } from '../types';
 import { notificationService } from './notificationService';
-
+import { validateDriverScheduleRules, fetchSystemHolidaysFromDatabase } from './driverRestRulesService';
 
 const mapSchedule = (s: any): VehicleSchedule => ({
     id: s.id,
@@ -116,6 +116,24 @@ const notifyRequester = async (scheduleId: string, status: ScheduleStatus) => {
 
 
 export const createSchedule = async (schedule: Omit<VehicleSchedule, 'id' | 'createdAt' | 'protocol'>): Promise<VehicleSchedule | null> => {
+    // Validação Definitiva no Backend: Regras de Descanso e Disponibilidade do Motorista
+    if (schedule.driverId && schedule.departureDateTime && schedule.returnDateTime) {
+        const existingSchedules = await getSchedules();
+        const holidays = await fetchSystemHolidaysFromDatabase();
+        const validation = validateDriverScheduleRules({
+            driverId: schedule.driverId,
+            departureDateTime: schedule.departureDateTime,
+            returnDateTime: schedule.returnDateTime,
+            allSchedules: existingSchedules,
+            customHolidays: holidays
+        });
+
+        if (!validation.isValid) {
+            console.error('Tentativa de agendamento bloqueada por regra de descanso:', validation);
+            throw new Error(validation.message || 'Motorista indisponível pelas regras de descanso.');
+        }
+    }
+
     const protocol = await generateProtocol();
 
     const dbSchedule = {
@@ -176,6 +194,25 @@ export const createSchedule = async (schedule: Omit<VehicleSchedule, 'id' | 'cre
 };
 
 export const updateSchedule = async (schedule: VehicleSchedule): Promise<VehicleSchedule | null> => {
+    // Validação Definitiva no Backend: Regras de Descanso e Disponibilidade do Motorista
+    if (schedule.driverId && schedule.departureDateTime && schedule.returnDateTime && schedule.status !== 'cancelado') {
+        const existingSchedules = await getSchedules();
+        const holidays = await fetchSystemHolidaysFromDatabase();
+        const validation = validateDriverScheduleRules({
+            driverId: schedule.driverId,
+            departureDateTime: schedule.departureDateTime,
+            returnDateTime: schedule.returnDateTime,
+            allSchedules: existingSchedules,
+            customHolidays: holidays,
+            excludeScheduleId: schedule.id
+        });
+
+        if (!validation.isValid) {
+            console.error('Tentativa de atualização bloqueada por regra de descanso:', validation);
+            throw new Error(validation.message || 'Motorista indisponível pelas regras de descanso.');
+        }
+    }
+
     const dbSchedule = {
         vehicle_id: schedule.vehicleId,
         driver_id: schedule.driverId,
@@ -254,6 +291,28 @@ export const updateScheduleStatus = async (
     status: ScheduleStatus,
     cancellationDetails?: { reason: string, cancelledBy: string }
 ): Promise<boolean> => {
+    // Validação ao aprovar agendamento
+    if (status === 'confirmado') {
+        const current = await getScheduleById(id);
+        if (current && current.driverId && current.departureDateTime && current.returnDateTime) {
+            const existingSchedules = await getSchedules();
+            const holidays = await fetchSystemHolidaysFromDatabase();
+            const validation = validateDriverScheduleRules({
+                driverId: current.driverId,
+                departureDateTime: current.departureDateTime,
+                returnDateTime: current.returnDateTime,
+                allSchedules: existingSchedules,
+                customHolidays: holidays,
+                excludeScheduleId: id
+            });
+
+            if (!validation.isValid) {
+                console.error('Tentativa de aprovação bloqueada por regra de descanso:', validation);
+                throw new Error(validation.message || 'Aprovação bloqueada: Motorista indisponível pelas regras de descanso.');
+            }
+        }
+    }
+
     const updateData: any = { status };
 
     if (status === 'cancelado' && cancellationDetails) {

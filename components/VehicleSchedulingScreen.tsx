@@ -11,7 +11,7 @@ import {
   UserCheck, ShieldCheck, XCircle, ChevronRight as ChevronRightIcon,
   PackageCheck, Sparkles, Truck, CheckCircle, Activity, Flame,
   Building2, ArrowRightLeft, UserCircle, Landmark, Users, Briefcase,
-  HeartPulse, ShieldAlert, UserPlus, Unlock, HelpCircle
+  HeartPulse, ShieldAlert, UserPlus, Unlock, HelpCircle, RotateCcw
 } from 'lucide-react';
 import { DateTimePickerModal } from './DateTimePickerModal';
 import { VehicleScheduleHistory } from './VehicleScheduleHistory';
@@ -19,8 +19,13 @@ import { VehicleScheduleApprovals } from './VehicleScheduleApprovals';
 import { SelectionModal } from './SelectionModal';
 import { VehicleScheduleDashboard } from './VehicleScheduleDashboard';
 import { ConsultarVeiculoScreen } from './vehicle/ConsultarVeiculoScreen';
+import { DriverRestRestrictionModal } from './modals/DriverRestRestrictionModal';
+import { VehicleSchedulingLoadingModal } from './modals/VehicleSchedulingLoadingModal';
 import { useSystemSettings } from '../contexts/SystemSettingsContext';
 import { userCanAccessSubmodule } from '../services/permissionService';
+import { validateDriverScheduleRules, fetchSystemHolidaysFromDatabase, getUnifiedHolidaysMap, toDateStr, DriverValidationResult, SystemHoliday } from '../services/driverRestRulesService';
+import { getSectors } from '../services/entityService';
+import { DEFAULT_SECTORS } from '../constants';
 import { User } from '../types';
 
 interface VehicleSchedulingScreenProps {
@@ -149,9 +154,96 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
   state
 }) => {
   const [activeSubView, setActiveSubView] = useState<'menu' | 'calendar' | 'novo' | 'history' | 'approvals' | 'dashboard' | 'day' | 'consultar'>('menu');
+  const [isLoadingModalOpen, setIsLoadingModalOpen] = useState(true);
+
+  const [dynamicSectors, setDynamicSectors] = useState<Sector[]>(() => {
+    if (sectors && sectors.length > 0) return sectors;
+    try {
+      const cached = sessionStorage.getItem('cachedSectors');
+      return cached ? JSON.parse(cached) : DEFAULT_SECTORS;
+    } catch {
+      return DEFAULT_SECTORS;
+    }
+  });
+
+  useEffect(() => {
+    if (sectors && sectors.length > 0) {
+      setDynamicSectors(sectors);
+    } else {
+      getSectors().then(loaded => {
+        if (loaded && loaded.length > 0) {
+          setDynamicSectors(loaded);
+          try {
+            sessionStorage.setItem('cachedSectors', JSON.stringify(loaded));
+          } catch (e) { }
+        }
+      }).catch(console.error);
+    }
+  }, [sectors]);
 
   const normalizeString = (str: string) =>
     str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+
+  const effectiveSectors = useMemo(() => {
+    const list = dynamicSectors.length > 0 ? dynamicSectors : (sectors.length > 0 ? sectors : DEFAULT_SECTORS);
+    const map = new Map<string, Sector>();
+    DEFAULT_SECTORS.forEach(s => map.set(s.id, s));
+    list.forEach(s => map.set(s.id, s));
+    return Array.from(map.values());
+  }, [dynamicSectors, sectors]);
+
+  const resolveSectorName = (sectorIdOrName?: string): string => {
+    if (!sectorIdOrName) return '';
+    const clean = String(sectorIdOrName).trim();
+    if (!clean) return '';
+
+    // 1. Busca por id exato
+    const byId = effectiveSectors.find(s => s.id === clean || s.id.toLowerCase() === clean.toLowerCase());
+    if (byId) return byId.name;
+
+    // 2. Busca por id no DEFAULT_SECTORS
+    const byDefaultId = DEFAULT_SECTORS.find(s => s.id === clean || s.id.toLowerCase() === clean.toLowerCase());
+    if (byDefaultId) {
+      const inEffective = effectiveSectors.find(s => normalizeString(s.name) === normalizeString(byDefaultId.name));
+      return inEffective ? inEffective.name : byDefaultId.name;
+    }
+
+    // 3. Se for nome do setor
+    const norm = normalizeString(clean);
+    const byName = effectiveSectors.find(s =>
+      normalizeString(s.name) === norm ||
+      normalizeString(s.name).includes(norm) ||
+      norm.includes(normalizeString(s.name))
+    );
+    if (byName) return byName.name;
+
+    return clean;
+  };
+
+  const getVehicleSectorName = (v: Vehicle): string => {
+    if (!v) return 'Sem Setor';
+    const rawId = v.sectorId || (v as any).sector_id;
+    if (rawId) {
+      const resolved = resolveSectorName(rawId);
+      if (resolved && resolved !== rawId) return resolved;
+      if (resolved) return resolved;
+    }
+    if ((v as any).sector_name) return (v as any).sector_name;
+    if ((v as any).sector && typeof (v as any).sector === 'string') return resolveSectorName((v as any).sector);
+    return 'Sem Setor';
+  };
+
+  const getPersonSectorName = (p: Person): string => {
+    if (!p) return 'Sem setor vinculado';
+    const rawId = p.sectorId || (p as any).sector_id;
+    if (rawId) {
+      const resolved = resolveSectorName(rawId);
+      if (resolved && resolved !== rawId) return resolved;
+      if (resolved) return resolved;
+    }
+    if ((p as any).sector && typeof (p as any).sector === 'string') return resolveSectorName((p as any).sector);
+    return 'Sem setor vinculado';
+  };
 
   const currentUserPerson = useMemo(() => {
     if (!currentUserName) return undefined;
@@ -392,6 +484,27 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
     name: '', departureLocation: '', appointmentTime: '', appointmentLocation: ''
   });
 
+  const [systemHolidays, setSystemHolidays] = useState<SystemHoliday[]>([]);
+  const [driverRestModal, setDriverRestModal] = useState<{
+    isOpen: boolean;
+    result: DriverValidationResult | null;
+    driver?: Person | null;
+    vehicle?: Vehicle | null;
+  }>({
+    isOpen: false,
+    result: null,
+    driver: null,
+    vehicle: null
+  });
+
+  useEffect(() => {
+    fetchSystemHolidaysFromDatabase().then(holidays => {
+      if (holidays && holidays.length > 0) {
+        setSystemHolidays(holidays);
+      }
+    });
+  }, []);
+
   // Estados de controle da Aba Tripulação
   const [isTripulacaoUnlocked, setIsTripulacaoUnlocked] = useState(false);
   const [isSpecialTreatmentTrip, setIsSpecialTreatmentTrip] = useState<boolean | null>(null);
@@ -610,6 +723,30 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
     const schedule = (schedules || []).find(s => s.id === id);
     if (schedule) {
       try {
+        if (status === 'confirmado') {
+          const selectedDriverObj = persons.find(p => p.id === schedule.driverId);
+          const val = validateDriverScheduleRules({
+            driverId: schedule.driverId,
+            driverName: selectedDriverObj?.name,
+            departureDateTime: schedule.departureDateTime,
+            returnDateTime: schedule.returnDateTime,
+            allSchedules: schedules,
+            customHolidays: systemHolidays,
+            excludeScheduleId: id
+          });
+
+          if (!val.isValid) {
+            setDriverRestModal({
+              isOpen: true,
+              result: val,
+              driver: selectedDriverObj,
+              vehicle: vehicles.find(v => v.id === schedule.vehicleId)
+            });
+            showToast(val.message || "Aprovação impedida: Motorista com restrição de descanso.", "error");
+            return;
+          }
+        }
+
         let updatedSchedule = { ...schedule, status };
 
         if (status === 'confirmado') {
@@ -630,8 +767,9 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
         if (status === 'confirmado') showToast("Agendamento aprovado!", "success");
         else if (status === 'cancelado') showToast("Agendamento rejeitado/cancelado.", "success");
         else showToast("Status atualizado com sucesso!", "success");
-      } catch (error) {
-        showToast("Erro ao atualizar status.", "error");
+      } catch (error: any) {
+        console.error("Erro ao atualizar status:", error);
+        showToast(error?.message || "Erro ao atualizar status.", "error");
       }
     }
   };
@@ -657,6 +795,28 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
   useEffect(() => {
     // Clean up or initial logic if needed
   }, []);
+
+  const holidaysMap = useMemo(() => {
+    const years = [currentDate.getFullYear() - 1, currentDate.getFullYear(), currentDate.getFullYear() + 1];
+    return getUnifiedHolidaysMap(years, systemHolidays);
+  }, [currentDate, systemHolidays]);
+
+  const getDriverValidation = (driverId: string, driverName?: string, dep?: string, ret?: string): DriverValidationResult => {
+    const departure = dep || formData.departureDateTime;
+    const returnDate = ret || formData.returnDateTime;
+    if (!departure || !returnDate || !driverId) {
+      return { isValid: true };
+    }
+    return validateDriverScheduleRules({
+      driverId,
+      driverName,
+      departureDateTime: departure,
+      returnDateTime: returnDate,
+      allSchedules: schedules,
+      customHolidays: systemHolidays,
+      excludeScheduleId: editingSchedule?.id
+    });
+  };
 
   const isVehicleAvailable = (vehicleId: string, start: string, end: string, excludeScheduleId?: string) => {
     if (!start || !end) return true;
@@ -689,10 +849,15 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
     const days = [];
     const prevMonthLast = new Date(year, month, 0).getDate();
     for (let i = firstDay - 1; i >= 0; i--) days.push({ day: prevMonthLast - i, month: month - 1, year, isCurrent: false });
-    for (let i = 1; i <= daysInMonth; i++) days.push({ day: i, month, year, isCurrent: true });
+    for (let i = 1; i <= daysInMonth; i++) {
+      const dateObj = new Date(year, month, i);
+      const dIso = toDateStr(dateObj);
+      const holidayName = holidaysMap.get(dIso);
+      days.push({ day: i, month, year, isCurrent: true, holidayName, dateObj });
+    }
     while (days.length < 42) days.push({ day: days.length - (daysInMonth + firstDay) + 1, month: month + 1, year, isCurrent: false });
     return days;
-  }, [currentDate]);
+  }, [currentDate, holidaysMap]);
 
   const monthDays = useMemo(() => {
     const year = currentDate.getFullYear();
@@ -701,8 +866,8 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
     const list = [];
     for (let d = 1; d <= daysInMonth; d++) {
       const dateObj = new Date(year, month, d);
-      const dayKey = `${String(d).padStart(2, '0')}-${String(month + 1).padStart(2, '0')}`;
-      const holidayName = HOLIDAYS[dayKey];
+      const dIso = toDateStr(dateObj);
+      const holidayName = holidaysMap.get(dIso);
       const isToday = new Date().getDate() === d && new Date().getMonth() === month && new Date().getFullYear() === year;
       const isSelected = selectedCalendarDate.getDate() === d && selectedCalendarDate.getMonth() === month && selectedCalendarDate.getFullYear() === year;
       
@@ -729,7 +894,7 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
       });
     }
     return list;
-  }, [currentDate, selectedCalendarDate, schedules]);
+  }, [currentDate, selectedCalendarDate, schedules, holidaysMap]);
 
   const selectedDaySchedules = useMemo(() => {
     const start = new Date(selectedCalendarDate.getFullYear(), selectedCalendarDate.getMonth(), selectedCalendarDate.getDate(), 0, 0, 0).getTime();
@@ -749,14 +914,16 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
     if (s) {
       setEditingSchedule(s);
       let validSectorId = s.serviceSectorId;
-      if (validSectorId && !sectors.some(sec => sec.id === validSectorId)) {
+      if (validSectorId && !effectiveSectors.some(sec => sec.id === validSectorId)) {
         const p = persons.find(per => per.id === s.requesterPersonId);
-        if (p?.sectorId && sectors.some(sec => sec.id === p.sectorId)) {
-          validSectorId = p.sectorId;
+        const pSec = p?.sectorId || (p as any)?.sector_id;
+        if (pSec && effectiveSectors.some(sec => sec.id === pSec)) {
+          validSectorId = pSec;
         } else {
           const v = vehicles.find(veh => veh.id === s.vehicleId);
-          if (v?.sectorId && sectors.some(sec => sec.id === v.sectorId)) {
-            validSectorId = v.sectorId;
+          const vSec = v?.sectorId || (v as any)?.sector_id;
+          if (vSec && effectiveSectors.some(sec => sec.id === vSec)) {
+            validSectorId = vSec;
           } else {
             validSectorId = '';
           }
@@ -792,23 +959,24 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
       let defaultSectorId = '';
       
       // 1. Tenta pelo sectorId da pessoa logada
-      if (currentUserPerson?.sectorId && sectors.some(s => s.id === currentUserPerson.sectorId)) {
-        defaultSectorId = currentUserPerson.sectorId;
+      const userPersonSec = currentUserPerson?.sectorId || (currentUserPerson as any)?.sector_id;
+      if (userPersonSec && effectiveSectors.some(s => s.id === userPersonSec)) {
+        defaultSectorId = userPersonSec;
       }
       
       // 2. Tenta pelo currentUserSectorId explicitamente recebido
-      if (!defaultSectorId && currentUserSectorId && sectors.some(s => s.id === currentUserSectorId)) {
+      if (!defaultSectorId && currentUserSectorId && effectiveSectors.some(s => s.id === currentUserSectorId)) {
         defaultSectorId = currentUserSectorId;
       }
 
       // 3. Tenta pelo currentUserSector (que pode ser ID ou nome do setor)
       if (!defaultSectorId && currentUserSector) {
-        const byId = sectors.find(s => s.id === currentUserSector);
+        const byId = effectiveSectors.find(s => s.id === currentUserSector);
         if (byId) {
           defaultSectorId = byId.id;
         } else {
           const searchSector = normalizeString(currentUserSector);
-          const matchedSector = sectors.find(s =>
+          const matchedSector = effectiveSectors.find(s =>
             normalizeString(s.name) === searchSector ||
             normalizeString(s.name).includes(searchSector) ||
             searchSector.includes(normalizeString(s.name))
@@ -820,8 +988,9 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
       // 4. Se ainda sem setor e um veículo inicial foi selecionado, usa o setor do veículo
       if (!defaultSectorId && initialVehicleId) {
         const v = vehicles.find(veh => veh.id === initialVehicleId);
-        if (v?.sectorId && sectors.some(s => s.id === v.sectorId)) {
-          defaultSectorId = v.sectorId;
+        const vSec = v?.sectorId || (v as any)?.sector_id;
+        if (vSec && effectiveSectors.some(s => s.id === vSec)) {
+          defaultSectorId = vSec;
         }
       }
 
@@ -846,7 +1015,7 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
   };
 
   const handleSave = async () => {
-    const validSector = sectors.find(s => s.id === formData.serviceSectorId);
+    const validSector = effectiveSectors.find(s => s.id === formData.serviceSectorId);
     if (!formData.vehicleId || !formData.driverId || !formData.departureDateTime || !formData.returnDateTime || !formData.destination || !formData.requesterPersonId || !formData.serviceSectorId || !validSector) {
       showToast("Preencha todos os campos obrigatórios, incluindo um Setor Solicitante válido.", "warning");
       return;
@@ -894,6 +1063,30 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
       showToast("A data/hora de retorno deve ser posterior à de saída.", "warning");
       return;
     }
+
+    // Validação Obrigatória das Regras de Descanso e Disponibilidade do Motorista
+    const selectedDriverObj = persons.find(p => p.id === formData.driverId);
+    const driverValidation = validateDriverScheduleRules({
+      driverId: formData.driverId!,
+      driverName: selectedDriverObj?.name,
+      departureDateTime: formData.departureDateTime!,
+      returnDateTime: formData.returnDateTime!,
+      allSchedules: schedules,
+      customHolidays: systemHolidays,
+      excludeScheduleId: editingSchedule?.id
+    });
+
+    if (!driverValidation.isValid) {
+      setDriverRestModal({
+        isOpen: true,
+        result: driverValidation,
+        driver: selectedDriverObj,
+        vehicle: selectedVehicle
+      });
+      showToast(driverValidation.message || "Motorista indisponível pelas regras de descanso.", "error");
+      return;
+    }
+
     // Lógica de aprovação automática
     const isAdmin = currentUserRole === 'admin';
     const isFleetManager = currentUserPermissions?.includes('parent_frotas');
@@ -960,9 +1153,22 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
         showToast(hasAuthority ? "Agendamento aprovado e realizado!" : "Agendamento realizado com sucesso!", "success");
       }
       setIsModalOpen(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro ao salvar:", error);
-      showToast("Erro ao processar agendamento. Tente novamente.", "error");
+      const errorMsg = error?.message || "Erro ao processar agendamento. Tente novamente.";
+      showToast(errorMsg, "error");
+      if (errorMsg.includes('descanso') || errorMsg.includes('consecutivos') || errorMsg.includes('sábado') || errorMsg.includes('domingo') || errorMsg.includes('feriado')) {
+        setDriverRestModal({
+          isOpen: true,
+          result: {
+            isValid: false,
+            title: 'Motorista Indisponível',
+            message: errorMsg
+          },
+          driver: selectedDriverObj,
+          vehicle: selectedVehicle
+        });
+      }
     } finally {
       setIsSaving(false);
     }
@@ -1217,8 +1423,30 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
             </button>
           </div>
 
-          {/* Spacer / Right */}
-          <div className="hidden md:block w-10"></div>
+          {/* Ações da Barra Superior: Sincronizar & Novo Agendamento */}
+          <div className="flex items-center gap-2 order-2 md:order-3 shrink-0">
+            <button
+              type="button"
+              onClick={() => setIsLoadingModalOpen(true)}
+              className="px-3.5 py-2 rounded-xl bg-white hover:bg-slate-50 text-slate-700 hover:text-indigo-600 border border-slate-200 shadow-xs hover:shadow-sm text-[11px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+              title="Recarregar e sincronizar dados da frota e viagens em tempo real"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-indigo-600" />
+              <span className="hidden sm:inline">Sincronizar</span>
+            </button>
+
+            {canAccessAgendar && (
+              <button
+                type="button"
+                onClick={() => handleStartNovoAgendamento()}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-700 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white text-[11px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-all active:scale-95 shadow-md shadow-indigo-600/25 cursor-pointer"
+                title="Cadastrar nova solicitação de viagem"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Novo Agendamento</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* ===================== WEB / DESKTOP VIEW (CALENDÁRIO COMPLETO COM AGENDAMENTOS) ===================== */}
@@ -1553,7 +1781,7 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
     const selectedVehicle = vehicles.find(v => v.id === formData.vehicleId);
     const selectedDriver = persons.find(p => p.id === formData.driverId);
     const selectedRequester = persons.find(p => p.id === formData.requesterPersonId);
-    const selectedSector = sectors.find(s => s.id === formData.serviceSectorId);
+    const selectedSector = effectiveSectors.find(s => s.id === formData.serviceSectorId);
 
     const tabs: { id: 'dados_gerais' | 'destino' | 'data' | 'objetivo' | 'tripulacao'; label: string; icon: any }[] = [
       { id: 'dados_gerais', label: 'Dados Gerais', icon: ClipboardList },
@@ -2183,7 +2411,7 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
           schedules={schedules}
           vehicles={vehicles}
           persons={persons}
-          sectors={sectors}
+          sectors={effectiveSectors}
           state={state}
           onViewDetails={(s) => {
             setViewingSchedule(s);
@@ -2207,7 +2435,7 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
           schedules={schedules}
           vehicles={vehicles}
           persons={persons}
-          sectors={sectors}
+          sectors={effectiveSectors}
           onApprove={(s) => onUpdateStatusSchedule(s.id, 'confirmado')}
           onReject={(s) => onUpdateStatusSchedule(s.id, 'cancelado', { reason: 'Rejeitado por Gestor', cancelledBy: currentUserName || 'Gestor' })}
           onBack={() => handleSubViewChange('menu')}
@@ -2222,13 +2450,13 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
           schedules={schedules}
           vehicles={vehicles}
           persons={persons}
-          sectors={sectors}
+          sectors={effectiveSectors}
           onBack={() => handleSubViewChange('menu')}
         />
       ) : renderAccessDenied())}
       {activeSubView === 'consultar' && (canAccessConsultar ? (
         <ConsultarVeiculoScreen
-          sectors={sectors}
+          sectors={effectiveSectors}
           persons={persons}
           vehicles={vehicles}
           onBack={() => handleSubViewChange('menu')}
@@ -2286,7 +2514,7 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
                 </div>
                 <div className="space-y-1">
                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Setor</p>
-                  <p className="text-base font-bold text-slate-900 uppercase">{(sectors.find(s => s.id === viewingSchedule.serviceSectorId))?.name || '---'}</p>
+                  <p className="text-base font-bold text-slate-900 uppercase">{resolveSectorName(viewingSchedule.serviceSectorId) || '---'}</p>
                 </div>
                 <div className="space-y-1">
                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Solicitante</p>
@@ -2408,16 +2636,17 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
         onSelect={(v) => {
           setFormData(prev => {
             const updates: Partial<VehicleSchedule> = { ...prev, vehicleId: v.id };
-            const currentSectorValid = prev.serviceSectorId && sectors.some(s => s.id === prev.serviceSectorId);
-            if (!currentSectorValid && v.sectorId && sectors.some(s => s.id === v.sectorId)) {
-              updates.serviceSectorId = v.sectorId;
+            const vSecId = v.sectorId || (v as any).sector_id;
+            const currentSectorValid = prev.serviceSectorId && effectiveSectors.some(s => s.id === prev.serviceSectorId);
+            if (!currentSectorValid && vSecId && effectiveSectors.some(s => s.id === vSecId)) {
+              updates.serviceSectorId = vSecId;
             }
             return updates;
           });
         }}
         selectedItem={vehicles.find(v => v.id === formData.vehicleId)}
         renderItem={(v, isSelected) => {
-          const vehicleSector = sectors.find(s => s.id === v.sectorId)?.name || 'Sem Setor';
+          const vehicleSector = getVehicleSectorName(v);
           const isAvail = isVehicleAvailable(v.id, formData.departureDateTime!, formData.returnDateTime!, editingSchedule?.id);
 
           return (
@@ -2431,7 +2660,7 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
                   <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">{v.plate}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide flex items-center gap-1"><Landmark className="w-3 h-3" /> {vehicleSector}</span>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide flex items-center gap-1.5 bg-slate-100 px-2 py-0.5 rounded border border-slate-200"><Landmark className="w-3 h-3 text-indigo-500" /> {vehicleSector}</span>
                   {!isAvail && <span className="text-[9px] font-black text-rose-500 uppercase tracking-widest ml-auto">Ocupado</span>}
                 </div>
               </div>
@@ -2450,17 +2679,77 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
         getInternalId={(p) => p.id}
         searchPlaceholder="Buscar por nome..."
         filterFunction={(p, query) => p.name.toLowerCase().includes(query.toLowerCase())}
-        onSelect={(p) => setFormData({ ...formData, driverId: p.id })}
+        onSelect={(p) => {
+          const restVal = getDriverValidation(p.id, p.name);
+          if (!restVal.isValid) {
+            setDriverRestModal({
+              isOpen: true,
+              result: restVal,
+              driver: p,
+              vehicle: selectedVehicle
+            });
+            return;
+          }
+          setFormData({ ...formData, driverId: p.id });
+        }}
         selectedItem={persons.find(p => p.id === formData.driverId)}
-        renderItem={(p, isSelected) => (
-          <div className="p-4 flex items-center gap-4">
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isSelected ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-400'}`}>
-              <UserIcon className="w-5 h-5" />
+        renderItem={(p, isSelected) => {
+          const restVal = getDriverValidation(p.id, p.name);
+          const isAvail = restVal.isValid;
+          let badgeText = '';
+          let badgeColor = '';
+
+          if (!isAvail) {
+            if (restVal.code === 'WEEKEND_REST_VIOLATION') {
+              badgeText = 'Descanso FDS';
+              badgeColor = 'bg-amber-100 text-amber-800 border-amber-200';
+            } else if (restVal.code === 'HOLIDAY_BLOCK_REST_VIOLATION') {
+              badgeText = 'Descanso Feriado';
+              badgeColor = 'bg-rose-100 text-rose-800 border-rose-200';
+            } else if (restVal.code === 'CONSECUTIVE_DAYS_VIOLATION') {
+              badgeText = 'Limite 5 Dias';
+              badgeColor = 'bg-amber-100 text-amber-800 border-amber-200';
+            } else if (restVal.code === 'TIME_OVERLAP_VIOLATION') {
+              badgeText = 'Horário Ocupado';
+              badgeColor = 'bg-rose-100 text-rose-800 border-rose-200';
+            } else {
+              badgeText = 'Indisponível';
+              badgeColor = 'bg-rose-100 text-rose-800 border-rose-200';
+            }
+          }
+
+          return (
+            <div className={`p-4 flex items-center gap-4 ${!isAvail ? 'bg-rose-50/20' : ''}`}>
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
+                !isAvail
+                  ? 'bg-rose-100 text-rose-600'
+                  : isSelected
+                  ? 'bg-indigo-100 text-indigo-600'
+                  : 'bg-slate-100 text-slate-400'
+              }`}>
+                {!isAvail ? <ShieldAlert className="w-5 h-5" /> : <UserIcon className="w-5 h-5" />}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className={`text-sm font-bold truncate ${!isAvail ? 'text-slate-700' : isSelected ? 'text-indigo-900' : 'text-slate-700'}`}>
+                    {p.name}
+                  </span>
+                  {!isAvail && (
+                    <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border shrink-0 ${badgeColor}`}>
+                      {badgeText}
+                    </span>
+                  )}
+                </div>
+                {!isAvail && (
+                  <p className="text-[10px] text-rose-600 font-semibold truncate mt-0.5">
+                    {restVal.message ? (restVal.message.length > 60 ? restVal.message.slice(0, 60) + '...' : restVal.message) : 'Restrição de escala - clique para ver'}
+                  </p>
+                )}
+              </div>
+              {isSelected && <Check className="w-5 h-5 text-indigo-600 shrink-0" />}
             </div>
-            <span className={`text-sm font-bold flex-1 ${isSelected ? 'text-indigo-900' : 'text-slate-700'}`}>{p.name}</span>
-            {isSelected && <Check className="w-5 h-5 text-indigo-600 shrink-0" />}
-          </div>
-        )}
+          );
+        }}
       />
 
       <SelectionModal
@@ -2473,7 +2762,8 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
         searchPlaceholder="Buscar por nome..."
         filterFunction={(p, query) => p.name.toLowerCase().includes(query.toLowerCase())}
         onSelect={(p) => {
-          const personSector = p.sectorId && sectors.find(s => s.id === p.sectorId);
+          const pSecId = p.sectorId || (p as any).sector_id;
+          const personSector = pSecId && effectiveSectors.find(s => s.id === pSecId);
           setFormData(prev => ({
             ...prev,
             requesterPersonId: p.id,
@@ -2483,7 +2773,7 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
         }}
         selectedItem={persons.find(p => p.id === formData.requesterPersonId)}
         renderItem={(p, isSelected) => {
-          const pSector = sectors.find(s => s.id === p.sectorId);
+          const pSectorName = getPersonSectorName(p);
           return (
             <div className="p-4 flex items-center gap-4">
               <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isSelected ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-400'}`}>
@@ -2491,7 +2781,7 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
               </div>
               <div className="min-w-0 flex-1">
                 <p className={`text-sm font-bold truncate ${isSelected ? 'text-indigo-900' : 'text-slate-700'}`}>{p.name}</p>
-                <p className="text-[11px] text-slate-400 truncate uppercase font-semibold">{pSector?.name || 'Sem setor vinculado'}</p>
+                <p className="text-[11px] text-slate-400 truncate uppercase font-semibold">{pSectorName}</p>
               </div>
               {isSelected && <Check className="w-5 h-5 text-indigo-600 shrink-0" />}
             </div>
@@ -2504,12 +2794,12 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
         onClose={() => setActiveSelectionField(null)}
         title="Setor de Atendimento"
         subtitle="Para qual setor é esta viagem?"
-        options={sectors}
+        options={effectiveSectors}
         getInternalId={(s) => s.id}
         searchPlaceholder="Buscar setor..."
         filterFunction={(s, query) => s.name.toLowerCase().includes(query.toLowerCase())}
         onSelect={(s) => setFormData({ ...formData, serviceSectorId: s.id })}
-        selectedItem={sectors.find(s => s.id === formData.serviceSectorId)}
+        selectedItem={effectiveSectors.find(s => s.id === formData.serviceSectorId)}
         renderItem={(s, isSelected) => (
           <div className="p-4 flex items-center gap-4">
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${isSelected ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-400'}`}>
@@ -2554,7 +2844,39 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
         title="Início do Agendamento"
         initialDate={formData.departureDateTime ? new Date(formData.departureDateTime) : undefined}
         minDate={new Date()}
-        onSelect={(date) => setFormData({ ...formData, departureDateTime: getLocalISOString(date) })}
+        onSelect={(date) => {
+          const newDep = getLocalISOString(date);
+          setFormData(prev => {
+            const updates: Partial<VehicleSchedule> = { ...prev, departureDateTime: newDep };
+            if (prev.returnDateTime && new Date(prev.returnDateTime).getTime() <= date.getTime()) {
+              const newRet = new Date(date.getTime() + 2 * 60 * 60 * 1000);
+              updates.returnDateTime = getLocalISOString(newRet);
+            }
+            if (prev.driverId) {
+              const selectedDriverObj = persons.find(p => p.id === prev.driverId);
+              const val = validateDriverScheduleRules({
+                driverId: prev.driverId,
+                driverName: selectedDriverObj?.name,
+                departureDateTime: newDep,
+                returnDateTime: updates.returnDateTime || prev.returnDateTime || newDep,
+                allSchedules: schedules,
+                customHolidays: systemHolidays,
+                excludeScheduleId: editingSchedule?.id
+              });
+              if (!val.isValid) {
+                setDriverRestModal({
+                  isOpen: true,
+                  result: val,
+                  driver: selectedDriverObj,
+                  vehicle: selectedVehicle
+                });
+                updates.driverId = '';
+                showToast("O motorista selecionado anteriormente possui restrição de descanso nesta data e foi desmarcado.", "warning");
+              }
+            }
+            return updates;
+          });
+        }}
         shouldDisableDate={isDateBlocked}
       />
 
@@ -2581,7 +2903,35 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
           // A data/hora de retorno máxima deve ser no máximo 1 hora antes do início do próximo agendamento
           return nextSchedule ? new Date(new Date(nextSchedule.departureDateTime).getTime() - 60 * 60 * 1000) : undefined;
         })()}
-        onSelect={(date) => setFormData({ ...formData, returnDateTime: getLocalISOString(date) })}
+        onSelect={(date) => {
+          const newRet = getLocalISOString(date);
+          setFormData(prev => {
+            const updates: Partial<VehicleSchedule> = { ...prev, returnDateTime: newRet };
+            if (prev.driverId && prev.departureDateTime) {
+              const selectedDriverObj = persons.find(p => p.id === prev.driverId);
+              const val = validateDriverScheduleRules({
+                driverId: prev.driverId,
+                driverName: selectedDriverObj?.name,
+                departureDateTime: prev.departureDateTime,
+                returnDateTime: newRet,
+                allSchedules: schedules,
+                customHolidays: systemHolidays,
+                excludeScheduleId: editingSchedule?.id
+              });
+              if (!val.isValid) {
+                setDriverRestModal({
+                  isOpen: true,
+                  result: val,
+                  driver: selectedDriverObj,
+                  vehicle: selectedVehicle
+                });
+                updates.driverId = '';
+                showToast("O motorista selecionado anteriormente possui restrição de descanso neste período e foi desmarcado.", "warning");
+              }
+            }
+            return updates;
+          });
+        }}
         shouldDisableDate={isDateBlocked}
       />
 
@@ -2940,6 +3290,24 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
         </div>,
         document.body
       )}
+
+      {/* MODAL DE RESTRIÇÃO DE DESCANSO E DISPONIBILIDADE DO MOTORISTA */}
+      <DriverRestRestrictionModal
+        isOpen={driverRestModal.isOpen}
+        onClose={() => setDriverRestModal(prev => ({ ...prev, isOpen: false }))}
+        validationResult={driverRestModal.result}
+        driver={driverRestModal.driver}
+        vehicle={driverRestModal.vehicle}
+      />
+
+      {/* MODAL ANIMADO DE CARREGAMENTO E SINCRONIZAÇÃO DE DADOS */}
+      <VehicleSchedulingLoadingModal
+        isOpen={isLoadingModalOpen}
+        onClose={() => setIsLoadingModalOpen(false)}
+        vehiclesCount={vehicles.length}
+        driversCount={persons.length}
+        schedulesCount={schedules.length}
+      />
     </div>
   );
 };

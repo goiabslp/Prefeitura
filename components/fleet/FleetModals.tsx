@@ -754,6 +754,7 @@ interface VehicleFormModalProps {
     isOpen: boolean;
     onClose: () => void;
     editingVehicle?: Vehicle | null;
+    existingVehicles?: Vehicle[];
     sectors: Sector[];
     persons: Person[];
     brands?: Brand[];
@@ -764,6 +765,7 @@ export const VehicleFormModal: React.FC<VehicleFormModalProps> = ({
     isOpen,
     onClose,
     editingVehicle,
+    existingVehicles = [],
     sectors,
     persons,
     brands = [],
@@ -793,6 +795,20 @@ export const VehicleFormModal: React.FC<VehicleFormModalProps> = ({
     const [timingBeltCalculationBase, setTimingBeltCalculationBase] = useState<number>(50000);
     const [vehicleImageUrl, setVehicleImageUrl] = useState('');
     const [saving, setSaving] = useState(false);
+
+    // Função utilitária para normalizar placas
+    const normalizePlate = (p?: string): string => {
+        return (p || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    };
+
+    // Verificação de placa conflitante em tempo real
+    const cleanCurrentPlate = normalizePlate(plate);
+    const conflictingVehicle = cleanCurrentPlate.length >= 2 
+        ? existingVehicles.find(v => {
+            if (editingVehicle && v.id === editingVehicle.id) return false;
+            return normalizePlate(v.plate) === cleanCurrentPlate;
+        })
+        : undefined;
 
     useEffect(() => {
         if (editingVehicle) {
@@ -867,6 +883,19 @@ export const VehicleFormModal: React.FC<VehicleFormModalProps> = ({
         e.preventDefault();
         if (!model.trim() || !plate.trim()) {
             alert('Por favor, informe ao menos o Modelo e a Placa do veículo.');
+            return;
+        }
+
+        // Validação obrigatória de placa única
+        const normalizedSubmittedPlate = normalizePlate(plate);
+        const duplicate = existingVehicles.find(v => {
+            if (editingVehicle && v.id === editingVehicle.id) return false;
+            return normalizePlate(v.plate) === normalizedSubmittedPlate;
+        });
+
+        if (duplicate) {
+            alert(`A placa "${plate.trim().toUpperCase()}" já está cadastrada no veículo "${duplicate.model}" (${duplicate.brand || 'Frota'}) - Placa: ${duplicate.plate}.\n\nNão é permitido cadastrar a mesma placa em mais de um cadastro.`);
+            setActiveTab('geral');
             return;
         }
 
@@ -1041,9 +1070,17 @@ export const VehicleFormModal: React.FC<VehicleFormModalProps> = ({
 
                                     {/* Placa do Veículo */}
                                     <div className="space-y-1.5">
-                                        <label className="text-[11px] font-black uppercase tracking-wider text-slate-700 flex items-center gap-1">
-                                            Placa do Veículo <span className="text-orange-600">*</span>
-                                        </label>
+                                        <div className="flex items-center justify-between">
+                                            <label className="text-[11px] font-black uppercase tracking-wider text-slate-700 flex items-center gap-1">
+                                                Placa do Veículo <span className="text-orange-600">*</span>
+                                            </label>
+                                            {conflictingVehicle && (
+                                                <span className="text-[10px] font-extrabold text-rose-600 uppercase tracking-tight flex items-center gap-1">
+                                                    <AlertTriangle className="w-3 h-3" />
+                                                    Placa já em uso
+                                                </span>
+                                            )}
+                                        </div>
                                         <input
                                             type="text"
                                             required
@@ -1051,8 +1088,20 @@ export const VehicleFormModal: React.FC<VehicleFormModalProps> = ({
                                             placeholder="Ex: ABC1D23"
                                             value={plate}
                                             onChange={e => setPlate(e.target.value.toUpperCase())}
-                                            className="w-full px-4 py-3 bg-slate-50 hover:bg-slate-100/70 border border-slate-200 rounded-2xl font-mono font-black text-slate-900 uppercase tracking-widest placeholder:tracking-normal placeholder:font-normal placeholder:text-slate-400 focus:bg-white focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 transition-all outline-none text-sm"
+                                            className={`w-full px-4 py-3 rounded-2xl font-mono font-black uppercase tracking-widest placeholder:tracking-normal placeholder:font-normal placeholder:text-slate-400 focus:bg-white transition-all outline-none text-sm ${
+                                                conflictingVehicle 
+                                                    ? 'bg-rose-50/60 border-2 border-rose-500 text-rose-900 focus:border-rose-600 focus:ring-4 focus:ring-rose-500/20' 
+                                                    : 'bg-slate-50 hover:bg-slate-100/70 border border-slate-200 text-slate-900 focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10'
+                                            }`}
                                         />
+                                        {conflictingVehicle && (
+                                            <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs font-semibold flex items-start gap-2 animate-in fade-in">
+                                                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                                                <div className="text-[11px] leading-tight">
+                                                    Esta placa já está cadastrada para o veículo <strong>{conflictingVehicle.model}</strong> ({conflictingVehicle.brand || 'Frota'}) — <strong>{conflictingVehicle.plate}</strong>.
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
 
                                     {/* Tipo de Veículo */}

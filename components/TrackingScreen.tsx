@@ -1159,17 +1159,13 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                             const rawFase = ((content as any)?.fase) || (order as any)?.fase;
                                                             const isFaseFinalizado = getNormalizedLicitacaoPhaseKey(rawFase) === 'contrato_ata';
                                                             const isAllChecked = isFaseFinalizado && !!checkin.assinados && !!checkin.publicado && !!checkin.pasta;
-                                                            const isFinalized = order.status === 'completed' || order.status === 'approved' || isAllChecked;
-                                                            const stripTime = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
-                                                            const startDate = stripTime(new Date(order.createdAt));
-                                                            const endDate = stripTime(new Date());
-                                                            const diffTime = endDate.getTime() - startDate.getTime();
-                                                            const daysElapsed = Math.max(0, Math.floor(diffTime / (1000 * 3600 * 24)));
-                                                            const daysLeft = 60 - daysElapsed;
                                                             
-                                                            const isLate = daysLeft < 0;
+                                                            const normStatus = String(order.status || '').toLowerCase().trim();
+                                                            const isCompleted = normStatus === 'completed' || normStatus === 'concluído' || normStatus === 'concluido' || normStatus === 'finalized' || normStatus === 'finalizado';
+                                                            const isRejected = normStatus === 'rejected' || normStatus === 'rejeitado';
 
-                                                            if (isAllChecked) {
+                                                            // 1. Processo Concluído / Finalizado
+                                                            if (isAllChecked || isCompleted) {
                                                                 return (
                                                                     <div className="md:col-span-2 flex items-center justify-center">
                                                                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200">
@@ -1179,6 +1175,42 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                                     </div>
                                                                 );
                                                             }
+
+                                                            // 2. Processo Rejeitado
+                                                            if (isRejected) {
+                                                                return (
+                                                                    <div className="md:col-span-2 flex items-center justify-center">
+                                                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-rose-50 text-rose-500 border border-rose-200">
+                                                                            ---
+                                                                        </span>
+                                                                    </div>
+                                                                );
+                                                            }
+
+                                                            // 3. Processo Aprovado: Inicia contagem regressiva de 60 dias a partir da aprovação
+                                                            const approvalDateRaw = (content as any)?.aprovado_em || (order as any)?.aprovado_em || (order as any)?.approvedAt || (content as any)?.approvedAt;
+                                                            const isApproved = normStatus === 'approved' || normStatus === 'aprovado' || !!approvalDateRaw;
+
+                                                            if (!isApproved) {
+                                                                return (
+                                                                    <div className="md:col-span-2 flex items-center justify-center">
+                                                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-slate-100 text-slate-400 border border-slate-200">
+                                                                            <Clock className="w-3 h-3 text-slate-400" />
+                                                                            Aguardando Aprovação
+                                                                        </span>
+                                                                    </div>
+                                                                );
+                                                            }
+
+                                                            const stripTime = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+                                                            const approvalDate = approvalDateRaw ? new Date(approvalDateRaw) : new Date(order.createdAt);
+                                                            const startDate = stripTime(isNaN(approvalDate.getTime()) ? new Date(order.createdAt) : approvalDate);
+                                                            const endDate = stripTime(new Date());
+                                                            const diffTime = endDate.getTime() - startDate.getTime();
+                                                            const daysElapsed = Math.max(0, Math.floor(diffTime / (1000 * 3600 * 24)));
+                                                            const daysLeft = 60 - daysElapsed;
+                                                            
+                                                            const isLate = daysLeft < 0;
 
                                                             if (!isLate) {
                                                                 const isWarning = daysLeft <= 15;
@@ -1193,24 +1225,12 @@ export const TrackingScreen: React.FC<TrackingScreenProps> = ({
                                                                 );
                                                             }
 
-                                                            if (isLate && !isFinalized) {
-                                                                return (
-                                                                    <div className="md:col-span-2 flex items-center justify-center">
-                                                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-rose-50 text-rose-700 border border-rose-200 shadow-xs" title={`${daysElapsed} dias corridos`}>
-                                                                            <AlertTriangle className="w-3 h-3 text-rose-600" />
-                                                                            <span className="font-mono text-xs font-bold">{daysElapsed}d</span>
-                                                                            <span className="text-[8px]">vencido</span>
-                                                                        </span>
-                                                                    </div>
-                                                                );
-                                                            }
-
                                                             return (
                                                                 <div className="md:col-span-2 flex items-center justify-center">
-                                                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200">
-                                                                        <Clock className="w-3 h-3 text-slate-400" />
-                                                                        <span className="font-mono text-xs font-bold">{daysElapsed}</span>
-                                                                        <span className="text-[8px]">dias corridos</span>
+                                                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-rose-50 text-rose-700 border border-rose-200 shadow-xs" title={`${daysElapsed} dias corridos desde a aprovação`}>
+                                                                        <AlertTriangle className="w-3 h-3 text-rose-600" />
+                                                                        <span className="font-mono text-xs font-bold">{daysElapsed}d</span>
+                                                                        <span className="text-[8px]">vencido</span>
                                                                     </span>
                                                                 </div>
                                                             );

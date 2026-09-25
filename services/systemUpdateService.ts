@@ -104,10 +104,27 @@ export const performClientCleanup = async (newVersion?: number | string): Promis
   }
 };
 
+export interface UserUpdateRequest {
+  target: number;
+  version: string | number;
+  targetUserId: string;
+  targetUserName: string;
+  targetUserUsername?: string;
+  triggeredBy: string;
+  triggeredById?: string;
+  triggeredAt: string;
+  status: 'pending' | 'completed';
+  completedAt?: string;
+}
+
 /**
  * Dispara a Atualização Global do Sistema (Exclusivo para Administrador)
  */
 export const triggerGlobalSystemUpdate = async (adminUser: { id?: string; name?: string; role?: string }): Promise<{ success: boolean; target: number; error?: string }> => {
+  if (adminUser.role !== 'admin') {
+    return { success: false, target: 0, error: 'Acesso negado: Somente administradores podem atualizar o sistema.' };
+  }
+
   const targetEpoch = Date.now() + 60000; // 60 segundos
   const adminName = adminUser.name || 'Administrador';
   const adminId = adminUser.id || 'admin';
@@ -183,7 +200,236 @@ export const triggerGlobalSystemUpdate = async (adminUser: { id?: string; name?:
 };
 
 /**
- * Verifica se a versão atual do sistema exige atualização offline/boot
+ * Dispara a Atualização Individual por Usuário (Exclusivo para Administrador)
+ */
+export const triggerUserSystemUpdate = async (
+  adminUser: { id?: string; name?: string; role?: string },
+  targetUser: { id: string; name: string; username?: string }
+): Promise<{ success: boolean; target: number; error?: string }> => {
+  if (adminUser.role !== 'admin') {
+    return { success: false, target: 0, error: 'Acesso negado: Somente administradores podem atualizar usuários.' };
+  }
+
+  const targetEpoch = Date.now() + 60000; // 60 segundos para oportunidade segura
+  const adminName = adminUser.name || 'Administrador';
+  const adminId = adminUser.id || 'admin';
+  const nowIso = new Date().toISOString();
+
+  try {
+    // 1. Broadcast instantâneo via Realtime direcionado ao user_id
+    const channel = supabase.channel('global-updates', {
+      config: { broadcast: { self: true } }
+    });
+    await channel.subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        try {
+          await channel.send({
+            type: 'broadcast',
+            event: 'system_update',
+            payload: {
+              target: targetEpoch,
+              version: targetEpoch,
+              targetUserId: targetUser.id,
+              targetUserName: targetUser.name,
+              targetUserUsername: targetUser.username,
+              triggeredBy: adminName,
+              triggeredById: adminId,
+              triggeredAt: nowIso
+            }
+          });
+        } catch (bErr) {
+          console.warn('[SystemUpdate] Falha no broadcast de atualização de usuário:', bErr);
+        }
+      }
+    });
+
+    // 2. Persistência no Backend (organization_settings -> ui_config.user_update_requests)
+    const { data: existingSettings } = await supabase
+      .from('organization_settings')
+      .select('ui_config')
+      .eq('id', 'global_config')
+      .single();
+
+    const existingUiConfig = existingSettings?.ui_config || {};
+    const existingRequests: Record<string, UserUpdateRequest> = existingUiConfig.user_update_requests || {};
+
+    const newRequest: UserUpdateRequest = {
+      target: targetEpoch,
+      version: targetEpoch,
+      targetUserId: targetUser.id,
+      targetUserName: targetUser.name,
+      targetUserUsername: targetUser.username,
+      triggeredBy: adminName,
+      triggeredById: adminId,
+      triggeredAt: nowIso,
+      status: 'pending'
+    };
+
+    const updatedUiConfig = {
+      ...existingUiConfig,
+      user_update_requests: {
+        ...existingRequests,
+        [targetUser.id]: newRequest
+      }
+    };
+
+    const { error: dbError } = await supabase
+      .from('organization_settings')
+      .update({
+        ui_config: updatedUiConfig,
+        updated_at: nowIso
+      })
+      .eq('id', 'global_config');
+
+    if (dbError) {
+      console.error('[SystemUpdate] Erro ao salvar solicitação individual no banco:', dbError);
+      return { success: false, target: targetEpoch, error: dbError.message };
+    }
+
+    // 3. Registro no Log de Auditoria
+    await auditLogService.logAction({
+      action_type: 'system_update_user',
+      module: 'admin',
+      description: `Atualização de Sistema solicitada para o usuário "${targetUser.name}" (@${targetUser.username || targetUser.id}) por ${adminName}. Versão: ${targetEpoch}.`,
+      details: {
+        admin_id: adminId,
+        admin_name: adminName,
+        target_user_id: targetUser.id,
+        target_user_name: targetUser.name,
+        target_username: targetUser.username,
+        version: targetEpoch,
+        status: 'pending',
+        triggered_at: nowIso
+      }
+    });
+
+    return { success: true, target: targetEpoch };
+  } catch (err: any) {
+    console.error('[SystemUpdate] Falha ao iniciar atualização individual:', err);
+    return { success: false, target: targetEpoch, error: err.message || 'Erro desconhecido' };
+  }
+};
+
+/**
+ * Obtém o mapa de solicitações de atualização individual por usuário
+ */
+export const getUserUpdateRequests = async (): Promise<Record<string, UserUpdateRequest>> => {
+  try {
+    const { data, error } = await supabase
+      .from('organization_settings')
+      .select('ui_config')
+      .eq('id', 'global_config')
+      .single();
+
+    if (error || !data) return {};
+    return data.ui_config?.user_update_requests || {};
+  } catch (err) {
+    console.warn('[SystemUpdate] Erro ao carregar solicitações de atualização de usuários:', err);
+    return {};
+  }
+};
+
+/**
+ * Marca uma atualização individual de usuário como concluída
+ */
+export const markUserUpdateCompleted = async (userId: string, version?: number | string): Promise<boolean> => {
+  if (!userId) return false;
+  const nowIso = new Date().toISOString();
+
+  try {
+    const { data: existingSettings } = await supabase
+      .from('organization_settings')
+      .select('ui_config')
+      .eq('id', 'global_config')
+      .single();
+
+    const existingUiConfig = existingSettings?.ui_config || {};
+    const existingRequests: Record<string, UserUpdateRequest> = existingUiConfig.user_update_requests || {};
+
+    if (!existingRequests[userId]) {
+      existingRequests[userId] = {
+        target: Date.now(),
+        version: version || Date.now(),
+        targetUserId: userId,
+        targetUserName: 'Usuário',
+        triggeredBy: 'Sistema',
+        triggeredAt: nowIso,
+        status: 'completed',
+        completedAt: nowIso
+      };
+    } else {
+      existingRequests[userId] = {
+        ...existingRequests[userId],
+        status: 'completed',
+        completedAt: nowIso
+      };
+    }
+
+    const updatedUiConfig = {
+      ...existingUiConfig,
+      user_update_requests: existingRequests
+    };
+
+    const { error } = await supabase
+      .from('organization_settings')
+      .update({
+        ui_config: updatedUiConfig,
+        updated_at: nowIso
+      })
+      .eq('id', 'global_config');
+
+    if (!error) {
+      await auditLogService.logAction({
+        action_type: 'system_update_user_completed',
+        module: 'admin',
+        description: `Atualização de Sistema individual concluída com sucesso para o usuário ID "${userId}".`,
+        details: {
+          target_user_id: userId,
+          version: version || Date.now(),
+          completed_at: nowIso
+        }
+      });
+      return true;
+    }
+  } catch (err) {
+    console.warn('[SystemUpdate] Erro ao marcar atualização como concluída:', err);
+  }
+  return false;
+};
+
+/**
+ * Verifica se há atualização individual pendente para o usuário (inclusive offline/boot)
+ */
+export const checkAndApplyUserOfflineUpdate = async (
+  userId: string,
+  signOutFn?: () => Promise<void>
+): Promise<boolean> => {
+  if (!userId) return false;
+
+  try {
+    const requests = await getUserUpdateRequests();
+    const userReq = requests[userId];
+
+    if (userReq && userReq.status === 'pending') {
+      console.log(`[SystemUpdate] Atualização individual pendente detectada para o usuário ${userId}. Executando renovação de cache e ambiente...`);
+      await performClientCleanup(userReq.version);
+      await markUserUpdateCompleted(userId, userReq.version);
+      if (signOutFn) {
+        try {
+          await signOutFn();
+        } catch (e) {}
+      }
+      return true;
+    }
+  } catch (err) {
+    console.warn('[SystemUpdate] Erro ao verificar atualização offline individual:', err);
+  }
+
+  return false;
+};
+
+/**
+ * Verifica se a versão atual do sistema exige atualização offline/boot global
  */
 export const checkAndApplyOfflineUpdate = async (
   serverTarget: number | null,

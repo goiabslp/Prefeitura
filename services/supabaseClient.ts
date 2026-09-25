@@ -3,8 +3,8 @@
 import { createClient } from '@supabase/supabase-js';
 import { egressMonitor } from './egressMonitorService';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseUrl = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_SUPABASE_URL) || (typeof process !== 'undefined' && process.env?.VITE_SUPABASE_URL) || '';
+const supabaseAnonKey = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_SUPABASE_ANON_KEY) || (typeof process !== 'undefined' && process.env?.VITE_SUPABASE_ANON_KEY) || '';
 
 if (!supabaseUrl || !supabaseAnonKey) {
     console.warn('Supabase URL and Anon Key missing! Authentication will not work properly.');
@@ -81,8 +81,8 @@ const monitoredFetch: typeof fetch = async (input, init) => {
 };
 
 export const supabase = createClient(
-    supabaseUrl || '',
-    supabaseAnonKey || '',
+    supabaseUrl || 'https://placeholder-project.supabase.co',
+    supabaseAnonKey || 'placeholder-key',
     {
         auth: {
             persistSession: true,

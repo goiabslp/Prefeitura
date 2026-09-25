@@ -119,7 +119,7 @@ import { PoliticaPrivacidadeAppScreen } from './components/PoliticaPrivacidadeAp
 import { canUserAccessRoute, cleanPermissionsArray } from './services/permissionService';
 import { SystemAIAssistantScreen } from './components/ai/SystemAIAssistantScreen';
 import { EgressMonitorModal } from './components/admin/EgressMonitorModal';
-import { performClientCleanup, checkAndApplyOfflineUpdate } from './services/systemUpdateService';
+import { performClientCleanup, checkAndApplyOfflineUpdate, checkAndApplyUserOfflineUpdate, markUserUpdateCompleted } from './services/systemUpdateService';
 
 const VIEW_TO_PATH: Record<string, string> = {
   'login': '/Login',
@@ -324,11 +324,15 @@ const mapLicitacaoProcessToOrder = (process: any): Order => {
     blockType: 'licitacao',
     documentos: process.documentos || process.licitacao_documentos || [],
     objeto_resumido: process.objeto_resumido,
+    aprovado_em: process.aprovado_em,
+    approvedAt: process.aprovado_em,
     documentSnapshot: {
       content: {
         objeto: process.finalidade,
         objeto_resumido: process.objeto_resumido,
         prioridade: process.prioridade,
+        aprovado_em: process.aprovado_em,
+        approvedAt: process.aprovado_em,
         requesterName: process.solicitante_nome,
         requesterRole: process.solicitante_cargo,
         requesterSector: process.solicitante_setor,
@@ -753,7 +757,12 @@ const App: React.FC = () => {
       ...allSignatures.filter(s => currentUser.allowedSignatureIds?.includes(s.id) && s.id !== currentUser.id)
     ]
     : [];
-  const [sectors, setSectors] = useState<Sector[]>(DEFAULT_SECTORS);
+  const [sectors, setSectors] = useState<Sector[]>(() => {
+    try {
+      const cached = sessionStorage.getItem('cachedSectors');
+      return cached ? JSON.parse(cached) : DEFAULT_SECTORS;
+    } catch { return DEFAULT_SECTORS; }
+  });
   const [jobs, setJobs] = useState<Job[]>(DEFAULT_JOBS);
   const [vehicles, setVehicles] = useState<Vehicle[]>(() => {
     try {
@@ -1014,8 +1023,8 @@ const App: React.FC = () => {
     if (!silent) showToast("Atualizando dados...", "info");
     try {
       // Determines which batches to run based on scope
-      const fetchMetadata = !scope || scope === 'metadata' || scope === 'entities' || scope === 'compras' || scope === 'diarias' || scope === 'rh';
-      const fetchEntities = !scope || scope === 'entities' || scope === 'compras' || scope === 'diarias' || scope === 'rh';
+      const fetchMetadata = !scope || scope === 'metadata' || scope === 'entities' || scope === 'compras' || scope === 'diarias' || scope === 'rh' || scope === 'vehicle-scheduling';
+      const fetchEntities = !scope || scope === 'entities' || scope === 'compras' || scope === 'diarias' || scope === 'rh' || scope === 'vehicle-scheduling';
       const fetchTransactions = !scope || scope === 'transactions'; // Generic transactions
       const fetchVehicleSchedules = (!scope || scope === 'vehicle-scheduling') && isModuleActive('parent_frotas');
       const fetchAbastecimento = (!scope || scope === 'abastecimento') && isModuleActive('parent_abastecimento');
@@ -1085,6 +1094,9 @@ const App: React.FC = () => {
         });
 
         setSectors(savedSectors);
+        try {
+          sessionStorage.setItem('cachedSectors', JSON.stringify(savedSectors));
+        } catch (e) { }
         setJobs(savedJobs);
         setBrands(savedBrands);
         setGasStations(savedGasStations);
@@ -1225,15 +1237,33 @@ const App: React.FC = () => {
             setSystemUpdateTarget(payload.new.system_update_target as number);
             setIsUpdateModalDismissed(false);
           }
+          const userRequests = (payload.new?.ui_config as any)?.user_update_requests;
+          const activeUserId = currentUserRef.current?.id;
+          if (userRequests && activeUserId && userRequests[activeUserId]) {
+            const myReq = userRequests[activeUserId];
+            if (myReq.status === 'pending' && myReq.target) {
+              setSystemUpdateTarget(myReq.target);
+              setIsUpdateModalDismissed(false);
+            }
+          }
         }
       )
       .on(
         'broadcast',
         { event: 'system_update' },
         (payload) => {
-          if (payload.payload?.target) {
-            setSystemUpdateTarget(payload.payload.target);
-            setIsUpdateModalDismissed(false);
+          const p = payload.payload;
+          if (p?.target) {
+            const activeUserId = currentUserRef.current?.id;
+            if (p.targetUserId) {
+              if (activeUserId === p.targetUserId) {
+                setSystemUpdateTarget(p.target);
+                setIsUpdateModalDismissed(false);
+              }
+            } else {
+              setSystemUpdateTarget(p.target);
+              setIsUpdateModalDismissed(false);
+            }
           }
         }
       )
@@ -1823,6 +1853,24 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [systemUpdateTarget]);
 
+  // Verificação de Atualização Offline Individual Pendente ao carregar o usuário autenticado
+  useEffect(() => {
+    if (!currentUser?.id || authLoading) return;
+
+    const verifyPendingUserUpdate = async () => {
+      try {
+        const applied = await checkAndApplyUserOfflineUpdate(currentUser.id, signOut);
+        if (applied) {
+          window.location.href = '/Login?update=1';
+        }
+      } catch (err) {
+        console.warn('[SystemUpdate] Erro ao verificar atualização offline do usuário:', err);
+      }
+    };
+
+    verifyPendingUserUpdate();
+  }, [currentUser?.id, authLoading, signOut]);
+
   // Forçar Desconexão e Limpeza de Cache APENAS para usuários autenticados no momento do término do countdown
   useEffect(() => {
     if (systemUpdateCountdown === 0 && currentUser && systemUpdateTarget) {
@@ -1837,6 +1885,9 @@ const App: React.FC = () => {
       const performGlobalLogoutAndCachePurge = async () => {
         try {
           await performClientCleanup(systemUpdateTarget);
+          if (currentUser?.id) {
+            await markUserUpdateCompleted(currentUser.id, systemUpdateTarget);
+          }
           await signOut();
         } catch (e) {
           console.error('Erro na limpeza de cache/logout:', e);
@@ -4538,6 +4589,7 @@ const App: React.FC = () => {
                     ) : currentView === 'admin' && adminTab === 'system_update' ? (
                       <SystemUpdateScreen
                         currentUser={currentUser}
+                        users={users}
                         onUpdateTriggered={(target) => {
                           setSystemUpdateTarget(target);
                           setSystemUpdateCountdown(60);
@@ -4710,21 +4762,31 @@ const App: React.FC = () => {
                         jobs={jobs}
                         brands={brands}
                         onAddVehicle={async v => {
-                          const newV = await entityService.createVehicle(v);
-                          if (newV) {
-                            const updatedList = await entityService.getVehicles();
-                            setVehicles(updatedList);
-                          } else {
-                            alert("Erro ao criar veículo");
+                          try {
+                            const newV = await entityService.createVehicle(v);
+                            if (newV) {
+                              const updatedList = await entityService.getVehicles();
+                              setVehicles(updatedList);
+                            } else {
+                              alert("Erro ao criar veículo");
+                            }
+                          } catch (err: any) {
+                            alert(err.message || "Erro ao criar veículo");
+                            throw err;
                           }
                         }}
                         onUpdateVehicle={async v => {
-                          const updated = await entityService.updateVehicle(v);
-                          if (updated) {
-                            const updatedList = await entityService.getVehicles();
-                            setVehicles(updatedList);
-                          } else {
-                            alert("Erro ao atualizar veículo");
+                          try {
+                            const updated = await entityService.updateVehicle(v);
+                            if (updated) {
+                              const updatedList = await entityService.getVehicles();
+                              setVehicles(updatedList);
+                            } else {
+                              alert("Erro ao atualizar veículo");
+                            }
+                          } catch (err: any) {
+                            alert(err.message || "Erro ao atualizar veículo");
+                            throw err;
                           }
                         }}
                         onDeleteVehicle={async id => {

@@ -330,6 +330,21 @@ export const FleetModule: React.FC<FleetModuleProps> = ({
     };
 
     const handleSaveVehicle = async (vehicleData: Partial<Vehicle>) => {
+        const cleanPlate = (p?: string) => (p || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+        const targetPlate = cleanPlate(vehicleData.plate);
+
+        if (targetPlate) {
+            const conflict = vehicles.find(v => {
+                if (editingVehicle && v.id === editingVehicle.id) return false;
+                return cleanPlate(v.plate) === targetPlate;
+            });
+
+            if (conflict) {
+                alert(`Atenção: A placa "${vehicleData.plate}" já está cadastrada para o veículo "${conflict.model}" (${conflict.brand || 'Frota'}). Não é permitido cadastrar placas duplicadas.`);
+                return;
+            }
+        }
+
         if (editingVehicle && onUpdateVehicle) {
             await onUpdateVehicle(vehicleData as Vehicle);
         } else if (onAddVehicle) {
@@ -587,8 +602,10 @@ export const FleetModule: React.FC<FleetModuleProps> = ({
                 onClose={() => {
                     setIsVehicleModalOpen(false);
                     setEditingVehicle(null);
+                    window.history.pushState({}, '', '/Frota/Veiculos');
                 }}
                 editingVehicle={editingVehicle}
+                existingVehicles={vehicles}
                 sectors={sectors}
                 persons={persons}
                 brands={brands}
