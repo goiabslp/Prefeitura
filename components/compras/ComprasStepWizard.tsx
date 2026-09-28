@@ -254,7 +254,7 @@ export const ComprasStepWizard: React.FC<ComprasStepWizardProps> = ({
 
                 {/* Área central com o formulário */}
                 <div className="flex-1 overflow-y-auto p-4 bg-slate-50 relative">
-                    <div className="w-full max-w-sm mx-auto">
+                    <div className="w-full max-w-md mx-auto">
                         <ComprasForm
                             state={state}
                             content={content}

@@ -469,7 +469,7 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
           <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
             <User className="w-4 h-4 text-emerald-600" /> Dados do Solicitante
           </h3>
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+          <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
             <div>
               <label className={labelClass}>NOME COMPLETO</label>
               <div
@@ -479,7 +479,7 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
                 <span className={content.requesterName ? 'text-slate-900 font-bold' : 'text-slate-400'}>
                   {content.requesterName || 'Selecione o Solicitante...'}
                 </span>
-                <ChevronDown className="w-4 h-4 text-slate-400" />
+                <ChevronDown className="w-4 h-4 text-slate-400 shrink-0 ml-2" />
               </div>
 
               <SelectionModal<Person>
@@ -498,9 +498,9 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shrink-0 ${isSelected ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
                       {person.name.charAt(0).toUpperCase()}
                     </div>
-                    <div className="flex-1">
-                      <p className={`font-bold text-sm ${isSelected ? 'text-emerald-950' : 'text-slate-700'}`}>{person.name}</p>
-                      <p className="text-[11px] text-slate-400 font-medium">
+                    <div className="flex-1 min-w-0">
+                      <p className={`font-bold text-sm truncate ${isSelected ? 'text-emerald-950' : 'text-slate-700'}`}>{person.name}</p>
+                      <p className="text-[11px] text-slate-400 font-medium truncate">
                         {jobs.find(j => j.id === person.jobId)?.name || 'Sem cargo'} • {sectors.find(s => s.id === person.sectorId)?.name || 'Sem setor'}
                       </p>
                     </div>
@@ -514,22 +514,25 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
+            {/* Cargo e Setor empilhados no mobile para não cortar informações */}
+            <div className="flex flex-col gap-3.5 w-full">
+              <div className="w-full">
                 <label className={labelClass}>Cargo</label>
                 <input
-                  type="text" value={content.requesterRole || ''}
+                  type="text"
+                  value={content.requesterRole || ''}
                   readOnly
-                  className={`${inputClass} bg-slate-100/50 cursor-not-allowed text-slate-500`}
+                  className="w-full h-11 bg-slate-50 border border-slate-200/90 rounded-xl px-3.5 text-xs font-semibold text-slate-700 cursor-not-allowed outline-none"
                   placeholder="Cargo automático"
                 />
               </div>
-              <div>
+              <div className="w-full">
                 <label className={labelClass}>Setor</label>
                 <input
-                  type="text" value={content.requesterSector || ''}
+                  type="text"
+                  value={content.requesterSector || ''}
                   readOnly
-                  className={`${inputClass} bg-slate-100/50 cursor-not-allowed text-slate-500`}
+                  className="w-full h-11 bg-slate-50 border border-slate-200/90 rounded-xl px-3.5 text-xs font-semibold text-slate-700 cursor-not-allowed outline-none"
                   placeholder="Setor automático"
                 />
               </div>
@@ -544,16 +547,16 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
           <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
             <ShoppingCart className="w-4 h-4 text-emerald-600" /> Finalidade do Pedido
           </h3>
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+          <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
             <div>
-              <div className="flex justify-between items-center mb-1.5 flex-wrap gap-2">
+              <div className="flex justify-between items-center mb-2 flex-wrap gap-2">
                 <div className="flex items-center gap-2">
                   <label className={labelClass}>Finalidade</label>
                   <button
                     type="button"
                     onClick={handlePolishTitle}
                     disabled={isPolishingTitle || !content.title?.trim()}
-                    className="px-2 py-0.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-lg text-[9px] font-black uppercase tracking-wider transition-all disabled:opacity-40 flex items-center justify-center gap-1 shadow-xs active:scale-95 shrink-0"
+                    className="px-2.5 py-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition-all disabled:opacity-40 flex items-center justify-center gap-1 shadow-xs active:scale-95 shrink-0"
                     title="Melhorar finalidade com IA Gemini"
                   >
                     {isPolishingTitle ? (
@@ -579,7 +582,7 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
                   ) : (
                     <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
                   )}
-                  <span>{content.title?.length || 0} / 100</span>
+                  <span>{content.title?.length || 0} / 100 MÍN.</span>
                 </span>
               </div>
               <div className="relative group">
@@ -587,7 +590,7 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
                   value={content.title || ''}
                   onChange={(e) => handleUpdate('content', 'title', e.target.value)}
                   disabled={isPolishingTitle}
-                  className="w-full min-h-[220px] bg-slate-50/50 border border-slate-200 rounded-2xl p-4 text-sm font-bold text-slate-900 outline-none focus:bg-white focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/5 transition-all resize-none leading-relaxed disabled:opacity-60"
+                  className="w-full min-h-[180px] bg-slate-50/70 border border-slate-200 rounded-2xl p-4 text-xs sm:text-sm font-semibold text-slate-900 outline-none focus:bg-white focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/5 transition-all resize-none leading-relaxed disabled:opacity-60"
                   placeholder="Descreva detalhadamente a finalidade do pedido (mínimo de 100 caracteres)..."
                 />
               </div>
@@ -596,60 +599,95 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
         </div>
       )}
 
-      {/* MOBILE STEP 3: Prioridade */}
+      {/* MOBILE STEP 3: Prioridade (Opções Empilhadas e Responsivas) */}
       {isMobile && currentStep === 3 && (
         <div className="space-y-4 animate-fade-in">
           <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
             <Info className="w-4 h-4 text-emerald-600" /> Nível de Urgência
           </h3>
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-            <div className="flex flex-col gap-3">
-              <div>
-                <label className={labelClass}>Prioridade</label>
-                <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Selecione o nível de urgência</p>
-              </div>
-              <div className="flex bg-slate-100/80 p-1 rounded-full gap-1 w-full border border-slate-200/50">
-                {PRIORITY_OPTIONS.map((opt) => {
-                  const Icon = opt.icon;
-                  const isSelected = content.priority === opt.value;
-                  const selectedColors = {
-                    slate: 'bg-white text-slate-700 shadow-sm ring-1 ring-black/5',
-                    indigo: 'bg-indigo-600 text-white shadow-md shadow-indigo-500/30',
-                    amber: 'bg-amber-500 text-white shadow-md shadow-amber-500/30',
-                    rose: 'bg-rose-500 text-white shadow-md shadow-rose-500/30',
-                  };
+          <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+            <div className="space-y-1">
+              <label className={labelClass}>Prioridade da Compra</label>
+              <p className="text-xs text-slate-500 font-medium">Selecione o nível de urgência desta solicitação:</p>
+            </div>
 
-                  return (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => handleUpdate('content', 'priority', opt.value)}
-                      className={`
-                        flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-full text-[10px] font-black uppercase tracking-wider transition-all duration-300
-                        ${isSelected
-                          ? selectedColors[opt.color as keyof typeof selectedColors]
-                          : 'text-slate-400 hover:bg-white/50 hover:text-slate-600'}
-                      `}
-                    >
-                      <Icon className={`w-3.5 h-3.5 ${isSelected ? '' : 'opacity-70'}`} />
-                      <span>{opt.label.slice(0, 3)}</span>
-                    </button>
-                  );
-                })}
-              </div>
+            {/* Lista Empilhada de Prioridades */}
+            <div className="flex flex-col gap-2.5 w-full">
+              {PRIORITY_OPTIONS.map((opt) => {
+                const Icon = opt.icon;
+                const isSelected = content.priority === opt.value;
+
+                const priorityStyles = {
+                  'Normal': {
+                    border: isSelected ? 'border-slate-800 bg-slate-50 ring-2 ring-slate-800/10 shadow-sm' : 'border-slate-200 hover:border-slate-300 bg-white',
+                    iconBg: isSelected ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600',
+                    title: isSelected ? 'text-slate-900' : 'text-slate-700',
+                    desc: 'Atendimento e fluxo regular padrão'
+                  },
+                  'Média': {
+                    border: isSelected ? 'border-indigo-600 bg-indigo-50/60 ring-2 ring-indigo-500/20 shadow-sm' : 'border-slate-200 hover:border-indigo-200 bg-white',
+                    iconBg: isSelected ? 'bg-indigo-600 text-white' : 'bg-indigo-50 text-indigo-600',
+                    title: isSelected ? 'text-indigo-950' : 'text-slate-700',
+                    desc: 'Prioridade moderada com prazo breve'
+                  },
+                  'Alta': {
+                    border: isSelected ? 'border-amber-500 bg-amber-50/60 ring-2 ring-amber-500/20 shadow-sm' : 'border-slate-200 hover:border-amber-200 bg-white',
+                    iconBg: isSelected ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-600',
+                    title: isSelected ? 'text-amber-950' : 'text-slate-700',
+                    desc: 'Demanda prioritária que requer agilidade'
+                  },
+                  'Urgência': {
+                    border: isSelected ? 'border-rose-500 bg-rose-50/60 ring-2 ring-rose-500/20 shadow-sm' : 'border-slate-200 hover:border-rose-200 bg-white',
+                    iconBg: isSelected ? 'bg-rose-500 text-white' : 'bg-rose-50 text-rose-600',
+                    title: isSelected ? 'text-rose-950' : 'text-slate-700',
+                    desc: 'Atendimento emergencial e imediato'
+                  }
+                };
+
+                const style = priorityStyles[opt.value as keyof typeof priorityStyles];
+
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => handleUpdate('content', 'priority', opt.value)}
+                    className={`w-full flex items-center justify-between p-3.5 rounded-2xl border-2 transition-all text-left group active:scale-[0.99] ${style.border}`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors ${style.iconBg}`}>
+                        <Icon className="w-5 h-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <span className={`text-sm font-black uppercase tracking-wide block ${style.title}`}>
+                          {opt.label}
+                        </span>
+                        <p className="text-[11px] text-slate-500 font-medium truncate">
+                          {style.desc}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="shrink-0 ml-2">
+                      <div className={`w-5 h-5 rounded-full flex items-center justify-center border-2 transition-all ${isSelected ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-slate-300 bg-white'}`}>
+                        {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
 
             {showPriorityJustification && (
-              <div className="pt-4 animate-slide-up">
+              <div className="pt-2 animate-slide-up">
                 <label className={labelClass}>Justificativa da {content.priority}</label>
                 <div className="relative">
                   <textarea
                     value={content.priorityJustification || ''}
                     onChange={(e) => handleUpdate('content', 'priorityJustification', e.target.value)}
-                    className={`${inputClass} min-h-[120px] resize-none leading-relaxed p-4 border-rose-100 bg-rose-50/20`}
+                    className="w-full min-h-[100px] bg-rose-50/40 border border-rose-200 rounded-xl p-3.5 text-xs font-semibold text-slate-900 outline-none focus:bg-white focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20 transition-all resize-none leading-relaxed"
                     placeholder={`Por que este pedido tem prioridade ${content.priority}?`}
                   />
-                  <MessageSquare className="absolute right-3 top-3 w-4 h-4 text-rose-300 pointer-events-none" />
+                  <MessageSquare className="absolute right-3 top-3 w-4 h-4 text-rose-400 pointer-events-none" />
                 </div>
               </div>
             )}
@@ -657,11 +695,11 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
         </div>
       )}
 
-      {/* STEP 2: ITENS DA REQUISIÇÃO */}
+      {/* STEP 2 (DESKTOP) / STEP 4 (MOBILE): ITENS DA REQUISIÇÃO */}
       {((!isMobile && currentStep === 2) || (isMobile && currentStep === 4)) && (
-        <div className={isMobile ? "w-full bg-white border border-slate-200/80 rounded-3xl shadow-xl p-6 space-y-5 flex flex-col" : "space-y-4 border-t border-slate-200 pt-6"}>
+        <div className={isMobile ? "w-full bg-white border border-slate-200/80 rounded-3xl shadow-xl p-5 sm:p-6 space-y-4 flex flex-col" : "space-y-4 border-t border-slate-200 pt-6"}>
           {isMobile ? (
-            <div className="text-center flex flex-col items-center space-y-4 mb-2">
+            <div className="text-center flex flex-col items-center space-y-3 mb-1">
               <div className="w-14 h-14 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto text-emerald-600 shadow-inner border border-emerald-100">
                 <ShoppingCart className="w-7 h-7" />
               </div>
@@ -670,7 +708,7 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
                 <p className="text-slate-500 text-xs font-medium max-w-xs mx-auto">
                   Adicione os produtos ou serviços que deseja solicitar.
                 </p>
-                <div className="pt-2">
+                <div className="pt-1">
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 border border-emerald-200 text-emerald-800 font-black text-xs rounded-full shadow-2xs">
                     <Package className="w-3.5 h-3.5 text-emerald-600" />
                     {(content.purchaseItems || []).length} {(content.purchaseItems || []).length === 1 ? 'item adicionado' : 'itens adicionados'}
@@ -712,153 +750,147 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
             </div>
           )}
 
-          <div className="space-y-4" ref={dropdownRef}>
-            {/* SORTABLE / LIST LIST */}
+          <div className="space-y-3.5" ref={dropdownRef}>
+            {/* LISTA RESPONSIVA DE ITENS */}
             {(content.purchaseItems || []).map((item, index) => {
               const isDropdownOpen = openDropdownId === item.id;
 
               return (
                 <div
                   key={item.id}
-                  className={`flex gap-4 sm:gap-6 items-stretch transition-all duration-300 ${isDropdownOpen ? 'z-50 relative' : 'z-0 relative'}`}
+                  className={`w-full bg-white rounded-2xl p-4 sm:p-5 border transition-all duration-300 ${
+                    isDropdownOpen
+                      ? 'border-emerald-400 ring-4 ring-emerald-500/10 shadow-xl z-50 relative'
+                      : 'border-slate-200/90 shadow-sm hover:border-emerald-500/30 hover:shadow-md z-0 relative'
+                  }`}
                 >
-                  {/* EXTERNAL COUNTER */}
-                  <div className="flex flex-col items-center pt-2">
-                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-slate-900 text-white flex items-center justify-center font-black text-sm sm:text-base shadow-lg shadow-slate-900/20 z-10">
-                      {index + 1}
+                  {/* Topo do Card: Número do Item, Código e Botão de Remover */}
+                  <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-100">
+                    <div className="flex items-center gap-2">
+                      <span className="w-6 h-6 rounded-full bg-slate-900 text-white flex items-center justify-center font-black text-xs shadow-xs">
+                        {index + 1}
+                      </span>
+                      <span className="text-xs font-black text-slate-800 uppercase tracking-wide">
+                        Item #{index + 1}
+                      </span>
+                      {item.code && (
+                        <span className="bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded text-[10px] font-bold border border-emerald-200">
+                          Cód: {item.code}
+                        </span>
+                      )}
                     </div>
-                    {/* Connecting Line (except for last item) */}
-                    {index < (content.purchaseItems?.length || 0) - 1 && (
-                      <div className="w-0.5 flex-1 bg-slate-200 mt-2 mb-2 rounded-full" />
-                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveItem(item.id)}
+                      className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all active:scale-90"
+                      title="Remover Item"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
 
-                  {/* ITEM CARD */}
-                  <div className={`
-                    flex-1 bg-white rounded-2xl p-5 border transition-all duration-300 ease-out group
-                    ${isDropdownOpen
-                      ? 'border-emerald-400 ring-4 ring-emerald-500/10 shadow-xl'
-                      : 'border-slate-100 hover:border-emerald-500/30 hover:shadow-lg hover:shadow-emerald-500/5'
-                    }
-                  `}>
-                    <div className="flex flex-col md:flex-row md:items-center gap-4 sm:gap-6">
+                  {/* Conteúdo do Formulário do Item */}
+                  <div className="space-y-3 w-full">
+                    {/* 1. Descrição (Largura Total) */}
+                    <div className="w-full">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">
+                        Descrição do Item
+                      </label>
+                      <input
+                        type="text"
+                        value={item.name}
+                        onChange={(e) => handleUpdateItem(item.id, 'name', e.target.value)}
+                        placeholder="Ex: Caneta Esferográfica Azul (Cx. 50 un)..."
+                        className="w-full text-xs sm:text-sm font-semibold text-slate-800 bg-slate-50 border border-slate-200 focus:bg-white focus:border-emerald-500 rounded-xl px-3.5 py-2.5 outline-none transition-all placeholder:text-slate-300"
+                      />
+                    </div>
 
-                      {/* 1. Description Input (Grows) */}
-                      <div className="flex-1 min-w-0">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 ml-1 flex items-center gap-2">
-                          Descrição do Item
-                          {item.code && (
-                             <span className="bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded text-[9px] border border-emerald-100">
-                               Cód: {item.code}
-                             </span>
-                          )}
+                    {/* 2. Grid de Quantidade e Unidade (50% / 50% responsivo) */}
+                    <div className="grid grid-cols-2 gap-3 w-full">
+                      {/* Quantidade */}
+                      <div className="w-full">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">
+                          Quantidade
                         </label>
-                        <input
-                          type="text"
-                          value={item.name}
-                          onChange={(e) => handleUpdateItem(item.id, 'name', e.target.value)}
-                          placeholder="Ex: Caneta Esferográfica Azul (Cx. 50 un)..."
-                          className="w-full text-base sm:text-lg font-medium text-slate-800 bg-transparent border-b-2 border-slate-100 hover:border-slate-300 focus:border-emerald-500 focus:bg-slate-50/50 outline-none transition-all placeholder:text-slate-300 py-2 sm:py-1"
-                        />
-                      </div>
-
-                      {/* 2. Controls Group (Qty, Unit, Delete) */}
-                      <div className="flex items-end md:items-center gap-3 sm:gap-4">
-
-                        {/* Quantity */}
-                        <div className="w-28 sm:w-32">
-                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 ml-1 block">
-                            Quantidade
-                          </label>
-                          <div className="flex items-center bg-slate-50 rounded-xl border border-slate-200 group-hover:border-slate-300 focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/10 transition-all h-[42px]">
-                            <button
-                              type="button"
-                              onClick={() => adjustQuantity(item.id, -1)}
-                              className="w-10 h-full flex items-center justify-center text-slate-400 hover:text-emerald-600 hover:bg-emerald-50/50 rounded-l-xl transition-colors active:scale-95"
-                            >
-                              <Minus className="w-3.5 h-3.5" />
-                            </button>
-                            <input
-                              type="number"
-                              min="1"
-                              value={item.quantity}
-                              onChange={(e) => handleUpdateItem(item.id, 'quantity', Number(e.target.value))}
-                              className="flex-1 w-full min-w-0 bg-transparent border-none text-center text-sm font-bold text-slate-700 outline-none h-full appearance-none"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => adjustQuantity(item.id, 1)}
-                              className="w-10 h-full flex items-center justify-center text-slate-400 hover:text-emerald-600 hover:bg-emerald-50/50 rounded-r-xl transition-colors active:scale-95"
-                            >
-                              <Plus className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Unit */}
-                        <div className="w-40 sm:w-48 relative flex-shrink-0">
-                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 ml-1 block">
-                            Unidade
-                          </label>
-                          <div className="relative">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setOpenDropdownId(openDropdownId === item.id ? null : item.id);
-                              }}
-                              className={`
-                                w-full flex items-center justify-between text-left bg-slate-50 border text-slate-700 text-sm font-semibold rounded-xl px-3 h-[42px] transition-all outline-none
-                                ${isDropdownOpen ? 'border-emerald-500 bg-white ring-2 ring-emerald-500/10' : 'border-slate-200 hover:bg-white hover:border-emerald-300'}
-                              `}
-                            >
-                              <span className="truncate whitespace-nowrap">{item.unit}</span>
-                              <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isDropdownOpen ? 'rotate-180 text-emerald-500' : ''}`} />
-                            </button>
-
-                            {/* Dropdown */}
-                            {isDropdownOpen && (
-                              <div className="absolute z-[100] right-0 mt-2 w-56 bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden animate-slide-up py-1 min-w-[200px]">
-                                {UNIT_OPTIONS.map((opt) => {
-                                  const Icon = opt.icon;
-                                  const isSelected = item.unit === opt.value;
-                                  return (
-                                    <button
-                                      key={opt.value}
-                                      onClick={() => {
-                                        handleUpdateItem(item.id, 'unit', opt.value);
-                                        setOpenDropdownId(null);
-                                      }}
-                                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-xs font-bold uppercase tracking-wider transition-all ${isSelected ? 'bg-emerald-50 text-emerald-700' : 'text-slate-500 hover:bg-slate-50 hover:text-emerald-600'
-                                        }`}
-                                    >
-                                      <Icon className="w-3.5 h-3.5" />
-                                      {opt.label}
-                                      {isSelected && <CheckCircle2 className="w-3.5 h-3.5 ml-auto text-emerald-600" />}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Delete */}
-                        <div className="h-[42px] flex items-end">
+                        <div className="flex items-center bg-slate-50 rounded-xl border border-slate-200 focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/10 transition-all h-[42px] w-full">
                           <button
-                            onClick={() => handleRemoveItem(item.id)}
-                            className="w-[42px] h-[42px] flex items-center justify-center rounded-xl text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all active:scale-95"
-                            title="Remover Item"
+                            type="button"
+                            onClick={() => adjustQuantity(item.id, -1)}
+                            className="w-9 h-full flex items-center justify-center text-slate-400 hover:text-emerald-600 hover:bg-emerald-50/50 rounded-l-xl transition-colors active:scale-95 shrink-0"
                           >
-                            <Trash2 className="w-5 h-5" />
+                            <Minus className="w-3.5 h-3.5" />
+                          </button>
+                          <input
+                            type="number"
+                            min="1"
+                            value={item.quantity}
+                            onChange={(e) => handleUpdateItem(item.id, 'quantity', Number(e.target.value))}
+                            className="flex-1 w-full min-w-0 bg-transparent border-none text-center text-xs sm:text-sm font-bold text-slate-700 outline-none h-full appearance-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => adjustQuantity(item.id, 1)}
+                            className="w-9 h-full flex items-center justify-center text-slate-400 hover:text-emerald-600 hover:bg-emerald-50/50 rounded-r-xl transition-colors active:scale-95 shrink-0"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
                           </button>
                         </div>
+                      </div>
 
+                      {/* Unidade Dropdown */}
+                      <div className="w-full relative">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">
+                          Unidade
+                        </label>
+                        <div className="relative w-full">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpenDropdownId(openDropdownId === item.id ? null : item.id);
+                            }}
+                            className={`
+                              w-full flex items-center justify-between text-left bg-slate-50 border text-slate-700 text-xs sm:text-sm font-semibold rounded-xl px-3 h-[42px] transition-all outline-none
+                              ${isDropdownOpen ? 'border-emerald-500 bg-white ring-2 ring-emerald-500/10' : 'border-slate-200 hover:bg-white hover:border-emerald-300'}
+                            `}
+                          >
+                            <span className="truncate whitespace-nowrap">{item.unit}</span>
+                            <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform shrink-0 ml-1 ${isDropdownOpen ? 'rotate-180 text-emerald-500' : ''}`} />
+                          </button>
+
+                          {/* Menu Suspenso */}
+                          {isDropdownOpen && (
+                            <div className="absolute z-[100] right-0 left-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden animate-slide-up py-1 min-w-[170px]">
+                              {UNIT_OPTIONS.map((opt) => {
+                                const Icon = opt.icon;
+                                const isSelected = item.unit === opt.value;
+                                return (
+                                  <button
+                                    key={opt.value}
+                                    type="button"
+                                    onClick={() => {
+                                      handleUpdateItem(item.id, 'unit', opt.value);
+                                      setOpenDropdownId(null);
+                                    }}
+                                    className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold uppercase tracking-wider transition-all ${isSelected ? 'bg-emerald-50 text-emerald-700' : 'text-slate-500 hover:bg-slate-50 hover:text-emerald-600'}`}
+                                  >
+                                    <Icon className="w-3.5 h-3.5 shrink-0" />
+                                    <span className="truncate">{opt.label}</span>
+                                    {isSelected && <CheckCircle2 className="w-3.5 h-3.5 ml-auto text-emerald-600 shrink-0" />}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
               );
             })}
+
             {(!content.purchaseItems || content.purchaseItems.length === 0) && (
               <div className="p-8 sm:p-14 border-2 border-dashed border-slate-200 rounded-[2rem] text-center bg-white/50 backdrop-blur-sm flex flex-col items-center">
                 <div className="w-16 h-16 sm:w-20 sm:h-20 bg-slate-100 rounded-3xl flex items-center justify-center text-slate-300 mx-auto mb-4 shadow-inner">
@@ -882,7 +914,7 @@ export const ComprasForm: React.FC<ComprasFormProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsItemSelectionOpen(true)}
-                  className="w-full py-3 px-4 border-2 border-dashed border-emerald-200 hover:border-emerald-400 hover:bg-emerald-50/50 text-emerald-700 font-bold text-xs uppercase tracking-wider rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-[0.99]"
+                  className="w-full py-3.5 px-4 border-2 border-dashed border-emerald-200 hover:border-emerald-400 hover:bg-emerald-50/50 text-emerald-700 font-bold text-xs uppercase tracking-wider rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-[0.99]"
                 >
                   <Plus className="w-4 h-4" />
                   <span>Adicionar Mais Itens</span>
