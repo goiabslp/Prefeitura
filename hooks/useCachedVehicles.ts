@@ -29,15 +29,31 @@ export const useCachedVehicles = (initialVehicles: Vehicle[] = []) => {
     return useQuery({
         queryKey: vehicleKeys.all,
         queryFn: async () => {
-            const VEHICLE_CACHE_COLUMNS = 'id, type, model, plate, brand, year, color, renavam, chassis, sector_id, responsible_person_id, document_url, document_name, vehicle_image_url, status, maintenance_status, fuel_types, request_manager_ids, max_kml, min_kml, current_km, oil_last_change, oil_next_change, oil_calculation_base, vehicle_category, available_for_scheduling';
-            const { data, error } = await supabase
+            const VEHICLE_CACHE_COLUMNS = 'id, type, model, plate, brand, year, color, renavam, chassis, sector_id, responsible_person_id, document_url, document_name, vehicle_image_url, status, maintenance_status, fuel_types, request_manager_ids, max_kml, min_kml, current_km, oil_last_change, oil_next_change, oil_calculation_base, vehicle_category, available_for_scheduling, available_for_consultation, passenger_capacity';
+            let rawData: any[] = [];
+            let queryError: any = null;
+
+            const res = await supabase
                 .from('vehicles')
                 .select(VEHICLE_CACHE_COLUMNS)
                 .order('plate', { ascending: true });
 
-            if (error) throw error;
+            rawData = (res.data as any[]) || [];
+            queryError = res.error;
 
-            const mappedVehicles = (data || []).map((v: any) => ({
+            if (queryError && queryError.code === '42703') {
+                const fallbackColumns = 'id, type, model, plate, brand, year, color, renavam, chassis, sector_id, responsible_person_id, document_url, document_name, vehicle_image_url, status, maintenance_status, fuel_types, request_manager_ids, max_kml, min_kml, current_km, oil_last_change, oil_next_change, oil_calculation_base, vehicle_category, available_for_scheduling, passenger_capacity';
+                const retry = await supabase
+                    .from('vehicles')
+                    .select(fallbackColumns)
+                    .order('plate', { ascending: true });
+                rawData = (retry.data as any[]) || [];
+                queryError = retry.error;
+            }
+
+            if (queryError) throw queryError;
+
+            const mappedVehicles = (rawData || []).map((v: any) => ({
                 ...v,
                 sectorId: v.sectorId || v.sector_id,
                 responsiblePersonId: v.responsiblePersonId || v.responsible_person_id,
@@ -53,6 +69,9 @@ export const useCachedVehicles = (initialVehicles: Vehicle[] = []) => {
                 oilLastChange: v.oilLastChange || v.oil_last_change,
                 oilNextChange: v.oilNextChange || v.oil_next_change,
                 oilCalculationBase: v.oilCalculationBase || v.oil_calculation_base,
+                passengerCapacity: v.passenger_capacity || v.passengerCapacity,
+                availableForScheduling: v.available_for_scheduling || v.availableForScheduling || 'Sim',
+                availableForConsultation: v.available_for_consultation || v.availableForConsultation || 'Sim',
             }));
 
             // Optional: Backup to LocalStorage if needed for offline-first boots

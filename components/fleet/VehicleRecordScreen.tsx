@@ -409,7 +409,15 @@ export const VehicleRecordScreen: React.FC<VehicleRecordScreenProps> = ({
                         </div>
                         <div>
                             <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">Para Agendamento</span>
-                            <span className="text-xs font-bold text-emerald-700">{vehicle.availableForScheduling || 'Sim'}</span>
+                            <span className={`text-xs font-bold ${vehicle.availableForScheduling === 'Não' ? 'text-rose-600' : 'text-emerald-700'}`}>
+                                {vehicle.availableForScheduling || 'Sim'}
+                            </span>
+                        </div>
+                        <div>
+                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">Disponível para Consulta</span>
+                            <span className={`text-xs font-bold ${vehicle.availableForConsultation === 'Não' ? 'text-rose-600' : 'text-emerald-700'}`}>
+                                {vehicle.availableForConsultation || 'Sim'}
+                            </span>
                         </div>
                     </div>
                 )}

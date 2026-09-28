@@ -208,12 +208,27 @@ export const getVehicles = async (): Promise<Vehicle[]> => {
         let keepFetching = true;
 
         // Fetch in chunks to avoid single massive JSON response failure
-        const vehicleColumns = 'id, type, model, plate, brand, year, color, renavam, chassis, sector_id, responsible_person_id, document_url, document_name, vehicle_image_url, status, maintenance_status, fuel_types, request_manager_ids, max_kml, min_kml, current_km, oil_last_change, oil_next_change, oil_calculation_base, timing_belt_last_change, timing_belt_next_change, timing_belt_calculation_base, passenger_capacity, vehicle_category, available_for_scheduling';
+        const vehicleColumns = 'id, type, model, plate, brand, year, color, renavam, chassis, sector_id, responsible_person_id, document_url, document_name, vehicle_image_url, status, maintenance_status, fuel_types, request_manager_ids, max_kml, min_kml, current_km, oil_last_change, oil_next_change, oil_calculation_base, timing_belt_last_change, timing_belt_next_change, timing_belt_calculation_base, passenger_capacity, vehicle_category, available_for_scheduling, available_for_consultation';
+        const fallbackVehicleColumns = 'id, type, model, plate, brand, year, color, renavam, chassis, sector_id, responsible_person_id, document_url, document_name, vehicle_image_url, status, maintenance_status, fuel_types, request_manager_ids, max_kml, min_kml, current_km, oil_last_change, oil_next_change, oil_calculation_base, timing_belt_last_change, timing_belt_next_change, timing_belt_calculation_base, passenger_capacity, vehicle_category, available_for_scheduling';
+        
+        let colsToUse = vehicleColumns;
+
         while (keepFetching) {
-            const { data, error } = await supabase
+            let { data, error } = await supabase
                 .from('vehicles')
-                .select(vehicleColumns)
+                .select(colsToUse)
                 .range(from, to);
+
+            if (error && error.code === '42703' && colsToUse === vehicleColumns) {
+                // Fallback para colunas legadas caso a coluna nova ainda não esteja no banco
+                colsToUse = fallbackVehicleColumns;
+                const retry = await supabase
+                    .from('vehicles')
+                    .select(colsToUse)
+                    .range(from, to);
+                data = retry.data;
+                error = retry.error;
+            }
 
             if (error) {
                 console.error(`Error fetching vehicles chunk ${from}-${to}:`, error.message);
@@ -277,17 +292,35 @@ export const mapVehicleFromDB = (data: any): Vehicle => {
         timingBeltCalculationBase: data.timing_belt_calculation_base,
         passengerCapacity: data.passenger_capacity,
         vehicleCategory: data.vehicle_category,
-        availableForScheduling: data.available_for_scheduling
+        availableForScheduling: data.available_for_scheduling,
+        availableForConsultation: data.available_for_consultation || 'Sim'
     };
 };
 
 export const getVehicleById = async (id: string): Promise<Vehicle | null> => {
-    const vehicleColumns = 'id, type, model, plate, brand, year, color, renavam, chassis, sector_id, responsible_person_id, document_url, document_name, vehicle_image_url, status, maintenance_status, fuel_types, request_manager_ids, max_kml, min_kml, current_km, oil_last_change, oil_next_change, oil_calculation_base, timing_belt_last_change, timing_belt_next_change, timing_belt_calculation_base, passenger_capacity, vehicle_category, available_for_scheduling';
-    const { data, error } = await supabase
+    const vehicleColumns = 'id, type, model, plate, brand, year, color, renavam, chassis, sector_id, responsible_person_id, document_url, document_name, vehicle_image_url, status, maintenance_status, fuel_types, request_manager_ids, max_kml, min_kml, current_km, oil_last_change, oil_next_change, oil_calculation_base, timing_belt_last_change, timing_belt_next_change, timing_belt_calculation_base, passenger_capacity, vehicle_category, available_for_scheduling, available_for_consultation';
+    let data: any = null;
+    let error: any = null;
+
+    const res = await supabase
         .from('vehicles')
         .select(vehicleColumns)
         .eq('id', id)
         .single();
+
+    data = res.data;
+    error = res.error;
+
+    if (error && error.code === '42703') {
+        const fallbackColumns = 'id, type, model, plate, brand, year, color, renavam, chassis, sector_id, responsible_person_id, document_url, document_name, vehicle_image_url, status, maintenance_status, fuel_types, request_manager_ids, max_kml, min_kml, current_km, oil_last_change, oil_next_change, oil_calculation_base, timing_belt_last_change, timing_belt_next_change, timing_belt_calculation_base, passenger_capacity, vehicle_category, available_for_scheduling';
+        const retry = await supabase
+            .from('vehicles')
+            .select(fallbackColumns)
+            .eq('id', id)
+            .single();
+        data = retry.data;
+        error = retry.error;
+    }
 
     if (error) {
         console.error('Error fetching vehicle details:', error);
@@ -313,7 +346,7 @@ export const createVehicle = async (vehicle: Vehicle): Promise<Vehicle | null> =
         }
     }
 
-    const dbVehicle = {
+    const dbVehicle: any = {
         type: vehicle.type,
         model: vehicle.model,
         plate: vehicle.plate,
@@ -342,14 +375,26 @@ export const createVehicle = async (vehicle: Vehicle): Promise<Vehicle | null> =
         timing_belt_calculation_base: vehicle.timingBeltCalculationBase,
         passenger_capacity: vehicle.passengerCapacity,
         vehicle_category: vehicle.vehicleCategory,
-        available_for_scheduling: vehicle.availableForScheduling || 'Sim'
+        available_for_scheduling: vehicle.availableForScheduling || 'Sim',
+        available_for_consultation: vehicle.availableForConsultation || 'Sim'
     };
 
-    const { data, error } = await supabase
+    let { data, error } = await supabase
         .from('vehicles')
         .insert([dbVehicle])
         .select()
         .single();
+
+    if (error && error.code === '42703') {
+        delete dbVehicle.available_for_consultation;
+        const retry = await supabase
+            .from('vehicles')
+            .insert([dbVehicle])
+            .select()
+            .single();
+        data = retry.data;
+        error = retry.error;
+    }
 
     if (error) {
         console.error('Error creating vehicle:', error);
@@ -376,7 +421,7 @@ export const updateVehicle = async (vehicle: Vehicle): Promise<Vehicle | null> =
         }
     }
 
-    const dbVehicle = {
+    const dbVehicle: any = {
         type: vehicle.type,
         model: vehicle.model,
         plate: vehicle.plate,
@@ -405,15 +450,28 @@ export const updateVehicle = async (vehicle: Vehicle): Promise<Vehicle | null> =
         timing_belt_calculation_base: vehicle.timingBeltCalculationBase,
         passenger_capacity: vehicle.passengerCapacity,
         vehicle_category: vehicle.vehicleCategory,
-        available_for_scheduling: vehicle.availableForScheduling
+        available_for_scheduling: vehicle.availableForScheduling,
+        available_for_consultation: vehicle.availableForConsultation || 'Sim'
     };
 
-    const { data, error } = await supabase
+    let { data, error } = await supabase
         .from('vehicles')
         .update(dbVehicle)
         .eq('id', vehicle.id)
         .select()
         .single();
+
+    if (error && error.code === '42703') {
+        delete dbVehicle.available_for_consultation;
+        const retry = await supabase
+            .from('vehicles')
+            .update(dbVehicle)
+            .eq('id', vehicle.id)
+            .select()
+            .single();
+        data = retry.data;
+        error = retry.error;
+    }
 
     if (error) {
         console.error('Error updating vehicle:', error);

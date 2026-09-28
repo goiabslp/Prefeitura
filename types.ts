@@ -473,6 +473,7 @@ export interface Vehicle {
   maintenanceStatus: MaintenanceStatus;
   vehicleCategory?: 'Carro' | 'Moto' | 'Van' | 'Ônibus' | 'Máquina Pesada' | 'Caminhão' | 'Acessórios';
   availableForScheduling?: 'Sim' | 'Não';
+  availableForConsultation?: 'Sim' | 'Não';
   fuelTypes?: string[];
   requestManagerIds?: string[];
   maxKml?: number;

@@ -789,6 +789,7 @@ export const VehicleFormModal: React.FC<VehicleFormModalProps> = ({
     const [status, setStatus] = useState<Vehicle['status']>('operacional');
     const [maintenanceStatus, setMaintenanceStatus] = useState<Vehicle['maintenanceStatus']>('em_dia');
     const [availableForScheduling, setAvailableForScheduling] = useState<'Sim' | 'Não'>('Sim');
+    const [availableForConsultation, setAvailableForConsultation] = useState<'Sim' | 'Não'>('Sim');
     const [passengerCapacity, setPassengerCapacity] = useState<number>(5);
     const [currentKm, setCurrentKm] = useState<number>(0);
     const [oilCalculationBase, setOilCalculationBase] = useState<number>(5000);
@@ -826,6 +827,7 @@ export const VehicleFormModal: React.FC<VehicleFormModalProps> = ({
             setStatus(editingVehicle.status || 'operacional');
             setMaintenanceStatus(editingVehicle.maintenanceStatus || 'em_dia');
             setAvailableForScheduling(editingVehicle.availableForScheduling || 'Sim');
+            setAvailableForConsultation(editingVehicle.availableForConsultation || 'Sim');
             setPassengerCapacity(editingVehicle.passengerCapacity !== undefined ? editingVehicle.passengerCapacity : 5);
             setCurrentKm(editingVehicle.currentKm || 0);
             setOilCalculationBase(editingVehicle.oilCalculationBase || 5000);
@@ -846,6 +848,7 @@ export const VehicleFormModal: React.FC<VehicleFormModalProps> = ({
             setStatus('operacional');
             setMaintenanceStatus('em_dia');
             setAvailableForScheduling('Sim');
+            setAvailableForConsultation('Sim');
             setPassengerCapacity(5);
             setCurrentKm(0);
             setOilCalculationBase(5000);
@@ -918,6 +921,7 @@ export const VehicleFormModal: React.FC<VehicleFormModalProps> = ({
                 status,
                 maintenanceStatus: editingVehicle?.maintenanceStatus || maintenanceStatus,
                 availableForScheduling,
+                availableForConsultation,
                 passengerCapacity: Number(passengerCapacity) || 5,
                 currentKm: Number(currentKm) || editingVehicle?.currentKm || 0,
                 oilCalculationBase: (oilCalculationBase as any) || editingVehicle?.oilCalculationBase || 5000,
@@ -1240,6 +1244,21 @@ export const VehicleFormModal: React.FC<VehicleFormModalProps> = ({
                                         >
                                             <option value="Sim">Sim (Aparece no módulo de Agendamentos)</option>
                                             <option value="Não">Não (Uso interno exclusivo / Não agendável)</option>
+                                        </select>
+                                    </div>
+
+                                    {/* Disponibilidade para Consulta */}
+                                    <div className="space-y-1.5 p-4 rounded-2xl bg-slate-50 border border-slate-200">
+                                        <label className="text-[11px] font-black uppercase tracking-wider text-slate-700 block">
+                                            Disponível para Consulta?
+                                        </label>
+                                        <select
+                                            value={availableForConsultation}
+                                            onChange={e => setAvailableForConsultation(e.target.value as any)}
+                                            className="w-full px-4 py-3 bg-white border border-slate-200 rounded-2xl font-bold text-slate-900 focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 transition-all outline-none text-sm cursor-pointer"
+                                        >
+                                            <option value="Sim">Sim (Aparece em consultas de veículos livres)</option>
+                                            <option value="Não">Não (Oculto em consultas de veículos livres)</option>
                                         </select>
                                     </div>
 

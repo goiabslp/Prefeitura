@@ -53,8 +53,9 @@ interface VeiculoLivreItem {
   plate: string;
   vehicleType?: string;
   vehicleCategory?: string;
+  totalCapacity: number;
   passengerCapacity: number;
-  year?: number;
+  year?: number | string;
   color?: string;
   sectorId?: string;
   sectorName?: string;
@@ -81,6 +82,7 @@ interface ViagemExistenteItem {
   destination: string;
   purpose: string;
   totalCapacity: number;
+  maxPassengers: number;
   occupiedSeats: number;
   remainingSeats: number;
   confirmedPassengers: CrewMember[];
@@ -302,16 +304,19 @@ export const ConsultarVeiculoScreen: React.FC<ConsultarVeiculoScreenProps> = ({
       const consultaEndMs = endDateTimeLocal.getTime();
 
       // Busca veículos operacionais, setores, pessoas e agendamentos conflitantes no período
+      const vehicleQueryCols = 'id, model, brand, plate, type, vehicle_category, passenger_capacity, year, color, status, available_for_scheduling, available_for_consultation, sector_id';
+      let rawVehiclesPromise = supabase
+        .from('vehicles')
+        .select(vehicleQueryCols)
+        .order('plate', { ascending: true });
+
       const [
-        { data: rawVehicles, error: vErr },
+        rawVehiclesRes,
         { data: sectorsData },
         { data: personsData },
         { data: schedulesData, error: sErr }
       ] = await Promise.all([
-        supabase
-          .from('vehicles')
-          .select('id, model, brand, plate, type, vehicle_category, passenger_capacity, year, color, status, available_for_scheduling, sector_id')
-          .order('plate', { ascending: true }),
+        rawVehiclesPromise,
         supabase
           .from('sectors')
           .select('id, name'),
@@ -325,6 +330,20 @@ export const ConsultarVeiculoScreen: React.FC<ConsultarVeiculoScreenProps> = ({
           .lt('departure_date_time', queryEndIso)
           .gt('return_date_time', queryStartIso)
       ]);
+
+      let rawVehicles: any[] = (rawVehiclesRes.data as any[]) || [];
+      let vErr: any = rawVehiclesRes.error;
+
+      // Se a coluna available_for_consultation ainda não existir no banco (fallback resiliente)
+      if (vErr && vErr.code === '42703') {
+        const fallbackCols = 'id, model, brand, plate, type, vehicle_category, passenger_capacity, year, color, status, available_for_scheduling, sector_id';
+        const retry = await supabase
+          .from('vehicles')
+          .select(fallbackCols)
+          .order('plate', { ascending: true });
+        rawVehicles = (retry.data as any[]) || [];
+        vErr = retry.error;
+      }
 
       if (vErr) throw vErr;
       if (sErr) throw sErr;
@@ -343,11 +362,18 @@ export const ConsultarVeiculoScreen: React.FC<ConsultarVeiculoScreenProps> = ({
         if (p.id && p.name) personMap.set(p.id, p.name);
       });
 
-      // Filtra apenas veículos operacionais e aptos para agendamento
+      // REGRA 1: Disponibilidade para consulta e status operacional
+      // - Veículos marcados como "Disponível para Consulta? = Não" nunca devem aparecer nos resultados.
+      // - Somente veículos configurados como "Sim" poderão ser considerados.
+      // - Mantém validação de status operacional e aptidão geral de agendamento.
       const activeVehicles = (rawVehicles || []).filter((v: any) => {
         const isOperacional = !v.status || v.status.toLowerCase() === 'operacional' || v.status.toLowerCase() === 'ativo';
-        const isDisponivelGeral = v.available_for_scheduling !== 'Não' && v.available_for_scheduling !== 'nao';
-        return isOperacional && isDisponivelGeral;
+        const isDisponivelScheduling = v.available_for_scheduling !== 'Não' && v.available_for_scheduling !== 'nao';
+        
+        const isConsultaNao = v.available_for_consultation === 'Não' || v.available_for_consultation === 'nao';
+        const isDisponivelConsulta = !isConsultaNao && (v.available_for_consultation === 'Sim' || v.available_for_consultation === undefined || v.available_for_consultation === null);
+
+        return isOperacional && isDisponivelScheduling && isDisponivelConsulta;
       });
 
       // Agrupa agendamentos válidos e conflitantes por veículo
@@ -371,14 +397,18 @@ export const ConsultarVeiculoScreen: React.FC<ConsultarVeiculoScreenProps> = ({
       const targetDestNorm = normalizeCity(searchDestination);
       const computedResults: ResultadoConsultaItem[] = [];
 
-      // Avalia cada veículo da frota
+      // Avalia cada veículo da frota de acordo com as regras de disponibilidade e capacidade
       activeVehicles.forEach((v: any) => {
-        const vehicleCap = Number(v.passenger_capacity) || 4;
+        const totalCapacity = Number(v.passenger_capacity) || 5;
+        // REGRA 2: O motorista é obrigatório e ocupa 1 lugar do veículo.
+        // Capacidade disponível para passageiros = Capacidade total do veículo − 1 motorista.
+        const maxPassengers = Math.max(0, totalCapacity - 1);
         const vehicleSchedules = schedulesByVehicle.get(v.id) || [];
 
-        // CASO A: Veículo Totalmente Livre
+        // CASO A: Veículo Totalmente Livre (Sem conflito de agendamento no período)
+        // Formalmente: capacidade_total >= quantidade_passageiros + 1 (ou maxPassengers >= searchPassengerCount)
         if (vehicleSchedules.length === 0) {
-          if (vehicleCap >= searchPassengerCount) {
+          if (totalCapacity >= (searchPassengerCount + 1)) {
             computedResults.push({
               type: 'livre',
               id: v.id,
@@ -387,7 +417,8 @@ export const ConsultarVeiculoScreen: React.FC<ConsultarVeiculoScreenProps> = ({
               plate: v.plate,
               vehicleType: v.type,
               vehicleCategory: v.vehicle_category,
-              passengerCapacity: vehicleCap,
+              totalCapacity,
+              passengerCapacity: maxPassengers,
               year: v.year,
               color: v.color,
               sectorId: v.sector_id,
@@ -398,23 +429,24 @@ export const ConsultarVeiculoScreen: React.FC<ConsultarVeiculoScreenProps> = ({
         }
 
         // CASO B: Veículo com Viagem Existente -> Verificar compatibilidade de Destino e Vagas
+        // O motorista já está designado na viagem existente. As vagas de passageiros são maxPassengers (totalCapacity - 1).
         vehicleSchedules.forEach((sched: any) => {
           const schedDestNorm = normalizeCity(sched.destination);
           const isDestinationMatch = schedDestNorm === targetDestNorm;
 
           if (isDestinationMatch) {
-            // Calcula ocupação atual
+            // Calcula ocupação atual dos passageiros na viagem
             let occupiedSeats = 0;
             if (Array.isArray(sched.passengers) && sched.passengers.length > 0) {
               occupiedSeats = sched.passengers.length;
             } else {
               occupiedSeats = (Number(sched.patient_count) || 0) + (Number(sched.companion_count) || 0);
-              if (occupiedSeats === 0) occupiedSeats = 1; // Ao menos o passageiro/solicitante da viagem
+              if (occupiedSeats === 0) occupiedSeats = 1; // Ao menos o solicitante original
             }
 
-            const remainingSeats = Math.max(0, vehicleCap - occupiedSeats);
+            const remainingSeats = Math.max(0, maxPassengers - occupiedSeats);
 
-            // Se houver vagas suficientes para os novos passageiros solicitados
+            // Se houver vagas livres suficientes para os novos passageiros solicitados
             if (remainingSeats >= searchPassengerCount) {
               computedResults.push({
                 type: 'viagem_existente',
@@ -435,7 +467,8 @@ export const ConsultarVeiculoScreen: React.FC<ConsultarVeiculoScreenProps> = ({
                 returnDateTime: sched.return_date_time,
                 destination: sched.destination,
                 purpose: sched.purpose || 'Viagem Oficial',
-                totalCapacity: vehicleCap,
+                totalCapacity,
+                maxPassengers,
                 occupiedSeats,
                 remainingSeats,
                 confirmedPassengers: Array.isArray(sched.passengers) ? sched.passengers : []
@@ -629,7 +662,7 @@ export const ConsultarVeiculoScreen: React.FC<ConsultarVeiculoScreenProps> = ({
           return {
             ...item,
             occupiedSeats: newOccupied,
-            remainingSeats: Math.max(0, item.totalCapacity - newOccupied)
+            remainingSeats: Math.max(0, item.maxPassengers - newOccupied)
           };
         }
         return item;
@@ -954,10 +987,13 @@ export const ConsultarVeiculoScreen: React.FC<ConsultarVeiculoScreenProps> = ({
 
                             <div className="flex items-center justify-between">
                               <span className="text-slate-400 flex items-center gap-1">
-                                <Users className="w-3.5 h-3.5 text-slate-400" /> Capacidade Total:
+                                <Users className="w-3.5 h-3.5 text-slate-400" /> Vagas p/ Passageiros:
                               </span>
-                              <span className="font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200">
-                                {item.passengerCapacity} passageiros
+                              <span 
+                                className="font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200"
+                                title={`Capacidade total do veículo: ${item.totalCapacity} lugares (${item.passengerCapacity} passageiros + 1 motorista)`}
+                              >
+                                {item.passengerCapacity} passageiros (+ 1 motorista)
                               </span>
                             </div>
 
@@ -1054,7 +1090,8 @@ export const ConsultarVeiculoScreen: React.FC<ConsultarVeiculoScreenProps> = ({
                             </span>
                           </div>
                           <div className="text-right text-[11px] font-semibold text-amber-800/80">
-                            <span>Ocupação: {item.occupiedSeats}/{item.totalCapacity}</span>
+                            <span>Passageiros: {item.occupiedSeats}/{item.maxPassengers}</span>
+                            <span className="block text-[9px] text-amber-700/70">(+ 1 motorista alocado)</span>
                           </div>
                         </div>
 

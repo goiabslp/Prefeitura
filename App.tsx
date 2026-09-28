@@ -4660,12 +4660,17 @@ const App: React.FC = () => {
                         }}
                         onUpdateUser={handleUpdateUserInApp}
                         onDeleteUser={async (id) => {
-                          const { error } = await supabase.rpc('delete_user_admin', { user_id: id });
-                          if (error) {
-                            console.error("Error deleting user:", error);
-                            alert("Erro ao deletar: " + error.message);
-                          } else {
+                          try {
+                            const { error } = await supabase.rpc('delete_user_admin', { user_id: id });
+                            if (error) {
+                              console.error("Error deleting user:", error);
+                              return { success: false, message: error.message };
+                            }
                             setUsers(p => p.filter(u => u.id !== id));
+                            return { success: true };
+                          } catch (err: any) {
+                            console.error("Unexpected error deleting user:", err);
+                            return { success: false, message: err?.message || 'Erro inesperado ao excluir usuário' };
                           }
                         }}
                         availableSignatures={allSignatures}

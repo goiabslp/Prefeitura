@@ -28,6 +28,7 @@ import {
 import { AbastecimentoRecord } from '../../services/abastecimentoService';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
+import { getVehicleVisualCategory } from './FleetVehicles';
 
 interface FleetReportsProps {
     vehicles: Vehicle[];
@@ -74,7 +75,7 @@ export const FleetReports: React.FC<FleetReportsProps> = ({
     const reportData = useMemo(() => {
         let vList = [...vehicles];
         if (selectedVehicleId !== 'todos') vList = vList.filter(v => v.id === selectedVehicleId);
-        if (selectedCategory !== 'todos') vList = vList.filter(v => (v.vehicleCategory || v.type) === selectedCategory);
+        if (selectedCategory !== 'todos') vList = vList.filter(v => getVehicleVisualCategory(v) === selectedCategory);
 
         let mList = [...maintenances];
         if (selectedVehicleId !== 'todos') mList = mList.filter(m => m.vehicle_id === selectedVehicleId);
@@ -288,7 +289,7 @@ export const FleetReports: React.FC<FleetReportsProps> = ({
                                         <tr key={v.id}>
                                             <td className="p-2 font-mono font-black">{v.plate}</td>
                                             <td className="p-2 font-bold uppercase">{v.brand} {v.model}</td>
-                                            <td className="p-2">{v.vehicleCategory || v.type || 'Carro'}</td>
+                                            <td className="p-2">{getVehicleVisualCategory(v)}</td>
                                             <td className="p-2 font-semibold">{sectorMap.get(v.sectorId) || '-'}</td>
                                             <td className="p-2 font-mono font-bold">{(Number(v.currentKm) || 0).toLocaleString('pt-BR')} km</td>
                                             <td className="p-2 uppercase font-black text-[10px]">{v.status}</td>

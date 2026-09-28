@@ -56,6 +56,38 @@ const CATEGORIES = [
     { id: 'Acessórios', label: 'Acessórios', icon: Layers },
 ];
 
+export const getVehicleVisualCategory = (v?: Partial<Vehicle> | null): NonNullable<Vehicle['vehicleCategory']> => {
+    if (!v) return 'Carro';
+    if (v.vehicleCategory && ['Carro', 'Moto', 'Van', 'Ônibus', 'Máquina Pesada', 'Caminhão', 'Acessórios'].includes(v.vehicleCategory)) {
+        return v.vehicleCategory;
+    }
+    const m = (v.model || '').toUpperCase();
+    const t = (v.type || '').toLowerCase();
+
+    if (t === 'acessorio' || m.includes('HUSQ') || m.includes('MOTOSSERRA') || m.includes('ROÇADEIRA') || m.includes('ROCADEIRA')) {
+        return 'Acessórios';
+    }
+    if (m.includes('MOTO') || m.includes('SHINERAY') || m.includes('BROSS') || m.includes('TITAN') || m.includes('FAN')) {
+        return 'Moto';
+    }
+    if (m.includes('ONIBUS') || m.includes('ÔNIBUS') || m.includes('MICROONIBUS') || m.includes('MICRO-ÔNIBUS') || m.includes('MASCA')) {
+        return 'Ônibus';
+    }
+    if (m.includes('VAN') || m.includes('MASTER') || m.includes('TRANSIT') || m.includes('DAILY') || m.includes('DUCATO') || m.includes('VACIMOVEL') || m.includes('AMBULANCIA')) {
+        return 'Van';
+    }
+    if (m.includes('CAMINHÃO') || m.includes('CAMINHAO')) {
+        return 'Caminhão';
+    }
+    if (m.includes('TRATOR') || m.includes('PATROL') || m.includes('CARREGADEIRA') || m.includes('RETROESCAVADEIRA') || m.includes('BOBCAT') || m.includes('MOTONIVELADORA') || m.includes('MÁQUINA') || m.includes('MAQUINA') || m.includes('LW300') || m.includes('XC870') || m.includes('MBL-X') || m.includes('4160D') || m.includes('W-130')) {
+        return 'Máquina Pesada';
+    }
+    if (t === 'pesado') {
+        return 'Máquina Pesada';
+    }
+    return 'Carro';
+};
+
 export const FleetVehicles: React.FC<FleetVehiclesProps> = ({
     vehicles,
     sectors,
@@ -101,7 +133,7 @@ export const FleetVehicles: React.FC<FleetVehiclesProps> = ({
         return vehicles.filter(v => {
             // Categoria
             if (selectedCategory !== 'todos') {
-                const cat = v.vehicleCategory || v.type;
+                const cat = getVehicleVisualCategory(v);
                 if (cat !== selectedCategory) return false;
             }
 
@@ -182,7 +214,7 @@ export const FleetVehicles: React.FC<FleetVehiclesProps> = ({
                     const isSelected = selectedCategory === cat.id;
                     const count = cat.id === 'todos' 
                         ? vehicles.length 
-                        : vehicles.filter(v => (v.vehicleCategory || v.type) === cat.id).length;
+                        : vehicles.filter(v => getVehicleVisualCategory(v) === cat.id).length;
 
                     return (
                         <button
@@ -335,7 +367,7 @@ export const FleetVehicles: React.FC<FleetVehiclesProps> = ({
                                             {v.brand} {v.model}
                                         </h3>
                                         <span className="text-[10px] font-semibold text-slate-500">
-                                            {v.vehicleCategory || v.type || 'Carro'} {v.year ? `• ${v.year}` : ''}
+                                            {getVehicleVisualCategory(v)} {v.year ? `• ${v.year}` : ''}
                                         </span>
                                     </div>
 

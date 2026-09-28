@@ -53,7 +53,7 @@ interface UserManagementScreenProps {
   currentUser: User;
   onAddUser: (user: User) => void;
   onUpdateUser: (user: User) => void;
-  onDeleteUser: (userId: string) => void;
+  onDeleteUser: (userId: string) => Promise<{ success: boolean; message?: string } | void> | void;
   onImpersonateUser?: (user: User) => void;
   availableSignatures: Signature[];
   jobs: Job[];
@@ -969,10 +969,18 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                             title: "Excluir Usuário",
                             message: `Deseja realmente remover o acesso de "${user.name}"? Esta ação é irreversível.`,
                             type: 'danger',
-                            onConfirm: () => {
-                              onDeleteUser(user.id);
-                              showToast("Usuário removido.");
-                              setConfirmModal({ ...confirmModal, isOpen: false });
+                            onConfirm: async () => {
+                              try {
+                                const result = await onDeleteUser(user.id);
+                                if (result && (result as any).success === false) {
+                                  showToast((result as any).message || "Erro ao remover usuário.", "error");
+                                } else {
+                                  showToast("Usuário removido com sucesso.");
+                                  setConfirmModal(prev => ({ ...prev, isOpen: false }));
+                                }
+                              } catch (err: any) {
+                                showToast(err?.message || "Erro ao remover usuário.", "error");
+                              }
                             }
                           })}
                           className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-100 transition-all cursor-pointer"

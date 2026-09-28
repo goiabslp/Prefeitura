@@ -1009,6 +1009,7 @@ export const fleetManagementService = {
             maintenanceStatus: vData.maintenance_status,
             vehicleCategory: vData.vehicle_category,
             availableForScheduling: vData.available_for_scheduling,
+            availableForConsultation: vData.available_for_consultation || 'Sim',
             fuelTypes: vData.fuel_types,
             requestManagerIds: vData.request_manager_ids,
             maxKml: vData.max_kml,
