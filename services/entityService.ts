@@ -297,6 +297,15 @@ export const mapVehicleFromDB = (data: any): Vehicle => {
     };
 };
 
+const isMissingColumnError = (err: any): boolean => {
+    if (!err) return false;
+    return err.code === '42703' ||
+        err.code === 'PGRST204' ||
+        String(err.message || '').includes('available_for_consultation') ||
+        String(err.message || '').includes('schema cache') ||
+        String(err.details || '').includes('available_for_consultation');
+};
+
 export const getVehicleById = async (id: string): Promise<Vehicle | null> => {
     const vehicleColumns = 'id, type, model, plate, brand, year, color, renavam, chassis, sector_id, responsible_person_id, document_url, document_name, vehicle_image_url, status, maintenance_status, fuel_types, request_manager_ids, max_kml, min_kml, current_km, oil_last_change, oil_next_change, oil_calculation_base, timing_belt_last_change, timing_belt_next_change, timing_belt_calculation_base, passenger_capacity, vehicle_category, available_for_scheduling, available_for_consultation';
     let data: any = null;
@@ -311,7 +320,7 @@ export const getVehicleById = async (id: string): Promise<Vehicle | null> => {
     data = res.data;
     error = res.error;
 
-    if (error && error.code === '42703') {
+    if (isMissingColumnError(error)) {
         const fallbackColumns = 'id, type, model, plate, brand, year, color, renavam, chassis, sector_id, responsible_person_id, document_url, document_name, vehicle_image_url, status, maintenance_status, fuel_types, request_manager_ids, max_kml, min_kml, current_km, oil_last_change, oil_next_change, oil_calculation_base, timing_belt_last_change, timing_belt_next_change, timing_belt_calculation_base, passenger_capacity, vehicle_category, available_for_scheduling';
         const retry = await supabase
             .from('vehicles')
@@ -385,7 +394,7 @@ export const createVehicle = async (vehicle: Vehicle): Promise<Vehicle | null> =
         .select()
         .single();
 
-    if (error && error.code === '42703') {
+    if (isMissingColumnError(error)) {
         delete dbVehicle.available_for_consultation;
         const retry = await supabase
             .from('vehicles')
@@ -461,7 +470,7 @@ export const updateVehicle = async (vehicle: Vehicle): Promise<Vehicle | null> =
         .select()
         .single();
 
-    if (error && error.code === '42703') {
+    if (isMissingColumnError(error)) {
         delete dbVehicle.available_for_consultation;
         const retry = await supabase
             .from('vehicles')

@@ -335,7 +335,16 @@ export const ConsultarVeiculoScreen: React.FC<ConsultarVeiculoScreenProps> = ({
       let vErr: any = rawVehiclesRes.error;
 
       // Se a coluna available_for_consultation ainda não existir no banco (fallback resiliente)
-      if (vErr && vErr.code === '42703') {
+      const isMissingCol = (err: any) => {
+        if (!err) return false;
+        return err.code === '42703' ||
+          err.code === 'PGRST204' ||
+          String(err.message || '').includes('available_for_consultation') ||
+          String(err.message || '').includes('schema cache') ||
+          String(err.details || '').includes('available_for_consultation');
+      };
+
+      if (isMissingCol(vErr)) {
         const fallbackCols = 'id, model, brand, plate, type, vehicle_category, passenger_capacity, year, color, status, available_for_scheduling, sector_id';
         const retry = await supabase
           .from('vehicles')
