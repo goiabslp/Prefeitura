@@ -6,7 +6,7 @@ import {
   Plus, Search, Edit2, Trash2, ShieldCheck, Users, Save, X, Key,
   PenTool, LayoutGrid, User as UserIcon, CheckCircle2, Gavel, ShoppingCart, Briefcase, Network,
   Eye, EyeOff, RotateCcw, AlertTriangle, Clock, Lock, Copy, Check, Info, Trash, ToggleRight, ArrowLeft, RefreshCw, Megaphone, FlaskConical, Calendar,
-  ChevronDown, ChevronUp, CheckSquare, Square, Filter, UserCheck, ShieldAlert
+  ChevronDown, ChevronUp, CheckSquare, Square, Filter, UserCheck, ShieldAlert, Radio, Sparkles
 } from 'lucide-react';
 import { googleCalendarService } from '../services/googleCalendarService';
 import { ModuleAccessControlTree } from './admin/ModuleAccessControlTree';
@@ -943,11 +943,15 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                         <button
                           type="button"
                           onClick={() => setImpersonateModal({ isOpen: true, targetUser: user })}
-                          className="p-2 sm:px-3 sm:py-1.5 rounded-xl bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200/80 transition-all flex items-center gap-1.5 text-xs font-bold cursor-pointer"
-                          title="Acessar como usuário"
+                          className="p-2 sm:px-3 sm:py-1.5 rounded-xl bg-gradient-to-r from-amber-50 to-orange-50 text-amber-800 hover:from-amber-100 hover:to-orange-100 border border-amber-300/80 transition-all flex items-center gap-1.5 text-xs font-bold cursor-pointer shadow-xs group"
+                          title="Simular conta com acompanhamento assistido em tempo real"
                         >
-                          <UserCheck className="w-4 h-4 text-amber-600" />
-                          <span className="hidden md:inline">Simular</span>
+                          <div className="relative flex items-center justify-center">
+                            <UserCheck className="w-4 h-4 text-amber-600 group-hover:scale-110 transition-transform" />
+                            <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping" />
+                          </div>
+                          <span className="hidden md:inline">Simular & Acompanhar</span>
+                          <span className="md:hidden">Simular</span>
                         </button>
                       )}
 
@@ -1985,44 +1989,45 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
           )
         }
 
-        {/* MODAL DE CONFIRMAÇÃO DE ACESSO COMO USUÁRIO (IMPERSONATION) */}
+        {/* MODAL DE CONFIRMAÇÃO DE ACOMPANHAMENTO ASSISTIDO EM TEMPO REAL (IMPERSONATION) */}
         {
           impersonateModal.isOpen && impersonateModal.targetUser && createPortal(
-            <div className="fixed inset-0 z-[220] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md animate-fade-in">
-              <div className="w-full max-w-lg bg-white rounded-[2.5rem] shadow-2xl overflow-hidden animate-slide-up border border-slate-100 flex flex-col">
+            <div className="fixed inset-0 z-[220] flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-md animate-fade-in">
+              <div className="w-full max-w-xl bg-white rounded-[2.5rem] shadow-2xl overflow-hidden animate-slide-up border border-slate-100 flex flex-col max-h-[90vh]">
                 {/* Header do Modal */}
-                <div className="p-6 md:p-8 bg-gradient-to-br from-amber-500 via-amber-600 to-orange-600 text-white relative overflow-hidden">
+                <div className="p-6 md:p-7 bg-gradient-to-br from-indigo-900 via-indigo-950 to-slate-950 text-white relative overflow-hidden shrink-0 border-b border-indigo-500/30">
                   <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
-                    <UserCheck className="w-36 h-36" />
+                    <Radio className="w-40 h-40 text-cyan-400" />
                   </div>
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="p-2.5 bg-white/20 backdrop-blur-md rounded-2xl border border-white/30 text-white shadow-inner">
-                      <ShieldAlert className="w-6 h-6" />
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="p-2.5 bg-indigo-500/20 backdrop-blur-md rounded-2xl border border-indigo-400/40 text-cyan-300 shadow-inner">
+                      <Radio className="w-6 h-6 animate-pulse" />
                     </div>
-                    <span className="px-3 py-1 bg-black/25 backdrop-blur-md rounded-full text-[10px] font-black uppercase tracking-widest text-amber-100 border border-white/20">
-                      Sessão Administrativa Temporária
+                    <span className="px-3 py-1 bg-indigo-500/20 text-cyan-300 backdrop-blur-md rounded-full text-[10px] font-black uppercase tracking-widest border border-indigo-400/30 flex items-center gap-1.5">
+                      <Sparkles className="w-3 h-3 text-cyan-300" />
+                      Modo Assistido em Tempo Real
                     </span>
                   </div>
-                  <h3 className="text-2xl font-black tracking-tight text-white">
-                    Acessar como Usuário
+                  <h3 className="text-xl md:text-2xl font-black tracking-tight text-white">
+                    Simulação & Acompanhamento Assistido
                   </h3>
-                  <p className="text-amber-100/90 text-xs md:text-sm font-medium mt-1">
-                    Você visualizará o sistema exatamente com o perfil, telas e permissões do usuário selecionado.
+                  <p className="text-slate-300 text-xs md:text-sm font-medium mt-1 leading-relaxed">
+                    Você navegará com as permissões do usuário enquanto ele acompanha cada demonstração e ação diretamente na tela dele em tempo real.
                   </p>
                 </div>
 
                 {/* Corpo com Detalhes do Usuário */}
-                <div className="p-6 md:p-8 space-y-6">
+                <div className="p-6 space-y-4 overflow-y-auto flex-1 custom-scrollbar">
                   {/* Card do Usuário Alvo */}
                   <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 flex items-center gap-4">
-                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center text-xl font-black shadow-inner shrink-0 overflow-hidden">
+                    <div className="w-13 h-13 rounded-2xl bg-gradient-to-br from-indigo-600 to-cyan-600 text-white flex items-center justify-center text-xl font-black shadow-inner shrink-0 overflow-hidden">
                       {impersonateModal.targetUser.name.charAt(0).toUpperCase()}
                     </div>
                     <div className="min-w-0 flex-1">
                       <h4 className="font-bold text-base text-slate-900 truncate">
                         {impersonateModal.targetUser.name}
                       </h4>
-                      <p className="text-xs text-slate-500 font-medium">
+                      <p className="text-xs text-slate-500 font-medium truncate">
                         @{impersonateModal.targetUser.username} {impersonateModal.targetUser.email ? `• ${impersonateModal.targetUser.email}` : ''}
                       </p>
                       <div className="flex items-center gap-2 mt-2 flex-wrap">
@@ -2041,31 +2046,54 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                     </div>
                   </div>
 
+                  {/* Recursos Sincronizados em Tempo Real */}
+                  <div className="p-4 rounded-2xl bg-indigo-50/70 border border-indigo-100 space-y-2.5 text-xs text-indigo-950">
+                    <div className="flex items-center gap-2 font-black text-indigo-900 uppercase tracking-wider text-[11px]">
+                      <Radio className="w-4 h-4 text-indigo-600 shrink-0 animate-pulse" />
+                      O que o usuário verá na tela dele:
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] font-medium text-indigo-900/90">
+                      <div className="flex items-center gap-2 bg-white/70 p-2 rounded-xl border border-indigo-100/60">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                        <span>Mudanças de páginas e rotas URL</span>
+                      </div>
+                      <div className="flex items-center gap-2 bg-white/70 p-2 rounded-xl border border-indigo-100/60">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                        <span>Abertura de menus e modais</span>
+                      </div>
+                      <div className="flex items-center gap-2 bg-white/70 p-2 rounded-xl border border-indigo-100/60">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                        <span>Cliques e cursor do Administrador</span>
+                      </div>
+                      <div className="flex items-center gap-2 bg-white/70 p-2 rounded-xl border border-indigo-100/60">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                        <span>Filtros, pesquisas e rolagem</span>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Termos de Segurança e Auditoria */}
-                  <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200 text-amber-950 space-y-2 text-xs">
+                  <div className="p-4 rounded-2xl bg-amber-50/80 border border-amber-200 text-amber-950 space-y-1.5 text-xs">
                     <div className="flex items-center gap-2 font-bold text-amber-900 uppercase tracking-wider text-[11px]">
                       <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                      Regras de Auditoria e Conformidade
+                      Segurança & Regras de Sessão
                     </div>
-                    <ul className="space-y-1.5 pl-5 list-disc text-amber-900/90 leading-relaxed font-medium">
+                    <ul className="space-y-1 pl-5 list-disc text-amber-900/90 leading-relaxed font-medium text-[11px]">
                       <li>
-                        A sessão é <strong>temporária</strong> e auditada em tempo real no banco de dados.
+                        O usuário ficará em <strong>modo somente visualização</strong>, impedindo conflitos acidentais.
                       </li>
                       <li>
-                        Todas as ações registradas manterão a autoria do administrador real (<strong>{currentUser.name}</strong>).
+                        Todas as ações e páginas acessadas serão auditadas em nome do administrador real (<strong>{currentUser.name}</strong>).
                       </li>
                       <li>
-                        Nenhuma senha do usuário será visualizada, alterada ou exigida.
-                      </li>
-                      <li>
-                        Um banner fixo permanecerá no topo de todas as páginas para permitir o encerramento imediato a qualquer instante.
+                        Você terá controles no topo da tela para <strong>pausar, retomar ou encerrar</strong> a qualquer instante.
                       </li>
                     </ul>
                   </div>
                 </div>
 
                 {/* Ações do Modal */}
-                <div className="p-6 bg-slate-50 border-t border-slate-100 flex flex-col sm:flex-row gap-3">
+                <div className="p-5 bg-slate-50 border-t border-slate-100 flex flex-col sm:flex-row gap-2.5 shrink-0">
                   <button
                     type="button"
                     onClick={() => {
@@ -2074,15 +2102,15 @@ export const UserManagementScreen: React.FC<UserManagementScreenProps> = ({
                       }
                       setImpersonateModal({ isOpen: false, targetUser: null });
                     }}
-                    className="flex-1 py-3.5 px-6 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-black text-xs uppercase tracking-widest rounded-2xl shadow-lg shadow-amber-600/25 hover:shadow-xl hover:scale-[1.01] active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-2"
+                    className="flex-1 py-3 px-5 bg-gradient-to-r from-indigo-600 via-indigo-700 to-indigo-800 hover:from-indigo-700 hover:to-indigo-900 text-white font-black text-xs uppercase tracking-widest rounded-2xl shadow-lg shadow-indigo-600/25 hover:shadow-xl hover:scale-[1.01] active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-2"
                   >
-                    <UserCheck className="w-4 h-4" />
-                    <span>Confirmar e Iniciar Acesso</span>
+                    <Radio className="w-4 h-4 text-cyan-300" />
+                    <span>Iniciar Acompanhamento Assistido</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setImpersonateModal({ isOpen: false, targetUser: null })}
-                    className="py-3.5 px-6 bg-white hover:bg-slate-100 text-slate-600 font-black text-xs uppercase tracking-wider rounded-2xl border border-slate-200 hover:border-slate-300 transition-all cursor-pointer"
+                    className="py-3 px-5 bg-white hover:bg-slate-100 text-slate-600 font-black text-xs uppercase tracking-wider rounded-2xl border border-slate-200 hover:border-slate-300 transition-all cursor-pointer"
                   >
                     Cancelar
                   </button>

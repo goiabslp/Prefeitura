@@ -25,6 +25,13 @@ import * as settingsService from './services/settingsService';
 import * as db from './services/dbService';
 import { auditLogService } from './services/auditLogService';
 import { impersonationService, ImpersonationSession } from './services/impersonationService';
+import { 
+  assistedSessionService, 
+  AssistedMouseMovePayload, 
+  AssistedClickPayload 
+} from './services/assistedSessionService';
+import { AssistedSessionControlHUD } from './components/AssistedSessionControlHUD';
+import { AssistedUserViewerOverlay } from './components/AssistedUserViewerOverlay';
 import {
   INITIAL_STATE,
   DEFAULT_USERS,
@@ -572,109 +579,12 @@ const App: React.FC = () => {
     };
   }, [impersonationSession]);
 
-  // Transparência e Segurança: Notifica o usuário comum quando sua conta estiver sob acesso administrativo (não permitir impersonação silenciosa)
-  const [impersonationNoticeOnMe, setImpersonationNoticeOnMe] = useState<{
-    active: boolean;
-    adminName: string;
-    adminEmail?: string;
-    startedAt: string;
-  } | null>(null);
-
+  // Inicializa sessão assistida no serviço caso a sessão tenha sido recuperada do storage
   useEffect(() => {
-    // Se for o próprio administrador operando sob impersonação, não exibe este aviso de usuário
-    if (!rawUser || impersonationSession) {
-      setImpersonationNoticeOnMe(null);
-      return;
+    if (impersonationSession) {
+      assistedSessionService.initAdminSession(impersonationSession);
     }
-
-    const checkMatch = (data: any) => {
-      if (!data) return false;
-      const uid = (rawUser.id || '').toString().toLowerCase();
-      const uname = (rawUser.username || '').toString().toLowerCase();
-      const umail = (rawUser.email || '').toString().toLowerCase();
-      const rname = (rawUser.name || '').toString().toLowerCase();
-
-      const tId = (data.targetUserId || '').toString().toLowerCase();
-      const tUname = (data.targetUsername || '').toString().toLowerCase();
-      const tMail = (data.targetEmail || '').toString().toLowerCase();
-      const tName = (data.targetUserName || '').toString().toLowerCase();
-
-      return (
-        (tId && uid && tId === uid) ||
-        (tUname && uname && tUname === uname) ||
-        (tMail && umail && tMail === umail) ||
-        (tName && rname && tName === rname)
-      );
-    };
-
-    // 1. Escuta via Supabase Presence (sincronização automática mesmo ao dar F5 na página)
-    const presenceChannel = supabase.channel('impersonation_presence');
-    presenceChannel
-      .on('presence', { event: 'sync' }, () => {
-        const state = presenceChannel.presenceState();
-        let match: any = null;
-        for (const key of Object.keys(state)) {
-          const presences = (state[key] || []) as any[];
-          for (const p of presences) {
-            if (checkMatch(p)) {
-              match = p;
-              break;
-            }
-          }
-          if (match) break;
-        }
-
-        if (match) {
-          setImpersonationNoticeOnMe({
-            active: true,
-            adminName: match.adminName || 'Administrador',
-            adminEmail: match.adminEmail,
-            startedAt: match.startedAt || new Date().toISOString()
-          });
-        } else {
-          setImpersonationNoticeOnMe(null);
-        }
-      })
-      .subscribe();
-
-    // 2. Escuta via Broadcasts em tempo real (alerta imediato e notificação toast)
-    const handleStarted = (payload: any) => {
-      const data = payload?.payload || payload;
-      if (checkMatch(data)) {
-        setImpersonationNoticeOnMe({
-          active: true,
-          adminName: data.adminName || 'Administrador',
-          adminEmail: data.adminEmail,
-          startedAt: data.startedAt || new Date().toISOString()
-        });
-        showToast(`Atenção: O Administrador ${data.adminName || ''} iniciou uma sessão de suporte na sua conta.`, "info");
-      }
-    };
-
-    const handleEnded = (payload: any) => {
-      const data = payload?.payload || payload;
-      if (checkMatch(data)) {
-        setImpersonationNoticeOnMe(null);
-        showToast(`A sessão de suporte do Administrador foi finalizada.`, "info");
-      }
-    };
-
-    const globalEventsCh = supabase.channel('global_events')
-      .on('broadcast', { event: 'impersonation-started' }, handleStarted)
-      .on('broadcast', { event: 'impersonation-ended' }, handleEnded)
-      .subscribe();
-
-    const alertsCh = supabase.channel('user_impersonation_alerts')
-      .on('broadcast', { event: 'impersonation-started' }, handleStarted)
-      .on('broadcast', { event: 'impersonation-ended' }, handleEnded)
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(presenceChannel);
-      supabase.removeChannel(globalEventsCh);
-      supabase.removeChannel(alertsCh);
-    };
-  }, [rawUser?.id, rawUser?.username, rawUser?.email, rawUser?.name, impersonationSession]);
+  }, [impersonationSession?.sessionId]);
 
   const { moduleStatus } = useSystemSettings();
   const isModuleActive = (key: string) => moduleStatus[key] !== false;
@@ -819,6 +729,288 @@ const App: React.FC = () => {
   });
   const [isFinalizedView, setIsFinalizedView] = useState(false);
   const [isOficioNumberingModalOpen, setIsOficioNumberingModalOpen] = useState(false);
+
+  // Transmissão de Navegação / Rotas URL pelo Administrador em tempo real
+  useEffect(() => {
+    if (!impersonationSession) return;
+    const currentPath = window.location.pathname;
+    assistedSessionService.broadcastNavigation({
+      path: currentPath,
+      currentView,
+      activeBlock,
+      adminTab,
+      currentSubView: appState.view
+    });
+  }, [impersonationSession, currentView, activeBlock, adminTab, appState.view]);
+
+  // Captura e transmissão de interações do Administrador (mouse, cliques, rolagem, inputs)
+  useEffect(() => {
+    if (!impersonationSession) return;
+
+    // 1. Mouse move com throttle (~60ms) para não sobrecarregar websocket
+    let lastMouseTime = 0;
+    const handleMouseMove = (e: MouseEvent) => {
+      const now = Date.now();
+      if (now - lastMouseTime < 60) return;
+      lastMouseTime = now;
+      const xPct = Math.round((e.clientX / window.innerWidth) * 10000) / 100;
+      const yPct = Math.round((e.clientY / window.innerHeight) * 10000) / 100;
+      assistedSessionService.broadcastMouseMove(xPct, yPct);
+    };
+
+    // 2. Cliques do Administrador com identificação do elemento
+    const handleClick = (e: MouseEvent) => {
+      const xPct = Math.round((e.clientX / window.innerWidth) * 10000) / 100;
+      const yPct = Math.round((e.clientY / window.innerHeight) * 10000) / 100;
+      const target = e.target as HTMLElement | null;
+      let selector = '';
+      if (target) {
+        if (target.id) selector = `#${target.id}`;
+        else if (target.getAttribute('name')) selector = `[name="${target.getAttribute('name')}"]`;
+      }
+      const text = target?.innerText?.slice(0, 30);
+      const tag = target?.tagName?.toLowerCase();
+      assistedSessionService.broadcastClick(xPct, yPct, { tag, text, selector });
+    };
+
+    // 3. Scroll suave com throttle (~80ms)
+    let lastScrollTime = 0;
+    const handleScroll = () => {
+      const now = Date.now();
+      if (now - lastScrollTime < 80) return;
+      lastScrollTime = now;
+      const scrollY = window.scrollY || document.documentElement.scrollTop;
+      const maxScroll = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+      const scrollPctY = Math.round((scrollY / maxScroll) * 10000) / 100;
+      assistedSessionService.broadcastScroll(scrollPctY, scrollY);
+    };
+
+    // 4. Preenchimento de campos e buscas com debounce (~100ms)
+    let inputTimer: any = null;
+    const handleInput = (e: Event) => {
+      const target = e.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null;
+      if (!target) return;
+      clearTimeout(inputTimer);
+      inputTimer = setTimeout(() => {
+        let selector = '';
+        if (target.id) selector = `#${target.id}`;
+        else if (target.name) selector = `[name="${target.name}"]`;
+        assistedSessionService.broadcastInputChange({
+          selector,
+          name: target.name,
+          id: target.id,
+          value: target.value,
+          checked: (target as HTMLInputElement).checked
+        });
+      }, 100);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove, { passive: true });
+    window.addEventListener('click', handleClick, { capture: true, passive: true });
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    document.addEventListener('input', handleInput, { capture: true, passive: true });
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('click', handleClick, { capture: true });
+      window.removeEventListener('scroll', handleScroll);
+      document.removeEventListener('input', handleInput, { capture: true });
+      clearTimeout(inputTimer);
+    };
+  }, [impersonationSession]);
+
+  // Transparência e Segurança: Modo Assistido do Usuário Alvo
+  const [assistedViewerData, setAssistedViewerData] = useState<{
+    active: boolean;
+    sessionId: string;
+    adminName: string;
+    adminEmail?: string;
+    startedAt: string;
+    isPaused: boolean;
+  } | null>(null);
+
+  const [assistedVirtualCursor, setAssistedVirtualCursor] = useState<AssistedMouseMovePayload | null>(null);
+  const [assistedLastClick, setAssistedLastClick] = useState<AssistedClickPayload | null>(null);
+
+  // Monitora detecção de que um Administrador iniciou suporte na conta deste usuário
+  useEffect(() => {
+    // Se for o próprio administrador operando sob simulação, não ativa modo receptor
+    if (!rawUser || impersonationSession) {
+      setAssistedViewerData(null);
+      return;
+    }
+
+    const checkMatch = (data: any) => {
+      if (!data) return false;
+      const uid = (rawUser.id || '').toString().toLowerCase();
+      const uname = (rawUser.username || '').toString().toLowerCase();
+      const umail = (rawUser.email || '').toString().toLowerCase();
+      const rname = (rawUser.name || '').toString().toLowerCase();
+
+      const tId = (data.targetUserId || '').toString().toLowerCase();
+      const tUname = (data.targetUsername || '').toString().toLowerCase();
+      const tMail = (data.targetEmail || '').toString().toLowerCase();
+      const tName = (data.targetUserName || '').toString().toLowerCase();
+
+      return (
+        (tId && uid && tId === uid) ||
+        (tUname && uname && tUname === uname) ||
+        (tMail && umail && tMail === umail) ||
+        (tName && rname && tName === rname)
+      );
+    };
+
+    // 1. Escuta via Supabase Presence
+    const presenceChannel = supabase.channel('impersonation_presence');
+    presenceChannel
+      .on('presence', { event: 'sync' }, () => {
+        const state = presenceChannel.presenceState();
+        let match: any = null;
+        for (const key of Object.keys(state)) {
+          const presences = (state[key] || []) as any[];
+          for (const p of presences) {
+            if (checkMatch(p)) {
+              match = p;
+              break;
+            }
+          }
+          if (match) break;
+        }
+
+        if (match) {
+          setAssistedViewerData({
+            active: true,
+            sessionId: match.sessionId,
+            adminName: match.adminName || 'Administrador',
+            adminEmail: match.adminEmail,
+            startedAt: match.startedAt || new Date().toISOString(),
+            isPaused: !!match.isPaused
+          });
+        } else {
+          setAssistedViewerData(null);
+        }
+      })
+      .subscribe();
+
+    // 2. Escuta via Broadcasts em tempo real (alerta imediato)
+    const handleStarted = (payload: any) => {
+      const data = payload?.payload || payload;
+      if (checkMatch(data)) {
+        setAssistedViewerData({
+          active: true,
+          sessionId: data.sessionId,
+          adminName: data.adminName || 'Administrador',
+          adminEmail: data.adminEmail,
+          startedAt: data.startedAt || new Date().toISOString(),
+          isPaused: false
+        });
+        showToast(`Atenção: O Administrador ${data.adminName || ''} iniciou uma sessão de suporte na sua conta.`, "info");
+      }
+    };
+
+    const handleEnded = (payload: any) => {
+      const data = payload?.payload || payload;
+      if (checkMatch(data)) {
+        setAssistedViewerData(null);
+        setAssistedVirtualCursor(null);
+        setAssistedLastClick(null);
+        showToast(`A sessão de suporte do Administrador foi finalizada.`, "info");
+      }
+    };
+
+    const globalEventsCh = supabase.channel('global_events')
+      .on('broadcast', { event: 'impersonation-started' }, handleStarted)
+      .on('broadcast', { event: 'impersonation-ended' }, handleEnded)
+      .subscribe();
+
+    const alertsCh = supabase.channel('user_impersonation_alerts')
+      .on('broadcast', { event: 'impersonation-started' }, handleStarted)
+      .on('broadcast', { event: 'impersonation-ended' }, handleEnded)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(presenceChannel);
+      supabase.removeChannel(globalEventsCh);
+      supabase.removeChannel(alertsCh);
+    };
+  }, [rawUser?.id, rawUser?.username, rawUser?.email, rawUser?.name, impersonationSession]);
+
+  // Conecta o Usuário Assistido ao canal Realtime da sessão para receber comandos e reflexo ao vivo
+  useEffect(() => {
+    if (!assistedViewerData?.sessionId || !rawUser || impersonationSession) return;
+
+    const unsubscribe = assistedSessionService.listenAsTargetUser(
+      rawUser,
+      assistedViewerData.sessionId,
+      {
+        onControl: (payload) => {
+          setAssistedViewerData(prev => prev ? {
+            ...prev,
+            isPaused: payload.status === 'paused'
+          } : null);
+        },
+        onNavigation: (nav) => {
+          // Reflete mudança de página e rota URL
+          if (nav.path && window.location.pathname !== nav.path) {
+            window.history.pushState(null, '', nav.path);
+          }
+          if (nav.currentView) {
+            setCurrentView(nav.currentView as any);
+          }
+          if (nav.activeBlock !== undefined) {
+            setActiveBlock(nav.activeBlock as any);
+          }
+          if (nav.adminTab !== undefined) {
+            setAdminTab(nav.adminTab as any);
+          }
+          if (nav.currentSubView !== undefined) {
+            setAppState(prev => ({ ...prev, view: nav.currentSubView as any }));
+          }
+        },
+        onMouseMove: (mouse) => {
+          setAssistedVirtualCursor(mouse);
+        },
+        onClick: (click) => {
+          setAssistedLastClick(click);
+        },
+        onScroll: (scroll) => {
+          window.scrollTo({ top: scroll.scrollY, behavior: 'smooth' });
+        },
+        onInputChange: (input) => {
+          let el: HTMLElement | null = null;
+          if (input.id) {
+            el = document.getElementById(input.id);
+          }
+          if (!el && input.name) {
+            el = document.querySelector(`[name="${input.name}"]`);
+          }
+          if (!el && input.selector) {
+            try { el = document.querySelector(input.selector); } catch (e) {}
+          }
+          if (el) {
+            const formEl = el as HTMLInputElement;
+            if (input.checked !== undefined && formEl.type === 'checkbox') {
+              formEl.checked = input.checked;
+            } else {
+              formEl.value = input.value;
+            }
+            formEl.dispatchEvent(new Event('input', { bubbles: true }));
+            formEl.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        },
+        onSessionEnded: () => {
+          setAssistedViewerData(null);
+          setAssistedVirtualCursor(null);
+          setAssistedLastClick(null);
+          showToast("A sessão de suporte do Administrador foi finalizada.", "info");
+        }
+      }
+    );
+
+    return () => {
+      unsubscribe();
+    };
+  }, [assistedViewerData?.sessionId, rawUser, impersonationSession]);
 
   // --- GLOBAL SETTINGS LOAD & SAVE ---
   const [isLoadingDetails, setIsLoadingDetails] = useState(false); // New state for lazy loading
@@ -3764,26 +3956,29 @@ const App: React.FC = () => {
     try {
       const session = await impersonationService.startImpersonation(rawUser, targetUser);
       setImpersonationSession(session);
+      await assistedSessionService.initAdminSession(session);
       setCurrentView('home');
       setActiveBlock(null);
       window.history.pushState(null, '', '/PaginaInicial');
-      showToast(`Acesso Administrativo iniciado: visualizando como "${targetUser.name}".`, "success");
+      showToast(`Acompanhamento Assistido iniciado: operando na conta de "${targetUser.name}".`, "success");
     } catch (err: any) {
-      console.error('Erro ao iniciar impersonação:', err);
-      alert(err.message || 'Erro ao iniciar acesso como usuário.');
+      console.error('Erro ao iniciar suporte assistido:', err);
+      alert(err.message || 'Erro ao iniciar suporte assistido.');
     }
   };
 
   const handleStopImpersonation = async () => {
     try {
+      await assistedSessionService.endSession();
       await impersonationService.stopImpersonation();
       setImpersonationSession(null);
       setCurrentView('admin');
       setAdminTab('users');
       window.history.pushState(null, '', '/Admin/Usuarios');
-      showToast("Sessão administrativa encerrada com sucesso.", "success");
+      showToast("Sessão de suporte assistido encerrada com sucesso.", "success");
     } catch (err: any) {
-      console.error('Erro ao encerrar impersonação:', err);
+      console.error('Erro ao encerrar suporte assistido:', err);
+      assistedSessionService.endSession().catch(() => {});
       impersonationService.clearSession();
       setImpersonationSession(null);
     }
@@ -4458,32 +4653,24 @@ const App: React.FC = () => {
             </>
           )}
 
-          {/* Banner de Notificação e Transparência de Impersonação para o Usuário Alvo */}
-          {impersonationNoticeOnMe && !impersonationSession && (
-            <div className="w-full bg-gradient-to-r from-blue-950 via-indigo-950 to-slate-950 text-white px-4 md:px-8 py-3.5 shadow-2xl border-b-2 border-cyan-400 flex flex-col sm:flex-row items-center justify-between gap-3 animate-slide-down sticky top-0 z-[100]">
-              <div className="flex items-center gap-3.5">
-                <div className="p-2.5 bg-cyan-500/20 rounded-2xl border border-cyan-400/40 text-cyan-300 shadow-inner shrink-0">
-                  <ShieldAlert className="w-6 h-6 animate-pulse" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[10px] font-black uppercase tracking-widest bg-cyan-500/20 text-cyan-300 px-2.5 py-0.5 rounded-full border border-cyan-400/30">
-                      Transparência & Conformidade
-                    </span>
-                    <h4 className="font-black text-sm md:text-base text-white tracking-tight">
-                      Acesso Administrativo em Andamento na sua Conta
-                    </h4>
-                  </div>
-                  <p className="text-xs text-slate-300 mt-1 leading-relaxed">
-                    O Administrador <strong className="text-cyan-200">{impersonationNoticeOnMe.adminName}</strong> está conectado temporariamente à sua conta para suporte e auditoria. Todas as ações permanecem registradas com a autoria do administrador.
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 text-xs font-semibold text-slate-300 bg-white/10 px-3.5 py-2 rounded-xl shrink-0 border border-white/10">
-                <Clock className="w-4 h-4 text-cyan-300" />
-                <span>Iniciado às {new Date(impersonationNoticeOnMe.startedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
-              </div>
-            </div>
+          {/* Overlay de Acompanhamento Assistido em Tempo Real para o Usuário Alvo */}
+          {assistedViewerData && assistedViewerData.active && !impersonationSession && (
+            <AssistedUserViewerOverlay
+              adminName={assistedViewerData.adminName}
+              adminEmail={assistedViewerData.adminEmail}
+              startedAt={assistedViewerData.startedAt}
+              isPaused={assistedViewerData.isPaused}
+              virtualCursor={assistedVirtualCursor}
+              lastClick={assistedLastClick}
+            />
+          )}
+
+          {/* HUD de Controle de Suporte Assistido para o Administrador */}
+          {impersonationSession && (
+            <AssistedSessionControlHUD
+              session={impersonationSession}
+              onStop={handleStopImpersonation}
+            />
           )}
 
           <div className="w-full shrink-0 sticky top-0 z-40">
