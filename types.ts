@@ -673,6 +673,8 @@ export interface ConsultaProcedimento {
   updated_at?: string;
 }
 
+export type TipoAtendimentoConsulta = 'INTERNO' | 'EXTERNO';
+
 export interface ConsultaAgendamento {
   id: string;
   patient_id: string;
@@ -690,6 +692,11 @@ export interface ConsultaAgendamento {
   is_retorno?: boolean;
   retorno_tipo?: '1º Retorno' | '2º Retorno' | '3º Retorno' | '4º Retorno' | '5º Retorno' | string;
   retorno_grau?: number;
+  tipo_atendimento?: TipoAtendimentoConsulta;
+  prestador?: string;
+  municipio?: string;
+  convenio?: string;
+  vaga_id?: string;
   paciente?: ConsultaPaciente;
   procedimento?: ConsultaProcedimento;
   responsavel?: { name: string };
@@ -705,6 +712,10 @@ export interface ConsultaVaga {
   data: string;
   hora: string;
   status: 'Disponível' | 'Ocupada' | 'Pausada';
+  tipo_atendimento: TipoAtendimentoConsulta;
+  prestador?: string;
+  municipio?: string;
+  convenio?: string;
   created_at?: string;
 }
 

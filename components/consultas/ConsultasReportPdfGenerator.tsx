@@ -9,6 +9,7 @@ import { FileType } from 'lucide-react';
 
 interface ConsultasReportPdfGeneratorProps {
     reportType: 'simplificado' | 'completo' | 'fila';
+    demandaFilter?: 'TODAS' | 'INTERNO' | 'EXTERNO';
     bookings: ConsultaAgendamento[];
     procedures: ConsultaProcedimento[];
     queuePositions: Record<string, number>;
@@ -19,6 +20,7 @@ interface ConsultasReportPdfGeneratorProps {
 
 export const ConsultasReportPdfGenerator: React.FC<ConsultasReportPdfGeneratorProps> = ({
     reportType,
+    demandaFilter = 'TODAS',
     bookings,
     procedures,
     queuePositions,
@@ -148,13 +150,19 @@ export const ConsultasReportPdfGenerator: React.FC<ConsultasReportPdfGeneratorPr
     const totalPages = summaryPagesCount + (detailPagesCount > 0 ? detailPagesCount : (reportType === 'simplificado' ? 0 : 1));
 
     // Configuração oficial de cabeçalho e rodapé do sistema
-    const protocolCode = `REL-${reportType.toUpperCase()}-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}`;
+    const protocolCode = `REL-${reportType.toUpperCase()}-${demandaFilter.toUpperCase()}-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}`;
+
+    const demandaSubtitle = demandaFilter === 'INTERNO'
+        ? 'DEMANDA INTERNA (REDE MUNICIPAL PRÓPRIA)'
+        : demandaFilter === 'EXTERNO'
+        ? 'DEMANDA EXTERNA (CONVÊNIOS / CONSÓRCIOS / FORA DO MUNICÍPIO)'
+        : 'CONSOLIDADO GERAL (DEMANDA INTERNA E EXTERNA)';
 
     const reportTitle = reportType === 'simplificado'
-        ? 'RELATÓRIO SIMPLIFICADO - QUANTITATIVO POR PROCEDIMENTO'
+        ? `RELATÓRIO SIMPLIFICADO - QUANTITATIVO (${demandaSubtitle})`
         : reportType === 'fila'
-        ? 'RELATÓRIO DA FILA DE ESPERA'
-        : 'RELATÓRIO COMPLETO - PROCEDIMENTOS E PACIENTES';
+        ? `RELATÓRIO DA FILA DE ESPERA (${demandaSubtitle})`
+        : `RELATÓRIO COMPLETO - PROCEDIMENTOS E PACIENTES (${demandaSubtitle})`;
 
     const reportState: AppState = {
         ...state,
@@ -232,8 +240,14 @@ export const ConsultasReportPdfGenerator: React.FC<ConsultasReportPdfGeneratorPr
                 ? 'Relatorio_Fila_Espera'
                 : 'Relatorio_Completo_Procedimentos_Pacientes';
 
+            const demandaSuffix = demandaFilter === 'INTERNO'
+                ? '_Demanda_Interna'
+                : demandaFilter === 'EXTERNO'
+                ? '_Demanda_Externa'
+                : '_Geral';
+
             const timestamp = new Date().toISOString().split('T')[0];
-            pdf.save(`${prefix}_${timestamp}.pdf`);
+            pdf.save(`${prefix}${demandaSuffix}_${timestamp}.pdf`);
             onClose();
         } catch (error) {
             console.error('Error generating PDF:', error);
@@ -498,11 +512,24 @@ export const ConsultasReportPdfGenerator: React.FC<ConsultasReportPdfGeneratorPr
                                                                 <div className="font-bold text-slate-900 leading-snug break-words">
                                                                     {formatProcedimentoLabel(b.procedimento) || 'Procedimento não informado'}
                                                                 </div>
-                                                                {b.procedimento?.code && (
-                                                                    <div className="text-[6pt] font-mono font-bold text-slate-500 leading-none">
-                                                                        CÓD: {b.procedimento.code}
-                                                                    </div>
-                                                                )}
+                                                                <div className="flex flex-wrap items-center gap-1">
+                                                                    {b.procedimento?.code && (
+                                                                        <span className="text-[6pt] font-mono font-bold text-slate-500 leading-none">
+                                                                            CÓD: {b.procedimento.code}
+                                                                        </span>
+                                                                    )}
+                                                                    {b.tipo_atendimento && (
+                                                                        <span className={`text-[5.5pt] font-black uppercase px-1 py-0.2 rounded border leading-none ${
+                                                                            b.tipo_atendimento === 'INTERNO'
+                                                                                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                                                                : 'bg-purple-50 text-purple-800 border-purple-200'
+                                                                        }`}>
+                                                                            {b.tipo_atendimento === 'INTERNO' 
+                                                                                ? 'INTERNO (MUNICIPAL)' 
+                                                                                : `EXTERNO • ${b.prestador || 'PRESTADOR FORA'}${b.municipio ? ` (${b.municipio})` : ''}`}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
                                                             </div>
                                                         </td>
 

@@ -1,12 +1,12 @@
-// Tela de Liberação e Gestão de Vagas por Procedimento - Versão Compacta e Organizada
 import React, { useState, useEffect, useMemo } from 'react';
-import { User, ConsultaProcedimento, ConsultaAgendamento, ConsultaVaga } from '../../types';
+import { User, ConsultaProcedimento, ConsultaAgendamento, ConsultaVaga, TipoAtendimentoConsulta } from '../../types';
 import { 
     ArrowLeft, Search, Plus, Calendar, Clock, Edit2, Trash2, 
     PauseCircle, PlayCircle, Activity, Stethoscope, Sparkles, 
     ChevronLeft, ChevronRight, X, Loader2, CalendarDays,
     CheckCircle2, AlertTriangle, Sun, Sunset, Zap, RotateCcw, Check, CalendarCheck,
-    Users, ChevronDown, Moon, Wand2, SlidersHorizontal, Layers, Timer, Flame
+    Users, ChevronDown, Moon, Wand2, SlidersHorizontal, Layers, Timer, Flame,
+    Building2, Globe, MapPin, Hospital, FileText, Filter
 } from 'lucide-react';
 import * as db from '../../services/consultasService';
 import { formatProcedimentoLabel } from '../../services/consultasService';
@@ -44,6 +44,16 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
     const [customTime, setCustomTime] = useState('');
     const [numVagasPorHorario, setNumVagasPorHorario] = useState<number>(1);
 
+    // Estados Obrigatórios do Tipo de Atendimento Territorial
+    const [tipoAtendimento, setTipoAtendimento] = useState<TipoAtendimentoConsulta>('INTERNO');
+    const [prestador, setPrestador] = useState('Centro de Saúde / Policlínica Municipal');
+    const [municipio, setMunicipio] = useState('São José do Goiabal - MG');
+    const [convenio, setConvenio] = useState('Rede Própria Municipal');
+    const [modalError, setModalError] = useState('');
+
+    // Filtro de Vagas exibidas (Todas | Internas | Externas)
+    const [vagaTipoFilter, setVagaTipoFilter] = useState<'TODOS' | 'INTERNO' | 'EXTERNO'>('TODOS');
+
     // Estados do Select Moderno e Dinâmico de Horários
     const [isTimeDropdownOpen, setIsTimeDropdownOpen] = useState(false);
     const [timeSearchTerm, setTimeSearchTerm] = useState('');
@@ -63,11 +73,16 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
             document.removeEventListener('mousedown', handleClickOutside);
         };
     }, [isTimeDropdownOpen]);
+
     // Modal de Editar Vaga Individual
     const [editingVaga, setEditingVaga] = useState<ConsultaVaga | null>(null);
     const [editDate, setEditDate] = useState('');
     const [editTime, setEditTime] = useState('');
     const [editStatus, setEditStatus] = useState<'Disponível' | 'Pausada'>('Disponível');
+    const [editTipoAtendimento, setEditTipoAtendimento] = useState<TipoAtendimentoConsulta>('INTERNO');
+    const [editPrestador, setEditPrestador] = useState('');
+    const [editMunicipio, setEditMunicipio] = useState('');
+    const [editConvenio, setEditConvenio] = useState('');
 
     // Estados de Ações em Lote (Bulk Actions)
     const [isBulkEditModalOpen, setIsBulkEditModalOpen] = useState(false);
@@ -76,6 +91,10 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
     const [bulkEditNewDate, setBulkEditNewDate] = useState<string>('');
     const [bulkEditNewTime, setBulkEditNewTime] = useState<string>('');
     const [bulkEditNewStatus, setBulkEditNewStatus] = useState<'Disponível' | 'Pausada' | 'manter'>('manter');
+    const [bulkEditTipoAtendimento, setBulkEditTipoAtendimento] = useState<TipoAtendimentoConsulta | 'manter'>('manter');
+    const [bulkEditPrestador, setBulkEditPrestador] = useState<string>('');
+    const [bulkEditMunicipio, setBulkEditMunicipio] = useState<string>('');
+    const [bulkEditConvenio, setBulkEditConvenio] = useState<string>('');
 
     const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
     const [bulkDeleteScope, setBulkDeleteScope] = useState<'all' | 'date'>('all');
@@ -306,11 +325,38 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
     // Ações de Vagas
     const handleConfirmAddVagas = async () => {
         if (!selectedDate || selectedTimes.length === 0 || !selectedProc) return;
+        setModalError('');
+
+        // Regra importante: Tipo de Atendimento é estritamente obrigatório
+        if (!tipoAtendimento) {
+            setModalError('Selecione obrigatoriamente o Tipo de Atendimento (INTERNO ou EXTERNO).');
+            return;
+        }
+
+        if (tipoAtendimento === 'EXTERNO') {
+            if (!prestador || !prestador.trim()) {
+                setModalError('Para atendimento EXTERNO, informe o Prestador / Unidade (ex: CISAMAPI).');
+                return;
+            }
+            if (!municipio || !municipio.trim()) {
+                setModalError('Para atendimento EXTERNO, informe o Município (ex: Ponte Nova - MG).');
+                return;
+            }
+        }
+
         setActionLoading(true);
         try {
             const formattedDate = formatDateToYYYYMMDD(selectedDate);
             const qtd = Math.max(1, numVagasPorHorario);
-            const newVagas: Array<{ procedimento_id: string; data: string; hora: string }> = [];
+            const newVagas: Array<{
+                procedimento_id: string;
+                data: string;
+                hora: string;
+                tipo_atendimento: TipoAtendimentoConsulta;
+                prestador: string;
+                municipio: string;
+                convenio: string;
+            }> = [];
 
             // Cria individualmente o número de vagas configurado para cada data e horário
             selectedTimes.forEach(t => {
@@ -318,7 +364,11 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
                     newVagas.push({
                         procedimento_id: selectedProc.id,
                         data: formattedDate,
-                        hora: t
+                        hora: t,
+                        tipo_atendimento: tipoAtendimento,
+                        prestador: tipoAtendimento === 'EXTERNO' ? prestador.trim() : (prestador.trim() || 'Centro de Saúde / Policlínica Municipal'),
+                        municipio: tipoAtendimento === 'EXTERNO' ? municipio.trim() : (municipio.trim() || 'São José do Goiabal - MG'),
+                        convenio: tipoAtendimento === 'EXTERNO' ? convenio.trim() : (convenio.trim() || 'Rede Própria Municipal')
                     });
                 }
             });
@@ -326,6 +376,7 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
             await db.createVagas(newVagas);
             setSelectedTimes([]);
             setNumVagasPorHorario(1);
+            setModalError('');
             setIsAddVagasModalOpen(false);
             await reloadProcVagas(selectedProc.id);
         } catch (err: any) {
@@ -361,6 +412,10 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
         setEditDate(vaga.data);
         setEditTime(vaga.hora.substring(0, 5));
         setEditStatus(vaga.status === 'Pausada' ? 'Pausada' : 'Disponível');
+        setEditTipoAtendimento(vaga.tipo_atendimento || 'INTERNO');
+        setEditPrestador(vaga.prestador || (vaga.tipo_atendimento === 'EXTERNO' ? 'CISAMAPI' : 'Centro de Saúde / Policlínica Municipal'));
+        setEditMunicipio(vaga.municipio || (vaga.tipo_atendimento === 'EXTERNO' ? 'Ponte Nova - MG' : 'São José do Goiabal - MG'));
+        setEditConvenio(vaga.convenio || (vaga.tipo_atendimento === 'EXTERNO' ? 'Consórcio CISAMAPI' : 'Rede Própria Municipal'));
     };
 
     const handleSaveEditSlot = async (e: React.FormEvent) => {
@@ -371,7 +426,11 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
             await db.updateVaga(editingVaga.id, {
                 data: editDate,
                 hora: editTime,
-                status: editStatus
+                status: editStatus,
+                tipo_atendimento: editTipoAtendimento,
+                prestador: editPrestador.trim() || undefined,
+                municipio: editMunicipio.trim() || undefined,
+                convenio: editConvenio.trim() || undefined
             });
             setEditingVaga(null);
             if (selectedProc) {
@@ -448,6 +507,10 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
         setBulkEditNewDate(targetDate || '');
         setBulkEditNewTime('');
         setBulkEditNewStatus('manter');
+        setBulkEditTipoAtendimento('manter');
+        setBulkEditPrestador('');
+        setBulkEditMunicipio('');
+        setBulkEditConvenio('');
         setIsBulkEditModalOpen(true);
     };
 
@@ -462,8 +525,8 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
             return;
         }
 
-        if (!bulkEditNewDate && !bulkEditNewTime && bulkEditNewStatus === 'manter') {
-            alert('Por favor, defina ao menos um campo para alterar (Data, Horário ou Status).');
+        if (!bulkEditNewDate && !bulkEditNewTime && bulkEditNewStatus === 'manter' && bulkEditTipoAtendimento === 'manter' && !bulkEditPrestador && !bulkEditMunicipio) {
+            alert('Por favor, defina ao menos um campo para alterar (Data, Horário, Status, Tipo ou Prestador).');
             return;
         }
 
@@ -471,6 +534,10 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
         if (bulkEditNewDate) updates.data = bulkEditNewDate;
         if (bulkEditNewTime) updates.hora = bulkEditNewTime;
         if (bulkEditNewStatus !== 'manter') updates.status = bulkEditNewStatus;
+        if (bulkEditTipoAtendimento !== 'manter') updates.tipo_atendimento = bulkEditTipoAtendimento;
+        if (bulkEditPrestador.trim()) updates.prestador = bulkEditPrestador.trim();
+        if (bulkEditMunicipio.trim()) updates.municipio = bulkEditMunicipio.trim();
+        if (bulkEditConvenio.trim()) updates.convenio = bulkEditConvenio.trim();
 
         setActionLoading(true);
         try {
@@ -514,15 +581,26 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
         }
     };
 
+    // Vagas filtradas por tipo (Todas | Internas | Externas)
+    const filteredVagas = useMemo(() => {
+        if (vagaTipoFilter === 'INTERNO') {
+            return vagas.filter(v => v.tipo_atendimento !== 'EXTERNO');
+        }
+        if (vagaTipoFilter === 'EXTERNO') {
+            return vagas.filter(v => v.tipo_atendimento === 'EXTERNO');
+        }
+        return vagas;
+    }, [vagas, vagaTipoFilter]);
+
     // Agrupamento de vagas por data
     const groupedVagas = useMemo(() => {
         const map: Record<string, ConsultaVaga[]> = {};
-        vagas.forEach(v => {
+        filteredVagas.forEach(v => {
             if (!map[v.data]) map[v.data] = [];
             map[v.data].push(v);
         });
         return map;
-    }, [vagas]);
+    }, [filteredVagas]);
 
     const sortedDates = useMemo(() => {
         return Object.keys(groupedVagas).sort();
@@ -814,6 +892,61 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
                             </div>
                         )}
 
+                        {/* Barra de Filtros de Vagas por Tipo de Atendimento */}
+                        <div className="bg-white p-2 rounded-xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider flex items-center gap-1">
+                                    <Filter className="w-3 h-3 text-slate-400" />
+                                    Filtrar Vagas:
+                                </span>
+                                <div className="flex items-center bg-slate-100 p-0.5 rounded-lg">
+                                    <button
+                                        type="button"
+                                        onClick={() => setVagaTipoFilter('TODOS')}
+                                        className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                                            vagaTipoFilter === 'TODOS'
+                                                ? 'bg-white text-slate-900 shadow-xs'
+                                                : 'text-slate-600 hover:text-slate-900'
+                                        }`}
+                                    >
+                                        Todas ({vagas.length})
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setVagaTipoFilter('INTERNO')}
+                                        className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1 ${
+                                            vagaTipoFilter === 'INTERNO'
+                                                ? 'bg-emerald-600 text-white shadow-xs'
+                                                : 'text-emerald-700 hover:bg-emerald-50'
+                                        }`}
+                                    >
+                                        <span>🏢 Internas</span>
+                                        <span className="font-mono text-[9px]">
+                                            ({vagas.filter(v => v.tipo_atendimento !== 'EXTERNO').length})
+                                        </span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setVagaTipoFilter('EXTERNO')}
+                                        className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1 ${
+                                            vagaTipoFilter === 'EXTERNO'
+                                                ? 'bg-amber-600 text-white shadow-xs'
+                                                : 'text-amber-700 hover:bg-amber-50'
+                                        }`}
+                                    >
+                                        <span>🌐 Externas</span>
+                                        <span className="font-mono text-[9px]">
+                                            ({vagas.filter(v => v.tipo_atendimento === 'EXTERNO').length})
+                                        </span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="text-[10px] font-bold text-slate-500 flex items-center gap-2">
+                                <span>Exibindo: <strong>{filteredVagas.length}</strong> de {vagas.length} vagas</span>
+                            </div>
+                        </div>
+
                         {/* Listagem das Datas e Horários Compacta */}
                         {sortedDates.length > 0 ? (
                             <div className="space-y-3">
@@ -881,102 +1014,125 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
                                                     const isBooked = !!activeBooking;
                                                     const isSpecial = activeBooking?.priority === 'Especial';
                                                     const patientName = activeBooking?.paciente?.name;
+                                                    const isExterno = v.tipo_atendimento === 'EXTERNO';
 
                                                     const pillStyle = (() => {
                                                         if (isBooked && isSpecial) {
-                                                            return 'bg-amber-100 border-amber-400 text-amber-950 ring-1 ring-amber-400/40 shadow-xs';
-                                                        }
-                                                        if (isBooked) {
-                                                            return 'bg-indigo-50 border-indigo-200 text-indigo-900';
-                                                        }
-                                                        if (isPaused) {
-                                                            return 'bg-amber-50 border-amber-200 text-amber-900';
-                                                        }
-                                                        return 'bg-slate-100 hover:bg-white border-slate-200 text-slate-800';
-                                                    })();
+                                                             return 'bg-amber-100 border-amber-400 text-amber-950 ring-1 ring-amber-400/40 shadow-xs';
+                                                         }
+                                                         if (isBooked) {
+                                                             return 'bg-indigo-50 border-indigo-200 text-indigo-900';
+                                                         }
+                                                         if (isPaused) {
+                                                             return 'bg-amber-50 border-amber-200 text-amber-900';
+                                                         }
+                                                         return isExterno
+                                                             ? 'bg-amber-50/70 hover:bg-amber-50 border-amber-200/90 text-amber-950'
+                                                             : 'bg-slate-100 hover:bg-white border-slate-200 text-slate-800';
+                                                     })();
 
-                                                    return (
-                                                        <div 
-                                                            key={v.id}
-                                                            className={`px-2.5 py-1 rounded-lg border text-xs font-semibold flex items-center gap-2 shadow-xs transition-all ${pillStyle}`}
-                                                            title={patientName ? `Paciente: ${patientName}${isSpecial ? ' (AGENDAMENTO ESPECIAL)' : ''}` : undefined}
-                                                        >
-                                                            {/* Horário */}
-                                                            <div className="flex items-center gap-1 font-mono font-black text-xs">
-                                                                <Clock className="w-3 h-3 text-slate-400" />
-                                                                <span>{v.hora.substring(0, 5)}</span>
-                                                            </div>
+                                                     return (
+                                                         <div 
+                                                             key={v.id}
+                                                             className={`px-2.5 py-1 rounded-lg border text-xs font-semibold flex items-center gap-2 shadow-xs transition-all ${pillStyle}`}
+                                                             title={
+                                                                 isExterno 
+                                                                     ? `Vaga EXTERNA | Prestador: ${v.prestador || 'CISAMAPI'} | Município: ${v.municipio || 'Ponte Nova/MG'}${v.convenio ? ` | Convênio: ${v.convenio}` : ''}${patientName ? ` | Paciente: ${patientName}` : ''}`
+                                                                     : `Vaga INTERNA | Prestador: ${v.prestador || 'Centro de Saúde'} | Município: ${v.municipio || 'São José do Goiabal'}${patientName ? ` | Paciente: ${patientName}` : ''}`
+                                                             }
+                                                         >
+                                                             {/* Horário */}
+                                                             <div className="flex items-center gap-1 font-mono font-black text-xs">
+                                                                 <Clock className="w-3 h-3 text-slate-400" />
+                                                                 <span>{v.hora.substring(0, 5)}</span>
+                                                             </div>
 
-                                                            {/* Paciente ou Badge Status */}
-                                                            {patientName ? (
-                                                                <span className={`text-[10px] font-bold max-w-[130px] truncate flex items-center gap-1 ${isSpecial ? 'text-amber-950 font-black' : 'text-indigo-700'}`} title={patientName}>
-                                                                    {isSpecial && <Sparkles className="w-3 h-3 text-amber-600 fill-amber-500 shrink-0 animate-pulse" />}
-                                                                    <span>{patientName.split(' ')[0]}</span>
-                                                                    {isSpecial && (
-                                                                        <span className="text-[7.5px] bg-amber-200/80 text-amber-950 px-1 py-0.2 rounded font-black border border-amber-300">
-                                                                            ESP
-                                                                        </span>
-                                                                    )}
-                                                                </span>
-                                                            ) : isPaused ? (
-                                                                <span className="px-1 py-0.2 bg-amber-100 text-amber-800 rounded text-[9px] font-extrabold uppercase">
-                                                                    Pausada
-                                                                </span>
-                                                            ) : (
-                                                                <span className="px-1 py-0.2 bg-emerald-100 text-emerald-800 rounded text-[9px] font-extrabold uppercase">
-                                                                    Livre
-                                                                </span>
-                                                            )}
+                                                             {/* Tag de Tipo Territorial */}
+                                                             <span className={`text-[8.5px] font-black uppercase px-1.5 py-0.2 rounded ${
+                                                                 isExterno 
+                                                                     ? 'bg-amber-200/90 text-amber-950 border border-amber-300'
+                                                                     : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                                             }`}>
+                                                                 {isExterno ? 'EXT' : 'INT'}
+                                                             </span>
 
-                                                            {/* Ações Compactas no Hover / Inline */}
-                                                            {!isBooked && (
-                                                                <div className="flex items-center gap-1 ml-1 border-l border-slate-200 pl-1.5">
-                                                                    {/* Pausar / Despausar */}
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => handleTogglePauseSlot(v)}
-                                                                        disabled={actionLoading}
-                                                                        className={`p-0.5 rounded transition-colors cursor-pointer ${
-                                                                            isPaused 
-                                                                                ? 'text-emerald-600 hover:bg-emerald-100' 
-                                                                                : 'text-amber-600 hover:bg-amber-100'
-                                                                        }`}
-                                                                        title={isPaused ? "Reativar Vaga" : "Pausar Vaga"}
-                                                                    >
-                                                                        {isPaused ? <PlayCircle className="w-3 h-3" /> : <PauseCircle className="w-3 h-3" />}
-                                                                    </button>
+                                                             {/* Prestador / Município em Vagas Externas Livres */}
+                                                             {isExterno && !patientName && (
+                                                                 <span className="text-[9px] font-bold text-amber-800 max-w-[110px] truncate" title={`${v.prestador || 'CISAMAPI'} (${v.municipio || 'Ponte Nova'})`}>
+                                                                     {v.prestador || 'CISAMAPI'}
+                                                                 </span>
+                                                             )}
 
-                                                                    {/* Editar */}
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => handleOpenEditSlot(v)}
-                                                                        disabled={actionLoading}
-                                                                        className="p-0.5 rounded text-slate-400 hover:text-sky-600 hover:bg-slate-200 transition-colors cursor-pointer"
-                                                                        title="Editar Horário"
-                                                                    >
-                                                                        <Edit2 className="w-3 h-3" />
-                                                                    </button>
+                                                             {/* Paciente ou Badge Status */}
+                                                             {patientName ? (
+                                                                 <span className={`text-[10px] font-bold max-w-[130px] truncate flex items-center gap-1 ${isSpecial ? 'text-amber-950 font-black' : 'text-indigo-700'}`} title={patientName}>
+                                                                     {isSpecial && <Sparkles className="w-3 h-3 text-amber-600 fill-amber-500 shrink-0 animate-pulse" />}
+                                                                     <span>{patientName.split(' ')[0]}</span>
+                                                                     {isSpecial && (
+                                                                         <span className="text-[7.5px] bg-amber-200/80 text-amber-950 px-1 py-0.2 rounded font-black border border-amber-300">
+                                                                             ESP
+                                                                         </span>
+                                                                     )}
+                                                                 </span>
+                                                             ) : isPaused ? (
+                                                                 <span className="px-1 py-0.2 bg-amber-100 text-amber-800 rounded text-[9px] font-extrabold uppercase">
+                                                                     Pausada
+                                                                 </span>
+                                                             ) : (
+                                                                 <span className="px-1 py-0.2 bg-emerald-100 text-emerald-800 rounded text-[9px] font-extrabold uppercase">
+                                                                     Livre
+                                                                 </span>
+                                                             )}
 
-                                                                    {/* Excluir */}
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => handleDeleteSlot(v.id)}
-                                                                        disabled={actionLoading}
-                                                                        className="p-0.5 rounded text-slate-400 hover:text-rose-600 hover:bg-slate-200 transition-colors cursor-pointer"
-                                                                        title="Excluir Vaga"
-                                                                    >
-                                                                        <Trash2 className="w-3 h-3" />
-                                                                    </button>
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
+                                                             {/* Ações Compactas no Hover / Inline */}
+                                                             {!isBooked && (
+                                                                 <div className="flex items-center gap-1 ml-1 border-l border-slate-200 pl-1.5">
+                                                                     {/* Pausar / Despausar */}
+                                                                     <button
+                                                                         type="button"
+                                                                         onClick={() => handleTogglePauseSlot(v)}
+                                                                         disabled={actionLoading}
+                                                                         className={`p-0.5 rounded transition-colors cursor-pointer ${
+                                                                             isPaused 
+                                                                                 ? 'text-emerald-600 hover:bg-emerald-100' 
+                                                                                 : 'text-amber-600 hover:bg-amber-100'
+                                                                         }`}
+                                                                         title={isPaused ? "Reativar Vaga" : "Pausar Vaga"}
+                                                                     >
+                                                                         {isPaused ? <PlayCircle className="w-3 h-3" /> : <PauseCircle className="w-3 h-3" />}
+                                                                     </button>
+
+                                                                     {/* Editar */}
+                                                                     <button
+                                                                         type="button"
+                                                                         onClick={() => handleOpenEditSlot(v)}
+                                                                         disabled={actionLoading}
+                                                                         className="p-0.5 rounded text-slate-400 hover:text-sky-600 hover:bg-slate-200 transition-colors cursor-pointer"
+                                                                         title="Editar Vaga"
+                                                                     >
+                                                                         <Edit2 className="w-3 h-3" />
+                                                                     </button>
+
+                                                                     {/* Excluir */}
+                                                                     <button
+                                                                         type="button"
+                                                                         onClick={() => handleDeleteSlot(v.id)}
+                                                                         disabled={actionLoading}
+                                                                         className="p-0.5 rounded text-slate-400 hover:text-rose-600 hover:bg-slate-200 transition-colors cursor-pointer"
+                                                                         title="Excluir Vaga"
+                                                                     >
+                                                                         <Trash2 className="w-3 h-3" />
+                                                                     </button>
+                                                                 </div>
+                                                             )}
+                                                         </div>
+                                                     );
+                                                 })}
+                                             </div>
+                                         </div>
+                                     );
+                                 })}
+                             </div>
                         ) : (
                             <div className="text-center py-12 bg-white border border-dashed border-slate-200 rounded-2xl p-6 space-y-2">
                                 <Calendar className="w-8 h-8 text-slate-300 mx-auto" />
@@ -1170,9 +1326,164 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
                             </div>
 
                             {/* Lado Direito: Seleção Dinâmica e Moderna de Horários */}
-                            <div className="flex-1 p-6 flex flex-col space-y-5 bg-white">
+                            <div className="flex-1 p-6 flex flex-col space-y-4 bg-white">
                                 
-                                {/* 1. Controle de Vagas por Horário com Presets Rápidos */}
+                                {/* 1. Tipo de Atendimento - OBRIGATÓRIO */}
+                                <div className="space-y-3 bg-gradient-to-r from-slate-50 to-sky-50/40 p-4 rounded-2xl border border-sky-100 shadow-2xs">
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-[11px] font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                                            <Building2 className="w-3.5 h-3.5 text-sky-600" />
+                                            Tipo de Atendimento <span className="text-rose-500 font-bold">* (Obrigatório)</span>
+                                        </label>
+                                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                                            tipoAtendimento === 'INTERNO' ? 'bg-emerald-100 text-emerald-800' : 'bg-sky-100 text-sky-800'
+                                        }`}>
+                                            {tipoAtendimento === 'INTERNO' ? '🏥 Atendimento Próprio Municipal' : '🌐 Rede Externa / Consórcio'}
+                                        </span>
+                                    </div>
+
+                                    {/* Seletores Visuais INTERNO vs EXTERNO */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setTipoAtendimento('INTERNO');
+                                                setPrestador('Centro de Saúde / Policlínica Municipal');
+                                                setMunicipio('São José do Goiabal - MG');
+                                                setConvenio('Rede Própria Municipal');
+                                                setModalError('');
+                                            }}
+                                            className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col gap-1.5 ${
+                                                tipoAtendimento === 'INTERNO'
+                                                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-600/20 ring-2 ring-emerald-600/30'
+                                                    : 'bg-white border-slate-200 text-slate-700 hover:border-emerald-300 hover:bg-emerald-50/40'
+                                            }`}
+                                        >
+                                            <div className="flex items-center justify-between">
+                                                <span className="font-black text-xs uppercase flex items-center gap-1.5">
+                                                    <Building2 className="w-4 h-4 shrink-0" />
+                                                    INTERNO
+                                                </span>
+                                                {tipoAtendimento === 'INTERNO' && <Check className="w-4 h-4 stroke-[3]" />}
+                                            </div>
+                                            <p className={`text-[10px] leading-tight font-medium ${tipoAtendimento === 'INTERNO' ? 'text-emerald-100' : 'text-slate-500'}`}>
+                                                Profissionais/prestadores que atendem dentro do município.
+                                            </p>
+                                        </button>
+
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setTipoAtendimento('EXTERNO');
+                                                if (prestador === 'Centro de Saúde / Policlínica Municipal') setPrestador('');
+                                                if (municipio === 'São José do Goiabal - MG') setMunicipio('');
+                                                if (convenio === 'Rede Própria Municipal') setConvenio('CISAMAPI');
+                                                setModalError('');
+                                            }}
+                                            className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col gap-1.5 ${
+                                                tipoAtendimento === 'EXTERNO'
+                                                    ? 'bg-sky-600 text-white border-sky-600 shadow-md shadow-sky-600/20 ring-2 ring-sky-600/30'
+                                                    : 'bg-white border-slate-200 text-slate-700 hover:border-sky-300 hover:bg-sky-50/40'
+                                            }`}
+                                        >
+                                            <div className="flex items-center justify-between">
+                                                <span className="font-black text-xs uppercase flex items-center gap-1.5">
+                                                    <Globe className="w-4 h-4 shrink-0" />
+                                                    EXTERNO
+                                                </span>
+                                                {tipoAtendimento === 'EXTERNO' && <Check className="w-4 h-4 stroke-[3]" />}
+                                            </div>
+                                            <p className={`text-[10px] leading-tight font-medium ${tipoAtendimento === 'EXTERNO' ? 'text-sky-100' : 'text-slate-500'}`}>
+                                                Convênios, consórcios, hospitais, clínicas e parceiros fora.
+                                            </p>
+                                        </button>
+                                    </div>
+
+                                    {/* Campos Detalhados do Prestador / Município / Convênio */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                                        <div>
+                                            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">
+                                                Prestador / Unidade <span className="text-rose-500">*</span>
+                                            </label>
+                                            <input
+                                                type="text"
+                                                list="prestadores-list"
+                                                value={prestador}
+                                                onChange={(e) => { setPrestador(e.target.value); setModalError(''); }}
+                                                placeholder={tipoAtendimento === 'INTERNO' ? "Centro de Saúde / Policlínica" : "Ex: CISAMAPI, Hospital..."}
+                                                className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-800 outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-all placeholder:text-slate-400 placeholder:font-normal"
+                                                required
+                                            />
+                                            <datalist id="prestadores-list">
+                                                <option value="Centro de Saúde / Policlínica Municipal" />
+                                                <option value="CISAMAPI" />
+                                                <option value="Hospital Arnaldo Gavazza (Ponte Nova)" />
+                                                <option value="Hospital Nossa Senhora das Dores (Ponte Nova)" />
+                                                <option value="Hospital Margarida (João Monlevade)" />
+                                                <option value="Hospital Márcio Cunha (Ipatinga)" />
+                                                <option value="Hospital das Clínicas / UFMG (Belo Horizonte)" />
+                                                <option value="Santa Casa de Belo Horizonte" />
+                                                <option value="Clínica Oftalmológica Regional" />
+                                            </datalist>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">
+                                                Município <span className="text-rose-500">*</span>
+                                            </label>
+                                            <input
+                                                type="text"
+                                                list="municipios-list"
+                                                value={municipio}
+                                                onChange={(e) => { setMunicipio(e.target.value); setModalError(''); }}
+                                                placeholder={tipoAtendimento === 'INTERNO' ? "São José do Goiabal - MG" : "Ex: Ponte Nova - MG, BH..."}
+                                                className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-800 outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-all placeholder:text-slate-400 placeholder:font-normal"
+                                                required
+                                            />
+                                            <datalist id="municipios-list">
+                                                <option value="São José do Goiabal - MG" />
+                                                <option value="Ponte Nova - MG" />
+                                                <option value="João Monlevade - MG" />
+                                                <option value="Ipatinga - MG" />
+                                                <option value="Belo Horizonte - MG" />
+                                                <option value="Rio Casca - MG" />
+                                                <option value="Viçosa - MG" />
+                                                <option value="Ouro Preto - MG" />
+                                            </datalist>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1">
+                                                Convênio / Consórcio
+                                            </label>
+                                            <input
+                                                type="text"
+                                                list="convenios-list"
+                                                value={convenio}
+                                                onChange={(e) => setConvenio(e.target.value)}
+                                                placeholder={tipoAtendimento === 'INTERNO' ? "Rede Própria Municipal" : "Ex: Consórcio CISAMAPI..."}
+                                                className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-800 outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-all placeholder:text-slate-400 placeholder:font-normal"
+                                            />
+                                            <datalist id="convenios-list">
+                                                <option value="Rede Própria Municipal" />
+                                                <option value="CISAMAPI" />
+                                                <option value="CISLESTE" />
+                                                <option value="SUS Regional (Estado de MG)" />
+                                                <option value="Contrato de Prestação de Serviços" />
+                                                <option value="Filantrópico" />
+                                            </datalist>
+                                        </div>
+                                    </div>
+
+                                    {modalError && (
+                                        <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-xs font-bold text-rose-700 flex items-center gap-2">
+                                            <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600" />
+                                            <span>{modalError}</span>
+                                        </div>
+                                    )}
+                                </div>
+                                
+                                {/* 2. Controle de Vagas por Horário com Presets Rápidos */}
                                 <div className="bg-gradient-to-r from-sky-50/70 via-indigo-50/40 to-slate-50/70 p-4 rounded-2xl border border-sky-100/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
                                     <div className="flex items-center gap-3">
                                         <div className="w-10 h-10 rounded-2xl bg-white text-sky-700 border border-sky-200 flex items-center justify-center font-black shadow-xs shrink-0">
@@ -1214,7 +1525,7 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
                                     </div>
                                 </div>
 
-                                {/* 2. Select Moderno e Dinâmico de Horários (Compacto, não ocupa espaço vertical) */}
+                                {/* 3. Select Moderno e Dinâmico de Horários (Compacto, não ocupa espaço vertical) */}
                                 <div ref={timeDropdownRef} className="relative space-y-2">
                                     <div className="flex items-center justify-between text-[11px] font-black uppercase tracking-wider text-slate-500">
                                         <span className="flex items-center gap-1.5">
@@ -1420,7 +1731,7 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
                                     )}
                                 </div>
 
-                                {/* 5. Resumo Visual dos Horários Selecionados */}
+                                {/* 4. Resumo Visual dos Horários Selecionados */}
                                 {selectedTimes.length > 0 && (
                                     <div className="p-3 bg-sky-50/80 rounded-2xl border border-sky-100 space-y-2">
                                         <div className="flex items-center justify-between text-[11px] font-black text-sky-950">
@@ -1460,10 +1771,10 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
                             <div className="text-xs font-semibold text-slate-500 text-center sm:text-left">
                                 {selectedTimes.length > 0 ? (
                                     <span>
-                                        Total a liberar: <strong className="text-sky-700 font-black text-sm">{selectedTimes.length * numVagasPorHorario} vaga(s)</strong> {numVagasPorHorario > 1 ? `(${selectedTimes.length} horários × ${numVagasPorHorario} vagas)` : `(${selectedTimes.length} horário(s))`} para <strong>{selectedDate ? selectedDate.toLocaleDateString('pt-BR') : ''}</strong>
+                                        Total a liberar: <strong className="text-sky-700 font-black text-sm">{selectedTimes.length * numVagasPorHorario} vaga(s)</strong> {numVagasPorHorario > 1 ? `(${selectedTimes.length} horários × ${numVagasPorHorario} vagas)` : `(${selectedTimes.length} horário(s))`} para <strong>{selectedDate ? selectedDate.toLocaleDateString('pt-BR') : ''}</strong> • <span className={`font-black px-1.5 py-0.5 rounded text-[10px] ${tipoAtendimento === 'INTERNO' ? 'bg-emerald-100 text-emerald-800' : 'bg-sky-100 text-sky-800'}`}>{tipoAtendimento}</span> ({prestador || 'Sem Prestador'})
                                     </span>
                                 ) : (
-                                    <span className="text-slate-400 font-medium">Selecione ao menos 1 horário no painel acima para liberar as vagas</span>
+                                    <span className="text-slate-400 font-medium">Selecione o tipo de atendimento e ao menos 1 horário para liberar as vagas</span>
                                 )}
                             </div>
 
@@ -1478,7 +1789,7 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
                                 <button
                                     type="button"
                                     onClick={handleConfirmAddVagas}
-                                    disabled={!selectedDate || selectedTimes.length === 0 || actionLoading}
+                                    disabled={!selectedDate || selectedTimes.length === 0 || actionLoading || !prestador.trim() || !municipio.trim()}
                                     className="px-6 py-2.5 bg-gradient-to-r from-sky-600 via-indigo-600 to-indigo-700 hover:from-sky-700 hover:to-indigo-800 text-white font-black rounded-xl shadow-lg shadow-sky-500/25 disabled:opacity-40 disabled:shadow-none transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer active:scale-95"
                                 >
                                     {actionLoading ? (
@@ -1502,9 +1813,10 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
             {/* MODAL: EDITAR VAGA */}
             {editingVaga && (
                 <div className="fixed inset-0 z-[1000] flex items-center justify-center p-3 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
-                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden border border-slate-100 flex flex-col">
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden border border-slate-100 flex flex-col">
                         <div className="p-3.5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                            <h3 className="text-xs font-black text-slate-800 uppercase tracking-wide">
+                            <h3 className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center gap-2">
+                                <Edit2 className="w-4 h-4 text-sky-600" />
                                 Editar Vaga
                             </h3>
                             <button onClick={() => setEditingVaga(null)} className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer">
@@ -1512,31 +1824,97 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
                             </button>
                         </div>
 
-                        <form onSubmit={handleSaveEditSlot} className="p-4 space-y-3">
-                            <div>
-                                <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">
-                                    Data da Vaga
-                                </label>
-                                <input
-                                    type="date"
-                                    value={editDate}
-                                    onChange={(e) => setEditDate(e.target.value)}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-800 outline-none"
-                                    required
-                                />
+                        <form onSubmit={handleSaveEditSlot} className="p-4 space-y-3.5">
+                            <div className="grid grid-cols-2 gap-2.5">
+                                <div>
+                                    <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">
+                                        Data da Vaga
+                                    </label>
+                                    <input
+                                        type="date"
+                                        value={editDate}
+                                        onChange={(e) => setEditDate(e.target.value)}
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-800 outline-none"
+                                        required
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">
+                                        Horário da Vaga
+                                    </label>
+                                    <input
+                                        type="time"
+                                        value={editTime}
+                                        onChange={(e) => setEditTime(e.target.value)}
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-800 outline-none"
+                                        required
+                                    />
+                                </div>
                             </div>
 
-                            <div>
-                                <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">
-                                    Horário da Vaga
+                            {/* Tipo de Atendimento Territorial */}
+                            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2.5">
+                                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-600">
+                                    Tipo de Atendimento <span className="text-rose-500">*</span>
                                 </label>
-                                <input
-                                    type="time"
-                                    value={editTime}
-                                    onChange={(e) => setEditTime(e.target.value)}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs font-bold text-slate-800 outline-none"
-                                    required
-                                />
+                                <div className="grid grid-cols-2 gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setEditTipoAtendimento('INTERNO');
+                                            if (!editPrestador) setEditPrestador('Centro de Saúde / Policlínica Municipal');
+                                            if (!editMunicipio) setEditMunicipio('São José do Goiabal - MG');
+                                        }}
+                                        className={`py-1.5 px-2 text-xs font-black rounded-lg border text-center transition-all cursor-pointer ${
+                                            editTipoAtendimento === 'INTERNO'
+                                                ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                                                : 'bg-white border-slate-200 text-slate-700'
+                                        }`}
+                                    >
+                                        INTERNO
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setEditTipoAtendimento('EXTERNO')}
+                                        className={`py-1.5 px-2 text-xs font-black rounded-lg border text-center transition-all cursor-pointer ${
+                                            editTipoAtendimento === 'EXTERNO'
+                                                ? 'bg-sky-600 text-white border-sky-600 shadow-xs'
+                                                : 'bg-white border-slate-200 text-slate-700'
+                                        }`}
+                                    >
+                                        EXTERNO
+                                    </button>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-2 pt-1">
+                                    <div>
+                                        <label className="block text-[9px] font-bold uppercase text-slate-400 mb-0.5">
+                                            Prestador / Unidade
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={editPrestador}
+                                            onChange={(e) => setEditPrestador(e.target.value)}
+                                            placeholder="Ex: CISAMAPI"
+                                            className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-xs font-bold text-slate-800 outline-none"
+                                            required
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[9px] font-bold uppercase text-slate-400 mb-0.5">
+                                            Município
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={editMunicipio}
+                                            onChange={(e) => setEditMunicipio(e.target.value)}
+                                            placeholder="Ex: Ponte Nova/MG"
+                                            className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-xs font-bold text-slate-800 outline-none"
+                                            required
+                                        />
+                                    </div>
+                                </div>
                             </div>
 
                             <div>
@@ -1625,30 +2003,84 @@ export const LiberarVagasScreen: React.FC<LiberarVagasScreenProps> = ({
                                     </p>
                                 </div>
 
-                                <div>
-                                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
-                                        Nova Data (opcional)
-                                    </label>
-                                    <input
-                                        type="date"
-                                        value={bulkEditNewDate}
-                                        onChange={(e) => setBulkEditNewDate(e.target.value)}
-                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-800 outline-none focus:border-sky-500 focus:bg-white transition-all"
-                                    />
-                                    <span className="text-[10px] text-slate-400">Deixe em branco para não alterar a data das vagas.</span>
+                                <div className="grid grid-cols-2 gap-2.5">
+                                    <div>
+                                        <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                                            Nova Data (opcional)
+                                        </label>
+                                        <input
+                                            type="date"
+                                            value={bulkEditNewDate}
+                                            onChange={(e) => setBulkEditNewDate(e.target.value)}
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-800 outline-none focus:border-sky-500 focus:bg-white transition-all"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                                            Novo Horário (opcional)
+                                        </label>
+                                        <input
+                                            type="time"
+                                            value={bulkEditNewTime}
+                                            onChange={(e) => setBulkEditNewTime(e.target.value)}
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-800 outline-none focus:border-sky-500 focus:bg-white transition-all"
+                                        />
+                                    </div>
                                 </div>
 
+                                {/* Atualização de Tipo de Atendimento em Lote */}
                                 <div>
                                     <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
-                                        Novo Horário (opcional)
+                                        Tipo de Atendimento Territorial
                                     </label>
-                                    <input
-                                        type="time"
-                                        value={bulkEditNewTime}
-                                        onChange={(e) => setBulkEditNewTime(e.target.value)}
-                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-800 outline-none focus:border-sky-500 focus:bg-white transition-all"
-                                    />
-                                    <span className="text-[10px] text-slate-400">Deixe em branco para manter os horários originais.</span>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {[
+                                            { id: 'manter', label: 'Manter Atual' },
+                                            { id: 'INTERNO', label: 'INTERNO' },
+                                            { id: 'EXTERNO', label: 'EXTERNO' }
+                                        ].map(item => (
+                                            <button
+                                                key={item.id}
+                                                type="button"
+                                                onClick={() => setBulkEditTipoAtendimento(item.id as any)}
+                                                className={`py-2 px-2 text-center rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                                                    bulkEditTipoAtendimento === item.id
+                                                        ? 'bg-sky-600 text-white border-sky-600 shadow-xs'
+                                                        : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                                                }`}
+                                            >
+                                                {item.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-2.5">
+                                    <div>
+                                        <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                                            Novo Prestador (opcional)
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={bulkEditPrestador}
+                                            onChange={(e) => setBulkEditPrestador(e.target.value)}
+                                            placeholder="Ex: CISAMAPI"
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-800 outline-none focus:border-sky-500 focus:bg-white transition-all"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                                            Novo Município (opcional)
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={bulkEditMunicipio}
+                                            onChange={(e) => setBulkEditMunicipio(e.target.value)}
+                                            placeholder="Ex: Ponte Nova - MG"
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-800 outline-none focus:border-sky-500 focus:bg-white transition-all"
+                                        />
+                                    </div>
                                 </div>
 
                                 <div>

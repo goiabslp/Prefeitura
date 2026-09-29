@@ -663,6 +663,10 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
         setLoading(true);
         
         // Determina se a data/hora selecionada corresponde a uma vaga futura real e livre
+        const matchedSlot = (bookingDate && bookingTime) 
+            ? futureAvailableSlots.find(v => v.data === bookingDate && matchTime(v.hora, bookingTime))
+            : futureAvailableSlots.find(v => v.data === bookingDate);
+
         const hasValidFutureSlot = Boolean(
             bookingDate && 
             futureAvailableSlots.some(v => 
@@ -680,6 +684,10 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
             procedimento_id: selectedProcedure.id,
             appointment_date: (!isWaitlist && bookingDate) ? targetDate : undefined,
             appointment_time: (!isWaitlist && bookingDate && bookingTime) ? (bookingTime || undefined) : undefined,
+            tipo_atendimento: matchedSlot?.tipo_atendimento || 'INTERNO',
+            prestador: matchedSlot?.prestador || (matchedSlot?.tipo_atendimento === 'EXTERNO' ? 'CISAMAPI' : 'Centro de Saúde / Policlínica Municipal'),
+            municipio: matchedSlot?.municipio || (matchedSlot?.tipo_atendimento === 'EXTERNO' ? 'Ponte Nova - MG' : 'São José do Goiabal - MG'),
+            convenio: matchedSlot?.convenio || (matchedSlot?.tipo_atendimento === 'EXTERNO' ? 'CISAMAPI' : 'Rede Própria Municipal'),
             solicitation_date: solicitationDate,
             quantity: bookingQty,
             priority: bookingPriority,

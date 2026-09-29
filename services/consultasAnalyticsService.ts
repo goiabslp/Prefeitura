@@ -95,10 +95,81 @@ export interface MetricasVolumeEFunil {
   vagasDisponiveisLivres: number;
 }
 
+export interface MetricasDemandaTerritorial {
+  demandaTotal: number;
+  interna: {
+    total: number;
+    percentual: number;
+    pacientesAguardando: number;
+    vagasLiberadas: number;
+    pacientesAgendados: number;
+    atendimentosRealizados: number;
+    procedimentosMaisDemandados: {
+      id: string;
+      nome: string;
+      tipo: string;
+      total: number;
+      aguardando: number;
+      liberadas: number;
+      agendados: number;
+      realizados: number;
+    }[];
+  };
+  externa: {
+    total: number;
+    percentual: number;
+    pacientesAguardando: number;
+    vagasLiberadas: number;
+    pacientesAgendados: number;
+    atendimentosRealizados: number;
+    procedimentosMaisDemandados: {
+      id: string;
+      nome: string;
+      tipo: string;
+      total: number;
+      aguardando: number;
+      liberadas: number;
+      agendados: number;
+      realizados: number;
+    }[];
+    porMunicipio: {
+      municipio: string;
+      total: number;
+      aguardando: number;
+      liberadas: number;
+      agendados: number;
+      realizados: number;
+      prestadores: string[];
+    }[];
+    porPrestador: {
+      prestador: string;
+      municipio: string;
+      convenio: string;
+      total: number;
+      aguardando: number;
+      liberadas: number;
+      agendados: number;
+      realizados: number;
+    }[];
+    porConvenio: {
+      convenio: string;
+      total: number;
+      aguardando: number;
+      liberadas: number;
+      agendados: number;
+      realizados: number;
+    }[];
+  };
+  taxaAbsorcaoMunicipal: number; // % que o município atende internamente
+  taxaDependenciaExterna: number; // % que depende da rede externa
+}
+
 export interface ConsultasAnalyticsCompleto {
   periodo: string;
   isMockData: boolean;
   volume: MetricasVolumeEFunil;
+  territorial: MetricasDemandaTerritorial;
+  demandaTerritorial: MetricasDemandaTerritorial;
   prazos: MetricasPrazos;
   ia: MetricasIAPredicoes;
   distribuicaoStatus: { status: string; count: number; color: string; percentual: number }[];
@@ -163,7 +234,19 @@ export const gerarMockConsultasDataset = (procedimentosCadastrados: ConsultaProc
   const mockVagas: ConsultaVaga[] = [];
 
   // Gera vagas distribuídas
+  const prestadoresExternos = [
+    { nome: 'CISAMAPI', municipio: 'Ponte Nova/MG', convenio: 'Consórcio CISAMAPI' },
+    { nome: 'Hospital Arnaldo Gavazza', municipio: 'Ponte Nova/MG', convenio: 'SUS / CISAMAPI' },
+    { nome: 'Hospital de Olhos de Minas', municipio: 'Belo Horizonte/MG', convenio: 'Consórcio CISAMAPI' },
+    { nome: 'Centro de Diagnósticos Regional', municipio: 'João Monlevade/MG', convenio: 'Convênio Municipal' },
+    { nome: 'Hospital N. Sra. das Dores', municipio: 'Ponte Nova/MG', convenio: 'SUS Regional' }
+  ];
+
   procsBase.forEach((proc, pIdx) => {
+    // 60% procedimentos internos, 40% externos
+    const isExterno = pIdx % 2 === 1 || proc.type === 'Cirurgia' || proc.name.includes('Ressonância') || proc.name.includes('Endoscopia');
+    const extInfo = prestadoresExternos[pIdx % prestadoresExternos.length];
+
     for (let dayOffset = -15; dayOffset <= 20; dayOffset++) {
       const vDate = new Date(hoje);
       vDate.setDate(vDate.getDate() + dayOffset);
@@ -178,6 +261,10 @@ export const gerarMockConsultasDataset = (procedimentosCadastrados: ConsultaProc
           procedimento_id: proc.id,
           data: dateStr,
           hora: hora,
+          tipo_atendimento: isExterno ? 'EXTERNO' : 'INTERNO',
+          prestador: isExterno ? extInfo.nome : 'Centro de Saúde / Policlínica Municipal',
+          municipio: isExterno ? extInfo.municipio : 'São José do Goiabal/MG',
+          convenio: isExterno ? extInfo.convenio : 'Rede Própria Municipal',
           status: dayOffset < 0 ? 'Ocupada' : (s % 2 === 0 ? 'Ocupada' : 'Disponível'),
           created_at: new Date(hoje.getTime() - 30 * 86400000).toISOString()
         });
@@ -206,6 +293,8 @@ export const gerarMockConsultasDataset = (procedimentosCadastrados: ConsultaProc
     const proc = procsBase[i % procsBase.length];
     const bairro = bairros[i % bairros.length];
     const agente = agentes[i % agentes.length];
+    const isExterno = (i % 3 === 0) || proc.type === 'Cirurgia' || proc.name.includes('Ressonância') || proc.name.includes('Endoscopia');
+    const extInfo = prestadoresExternos[i % prestadoresExternos.length];
     
     // Distribuição de prioridades: 70% Normal, 20% Especial, 10% Urgência
     let priority: 'Normal' | 'Especial' | 'Urgência' = 'Normal';
@@ -265,6 +354,10 @@ export const gerarMockConsultasDataset = (procedimentosCadastrados: ConsultaProc
       special_sequence: priority === 'Especial' && status === 'Fila de espera' ? (i % 3 + 1) : undefined,
       status: status,
       created_by: 'regulator-admin',
+      tipo_atendimento: isExterno ? 'EXTERNO' : 'INTERNO',
+      prestador: isExterno ? extInfo.nome : 'Centro de Saúde / Policlínica Municipal',
+      municipio: isExterno ? extInfo.municipio : 'São José do Goiabal/MG',
+      convenio: isExterno ? extInfo.convenio : 'Rede Própria Municipal',
       paciente: {
         id: `pac-${i}`,
         name: nome,
@@ -764,9 +857,148 @@ export const processarAnaliseConsultas = (
     .sort((a, b) => b.total - a.total)
     .slice(0, 8);
 
+  // 6. Métricas de Demanda Territorial (Interna vs Externa)
+  const agendamentosInternos = filtrados.filter(a => a.tipo_atendimento !== 'EXTERNO');
+  const agendamentosExternos = filtrados.filter(a => a.tipo_atendimento === 'EXTERNO');
+
+  const vagasInternas = vagas.filter(v => v.tipo_atendimento !== 'EXTERNO');
+  const vagasExternas = vagas.filter(v => v.tipo_atendimento === 'EXTERNO');
+
+  const demandaTotal = filtrados.length;
+  const totalInterna = agendamentosInternos.length;
+  const totalExterna = agendamentosExternos.length;
+
+  const percInterna = demandaTotal > 0 ? Number(((totalInterna / demandaTotal) * 100).toFixed(1)) : 0;
+  const percExterna = demandaTotal > 0 ? Number(((totalExterna / demandaTotal) * 100).toFixed(1)) : 0;
+
+  // Agrupamento de Procedimentos Internos
+  const procsInternosMap: Record<string, { id: string; nome: string; tipo: string; total: number; aguardando: number; liberadas: number; agendados: number; realizados: number }> = {};
+  agendamentosInternos.forEach(a => {
+    const id = a.procedimento_id || 'p-gen';
+    const nome = a.procedimento?.name || 'Procedimento';
+    const tipo = a.procedimento?.type || 'Consulta';
+    if (!procsInternosMap[id]) {
+      const vCount = vagasInternas.filter(v => v.procedimento_id === id).length;
+      procsInternosMap[id] = { id, nome, tipo, total: 0, aguardando: 0, liberadas: vCount, agendados: 0, realizados: 0 };
+    }
+    procsInternosMap[id].total += 1;
+    if (a.status === 'Fila de espera' || a.status === 'Aguardando Data') procsInternosMap[id].aguardando += 1;
+    if (a.status === 'Agendado' || a.status === 'Solicitado') procsInternosMap[id].agendados += 1;
+    if (a.status === 'Realizado') procsInternosMap[id].realizados += 1;
+  });
+
+  const procedimentosInternosRanking = Object.values(procsInternosMap).sort((a, b) => b.total - a.total);
+
+  // Agrupamento de Procedimentos Externos
+  const procsExternosMap: Record<string, { id: string; nome: string; tipo: string; total: number; aguardando: number; liberadas: number; agendados: number; realizados: number }> = {};
+  agendamentosExternos.forEach(a => {
+    const id = a.procedimento_id || 'p-gen';
+    const nome = a.procedimento?.name || 'Procedimento';
+    const tipo = a.procedimento?.type || 'Exame';
+    if (!procsExternosMap[id]) {
+      const vCount = vagasExternas.filter(v => v.procedimento_id === id).length;
+      procsExternosMap[id] = { id, nome, tipo, total: 0, aguardando: 0, liberadas: vCount, agendados: 0, realizados: 0 };
+    }
+    procsExternosMap[id].total += 1;
+    if (a.status === 'Fila de espera' || a.status === 'Aguardando Data') procsExternosMap[id].aguardando += 1;
+    if (a.status === 'Agendado' || a.status === 'Solicitado') procsExternosMap[id].agendados += 1;
+    if (a.status === 'Realizado') procsExternosMap[id].realizados += 1;
+  });
+
+  const procedimentosExternosRanking = Object.values(procsExternosMap).sort((a, b) => b.total - a.total);
+
+  // Agrupamento Externo por Município
+  const municipiosMap: Record<string, { municipio: string; total: number; aguardando: number; liberadas: number; agendados: number; realizados: number; prestadoresSet: Set<string> }> = {};
+  agendamentosExternos.forEach(a => {
+    const mun = a.municipio || 'Ponte Nova/MG';
+    const prest = a.prestador || 'CISAMAPI';
+    if (!municipiosMap[mun]) {
+      const vMun = vagasExternas.filter(v => (v.municipio || 'Ponte Nova/MG') === mun).length;
+      municipiosMap[mun] = { municipio: mun, total: 0, aguardando: 0, liberadas: vMun, agendados: 0, realizados: 0, prestadoresSet: new Set() };
+    }
+    municipiosMap[mun].total += 1;
+    municipiosMap[mun].prestadoresSet.add(prest);
+    if (a.status === 'Fila de espera' || a.status === 'Aguardando Data') municipiosMap[mun].aguardando += 1;
+    if (a.status === 'Agendado' || a.status === 'Solicitado') municipiosMap[mun].agendados += 1;
+    if (a.status === 'Realizado') municipiosMap[mun].realizados += 1;
+  });
+
+  const porMunicipio = Object.values(municipiosMap).map(m => ({
+    municipio: m.municipio,
+    total: m.total,
+    aguardando: m.aguardando,
+    liberadas: m.liberadas,
+    agendados: m.agendados,
+    realizados: m.realizados,
+    prestadores: Array.from(m.prestadoresSet)
+  })).sort((a, b) => b.total - a.total);
+
+  // Agrupamento Externo por Prestador
+  const prestadoresMap: Record<string, { prestador: string; municipio: string; convenio: string; total: number; aguardando: number; liberadas: number; agendados: number; realizados: number }> = {};
+  agendamentosExternos.forEach(a => {
+    const prest = a.prestador || 'CISAMAPI';
+    const mun = a.municipio || 'Ponte Nova/MG';
+    const conv = a.convenio || 'Consórcio CISAMAPI';
+    if (!prestadoresMap[prest]) {
+      const vPrest = vagasExternas.filter(v => (v.prestador || 'CISAMAPI') === prest).length;
+      prestadoresMap[prest] = { prestador: prest, municipio: mun, convenio: conv, total: 0, aguardando: 0, liberadas: vPrest, agendados: 0, realizados: 0 };
+    }
+    prestadoresMap[prest].total += 1;
+    if (a.status === 'Fila de espera' || a.status === 'Aguardando Data') prestadoresMap[prest].aguardando += 1;
+    if (a.status === 'Agendado' || a.status === 'Solicitado') prestadoresMap[prest].agendados += 1;
+    if (a.status === 'Realizado') prestadoresMap[prest].realizados += 1;
+  });
+
+  const porPrestador = Object.values(prestadoresMap).sort((a, b) => b.total - a.total);
+
+  // Agrupamento Externo por Convênio / Consórcio
+  const conveniosMap: Record<string, { convenio: string; total: number; aguardando: number; liberadas: number; agendados: number; realizados: number }> = {};
+  agendamentosExternos.forEach(a => {
+    const conv = a.convenio || 'Consórcio CISAMAPI';
+    if (!conveniosMap[conv]) {
+      const vConv = vagasExternas.filter(v => (v.convenio || 'Consórcio CISAMAPI') === conv).length;
+      conveniosMap[conv] = { convenio: conv, total: 0, aguardando: 0, liberadas: vConv, agendados: 0, realizados: 0 };
+    }
+    conveniosMap[conv].total += 1;
+    if (a.status === 'Fila de espera' || a.status === 'Aguardando Data') conveniosMap[conv].aguardando += 1;
+    if (a.status === 'Agendado' || a.status === 'Solicitado') conveniosMap[conv].agendados += 1;
+    if (a.status === 'Realizado') conveniosMap[conv].realizados += 1;
+  });
+
+  const porConvenio = Object.values(conveniosMap).sort((a, b) => b.total - a.total);
+
+  const metricasTerritoriais: MetricasDemandaTerritorial = {
+    demandaTotal,
+    interna: {
+      total: totalInterna,
+      percentual: percInterna,
+      pacientesAguardando: agendamentosInternos.filter(a => a.status === 'Fila de espera' || a.status === 'Aguardando Data').length,
+      vagasLiberadas: vagasInternas.length,
+      pacientesAgendados: agendamentosInternos.filter(a => a.status === 'Agendado' || a.status === 'Solicitado').length,
+      atendimentosRealizados: agendamentosInternos.filter(a => a.status === 'Realizado').length,
+      procedimentosMaisDemandados: procedimentosInternosRanking
+    },
+    externa: {
+      total: totalExterna,
+      percentual: percExterna,
+      pacientesAguardando: agendamentosExternos.filter(a => a.status === 'Fila de espera' || a.status === 'Aguardando Data').length,
+      vagasLiberadas: vagasExternas.length,
+      pacientesAgendados: agendamentosExternos.filter(a => a.status === 'Agendado' || a.status === 'Solicitado').length,
+      atendimentosRealizados: agendamentosExternos.filter(a => a.status === 'Realizado').length,
+      procedimentosMaisDemandados: procedimentosExternosRanking,
+      porMunicipio,
+      porPrestador,
+      porConvenio
+    },
+    taxaAbsorcaoMunicipal: percInterna,
+    taxaDependenciaExterna: percExterna
+  };
+
   return {
     periodo: filtroPeriodo,
     isMockData,
+    territorial: metricasTerritoriais,
+    demandaTerritorial: metricasTerritoriais,
     volume: {
       totalSolicitacoes,
       totalFilaEspera,

@@ -210,6 +210,7 @@ const VIEW_TO_PATH: Record<string, string> = {
   'consultas:dados': '/Regulacao/DADOS',
   'consultas:dados-dashboard': '/Regulacao/DADOS/Dashboard',
   'consultas:dados-dashboard-geral': '/Regulacao/DADOS/Dashboard/VisaoGeral',
+  'consultas:dados-dashboard-demanda-territorial': '/Regulacao/DADOS/Dashboard/DemandaTerritorial',
   'consultas:dados-dashboard-especialistas': '/Regulacao/DADOS/Dashboard/Especialistas',
   'consultas:dados-dashboard-prazos': '/Regulacao/DADOS/Dashboard/Prazos',
   'consultas:dados-dashboard-filas': '/Regulacao/DADOS/Dashboard/Filas',
@@ -5532,6 +5533,9 @@ const App: React.FC = () => {
                   } else if (view === 'consultas:dados-dashboard-geral') {
                     setAppState(prev => ({ ...prev, view: 'dados-dashboard-geral' }));
                     window.history.pushState({}, '', '/Regulacao/DADOS/Dashboard/VisaoGeral');
+                  } else if (view === 'consultas:dados-dashboard-demanda-territorial') {
+                    setAppState(prev => ({ ...prev, view: 'dados-dashboard-demanda-territorial' }));
+                    window.history.pushState({}, '', '/Regulacao/DADOS/Dashboard/DemandaTerritorial');
                   } else if (view === 'consultas:dados-dashboard-especialistas') {
                     setAppState(prev => ({ ...prev, view: 'dados-dashboard-especialistas' }));
                     window.history.pushState({}, '', '/Regulacao/DADOS/Dashboard/Especialistas');

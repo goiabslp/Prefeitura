@@ -896,12 +896,37 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                 />
                             )}
 
-                            {booking.paciente?.phone && (
+                            <DataItem 
+                                label="Tipo Atendimento" 
+                                value={booking.tipo_atendimento === 'EXTERNO' ? 'EXTERNO' : 'INTERNO'} 
+                                icon={booking.tipo_atendimento === 'EXTERNO' ? Building2 : MapPin} 
+                                colorClass={booking.tipo_atendimento === 'EXTERNO' ? 'text-sky-800 bg-sky-100/90 border-sky-300' : 'text-emerald-800 bg-emerald-100/90 border-emerald-300'} 
+                                isBadge={true} 
+                                flex="col-span-1 wide:w-auto" 
+                            />
+
+                            <DataItem 
+                                label="Prestador / Unidade" 
+                                value={booking.prestador || (booking.tipo_atendimento === 'EXTERNO' ? 'CISAMAPI' : 'Centro de Saúde / Policlínica Municipal')} 
+                                icon={Building2} 
+                                colorClass="text-slate-800 font-extrabold" 
+                                flex="col-span-1 wide:w-auto" 
+                            />
+
+                            <DataItem 
+                                label="Município" 
+                                value={booking.municipio || (booking.tipo_atendimento === 'EXTERNO' ? 'Ponte Nova - MG' : 'São José do Goiabal - MG')} 
+                                icon={MapPin} 
+                                colorClass="text-slate-700 font-bold" 
+                                flex="col-span-1 wide:w-auto" 
+                            />
+
+                            {booking.convenio && (
                                 <DataItem 
-                                    label="Contato" 
-                                    value={booking.paciente.phone} 
-                                    icon={Phone} 
-                                    colorClass="text-slate-600 font-medium" 
+                                    label="Convênio / Consórcio" 
+                                    value={booking.convenio} 
+                                    icon={FileText} 
+                                    colorClass="text-indigo-700 font-semibold" 
                                     flex="col-span-1 wide:w-auto" 
                                 />
                             )}
@@ -1189,6 +1214,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     const [allBookings, setAllBookings] = useState<ConsultaAgendamento[]>([]);
     const [isReportModalOpen, setIsReportModalOpen] = useState(false);
     const [reportType, setReportType] = useState<'simplificado' | 'completo'>('simplificado');
+    const [reportDemandaFilter, setReportDemandaFilter] = useState<'TODAS' | 'INTERNO' | 'EXTERNO'>('TODAS');
     const [isPrintingReport, setIsPrintingReport] = useState(false);
     const [queuePositions, setQueuePositions] = useState<Record<string, number>>({});
     const [specialSequences, setSpecialSequences] = useState<Record<string, number>>({});
@@ -1201,6 +1227,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     const [globalSearch, setGlobalSearch] = useState('');
     const [filterDate, setFilterDate] = useState('');
     const [filterStatus, setFilterStatus] = useState('');
+    const [filterTipoAtendimento, setFilterTipoAtendimento] = useState<string>('');
     const [isMobile, setIsMobile] = useState<boolean>(() => typeof window !== 'undefined' ? window.innerWidth < 768 : false);
     const [expandedBookingId, setExpandedBookingId] = useState<string | null>(null);
     const [displayLimit, setDisplayLimit] = useState(30);
@@ -1208,7 +1235,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     // Redefine paginação ao trocar filtros
     useEffect(() => {
         setDisplayLimit(30);
-    }, [globalSearch, filterDate, filterStatus]);
+    }, [globalSearch, filterDate, filterStatus, filterTipoAtendimento]);
 
     // Lookup Map O(1) de PSF dos Agentes para máxima performance
     const agentPsfMap = useMemo(() => {
@@ -1363,6 +1390,17 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
         return { total, proceduresCount };
     }, [allBookings, reportDataFila]);
 
+    // Agendamentos filtrados para o modal e geração de relatórios
+    const reportBookings = useMemo(() => {
+        if (reportDemandaFilter === 'INTERNO') {
+            return allBookings.filter(b => (b.tipo_atendimento || 'INTERNO') === 'INTERNO');
+        }
+        if (reportDemandaFilter === 'EXTERNO') {
+            return allBookings.filter(b => b.tipo_atendimento === 'EXTERNO');
+        }
+        return allBookings;
+    }, [allBookings, reportDemandaFilter]);
+
     // Load data
     const [allVagas, setAllVagas] = useState<ConsultaVaga[]>([]);
     const [isDefinirDataModalOpen, setIsDefinirDataModalOpen] = useState(false);
@@ -1494,6 +1532,9 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                     filtered = filtered.filter(a => a.status === filterStatus);
                 }
             }
+            if (filterTipoAtendimento) {
+                filtered = filtered.filter(a => (a.tipo_atendimento || 'INTERNO') === filterTipoAtendimento);
+            }
 
             setBookings(filtered);
         } catch (error) {
@@ -1506,7 +1547,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     // Trigger loading on filter change
     useEffect(() => {
         loadData();
-    }, [filterDate, filterStatus]);
+    }, [filterDate, filterStatus, filterTipoAtendimento]);
 
     // Debounce manual typing search
     useEffect(() => {
@@ -2103,6 +2144,19 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                         placeholder="Data"
                     />
 
+                    {/* Filter: Tipo de Atendimento (INTERNO / EXTERNO) */}
+                    <ModernDropdown
+                        value={filterTipoAtendimento}
+                        onChange={setFilterTipoAtendimento}
+                        options={[
+                            { value: '', label: 'Todos os Tipos' },
+                            { value: 'INTERNO', label: '🏥 Interno (Município)' },
+                            { value: 'EXTERNO', label: '🌐 Externo (Convênios/CISAMAPI)' }
+                        ]}
+                        placeholder="Tipo"
+                        minWidth="w-28 sm:w-36 lg:w-44"
+                    />
+
                     {/* Filter: Status Select (Modern Popover Dropdown) */}
                     <ModernDropdown
                         value={filterStatus}
@@ -2436,30 +2490,70 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                             </button>
                         </div>
 
-                        {/* Tabs Selector */}
-                        <div className="px-6 py-3 bg-slate-100/40 border-b border-slate-100 flex gap-2 shrink-0">
-                            <button
-                                onClick={() => setReportType('simplificado')}
-                                className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer ${
-                                    reportType === 'simplificado'
-                                    ? 'bg-sky-600 text-white shadow-md shadow-sky-200/50'
-                                    : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
-                                }`}
-                            >
-                                <BarChart3 className="w-3.5 h-3.5" />
-                                Relatório Simplificado (Quantitativo)
-                            </button>
-                            <button
-                                onClick={() => setReportType('completo')}
-                                className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer ${
-                                    reportType === 'completo'
-                                    ? 'bg-sky-600 text-white shadow-md shadow-sky-200/50'
-                                    : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
-                                }`}
-                            >
-                                <Users className="w-3.5 h-3.5" />
-                                Relatório Completo (Procedimentos e Pacientes)
-                            </button>
+                        {/* Tabs Selector e Filtro Territorial */}
+                        <div className="px-6 py-3 bg-slate-100/60 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
+                            {/* Formato do Relatório */}
+                            <div className="flex items-center gap-1.5 bg-white p-1 rounded-xl border border-slate-200">
+                                <button
+                                    onClick={() => setReportType('simplificado')}
+                                    className={`px-3.5 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
+                                        reportType === 'simplificado'
+                                        ? 'bg-sky-600 text-white shadow-xs'
+                                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                                    }`}
+                                >
+                                    <BarChart3 className="w-3.5 h-3.5" />
+                                    Simplificado
+                                </button>
+                                <button
+                                    onClick={() => setReportType('completo')}
+                                    className={`px-3.5 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
+                                        reportType === 'completo'
+                                        ? 'bg-sky-600 text-white shadow-xs'
+                                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                                    }`}
+                                >
+                                    <Users className="w-3.5 h-3.5" />
+                                    Completo
+                                </button>
+                            </div>
+
+                            {/* Seletor Territorial de Demanda */}
+                            <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-slate-200">
+                                <span className="text-[10px] font-black uppercase text-slate-400 px-2 tracking-wider">
+                                    Demanda:
+                                </span>
+                                <button
+                                    onClick={() => setReportDemandaFilter('TODAS')}
+                                    className={`px-2.5 py-1 rounded-lg text-[11px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                                        reportDemandaFilter === 'TODAS'
+                                        ? 'bg-slate-900 text-white shadow-xs'
+                                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                                    }`}
+                                >
+                                    🌐 Geral
+                                </button>
+                                <button
+                                    onClick={() => setReportDemandaFilter('INTERNO')}
+                                    className={`px-2.5 py-1 rounded-lg text-[11px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                                        reportDemandaFilter === 'INTERNO'
+                                        ? 'bg-emerald-600 text-white shadow-xs'
+                                        : 'text-emerald-700 hover:bg-emerald-50'
+                                    }`}
+                                >
+                                    🏥 Interna
+                                </button>
+                                <button
+                                    onClick={() => setReportDemandaFilter('EXTERNO')}
+                                    className={`px-2.5 py-1 rounded-lg text-[11px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                                        reportDemandaFilter === 'EXTERNO'
+                                        ? 'bg-purple-600 text-white shadow-xs'
+                                        : 'text-purple-700 hover:bg-purple-50'
+                                    }`}
+                                >
+                                    🚗 Externa
+                                </button>
+                            </div>
                         </div>
 
                         {/* Modal Body */}
@@ -2469,10 +2563,12 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                 <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
                                     <div className="flex items-center gap-2">
                                         <BarChart3 className="w-4 h-4 text-sky-400" />
-                                        <h4 className="text-xs font-black uppercase tracking-wider">Quantitativo dos Procedimentos</h4>
+                                        <h4 className="text-xs font-black uppercase tracking-wider">
+                                            Quantitativo dos Procedimentos {reportDemandaFilter !== 'TODAS' && `(${reportDemandaFilter === 'INTERNO' ? 'Demanda Interna' : 'Demanda Externa'})`}
+                                        </h4>
                                     </div>
                                     <span className="text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-slate-800 text-sky-300 border border-slate-700">
-                                        Total Geral: {allBookings.reduce((acc, b) => acc + (b.quantity || 1), 0)} Solicitações
+                                        Total: {reportBookings.reduce((acc, b) => acc + (b.quantity || 1), 0)} Solicitações
                                     </span>
                                 </div>
                                 <div className="overflow-x-auto">
@@ -2486,7 +2582,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                         </thead>
                                         <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-700">
                                             {procedures.map(proc => {
-                                                const procBookings = allBookings.filter(b => 
+                                                const procBookings = reportBookings.filter(b => 
                                                     b.procedimento_id === proc.id || b.procedimento?.id === proc.id
                                                 );
                                                 const totalQty = procBookings.reduce((acc, b) => acc + (b.quantity || 1), 0);
@@ -2532,10 +2628,12 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                     <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
                                         <div className="flex items-center gap-2">
                                             <Users className="w-4 h-4 text-sky-400" />
-                                            <h4 className="text-xs font-black uppercase tracking-wider">Lista Paciente x Procedimento (Ordem Alfabética)</h4>
+                                            <h4 className="text-xs font-black uppercase tracking-wider">
+                                                Lista Paciente x Procedimento {reportDemandaFilter !== 'TODAS' && `(${reportDemandaFilter === 'INTERNO' ? 'Interno' : 'Externo'})`}
+                                            </h4>
                                         </div>
                                         <span className="text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300">
-                                            {allBookings.length} Registros
+                                            {reportBookings.length} Registros
                                         </span>
                                     </div>
                                     <div className="overflow-x-auto max-h-[400px]">
@@ -2545,13 +2643,13 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                                     <th className="px-3 py-2.5 text-center w-16">Posição</th>
                                                     <th className="px-3 py-2.5 text-center w-28">Solicitado</th>
                                                     <th className="px-4 py-2.5">Paciente / CPF</th>
-                                                    <th className="px-4 py-2.5">Procedimento</th>
+                                                    <th className="px-4 py-2.5">Procedimento / Território</th>
                                                     <th className="px-3 py-2.5 text-center w-36">Data Agendada</th>
                                                     <th className="px-3 py-2.5 text-center w-28">Status</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-700 uppercase">
-                                                {allBookings
+                                                {reportBookings
                                                     .sort((a, b) => {
                                                         const nameA = a.paciente?.name || '';
                                                         const nameB = b.paciente?.name || '';
@@ -2593,11 +2691,24 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                                                     <div className="font-extrabold text-slate-800 leading-tight">
                                                                         {formatProcedimentoLabel(booking.procedimento) || 'Procedimento não informado'}
                                                                     </div>
-                                                                    {booking.procedimento?.code && (
-                                                                        <span className="text-[9px] font-mono text-slate-500 bg-slate-100 px-1 py-0.2 rounded border border-slate-200 inline-block mt-0.5">
-                                                                            {booking.procedimento.code}
-                                                                        </span>
-                                                                    )}
+                                                                    <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                                                                        {booking.procedimento?.code && (
+                                                                            <span className="text-[9px] font-mono text-slate-500 bg-slate-100 px-1 py-0.2 rounded border border-slate-200 inline-block">
+                                                                                {booking.procedimento.code}
+                                                                            </span>
+                                                                        )}
+                                                                        {booking.tipo_atendimento && (
+                                                                            <span className={`text-[9px] font-black uppercase px-1.5 py-0.2 rounded border ${
+                                                                                booking.tipo_atendimento === 'INTERNO'
+                                                                                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                                                                    : 'bg-purple-50 text-purple-800 border-purple-200'
+                                                                            }`}>
+                                                                                {booking.tipo_atendimento === 'INTERNO' 
+                                                                                    ? 'INTERNO' 
+                                                                                    : `EXTERNO • ${booking.prestador || 'Rede Fora'}${booking.municipio ? ` (${booking.municipio})` : ''}`}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
                                                                 </td>
                                                                 <td className="px-3 py-2 text-center font-mono text-[11px]">
                                                                     {booking.status !== 'Fila de espera' && booking.status !== 'Aguardando Data' && booking.appointment_date ? (
@@ -2663,7 +2774,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                     }`}
                                 >
                                     <FileDown className="w-4 h-4" />
-                                    Exportar Simplificado
+                                    Exportar Simplificado {reportDemandaFilter !== 'TODAS' ? `(${reportDemandaFilter})` : ''}
                                 </button>
                                 <button
                                     type="button"
@@ -2678,7 +2789,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                     }`}
                                 >
                                     <FileDown className="w-4 h-4" />
-                                    Exportar Completo
+                                    Exportar Completo {reportDemandaFilter !== 'TODAS' ? `(${reportDemandaFilter})` : ''}
                                 </button>
                             </div>
                         </div>
@@ -2690,7 +2801,8 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
             {isPrintingReport && (
                 <ConsultasReportPdfGenerator
                     reportType={reportType}
-                    bookings={allBookings}
+                    demandaFilter={reportDemandaFilter}
+                    bookings={reportBookings}
                     procedures={procedures}
                     queuePositions={queuePositions}
                     state={appState}

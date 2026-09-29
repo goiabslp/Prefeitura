@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient';
-import { ConsultaPaciente, ConsultaProcedimento, ConsultaAgendamento, ConsultaVaga, ConsultaEspecialista } from '../types';
+import { ConsultaPaciente, ConsultaProcedimento, ConsultaAgendamento, ConsultaVaga, ConsultaEspecialista, TipoAtendimentoConsulta } from '../types';
 import { handleSupabaseError } from '../utils/errorUtils';
 
 // --- PACIENTES ---
@@ -1197,7 +1197,8 @@ export const getAgendamentos = async (filters?: AgendamentoFilters): Promise<Con
         const fullColumns = `
             id, patient_id, procedimento_id, appointment_date, appointment_time, solicitation_date,
             quantity, priority, queue_position, special_sequence, status, created_by, created_at,
-            is_retorno, retorno_tipo, retorno_grau, cancellation_reason, canceled_by, canceled_by_name, canceled_at,
+            is_retorno, retorno_tipo, retorno_grau, tipo_atendimento, prestador, municipio, convenio, vaga_id,
+            cancellation_reason, canceled_by, canceled_by_name, canceled_at,
             paciente:consultas_pacientes(id, name, cpf, birth_date, phone, neighborhood, sus_number, agente_saude),
             procedimento:consultas_procedimentos(id, name, code, type, available_quantity, total_quantity, status, recurso),
             responsavel:profiles(id, name)
@@ -2054,10 +2055,15 @@ export const getVagas = async (procedimentoId?: string): Promise<ConsultaVaga[]>
         const CHUNK_SIZE = 1000;
         let hasMore = true;
 
+        const VAGA_COLUMNS = 'id, procedimento_id, data, hora, status, tipo_atendimento, prestador, municipio, convenio, created_at';
+        const VAGA_COLUMNS_FALLBACK = 'id, procedimento_id, data, hora, status, created_at';
+        let useFallback = false;
+
         while (hasMore) {
+            const cols = useFallback ? VAGA_COLUMNS_FALLBACK : VAGA_COLUMNS;
             let query = supabase
                 .from('consultas_vagas')
-                .select('id, procedimento_id, data, hora, status, created_at')
+                .select(cols as any)
                 .order('data', { ascending: true })
                 .order('hora', { ascending: true })
                 .range(from, from + CHUNK_SIZE - 1);
@@ -2066,12 +2072,33 @@ export const getVagas = async (procedimentoId?: string): Promise<ConsultaVaga[]>
                 query = query.eq('procedimento_id', procedimentoId);
             }
 
-            const { data, error } = await query;
+            let res: any = await query;
+            let data = res.data;
+            let error = res.error;
+
+            if (error && !useFallback && (error.code === '42703' || error.code === 'PGRST204' || error.message?.includes('column') || error.message?.includes('schema cache'))) {
+                useFallback = true;
+                const fallbackRes: any = await supabase
+                    .from('consultas_vagas')
+                    .select(VAGA_COLUMNS_FALLBACK as any)
+                    .order('data', { ascending: true })
+                    .order('hora', { ascending: true })
+                    .range(from, from + CHUNK_SIZE - 1);
+                data = fallbackRes.data;
+                error = fallbackRes.error;
+            }
 
             if (error) throw error;
 
             if (data && data.length > 0) {
-                allVagas.push(...(data as ConsultaVaga[]));
+                const mapped = data.map((v: any) => ({
+                    ...v,
+                    tipo_atendimento: (v.tipo_atendimento as any) || 'INTERNO',
+                    prestador: v.prestador || (v.tipo_atendimento === 'EXTERNO' ? 'CISAMAPI' : 'Centro de Saúde Municipal'),
+                    municipio: v.municipio || (v.tipo_atendimento === 'EXTERNO' ? 'Ponte Nova - MG' : 'São José do Goiabal - MG'),
+                    convenio: v.convenio || (v.tipo_atendimento === 'EXTERNO' ? 'CISAMAPI' : 'SUS Municipal')
+                }));
+                allVagas.push(...(mapped as ConsultaVaga[]));
                 if (data.length < CHUNK_SIZE) {
                     hasMore = false;
                 } else {
@@ -2090,12 +2117,47 @@ export const getVagas = async (procedimentoId?: string): Promise<ConsultaVaga[]>
     }
 };
 
-export const createVagas = async (vagas: Omit<ConsultaVaga, 'id' | 'created_at' | 'status'>[]): Promise<ConsultaVaga[] | null> => {
+export const createVagas = async (
+    vagas: Array<{
+        procedimento_id: string;
+        data: string;
+        hora: string;
+        tipo_atendimento?: TipoAtendimentoConsulta;
+        prestador?: string;
+        municipio?: string;
+        convenio?: string;
+        status?: ConsultaVaga['status'];
+    }>
+): Promise<ConsultaVaga[] | null> => {
     try {
-        const { data, error } = await supabase
+        const payload = vagas.map(v => ({
+            procedimento_id: v.procedimento_id,
+            data: v.data,
+            hora: v.hora,
+            tipo_atendimento: v.tipo_atendimento || 'INTERNO',
+            prestador: v.prestador || (v.tipo_atendimento === 'EXTERNO' ? 'CISAMAPI' : 'Centro de Saúde / Policlínica Municipal'),
+            municipio: v.municipio || (v.tipo_atendimento === 'EXTERNO' ? 'Ponte Nova - MG' : 'São José do Goiabal - MG'),
+            convenio: v.convenio || (v.tipo_atendimento === 'EXTERNO' ? 'Consórcio CISAMAPI' : 'Rede Própria Municipal')
+        }));
+
+        let { data, error } = await supabase
             .from('consultas_vagas')
-            .insert(vagas)
+            .insert(payload)
             .select();
+
+        if (error && (error.code === '42703' || error.code === 'PGRST204' || error.message?.includes('column') || error.message?.includes('schema cache'))) {
+            const fallbackPayload = vagas.map(v => ({
+                procedimento_id: v.procedimento_id,
+                data: v.data,
+                hora: v.hora
+            }));
+            const retryRes = await supabase
+                .from('consultas_vagas')
+                .insert(fallbackPayload)
+                .select();
+            data = retryRes.data;
+            error = retryRes.error;
+        }
 
         if (error) throw error;
 
@@ -2107,7 +2169,13 @@ export const createVagas = async (vagas: Omit<ConsultaVaga, 'id' | 'created_at' 
             window.dispatchEvent(new CustomEvent('consultas-procedimentos-changed'));
         }
 
-        return data;
+        return (data || []).map((v: any) => ({
+            ...v,
+            tipo_atendimento: v.tipo_atendimento || 'INTERNO',
+            prestador: v.prestador,
+            municipio: v.municipio,
+            convenio: v.convenio
+        }));
     } catch (error) {
         const appError = handleSupabaseError(error);
         console.error('[consultasService] createVagas Error:', appError.message);

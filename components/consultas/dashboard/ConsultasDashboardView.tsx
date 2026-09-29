@@ -9,6 +9,7 @@ import {
 } from '../../../services/consultasAnalyticsService';
 import { ConsultasIAPanel } from './ConsultasIAPanel';
 import { EspecialistasDashboardTab } from './EspecialistasDashboardTab';
+import { DemandaTerritorialDashboardTab } from './DemandaTerritorialDashboardTab';
 import {
   BarChart3,
   Brain,
@@ -29,6 +30,7 @@ import {
   ShieldCheck,
   Stethoscope,
   Building2,
+  Globe,
   UserCheck,
   Layers,
   ArrowUpRight,
@@ -57,7 +59,7 @@ interface ConsultasDashboardViewProps {
   onNavigate?: (view: string) => void;
 }
 
-type TabType = 'geral' | 'prazos' | 'filas' | 'ia' | 'eficiencia' | 'especialistas';
+type TabType = 'geral' | 'demanda_territorial' | 'especialistas' | 'prazos' | 'filas' | 'ia' | 'eficiencia';
 
 export const ConsultasDashboardView: React.FC<ConsultasDashboardViewProps> = ({
   currentUser,
@@ -66,6 +68,7 @@ export const ConsultasDashboardView: React.FC<ConsultasDashboardViewProps> = ({
 }) => {
   // Sincronização de Aba com base na subView / Rota
   const activeTab: TabType = useMemo(() => {
+    if (subView === 'dados-dashboard-demanda-territorial') return 'demanda_territorial';
     if (subView === 'dados-dashboard-especialistas') return 'especialistas';
     if (subView === 'dados-dashboard-prazos') return 'prazos';
     if (subView === 'dados-dashboard-filas') return 'filas';
@@ -78,6 +81,7 @@ export const ConsultasDashboardView: React.FC<ConsultasDashboardViewProps> = ({
   const handleTabChange = (tabId: TabType) => {
     const routeMap: Record<TabType, { routeKey: string; path: string }> = {
       geral: { routeKey: 'consultas:dados-dashboard-geral', path: '/Regulacao/DADOS/Dashboard/VisaoGeral' },
+      demanda_territorial: { routeKey: 'consultas:dados-dashboard-demanda-territorial', path: '/Regulacao/DADOS/Dashboard/DemandaTerritorial' },
       especialistas: { routeKey: 'consultas:dados-dashboard-especialistas', path: '/Regulacao/DADOS/Dashboard/Especialistas' },
       prazos: { routeKey: 'consultas:dados-dashboard-prazos', path: '/Regulacao/DADOS/Dashboard/Prazos' },
       filas: { routeKey: 'consultas:dados-dashboard-filas', path: '/Regulacao/DADOS/Dashboard/Filas' },
@@ -272,6 +276,7 @@ export const ConsultasDashboardView: React.FC<ConsultasDashboardViewProps> = ({
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200/80 pb-3">
         {[
           { id: 'geral', label: 'Visão Geral & Funil', icon: BarChart3, path: '/Regulacao/DADOS/Dashboard/VisaoGeral' },
+          { id: 'demanda_territorial', label: 'Demanda Territorial', icon: Globe, path: '/Regulacao/DADOS/Dashboard/DemandaTerritorial', highlight: true },
           { id: 'especialistas', label: 'Profissional Especialista', icon: Stethoscope, path: '/Regulacao/DADOS/Dashboard/Especialistas', highlight: true },
           { id: 'prazos', label: 'Prazos Médios & SLA', icon: Clock, path: '/Regulacao/DADOS/Dashboard/Prazos' },
           { id: 'filas', label: 'Fila & Especiais', icon: Users, path: '/Regulacao/DADOS/Dashboard/Filas' },
@@ -304,10 +309,44 @@ export const ConsultasDashboardView: React.FC<ConsultasDashboardViewProps> = ({
 
       {/* 3. CONTEÚDO DAS ABAS */}
 
+      {/* === ABA: DEMANDA TERRITORIAL === */}
+      {activeTab === 'demanda_territorial' && (
+        <DemandaTerritorialDashboardTab demanda={analytics.demandaTerritorial} isMockData={analytics.isMockData} />
+      )}
+
       {/* === ABA 1: VISÃO GERAL === */}
       {activeTab === 'geral' && (
         <div className="space-y-6">
           
+          {/* Mini-Banner de Destaque: Capacidade de Absorção Municipal vs Dependência Externa */}
+          <div className="bg-gradient-to-r from-slate-900 via-sky-950 to-indigo-950 p-5 rounded-3xl text-white shadow-md border border-sky-900/40 flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-sky-500/20 border border-sky-400/30 flex items-center justify-center shrink-0">
+                <Globe className="w-6 h-6 text-sky-300" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-black uppercase tracking-widest text-sky-300">
+                    Demanda Territorial & Pactuações
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-black uppercase border border-emerald-400/30">
+                    {analytics.demandaTerritorial.interna.percentual}% Absorção Própria
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300 mt-1 font-medium">
+                  Demanda total: <strong className="text-white font-black">{analytics.demandaTerritorial.demandaTotal}</strong> • Interna: <strong className="text-emerald-300 font-black">{analytics.demandaTerritorial.interna.total} ({analytics.demandaTerritorial.interna.percentual}%)</strong> • Externa: <strong className="text-sky-300 font-black">{analytics.demandaTerritorial.externa.total} ({analytics.demandaTerritorial.externa.percentual}%)</strong>
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => handleTabChange('demanda_territorial')}
+              className="px-4 py-2 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white font-extrabold text-xs rounded-xl transition-all shrink-0 flex items-center gap-1.5 shadow-md shadow-sky-500/25 cursor-pointer"
+            >
+              <Globe className="w-3.5 h-3.5" /> Ver Diagnóstico Territorial <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
           {/* Mini-Banner de Destaque da IA */}
           <div className="bg-gradient-to-r from-indigo-900 via-slate-900 to-indigo-950 text-white p-5 rounded-3xl shadow-lg flex flex-col md:flex-row items-center justify-between gap-4 border border-indigo-800/40">
             <div className="flex items-center gap-4">
