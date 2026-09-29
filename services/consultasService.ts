@@ -1377,6 +1377,31 @@ export const createAgendamento = async (agendamento: Omit<ConsultaAgendamento, '
 
         // 2. Insert agendamento com suporte a fallback resiliente para novas colunas
         let insertPayload: any = { ...agendamento };
+        
+        // Limpar propriedades com valor null ou undefined que sejam opcionais para evitar erros de schema cache
+        const optionalCols = [
+            'convenio',
+            'prestador',
+            'municipio',
+            'tipo_atendimento',
+            'vaga_id',
+            'retorno_tipo',
+            'retorno_grau',
+            'cancellation_reason',
+            'canceled_by',
+            'canceled_by_name',
+            'canceled_at',
+            'solicitation_date',
+            'appointment_time',
+            'is_retorno'
+        ];
+
+        optionalCols.forEach(col => {
+            if (insertPayload[col] === null || insertPayload[col] === undefined) {
+                delete insertPayload[col];
+            }
+        });
+
         let { data, error } = await supabase
             .from('consultas_agendamentos')
             .insert([insertPayload])
@@ -1390,9 +1415,14 @@ export const createAgendamento = async (agendamento: Omit<ConsultaAgendamento, '
 
         if (error && (error.code === '42703' || error.code === 'PGRST204' || error.message?.includes('column') || error.message?.includes('does not exist') || error.message?.includes('schema cache'))) {
             console.warn('[consultasService] Colunas opcionais ausentes na tabela consultas_agendamentos (createAgendamento). Tentando fallback...', error.message);
-            const optionalCols = ['retorno_tipo', 'retorno_grau', 'cancellation_reason', 'canceled_by', 'canceled_by_name', 'canceled_at', 'solicitation_date', 'appointment_time', 'is_retorno'];
             let fallbackPayload = { ...insertPayload };
             let lastError = error;
+
+            // Extrair dinamicamente coluna ausente mencionada no erro
+            const matchCol = lastError.message?.match(/Could not find the '([^']+)' column/) || lastError.message?.match(/column "([^"]+)" of relation/);
+            if (matchCol && matchCol[1]) {
+                delete fallbackPayload[matchCol[1]];
+            }
 
             for (const col of optionalCols) {
                 if (lastError && (lastError.code === '42703' || lastError.code === 'PGRST204' || lastError.message?.includes('column') || lastError.message?.includes('does not exist') || lastError.message?.includes('schema cache'))) {
@@ -1614,7 +1644,12 @@ export const getQueueEligibilityMap = (
     return map;
 };
 
-export const confirmarDataAgendamento = async (id: string, date: string, time?: string): Promise<ConsultaAgendamento | null> => {
+export const confirmarDataAgendamento = async (
+    id: string, 
+    date: string, 
+    time?: string,
+    vagaInfo?: Partial<ConsultaVaga>
+): Promise<ConsultaAgendamento | null> => {
     try {
         // 1. Buscar o agendamento atual para validar procedimento e integridade
         const { data: targetBooking, error: fetchErr } = await supabase
@@ -1635,6 +1670,14 @@ export const confirmarDataAgendamento = async (id: string, date: string, time?: 
             getAgendamentos()
         ]);
         const procBookings = allBookings.filter(b => (b.procedimento_id || b.procedimento?.id) === procId);
+
+        // Identificar a vaga correspondente para herdar seu tipo_atendimento, prestador, município e convênio
+        let matchedVaga: Partial<ConsultaVaga> | null = vagaInfo || null;
+        if (!matchedVaga && date && time) {
+            const cleanTime = time.substring(0, 5);
+            const freeSlots = getFreeSlotsForProcedure(allProcVagas, procBookings);
+            matchedVaga = freeSlots.find(s => s.data === date && matchTimeSlot(s.hora, cleanTime)) || null;
+        }
 
         // Se houver horário definido, verificar se ainda há vagas livres
         if (date && time) {
@@ -1695,6 +1738,13 @@ export const confirmarDataAgendamento = async (id: string, date: string, time?: 
         if (time) {
             updatePayload.appointment_time = time;
         }
+        if (matchedVaga) {
+            if (matchedVaga.id) updatePayload.vaga_id = matchedVaga.id;
+            if (matchedVaga.tipo_atendimento) updatePayload.tipo_atendimento = matchedVaga.tipo_atendimento;
+            if (matchedVaga.prestador) updatePayload.prestador = matchedVaga.prestador;
+            if (matchedVaga.municipio) updatePayload.municipio = matchedVaga.municipio;
+            if (matchedVaga.convenio) updatePayload.convenio = matchedVaga.convenio;
+        }
 
         let data = await updateAgendamento(id, updatePayload);
 
@@ -1712,13 +1762,22 @@ export const confirmarDataAgendamento = async (id: string, date: string, time?: 
                     .eq('id', procId);
             }
 
+            const forcePayload: any = {
+                appointment_date: date,
+                appointment_time: time || null,
+                status: 'Agendado'
+            };
+            if (matchedVaga) {
+                if (matchedVaga.id) forcePayload.vaga_id = matchedVaga.id;
+                if (matchedVaga.tipo_atendimento) forcePayload.tipo_atendimento = matchedVaga.tipo_atendimento;
+                if (matchedVaga.prestador) forcePayload.prestador = matchedVaga.prestador;
+                if (matchedVaga.municipio) forcePayload.municipio = matchedVaga.municipio;
+                if (matchedVaga.convenio) forcePayload.convenio = matchedVaga.convenio;
+            }
+
             const forceRes = await supabase
                 .from('consultas_agendamentos')
-                .update({
-                    appointment_date: date,
-                    appointment_time: time || null,
-                    status: 'Agendado'
-                })
+                .update(forcePayload)
                 .eq('id', id)
                 .select(`
                     *,
@@ -1802,9 +1861,30 @@ export const updateAgendamento = async (
         if (error && (error.code === '42703' || error.code === 'PGRST204' || error.message?.includes('column') || error.message?.includes('does not exist') || error.message?.includes('schema cache'))) {
             console.warn('[consultasService] Coluna(s) ausente(s) no Supabase (updateAgendamento). Tentando fallback progressivo...', error.message);
 
-            const optionalCols = ['retorno_tipo', 'retorno_grau', 'solicitation_date', 'appointment_time', 'is_retorno', 'cancellation_reason', 'canceled_by', 'canceled_by_name', 'canceled_at'];
+            const optionalCols = [
+                'convenio',
+                'prestador',
+                'municipio',
+                'tipo_atendimento',
+                'vaga_id',
+                'retorno_tipo',
+                'retorno_grau',
+                'solicitation_date',
+                'appointment_time',
+                'is_retorno',
+                'cancellation_reason',
+                'canceled_by',
+                'canceled_by_name',
+                'canceled_at'
+            ];
             let fallbackUpdates = { ...cleanUpdates };
             let lastError = error;
+
+            // Extrair dinamicamente coluna ausente mencionada no erro
+            const matchCol = lastError.message?.match(/Could not find the '([^']+)' column/) || lastError.message?.match(/column "([^"]+)" of relation/);
+            if (matchCol && matchCol[1]) {
+                delete fallbackUpdates[matchCol[1]];
+            }
 
             for (const col of optionalCols) {
                 if (lastError && (lastError.code === '42703' || lastError.code === 'PGRST204' || lastError.message?.includes('column') || lastError.message?.includes('does not exist') || lastError.message?.includes('schema cache'))) {
@@ -2587,6 +2667,11 @@ export const reagendarAgendamento = async (id: string): Promise<ConsultaAgendame
                 status: 'Fila de espera',
                 appointment_date: null,
                 appointment_time: null,
+                tipo_atendimento: null,
+                prestador: null,
+                municipio: null,
+                convenio: null,
+                vaga_id: null,
                 cancellation_reason: null,
                 canceled_by: null,
                 canceled_by_name: null,
@@ -2608,7 +2693,12 @@ export const reagendarAgendamento = async (id: string): Promise<ConsultaAgendame
                 .update({
                     status: 'Fila de espera',
                     appointment_date: null,
-                    appointment_time: null
+                    appointment_time: null,
+                    tipo_atendimento: null,
+                    prestador: null,
+                    municipio: null,
+                    convenio: null,
+                    vaga_id: null
                 })
                 .eq('id', id)
                 .select(`

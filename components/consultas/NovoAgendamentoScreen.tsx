@@ -682,12 +682,6 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
         const optimisticBooking: any = {
             patient_id: selectedPatient.id,
             procedimento_id: selectedProcedure.id,
-            appointment_date: (!isWaitlist && bookingDate) ? targetDate : undefined,
-            appointment_time: (!isWaitlist && bookingDate && bookingTime) ? (bookingTime || undefined) : undefined,
-            tipo_atendimento: matchedSlot?.tipo_atendimento || 'INTERNO',
-            prestador: matchedSlot?.prestador || (matchedSlot?.tipo_atendimento === 'EXTERNO' ? 'CISAMAPI' : 'Centro de Saúde / Policlínica Municipal'),
-            municipio: matchedSlot?.municipio || (matchedSlot?.tipo_atendimento === 'EXTERNO' ? 'Ponte Nova - MG' : 'São José do Goiabal - MG'),
-            convenio: matchedSlot?.convenio || (matchedSlot?.tipo_atendimento === 'EXTERNO' ? 'CISAMAPI' : 'Rede Própria Municipal'),
             solicitation_date: solicitationDate,
             quantity: bookingQty,
             priority: bookingPriority,
@@ -697,6 +691,20 @@ export const NovoAgendamentoScreen: React.FC<NovoAgendamentoScreenProps> = ({
             retorno_tipo: isRetorno && retornoTipo ? retornoTipo : undefined,
             retorno_grau: isRetorno && retornoTipo ? Number(retornoTipo.charAt(0)) : undefined
         };
+
+        if (!isWaitlist && bookingDate) {
+            optimisticBooking.appointment_date = targetDate;
+            if (bookingTime) {
+                optimisticBooking.appointment_time = bookingTime;
+            }
+            if (matchedSlot) {
+                if (matchedSlot.tipo_atendimento) optimisticBooking.tipo_atendimento = matchedSlot.tipo_atendimento;
+                if (matchedSlot.prestador) optimisticBooking.prestador = matchedSlot.prestador;
+                if (matchedSlot.municipio) optimisticBooking.municipio = matchedSlot.municipio;
+                if (matchedSlot.convenio) optimisticBooking.convenio = matchedSlot.convenio;
+                if (matchedSlot.id) optimisticBooking.vaga_id = matchedSlot.id;
+            }
+        }
 
         try {
             const result = await db.createAgendamento(optimisticBooking);

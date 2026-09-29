@@ -157,7 +157,7 @@ export const DefinirDataModal: React.FC<DefinirDataModalProps> = ({
         setSuccessMsg('');
 
         try {
-            const updated = await db.confirmarDataAgendamento(booking.id, selectedDate, selectedSlot.hora);
+            const updated = await db.confirmarDataAgendamento(booking.id, selectedDate, selectedSlot.hora, selectedSlot);
             if (!updated) {
                 throw new Error('Não foi possível registrar o agendamento no banco de dados.');
             }

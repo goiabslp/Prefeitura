@@ -518,7 +518,7 @@ export const ConsultasReportPdfGenerator: React.FC<ConsultasReportPdfGeneratorPr
                                                                             CÓD: {b.procedimento.code}
                                                                         </span>
                                                                     )}
-                                                                    {b.tipo_atendimento && (
+                                                                    {b.tipo_atendimento && (b.status === 'Agendado' || b.status === 'Realizado' || (!!b.appointment_date && b.status !== 'Fila de espera' && b.status !== 'Aguardando Data')) && (
                                                                         <span className={`text-[5.5pt] font-black uppercase px-1 py-0.2 rounded border leading-none ${
                                                                             b.tipo_atendimento === 'INTERNO'
                                                                                 ? 'bg-emerald-50 text-emerald-800 border-emerald-200'

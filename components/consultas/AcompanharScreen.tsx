@@ -896,35 +896,55 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                 />
                             )}
 
-                            <DataItem 
-                                label="Tipo Atendimento" 
-                                value={booking.tipo_atendimento === 'EXTERNO' ? 'EXTERNO' : 'INTERNO'} 
-                                icon={booking.tipo_atendimento === 'EXTERNO' ? Building2 : MapPin} 
-                                colorClass={booking.tipo_atendimento === 'EXTERNO' ? 'text-sky-800 bg-sky-100/90 border-sky-300' : 'text-emerald-800 bg-emerald-100/90 border-emerald-300'} 
-                                isBadge={true} 
-                                flex="col-span-1 wide:w-auto" 
-                            />
+                            {/* Tipo Atendimento */}
+                            {(booking.status === 'Agendado' || booking.status === 'Realizado' || (!!booking.appointment_date && booking.status !== 'Fila de espera' && booking.status !== 'Aguardando Data')) && booking.tipo_atendimento ? (
+                                <DataItem 
+                                    label="Tipo Atendimento" 
+                                    value={booking.tipo_atendimento === 'EXTERNO' ? 'EXTERNO' : 'INTERNO'} 
+                                    icon={booking.tipo_atendimento === 'EXTERNO' ? Building2 : MapPin} 
+                                    colorClass={booking.tipo_atendimento === 'EXTERNO' ? 'text-sky-800 bg-sky-100/90 border-sky-300' : 'text-emerald-800 bg-emerald-100/90 border-emerald-300'} 
+                                    isBadge={true} 
+                                    flex="col-span-1 wide:w-auto" 
+                                />
+                            ) : (
+                                <DataItem 
+                                    label="Tipo Atendimento" 
+                                    value="—" 
+                                    icon={Building2} 
+                                    colorClass="text-slate-400 bg-slate-100/90 border-slate-200 font-bold" 
+                                    isBadge={true} 
+                                    flex="col-span-1 wide:w-auto" 
+                                />
+                            )}
 
                             <DataItem 
                                 label="Prestador / Unidade" 
-                                value={booking.prestador || (booking.tipo_atendimento === 'EXTERNO' ? 'CISAMAPI' : 'Centro de Saúde / Policlínica Municipal')} 
+                                value={
+                                    (booking.status === 'Agendado' || booking.status === 'Realizado' || (!!booking.appointment_date && booking.status !== 'Fila de espera' && booking.status !== 'Aguardando Data'))
+                                        ? (booking.prestador || (booking.tipo_atendimento === 'EXTERNO' ? 'CISAMAPI' : 'Centro de Saúde / Policlínica Municipal'))
+                                        : (booking.prestador || '—')
+                                } 
                                 icon={Building2} 
-                                colorClass="text-slate-800 font-extrabold" 
+                                colorClass={(booking.status === 'Agendado' || booking.status === 'Realizado' || (!!booking.appointment_date && booking.status !== 'Fila de espera' && booking.status !== 'Aguardando Data')) ? "text-slate-800 font-extrabold" : "text-slate-500 font-normal"} 
                                 flex="col-span-1 wide:w-auto" 
                             />
 
                             <DataItem 
                                 label="Município" 
-                                value={booking.municipio || (booking.tipo_atendimento === 'EXTERNO' ? 'Ponte Nova - MG' : 'São José do Goiabal - MG')} 
+                                value={
+                                    (booking.status === 'Agendado' || booking.status === 'Realizado' || (!!booking.appointment_date && booking.status !== 'Fila de espera' && booking.status !== 'Aguardando Data'))
+                                        ? (booking.municipio || (booking.tipo_atendimento === 'EXTERNO' ? 'Ponte Nova - MG' : 'São José do Goiabal - MG'))
+                                        : (booking.municipio || '—')
+                                } 
                                 icon={MapPin} 
-                                colorClass="text-slate-700 font-bold" 
+                                colorClass={(booking.status === 'Agendado' || booking.status === 'Realizado' || (!!booking.appointment_date && booking.status !== 'Fila de espera' && booking.status !== 'Aguardando Data')) ? "text-slate-700 font-bold" : "text-slate-500 font-normal"} 
                                 flex="col-span-1 wide:w-auto" 
                             />
 
-                            {booking.convenio && (
+                            {((booking.status === 'Agendado' || booking.status === 'Realizado') ? (booking.convenio || booking.tipo_atendimento === 'EXTERNO') : !!booking.convenio) && (
                                 <DataItem 
                                     label="Convênio / Consórcio" 
-                                    value={booking.convenio} 
+                                    value={booking.convenio || (booking.tipo_atendimento === 'EXTERNO' ? 'Consórcio CISAMAPI' : 'Rede Própria Municipal')} 
                                     icon={FileText} 
                                     colorClass="text-indigo-700 font-semibold" 
                                     flex="col-span-1 wide:w-auto" 
@@ -1533,7 +1553,13 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                 }
             }
             if (filterTipoAtendimento) {
-                filtered = filtered.filter(a => (a.tipo_atendimento || 'INTERNO') === filterTipoAtendimento);
+                if (filterTipoAtendimento === 'INTERNO') {
+                    filtered = filtered.filter(a => (a.status === 'Agendado' || a.status === 'Realizado' || !!a.appointment_date) && a.tipo_atendimento === 'INTERNO');
+                } else if (filterTipoAtendimento === 'EXTERNO') {
+                    filtered = filtered.filter(a => (a.status === 'Agendado' || a.status === 'Realizado' || !!a.appointment_date) && a.tipo_atendimento === 'EXTERNO');
+                } else if (filterTipoAtendimento === 'NAO_DEFINIDO') {
+                    filtered = filtered.filter(a => a.status === 'Fila de espera' || a.status === 'Aguardando Data' || !a.tipo_atendimento || !a.appointment_date);
+                }
             }
 
             setBookings(filtered);
@@ -1836,6 +1862,11 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                 status: newStatus,
                 appointment_date: willResetToWaitlist ? null : (transferTarget.appointment_date || null),
                 appointment_time: willResetToWaitlist ? null : (transferTarget.appointment_time || null),
+                tipo_atendimento: willResetToWaitlist ? null : (transferTarget.tipo_atendimento || null),
+                prestador: willResetToWaitlist ? null : (transferTarget.prestador || null),
+                municipio: willResetToWaitlist ? null : (transferTarget.municipio || null),
+                convenio: willResetToWaitlist ? null : (transferTarget.convenio || null),
+                vaga_id: willResetToWaitlist ? null : (transferTarget.vaga_id || null),
                 solicitation_date: transferPreserveSolicitationDate
                     ? (transferTarget.solicitation_date || (transferTarget.created_at ? transferTarget.created_at.split('T')[0] : new Date().toISOString().split('T')[0]))
                     : new Date().toISOString().split('T')[0],
@@ -2150,8 +2181,9 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                         onChange={setFilterTipoAtendimento}
                         options={[
                             { value: '', label: 'Todos os Tipos' },
-                            { value: 'INTERNO', label: '🏥 Interno (Município)' },
-                            { value: 'EXTERNO', label: '🌐 Externo (Convênios/CISAMAPI)' }
+                            { value: 'INTERNO', label: '🏥 Interno (Agendado)' },
+                            { value: 'EXTERNO', label: '🌐 Externo (Agendado)' },
+                            { value: 'NAO_DEFINIDO', label: '⏳ Aguardando Vaga (—)' }
                         ]}
                         placeholder="Tipo"
                         minWidth="w-28 sm:w-36 lg:w-44"
