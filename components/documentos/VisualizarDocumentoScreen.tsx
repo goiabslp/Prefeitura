@@ -131,16 +131,42 @@ export const VisualizarDocumentoScreen: React.FC<VisualizarDocumentoScreenProps>
 
   // Se ainda estiver carregando e não tiver documento
   if (!documento) {
+    if (isLoading) {
+      return (
+        <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-center font-sans">
+          <Loader2 className="w-8 h-8 animate-spin text-blue-600 mb-3" />
+          <p className="text-sm font-semibold text-slate-700">Carregando detalhes do documento...</p>
+          <button
+            onClick={onVoltar}
+            className="mt-4 px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-100"
+          >
+            Voltar para Lista
+          </button>
+        </div>
+      );
+    }
+
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-center font-sans">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-600 mb-3" />
-        <p className="text-sm font-semibold text-slate-700">Carregando detalhes do documento...</p>
-        <button
-          onClick={onVoltar}
-          className="mt-4 px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-100"
-        >
-          Voltar para Lista
-        </button>
+        <AlertCircle className="w-12 h-12 text-amber-500 mb-3" />
+        <h3 className="text-base font-bold text-slate-800">Documento Não Encontrado</h3>
+        <p className="text-xs text-slate-500 mt-1 mb-4 max-w-sm">
+          O documento especificado (<span className="font-mono text-slate-700">{documentoId}</span>) não foi encontrado ou não está disponível no sistema.
+        </p>
+        <div className="flex gap-2">
+          <button
+            onClick={onVoltar}
+            className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-100 shadow-sm transition-all hover:border-slate-300"
+          >
+            Voltar para Lista
+          </button>
+          <button
+            onClick={onRefresh}
+            className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-semibold hover:bg-blue-700 flex items-center gap-1.5 shadow-sm transition-all"
+          >
+            <RefreshCw className="w-3.5 h-3.5" /> Tentar Novamente
+          </button>
+        </div>
       </div>
     );
   }

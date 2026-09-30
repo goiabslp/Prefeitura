@@ -282,12 +282,15 @@ export async function getDocumentos(): Promise<DocumentoFluxo[]> {
  * Retorna um documento por ID
  */
 export async function getDocumentoById(id: string): Promise<DocumentoFluxo | null> {
+  const localDocs = getLocalDocs();
+  const localDoc = localDocs.find(d => d.id === id || d.id.toLowerCase() === id.toLowerCase());
+
   try {
     const { data, error } = await supabase
       .from('documentos_fluxo')
       .select('*')
       .eq('id', id)
-      .single();
+      .maybeSingle();
 
     if (!error && data) {
       return data;
@@ -296,14 +299,15 @@ export async function getDocumentoById(id: string): Promise<DocumentoFluxo | nul
     console.warn('[documentosService] Supabase getDocumentoById fallback:', e);
   }
 
-  const local = getLocalDocs();
-  return local.find(d => d.id === id) || null;
+  return localDoc || null;
 }
 
 /**
  * Retorna as movimentações/histórico de um documento (linha do tempo imutável)
  */
 export async function getDocumentoMovimentacoes(documentoId: string): Promise<DocumentoMovimentacao[]> {
+  const localMovs = getLocalMovs().filter(m => m.documento_id === documentoId || m.documento_id.toLowerCase() === documentoId.toLowerCase());
+
   try {
     const { data, error } = await supabase
       .from('documentos_movimentacoes')
@@ -311,17 +315,14 @@ export async function getDocumentoMovimentacoes(documentoId: string): Promise<Do
       .eq('documento_id', documentoId)
       .order('timestamp_iso', { ascending: true });
 
-    if (!error && data && Array.isArray(data)) {
+    if (!error && data && Array.isArray(data) && data.length > 0) {
       return data;
     }
   } catch (e) {
     console.warn('[documentosService] Supabase getDocumentoMovimentacoes fallback:', e);
   }
 
-  const allMovs = getLocalMovs();
-  return allMovs
-    .filter(m => m.documento_id === documentoId)
-    .sort((a, b) => new Date(a.timestamp_iso).getTime() - new Date(b.timestamp_iso).getTime());
+  return localMovs.sort((a, b) => new Date(a.timestamp_iso).getTime() - new Date(b.timestamp_iso).getTime());
 }
 
 /**

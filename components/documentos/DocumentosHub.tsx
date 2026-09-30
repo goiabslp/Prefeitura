@@ -34,11 +34,12 @@ export const DocumentosHub: React.FC<DocumentosHubProps> = ({
   // - /Documentos/Visualizar/:id (detalhes e movimentação)
   const parseCurrentRoute = () => {
     if (typeof window === 'undefined') return { view: 'list', id: null };
-    const path = window.location.pathname.toLowerCase();
+    const rawPath = window.location.pathname;
+    const path = rawPath.toLowerCase();
     if (path === '/documentos/novo') {
       return { view: 'novo', id: null };
     }
-    const match = path.match(/\/documentos\/visualizar\/([^/]+)/);
+    const match = rawPath.match(/\/documentos\/visualizar\/([^/]+)/i);
     if (match && match[1]) {
       return { view: 'visualizar', id: match[1] };
     }
@@ -134,9 +135,22 @@ export const DocumentosHub: React.FC<DocumentosHubProps> = ({
 
   // Criação de novo documento
   const handleCriarDocumento = async (payload: CreateDocumentoPayload) => {
-    const novoDoc = await createDocumento(payload);
-    // Redireciona imediatamente para a visualização do documento recém criado
-    navegarParaVisualizar(novoDoc.id);
+    setIsLoading(true);
+    try {
+      const novoDoc = await createDocumento(payload);
+      setDocumentoAtivo(novoDoc);
+      const movs = await getDocumentoMovimentacoes(novoDoc.id);
+      setMovimentacoes(movs);
+      if (typeof window !== 'undefined') {
+        window.history.pushState({}, '', `/Documentos/Visualizar/${novoDoc.id}`);
+      }
+      setRouteState({ view: 'visualizar', id: novoDoc.id });
+    } catch (e) {
+      console.error('Erro ao criar documento:', e);
+      throw e;
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Encaminhamento de documento

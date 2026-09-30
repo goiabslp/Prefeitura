@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Search, History, Car, User, MapPin, Clock, Eye, Filter, Calendar, ArrowLeft, Building2, Target, FileText, Trash2, Edit3, ChevronDown, XCircle, Users, LayoutList, LayoutGrid } from 'lucide-react';
+import { Search, History, Car, User, MapPin, Clock, Eye, Filter, Calendar, ArrowLeft, Building2, Target, FileText, Trash2, Edit3, ChevronDown, ChevronRight, RotateCcw, XCircle, Users, LayoutList, LayoutGrid } from 'lucide-react';
 import { Vehicle, Person, VehicleSchedule, ScheduleStatus, Sector, AppState, CrewMember } from '../types';
 import { checkAndAutoUpdateStatuses } from '../services/vehicleSchedulingService';
 import { VehicleServiceOrderPreview } from './VehicleServiceOrderPreview';
@@ -57,7 +57,7 @@ export const VehicleScheduleHistory: React.FC<VehicleScheduleHistoryProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [viewingPurpose, setViewingPurpose] = useState<VehicleSchedule | null>(null);
   const [previewingOS, setPreviewingOS] = useState<VehicleSchedule | null>(null);
-  const [statusMenuOpen, setStatusMenuOpen] = useState<string | null>(null);
+  const [changeStatusModalSchedule, setChangeStatusModalSchedule] = useState<VehicleSchedule | null>(null);
   const [managingCrew, setManagingCrew] = useState<VehicleSchedule | null>(null);
   const [isSavingCrew, setIsSavingCrew] = useState(false);
   const [activeTab, setActiveTab] = useState<'all' | ScheduleStatus>('all');
@@ -173,7 +173,6 @@ export const VehicleScheduleHistory: React.FC<VehicleScheduleHistoryProps> = ({
   const handleOpenCancelModal = (s: VehicleSchedule) => {
     setCancelModalSchedule(s);
     setCancellationReason('');
-    setStatusMenuOpen(null);
   };
 
   const handleConfirmCancellation = async () => {
@@ -196,6 +195,12 @@ export const VehicleScheduleHistory: React.FC<VehicleScheduleHistoryProps> = ({
       console.error("Failed to cancel", error);
       alert("Erro ao cancelar agendamento.");
     }
+  };
+
+  const canChangeStatus = (s: VehicleSchedule) => {
+    if (s.status === 'concluido') return false;
+    if (s.status === 'cancelado') return userRole === 'admin';
+    return s.requesterId === currentUserId || userRole === 'admin';
   };
 
   return (
@@ -625,41 +630,18 @@ export const VehicleScheduleHistory: React.FC<VehicleScheduleHistoryProps> = ({
 
                               {/* Status */}
                               <td className="py-3 px-3 text-center whitespace-nowrap overflow-hidden">
-                                <div className="relative inline-block">
-                                  <button
-                                    onClick={() => setStatusMenuOpen(statusMenuOpen === s.id ? null : s.id)}
-                                    className={`px-2.5 py-1 rounded-full border text-[9px] font-black uppercase tracking-wider bg-${cfg.color}-50 text-${cfg.color}-700 border-${cfg.color}-200 flex items-center gap-1 hover:shadow-xs transition-all`}
-                                  >
-                                    <cfg.icon className="w-3 h-3" />
-                                    <span>{cfg.label}</span>
-                                    {!['cancelado', 'concluido'].includes(s.status) && <ChevronDown className="w-2.5 h-2.5 opacity-50" />}
-                                  </button>
-
-                                  {statusMenuOpen === s.id && !['cancelado', 'concluido'].includes(s.status) && (s.requesterId === currentUserId || userRole === 'admin') && (
-                                    <div className="absolute right-0 top-full mt-1 w-44 bg-white rounded-xl shadow-2xl border border-slate-100 p-1 z-[100] text-left">
-                                      {s.status === 'em_curso' && (
-                                        <button
-                                          onClick={() => {
-                                            onUpdateStatus(s.id, 'concluido');
-                                            setStatusMenuOpen(null);
-                                          }}
-                                          className="w-full flex items-center gap-2 px-2.5 py-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all text-[9px] font-black uppercase"
-                                        >
-                                          <CheckCircle2 className="w-3 h-3" />
-                                          <span>Concluir Serviço</span>
-                                        </button>
-                                      )}
-                                      <button
-                                        onClick={() => handleOpenCancelModal(s)}
-                                        className="w-full flex items-center gap-2 px-2.5 py-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-all text-[9px] font-black uppercase"
-                                      >
-                                        <XCircle className="w-3 h-3" />
-                                        <span>Cancelar Agendamento</span>
-                                      </button>
-                                    </div>
-                                  )}
-                                  {statusMenuOpen === s.id && <div className="fixed inset-0 z-[90]" onClick={() => setStatusMenuOpen(null)} />}
-                                </div>
+                                <button
+                                  onClick={() => canChangeStatus(s) && setChangeStatusModalSchedule(s)}
+                                  disabled={!canChangeStatus(s)}
+                                  className={`px-2.5 py-1 rounded-full border text-[9px] font-black uppercase tracking-wider bg-${cfg.color}-50 text-${cfg.color}-700 border-${cfg.color}-200 inline-flex items-center gap-1 transition-all ${
+                                    canChangeStatus(s) ? 'hover:shadow-md hover:scale-105 cursor-pointer ring-2 ring-transparent hover:ring-indigo-500/20' : 'cursor-default'
+                                  }`}
+                                  title={canChangeStatus(s) ? "Clique para alterar o status" : "Status finalizado"}
+                                >
+                                  <cfg.icon className="w-3 h-3" />
+                                  <span>{cfg.label}</span>
+                                  {canChangeStatus(s) && <ChevronRight className="w-2.5 h-2.5 opacity-60" />}
+                                </button>
                               </td>
 
                               {/* Ações */}
@@ -741,42 +723,19 @@ export const VehicleScheduleHistory: React.FC<VehicleScheduleHistoryProps> = ({
                           </div>
 
                           {/* Badge de Status Interativo no Mobile */}
-                          <div className="relative shrink-0">
+                          <div className="shrink-0">
                             <button
-                              onClick={() => setStatusMenuOpen(statusMenuOpen === s.id ? null : s.id)}
-                              className={`px-2 py-1 rounded-full border text-[9px] font-black uppercase tracking-wider bg-${cfg.color}-50 text-${cfg.color}-700 border-${cfg.color}-200 flex items-center gap-1 shadow-2xs`}
+                              onClick={() => canChangeStatus(s) && setChangeStatusModalSchedule(s)}
+                              disabled={!canChangeStatus(s)}
+                              className={`px-2 py-1 rounded-full border text-[9px] font-black uppercase tracking-wider bg-${cfg.color}-50 text-${cfg.color}-700 border-${cfg.color}-200 inline-flex items-center gap-1 shadow-2xs ${
+                                canChangeStatus(s) ? 'cursor-pointer active:scale-95' : 'cursor-default'
+                              }`}
+                              title={canChangeStatus(s) ? "Clique para alterar o status" : "Status finalizado"}
                             >
                               <cfg.icon className="w-2.5 h-2.5" />
                               <span>{cfg.label}</span>
-                              {!['cancelado', 'concluido'].includes(s.status) && (s.requesterId === currentUserId || userRole === 'admin') && (
-                                <ChevronDown className="w-2.5 h-2.5 opacity-50" />
-                              )}
+                              {canChangeStatus(s) && <ChevronRight className="w-2.5 h-2.5 opacity-60" />}
                             </button>
-
-                            {statusMenuOpen === s.id && !['cancelado', 'concluido'].includes(s.status) && (s.requesterId === currentUserId || userRole === 'admin') && (
-                              <div className="absolute right-0 top-full mt-1 w-44 bg-white rounded-xl shadow-2xl border border-slate-100 p-1 z-[100] text-left animate-slide-up">
-                                {s.status === 'em_curso' && (
-                                  <button
-                                    onClick={() => {
-                                      onUpdateStatus(s.id, 'concluido');
-                                      setStatusMenuOpen(null);
-                                    }}
-                                    className="w-full flex items-center gap-2 px-2.5 py-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all text-[9px] font-black uppercase"
-                                  >
-                                    <CheckCircle2 className="w-3 h-3" />
-                                    <span>Concluir Serviço</span>
-                                  </button>
-                                )}
-                                <button
-                                  onClick={() => handleOpenCancelModal(s)}
-                                  className="w-full flex items-center gap-2 px-2.5 py-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition-all text-[9px] font-black uppercase"
-                                >
-                                  <XCircle className="w-3 h-3" />
-                                  <span>Cancelar Agendamento</span>
-                                </button>
-                              </div>
-                            )}
-                            {statusMenuOpen === s.id && <div className="fixed inset-0 z-[90]" onClick={() => setStatusMenuOpen(null)} />}
                           </div>
                         </div>
 
@@ -961,45 +920,18 @@ export const VehicleScheduleHistory: React.FC<VehicleScheduleHistoryProps> = ({
                       </div>
 
                       <div className="flex items-center gap-2 shrink-0">
-                        <div className="relative">
+                        <div className="shrink-0">
                           <button
-                            onClick={() => setStatusMenuOpen(statusMenuOpen === s.id ? null : s.id)}
-                            className={`px-3 py-1.5 rounded-full border text-[9px] font-black uppercase tracking-widest shadow-sm bg-${cfg.color}-50 text-${cfg.color}-700 border-${cfg.color}-200 flex items-center gap-1.5 hover:shadow-md transition-all`}
+                            onClick={() => canChangeStatus(s) && setChangeStatusModalSchedule(s)}
+                            disabled={!canChangeStatus(s)}
+                            className={`px-3 py-1.5 rounded-full border text-[9px] font-black uppercase tracking-widest shadow-sm bg-${cfg.color}-50 text-${cfg.color}-700 border-${cfg.color}-200 inline-flex items-center gap-1.5 hover:shadow-md transition-all ${
+                              canChangeStatus(s) ? 'cursor-pointer hover:scale-105' : 'cursor-default'
+                            }`}
+                            title={canChangeStatus(s) ? "Clique para alterar o status" : "Status finalizado"}
                           >
                             <cfg.icon className="w-3 h-3" /> {cfg.label}
-                            {!['cancelado', 'concluido'].includes(s.status) && <ChevronDown className="w-2.5 h-2.5 opacity-50" />}
+                            {canChangeStatus(s) && <ChevronRight className="w-2.5 h-2.5 opacity-60" />}
                           </button>
-
-                          {statusMenuOpen === s.id && !['cancelado', 'concluido'].includes(s.status) && (s.requesterId === currentUserId || userRole === 'admin') && (
-                            <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-2xl shadow-2xl border border-slate-100 p-2 z-[100] animate-slide-up">
-                              {s.status === 'em_curso' && (
-                                <button
-                                  onClick={() => {
-                                    onUpdateStatus(s.id, 'concluido');
-                                    setStatusMenuOpen(null);
-                                  }}
-                                  className="w-full flex items-center gap-3 px-4 py-3 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all text-left mb-1"
-                                >
-                                  <CheckCircle2 className="w-4 h-4" />
-                                  <div className="flex flex-col">
-                                    <span className="text-[10px] font-black uppercase tracking-tight">Concluir</span>
-                                    <span className="text-[8px] font-bold text-emerald-400 uppercase tracking-widest leading-none">Finalizar Serviço</span>
-                                  </div>
-                                </button>
-                              )}
-                              <button
-                                onClick={() => handleOpenCancelModal(s)}
-                                className="w-full flex items-center gap-3 px-4 py-3 text-rose-600 hover:bg-rose-50 rounded-xl transition-all text-left"
-                              >
-                                <XCircle className="w-4 h-4" />
-                                <div className="flex flex-col">
-                                  <span className="text-[10px] font-black uppercase tracking-tight">Cancelar</span>
-                                  <span className="text-[8px] font-bold text-rose-400 uppercase tracking-widest leading-none">Irreversível</span>
-                                </div>
-                              </button>
-                            </div>
-                          )}
-                          {statusMenuOpen === s.id && <div className="fixed inset-0 z-[90]" onClick={() => setStatusMenuOpen(null)} />}
                         </div>
 
                         <button onClick={() => setPreviewingOS(s)} className="px-3 py-2 bg-white border border-slate-200 text-slate-500 hover:bg-slate-900 hover:text-white rounded-xl transition-all text-[10px] font-black uppercase tracking-widest">
@@ -1171,6 +1103,166 @@ export const VehicleScheduleHistory: React.FC<VehicleScheduleHistoryProps> = ({
           onSave={handleUpdateCrew}
           isSaving={isSavingCrew}
         />
+      )}
+
+      {/* Modal de Alteração de Status */}
+      {changeStatusModalSchedule && (
+        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-md bg-white sm:rounded-[2.5rem] rounded-t-[2.5rem] shadow-2xl border border-white/20 overflow-hidden flex flex-col animate-slide-up max-h-[90vh]">
+            {/* Header */}
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-600/20">
+                  <RotateCcw className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900 tracking-tight uppercase">Alterar Status</h3>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">OS: {changeStatusModalSchedule.protocol}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setChangeStatusModalSchedule(null)}
+                className="p-2 hover:bg-slate-200/60 rounded-xl text-slate-400 hover:text-slate-700 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 space-y-3 flex-1 overflow-y-auto custom-scrollbar">
+              {/* Status Atual */}
+              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between text-xs">
+                <span className="font-bold text-slate-500 uppercase tracking-wider text-[10px]">Status Atual</span>
+                <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-${STATUS_MAP[changeStatusModalSchedule.status].color}-50 text-${STATUS_MAP[changeStatusModalSchedule.status].color}-700 border border-${STATUS_MAP[changeStatusModalSchedule.status].color}-200 flex items-center gap-1`}>
+                  {STATUS_MAP[changeStatusModalSchedule.status].label}
+                </span>
+              </div>
+
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest pt-2">Selecione o novo status:</p>
+
+              {/* Opção 1: Aguardando / Pendente */}
+              {changeStatusModalSchedule.status !== 'pendente' && (
+                <button
+                  onClick={() => {
+                    onUpdateStatus(changeStatusModalSchedule.id, 'pendente');
+                    setChangeStatusModalSchedule(null);
+                  }}
+                  className="w-full text-left p-3.5 rounded-2xl border border-amber-100 bg-amber-50/40 hover:bg-amber-50 hover:border-amber-300 transition-all flex items-center justify-between group cursor-pointer shadow-xs hover:scale-[1.01]"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold shadow-sm">
+                      <Clock className="w-4.5 h-4.5" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black text-amber-950 uppercase tracking-tight group-hover:text-amber-700">Aguardando / Pendente</h4>
+                      <p className="text-[10px] text-amber-700/80 font-medium">Retornar solicitação para a fila de espera</p>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-amber-400 group-hover:translate-x-1 transition-transform" />
+                </button>
+              )}
+
+              {/* Opção 2: Confirmado */}
+              {changeStatusModalSchedule.status !== 'confirmado' && (
+                <button
+                  onClick={() => {
+                    onUpdateStatus(changeStatusModalSchedule.id, 'confirmado');
+                    setChangeStatusModalSchedule(null);
+                  }}
+                  className="w-full text-left p-3.5 rounded-2xl border border-emerald-100 bg-emerald-50/40 hover:bg-emerald-50 hover:border-emerald-300 transition-all flex items-center justify-between group cursor-pointer shadow-xs hover:scale-[1.01]"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold shadow-sm">
+                      <CheckCircle2 className="w-4.5 h-4.5" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black text-emerald-950 uppercase tracking-tight group-hover:text-emerald-700">Confirmado</h4>
+                      <p className="text-[10px] text-emerald-700/80 font-medium">Aprovar e confirmar a saída do veículo</p>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-emerald-400 group-hover:translate-x-1 transition-transform" />
+                </button>
+              )}
+
+              {/* Opção 3: Em Curso */}
+              {changeStatusModalSchedule.status !== 'em_curso' && (
+                <button
+                  onClick={() => {
+                    onUpdateStatus(changeStatusModalSchedule.id, 'em_curso');
+                    setChangeStatusModalSchedule(null);
+                  }}
+                  className="w-full text-left p-3.5 rounded-2xl border border-blue-100 bg-blue-50/40 hover:bg-blue-50 hover:border-blue-300 transition-all flex items-center justify-between group cursor-pointer shadow-xs hover:scale-[1.01]"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold shadow-sm">
+                      <MapPin className="w-4.5 h-4.5" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black text-blue-950 uppercase tracking-tight group-hover:text-blue-700">Em Curso</h4>
+                      <p className="text-[10px] text-blue-700/80 font-medium">Marcar veículo em trânsito / deslocamento</p>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-blue-400 group-hover:translate-x-1 transition-transform" />
+                </button>
+              )}
+
+              {/* Opção 4: Concluído */}
+              {changeStatusModalSchedule.status !== 'concluido' && (
+                <button
+                  onClick={() => {
+                    onUpdateStatus(changeStatusModalSchedule.id, 'concluido');
+                    setChangeStatusModalSchedule(null);
+                  }}
+                  className="w-full text-left p-3.5 rounded-2xl border border-slate-200 bg-slate-50 hover:bg-slate-100 hover:border-slate-300 transition-all flex items-center justify-between group cursor-pointer shadow-xs hover:scale-[1.01]"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-slate-700 text-white flex items-center justify-center font-bold shadow-sm">
+                      <History className="w-4.5 h-4.5" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black text-slate-900 uppercase tracking-tight group-hover:text-slate-700">Concluído</h4>
+                      <p className="text-[10px] text-slate-500 font-medium">Finalizar o serviço e liberar o veículo</p>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-400 group-hover:translate-x-1 transition-transform" />
+                </button>
+              )}
+
+              {/* Opção 5: Rejeitado / Cancelado */}
+              {changeStatusModalSchedule.status !== 'cancelado' && (
+                <button
+                  onClick={() => {
+                    const target = changeStatusModalSchedule;
+                    setChangeStatusModalSchedule(null);
+                    handleOpenCancelModal(target);
+                  }}
+                  className="w-full text-left p-3.5 rounded-2xl border border-rose-100 bg-rose-50/40 hover:bg-rose-50 hover:border-rose-300 transition-all flex items-center justify-between group cursor-pointer shadow-xs hover:scale-[1.01]"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-rose-600 text-white flex items-center justify-center font-bold shadow-sm">
+                      <XCircle className="w-4.5 h-4.5" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black text-rose-950 uppercase tracking-tight group-hover:text-rose-700">Rejeitado / Cancelado</h4>
+                      <p className="text-[10px] text-rose-700/80 font-medium">Cancelar o agendamento com justificativa</p>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-rose-400 group-hover:translate-x-1 transition-transform" />
+                </button>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end">
+              <button
+                onClick={() => setChangeStatusModalSchedule(null)}
+                className="px-5 py-2.5 bg-white border border-slate-200 text-slate-700 font-black text-xs uppercase tracking-wider rounded-xl hover:bg-slate-100 transition-all cursor-pointer shadow-xs"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
