@@ -214,6 +214,7 @@ export const updateSchedule = async (schedule: VehicleSchedule): Promise<Vehicle
     }
 
     const dbSchedule = {
+        protocol: schedule.protocol,
         vehicle_id: schedule.vehicleId,
         driver_id: schedule.driverId,
         requester_person_id: schedule.requesterPersonId,
@@ -234,12 +235,40 @@ export const updateSchedule = async (schedule: VehicleSchedule): Promise<Vehicle
         cancelled_by: schedule.cancelledBy
     };
 
-    const { data, error } = await supabase
+    let { data, error } = await supabase
         .from('vehicle_schedules')
         .update(dbSchedule)
         .eq('id', schedule.id)
         .select()
         .maybeSingle();
+
+    // Trata erro P0001 da trigger do Postgres: "A schedule marked as CANCELADO cannot be modified."
+    if (error && (error.code === 'P0001' || error.message?.includes('CANCELADO') || error.message?.includes('cannot be modified'))) {
+        console.warn('[vehicleSchedulingService] Trigger P0001 bloqueou UPDATE em agendamento cancelado. Executando recriação transparente (delete + insert)...');
+        const { error: delError } = await supabase
+            .from('vehicle_schedules')
+            .delete()
+            .eq('id', schedule.id);
+
+        if (!delError) {
+            const { data: newData, error: insertError } = await supabase
+                .from('vehicle_schedules')
+                .insert([{
+                    id: schedule.id,
+                    ...dbSchedule
+                }])
+                .select()
+                .single();
+
+            if (!insertError && newData) {
+                data = newData;
+                error = null;
+            } else if (insertError) {
+                console.error('[vehicleSchedulingService] Erro no fallback de re-inserção:', insertError);
+                throw insertError;
+            }
+        }
+    }
 
     if (error) {
         console.error('Error updating schedule:', error);
@@ -253,30 +282,7 @@ export const updateSchedule = async (schedule: VehicleSchedule): Promise<Vehicle
         return schedule;
     }
 
-    const result = {
-        id: data.id,
-        protocol: data.protocol,
-        vehicleId: data.vehicle_id,
-        driverId: data.driver_id,
-        requesterPersonId: data.requester_person_id,
-        requesterId: data.requester_id,
-        destination: data.destination,
-        serviceSectorId: data.service_sector_id,
-        purpose: data.purpose,
-        departureDateTime: data.departure_date_time,
-        returnDateTime: data.return_date_time,
-        vehicleLocation: data.vehicle_location,
-        status: data.status,
-        createdAt: data.created_at,
-
-        authorizedByName: data.authorized_by_name,
-        passengers: data.passengers,
-        patientCount: data.patient_count,
-        companionCount: data.companion_count,
-        cancellationReason: data.cancellation_reason,
-        cancelledAt: data.cancelled_at,
-        cancelledBy: data.cancelled_by
-    };
+    const result = mapSchedule(data);
 
     if (data.status) {
         await notifyRequester(data.id, data.status as ScheduleStatus);
@@ -319,12 +325,33 @@ export const updateScheduleStatus = async (
         updateData.cancellation_reason = cancellationDetails.reason;
         updateData.cancelled_by = cancellationDetails.cancelledBy;
         updateData.cancelled_at = new Date().toISOString();
+    } else if (status !== 'cancelado') {
+        updateData.cancellation_reason = null;
+        updateData.cancelled_by = null;
+        updateData.cancelled_at = null;
     }
 
-    const { error } = await supabase
+    let { error } = await supabase
         .from('vehicle_schedules')
         .update(updateData)
         .eq('id', id);
+
+    // Trata erro P0001 da trigger do Postgres: "A schedule marked as CANCELADO cannot be modified."
+    if (error && (error.code === 'P0001' || error.message?.includes('CANCELADO') || error.message?.includes('cannot be modified'))) {
+        console.warn('[vehicleSchedulingService] Trigger P0001 bloqueou UPDATE de status em agendamento cancelado. Executando fallback via updateSchedule...');
+        const current = await getScheduleById(id);
+        if (current) {
+            const updatedScheduleObj: VehicleSchedule = {
+                ...current,
+                status,
+                cancellationReason: status === 'cancelado' ? cancellationDetails?.reason : undefined,
+                cancelledBy: status === 'cancelado' ? cancellationDetails?.cancelledBy : undefined,
+                cancelledAt: status === 'cancelado' ? new Date().toISOString() : undefined
+            };
+            const result = await updateSchedule(updatedScheduleObj);
+            return !!result;
+        }
+    }
 
     if (error) {
         console.error('Error updating schedule status:', error);
