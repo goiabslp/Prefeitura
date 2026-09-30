@@ -163,168 +163,153 @@ export const DocumentosListScreen: React.FC<DocumentosListScreenProps> = ({
   }, [documentos]);
 
   return (
-    <div className="w-full flex-1 flex flex-col bg-slate-50 min-h-0 text-slate-800 font-sans pb-12">
-      {/* 1. TOPO 100% VIEWPORT COM IDENTIDADE E AÇÕES */}
-      <header className="w-full bg-white border-b border-slate-200 sticky top-0 z-20 shadow-xs">
-        <div className="w-full px-4 sm:px-6 lg:px-8 xl:px-10 py-3.5 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20 shrink-0">
-              <FileText className="w-6 h-6" />
+    <div className="w-full flex-1 flex flex-col bg-slate-50 min-h-0 text-slate-800 font-sans overflow-hidden">
+      {/* 1. TOPO COMPACTO 100% VIEWPORT */}
+      <header className="w-full bg-white border-b border-slate-200 shrink-0 z-20 shadow-2xs">
+        <div className="w-full px-4 sm:px-6 py-2 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-xs shrink-0">
+              <FileText className="w-4 h-4" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight leading-tight">
+              <div className="flex items-center gap-1.5">
+                <h1 className="text-sm sm:text-base font-black text-slate-900 tracking-tight leading-tight">
                   Documentos & Tramitações
                 </h1>
-                <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-50 border border-blue-200/80 text-blue-700 text-[11px] font-bold">
-                  <Sparkles className="w-3 h-3 text-blue-500" /> Fluxo Oficial
+                <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.2 rounded-full bg-blue-50 border border-blue-200/80 text-blue-700 text-[10px] font-bold">
+                  <Sparkles className="w-2.5 h-2.5 text-blue-500" /> Fluxo Oficial
                 </span>
               </div>
-              <p className="text-xs text-slate-500 font-medium">
-                Controle interno, encaminhamento entre setores e monitoramento de prazos em tempo real
+              <p className="text-[11px] text-slate-500 font-medium leading-none mt-0.5">
+                Controle interno, encaminhamento entre setores e prazos oficiais
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2">
             <button
               onClick={onRefresh}
               title="Recarregar dados"
-              className="p-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-all active:scale-95 shadow-2xs"
+              className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-all active:scale-95 shadow-2xs"
             >
-              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-blue-600' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-blue-600' : ''}`} />
             </button>
 
             <button
               onClick={onNovoDocumento}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-xs sm:text-sm font-bold shadow-md shadow-blue-500/25 hover:from-blue-700 hover:to-indigo-700 transition-all active:scale-95 cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-xs font-bold shadow-xs hover:from-blue-700 hover:to-indigo-700 transition-all active:scale-95 cursor-pointer shrink-0"
             >
-              <Plus className="w-4 h-4" />
+              <Plus className="w-3.5 h-3.5" />
               <span>Novo Documento</span>
             </button>
           </div>
         </div>
       </header>
 
-      {/* CONTEÚDO PRINCIPAL 100% FLUIDO */}
-      <div className="w-full px-4 sm:px-6 lg:px-8 xl:px-10 py-5 flex flex-col gap-5 flex-1">
+      {/* CONTEÚDO PRINCIPAL 100% FLUIDO E COMPACTO (FITS IN VIEWPORT) */}
+      <div className="w-full px-4 sm:px-6 py-2.5 flex flex-col gap-2.5 flex-1 min-h-0 overflow-y-auto">
 
-        {/* 2. PAINEL DE KPIS / MÉTRICAS EM 100% DA LARGURA */}
-        <section className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+        {/* 2. PAINEL DE KPIS / MÉTRICAS COMPACTOS (1 LINHA DE ALTURA BAIXA) */}
+        <section className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 shrink-0">
           {/* KPI 1: Total */}
-          <div className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-xs flex flex-col justify-between hover:border-slate-300 transition-all">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Total no Fluxo</span>
-              <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600">
-                <Layers className="w-3.5 h-3.5" />
-              </div>
+          <div className="bg-white px-3 py-2 rounded-xl border border-slate-200/90 shadow-2xs flex items-center justify-between">
+            <div className="min-w-0">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block leading-tight truncate">Total no Fluxo</span>
+              <span className="text-base font-black text-slate-900 leading-tight">{metricas.total}</span>
             </div>
-            <div className="flex items-baseline justify-between">
-              <span className="text-2xl font-black text-slate-900">{metricas.total}</span>
-              <span className="text-[11px] font-semibold text-slate-400">cadastrados</span>
+            <div className="w-6 h-6 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500 shrink-0">
+              <Layers className="w-3 h-3" />
             </div>
           </div>
 
           {/* KPI 2: Meus Documentos */}
           <div 
             onClick={() => handleTabChange('meus')}
-            className={`p-4 rounded-2xl border shadow-xs flex flex-col justify-between transition-all cursor-pointer ${
+            className={`px-3 py-2 rounded-xl border shadow-2xs flex items-center justify-between transition-all cursor-pointer ${
               activeTab === 'meus' 
-                ? 'bg-blue-50/70 border-blue-300 ring-2 ring-blue-500/20' 
+                ? 'bg-blue-50/80 border-blue-300 ring-1 ring-blue-500/30' 
                 : 'bg-white border-slate-200/90 hover:border-blue-200'
             }`}
           >
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-bold text-blue-800 uppercase tracking-wider">Meus Ativos</span>
-              <div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center text-blue-700">
-                <UserCheck className="w-3.5 h-3.5" />
-              </div>
+            <div className="min-w-0">
+              <span className="text-[10px] font-bold text-blue-800 uppercase tracking-wider block leading-tight truncate">Meus Ativos</span>
+              <span className="text-base font-black text-blue-900 leading-tight">{metricas.meus}</span>
             </div>
-            <div className="flex items-baseline justify-between">
-              <span className="text-2xl font-black text-blue-900">{metricas.meus}</span>
-              <span className="text-[11px] font-semibold text-blue-600">sob minha guarda</span>
+            <div className="w-6 h-6 rounded-lg bg-blue-100 flex items-center justify-center text-blue-700 shrink-0">
+              <UserCheck className="w-3 h-3" />
             </div>
           </div>
 
           {/* KPI 3: Recebidos no Setor */}
           <div 
             onClick={() => handleTabChange('recebidos')}
-            className={`p-4 rounded-2xl border shadow-xs flex flex-col justify-between transition-all cursor-pointer ${
+            className={`px-3 py-2 rounded-xl border shadow-2xs flex items-center justify-between transition-all cursor-pointer ${
               activeTab === 'recebidos' 
-                ? 'bg-indigo-50/70 border-indigo-300 ring-2 ring-indigo-500/20' 
+                ? 'bg-indigo-50/80 border-indigo-300 ring-1 ring-indigo-500/30' 
                 : 'bg-white border-slate-200/90 hover:border-indigo-200'
             }`}
           >
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-bold text-indigo-800 uppercase tracking-wider">Recebidos Setor</span>
-              <div className="w-7 h-7 rounded-lg bg-indigo-100 flex items-center justify-center text-indigo-700">
-                <Building2 className="w-3.5 h-3.5" />
-              </div>
+            <div className="min-w-0">
+              <span className="text-[10px] font-bold text-indigo-800 uppercase tracking-wider block leading-tight truncate">Recebidos Setor</span>
+              <span className="text-base font-black text-indigo-900 leading-tight">{metricas.recebidos}</span>
             </div>
-            <div className="flex items-baseline justify-between">
-              <span className="text-2xl font-black text-indigo-900">{metricas.recebidos}</span>
-              <span className="text-[11px] font-semibold text-indigo-600">{currentUser?.sector || 'Meu Setor'}</span>
+            <div className="w-6 h-6 rounded-lg bg-indigo-100 flex items-center justify-center text-indigo-700 shrink-0">
+              <Building2 className="w-3 h-3" />
             </div>
           </div>
 
           {/* KPI 4: Concluídos */}
           <div 
             onClick={() => handleTabChange('concluidos')}
-            className={`p-4 rounded-2xl border shadow-xs flex flex-col justify-between transition-all cursor-pointer ${
+            className={`px-3 py-2 rounded-xl border shadow-2xs flex items-center justify-between transition-all cursor-pointer ${
               activeTab === 'concluidos' 
-                ? 'bg-emerald-50/70 border-emerald-300 ring-2 ring-emerald-500/20' 
+                ? 'bg-emerald-50/80 border-emerald-300 ring-1 ring-emerald-500/30' 
                 : 'bg-white border-slate-200/90 hover:border-emerald-200'
             }`}
           >
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider">Concluídos</span>
-              <div className="w-7 h-7 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-700">
-                <CheckCircle2 className="w-3.5 h-3.5" />
-              </div>
+            <div className="min-w-0">
+              <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider block leading-tight truncate">Concluídos</span>
+              <span className="text-base font-black text-emerald-900 leading-tight">{metricas.concluidos}</span>
             </div>
-            <div className="flex items-baseline justify-between">
-              <span className="text-2xl font-black text-emerald-900">{metricas.concluidos}</span>
-              <span className="text-[11px] font-semibold text-emerald-600">finalizados</span>
+            <div className="w-6 h-6 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-700 shrink-0">
+              <CheckCircle2 className="w-3 h-3" />
             </div>
           </div>
 
           {/* KPI 5: Alertas de Prazos */}
           <div 
             onClick={() => setPrazoFiltro(prazoFiltro === 'atrasados' ? 'todos' : 'atrasados')}
-            className={`p-4 rounded-2xl border shadow-xs flex flex-col justify-between transition-all cursor-pointer col-span-2 sm:col-span-1 ${
+            className={`px-3 py-2 rounded-xl border shadow-2xs flex items-center justify-between transition-all cursor-pointer col-span-2 sm:col-span-1 ${
               metricas.alertasPrazo > 0 
-                ? 'bg-amber-50/70 border-amber-300 hover:border-amber-400' 
+                ? 'bg-amber-50/80 border-amber-300 hover:border-amber-400' 
                 : 'bg-white border-slate-200/90 hover:border-slate-300'
             }`}
           >
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-bold text-amber-900 uppercase tracking-wider">Prazos & Atenção</span>
-              <div className="w-7 h-7 rounded-lg bg-amber-100 flex items-center justify-center text-amber-700">
-                <Clock className="w-3.5 h-3.5" />
-              </div>
+            <div className="min-w-0">
+              <span className="text-[10px] font-bold text-amber-900 uppercase tracking-wider block leading-tight truncate">Prazos & Atenção</span>
+              <span className="text-base font-black text-amber-900 leading-tight">{metricas.alertasPrazo}</span>
             </div>
-            <div className="flex items-baseline justify-between">
-              <span className="text-2xl font-black text-amber-900">{metricas.alertasPrazo}</span>
-              <span className="text-[11px] font-semibold text-amber-700">requer atenção</span>
+            <div className="w-6 h-6 rounded-lg bg-amber-100 flex items-center justify-center text-amber-700 shrink-0">
+              <Clock className="w-3 h-3" />
             </div>
           </div>
         </section>
 
-        {/* 3. BARRA DE CONTROLE: ABAS + BUSCA + FILTROS + MODO DE VISUALIZAÇÃO */}
-        <div className="bg-white rounded-2xl border border-slate-200/90 p-3 sm:p-4 shadow-xs flex flex-col gap-3">
-          {/* Linha Superior: Abas de Navegação Fluidas */}
-          <div className="flex items-center justify-between flex-wrap gap-2.5 border-b border-slate-100 pb-3">
-            <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto w-full sm:w-auto">
+        {/* 3. BARRA DE CONTROLE COMPACTA: ABAS + BUSCA + FILTROS */}
+        <div className="bg-white rounded-xl border border-slate-200/90 p-2 sm:p-2.5 shadow-2xs flex flex-col gap-2 shrink-0">
+          {/* Linha Superior: Abas de Navegação Compactas */}
+          <div className="flex items-center justify-between flex-wrap gap-2 pb-1.5 border-b border-slate-100">
+            <div className="flex items-center gap-1 overflow-x-auto w-full sm:w-auto">
               <button
                 onClick={() => handleTabChange('meus')}
-                className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-all shrink-0 cursor-pointer ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shrink-0 cursor-pointer ${
                   activeTab === 'meus'
-                    ? 'bg-blue-600 text-white shadow-xs'
+                    ? 'bg-blue-600 text-white shadow-2xs'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                 }`}
               >
                 <span>Meus Documentos</span>
-                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
                   activeTab === 'meus' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
                 }`}>
                   {metricas.meus}
@@ -333,14 +318,14 @@ export const DocumentosListScreen: React.FC<DocumentosListScreenProps> = ({
 
               <button
                 onClick={() => handleTabChange('recebidos')}
-                className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-all shrink-0 cursor-pointer ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shrink-0 cursor-pointer ${
                   activeTab === 'recebidos'
-                    ? 'bg-blue-600 text-white shadow-xs'
+                    ? 'bg-blue-600 text-white shadow-2xs'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                 }`}
               >
                 <span>Recebidos ({currentUser?.sector || 'Setor'})</span>
-                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
                   activeTab === 'recebidos' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
                 }`}>
                   {metricas.recebidos}
@@ -349,14 +334,14 @@ export const DocumentosListScreen: React.FC<DocumentosListScreenProps> = ({
 
               <button
                 onClick={() => handleTabChange('concluidos')}
-                className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-all shrink-0 cursor-pointer ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shrink-0 cursor-pointer ${
                   activeTab === 'concluidos'
-                    ? 'bg-blue-600 text-white shadow-xs'
+                    ? 'bg-blue-600 text-white shadow-2xs'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                 }`}
               >
                 <span>Concluídos</span>
-                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
                   activeTab === 'concluidos' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
                 }`}>
                   {metricas.concluidos}
@@ -365,46 +350,46 @@ export const DocumentosListScreen: React.FC<DocumentosListScreenProps> = ({
             </div>
 
             {/* Alternância Grid / Tabela */}
-            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl shrink-0 self-end sm:self-auto">
+            <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg shrink-0 self-end sm:self-auto">
               <button
                 onClick={() => setViewMode('grid')}
-                className={`p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all ${
-                  viewMode === 'grid' ? 'bg-white text-blue-600 shadow-xs' : 'text-slate-500 hover:text-slate-800'
+                className={`px-2 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-all ${
+                  viewMode === 'grid' ? 'bg-white text-blue-600 shadow-2xs' : 'text-slate-500 hover:text-slate-800'
                 }`}
                 title="Modo Grade (Cards)"
               >
-                <LayoutGrid className="w-4 h-4" />
+                <LayoutGrid className="w-3.5 h-3.5" />
                 <span className="hidden md:inline">Grade</span>
               </button>
               <button
                 onClick={() => setViewMode('table')}
-                className={`p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all ${
-                  viewMode === 'table' ? 'bg-white text-blue-600 shadow-xs' : 'text-slate-500 hover:text-slate-800'
+                className={`px-2 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-all ${
+                  viewMode === 'table' ? 'bg-white text-blue-600 shadow-2xs' : 'text-slate-500 hover:text-slate-800'
                 }`}
                 title="Modo Tabela Widescreen"
               >
-                <List className="w-4 h-4" />
+                <List className="w-3.5 h-3.5" />
                 <span className="hidden md:inline">Tabela</span>
               </button>
             </div>
           </div>
 
-          {/* Linha Inferior: Barra de Busca Expandida + Filtros Dropdown */}
-          <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
+          {/* Linha Inferior: Busca + Filtros Dropdown Compactos */}
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
             {/* Input de Busca */}
             <div className="relative sm:col-span-6 lg:col-span-7">
-              <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
                 placeholder="Buscar por protocolo, título, assunto, responsável, fase ou setor..."
-                className="w-full pl-10 pr-9 py-2.5 bg-slate-50 hover:bg-slate-100/70 focus:bg-white border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-900 placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium"
+                className="w-full pl-9 pr-8 py-1.5 bg-slate-50 hover:bg-slate-100/70 focus:bg-white border border-slate-200 rounded-lg text-xs text-slate-900 placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium"
               />
               {searchTerm && (
                 <button
                   onClick={() => setSearchTerm('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-700 font-bold p-1"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] text-slate-400 hover:text-slate-700 font-bold p-0.5"
                 >
                   ✕
                 </button>
@@ -416,7 +401,7 @@ export const DocumentosListScreen: React.FC<DocumentosListScreenProps> = ({
               <select
                 value={tipoFiltro}
                 onChange={e => setTipoFiltro(e.target.value)}
-                className="w-full px-3 py-2.5 bg-slate-50 hover:bg-slate-100/70 focus:bg-white border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-800 font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                className="w-full px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100/70 focus:bg-white border border-slate-200 rounded-lg text-xs text-slate-800 font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
               >
                 <option value="todos">Todos os Tipos de Documento</option>
                 {tiposDisponiveis.map(t => (
@@ -430,7 +415,7 @@ export const DocumentosListScreen: React.FC<DocumentosListScreenProps> = ({
               <select
                 value={prazoFiltro}
                 onChange={e => setPrazoFiltro(e.target.value)}
-                className="w-full px-3 py-2.5 bg-slate-50 hover:bg-slate-100/70 focus:bg-white border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-800 font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                className="w-full px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100/70 focus:bg-white border border-slate-200 rounded-lg text-xs text-slate-800 font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
               >
                 <option value="todos">Todos os Prazos</option>
                 <option value="atrasados">Atrasados / Vencidos</option>
@@ -441,32 +426,32 @@ export const DocumentosListScreen: React.FC<DocumentosListScreenProps> = ({
           </div>
         </div>
 
-        {/* 4. LISTA OU GRADE DE DOCUMENTOS 100% FLUIDA */}
+        {/* 4. LISTA OU GRADE DE DOCUMENTOS 100% FLUIDA E COMPACTA */}
         {documentosFiltrados.length === 0 ? (
-          <div className="bg-white rounded-3xl border border-slate-200/90 p-12 text-center my-4 flex flex-col items-center justify-center gap-3.5 shadow-xs w-full">
-            <div className="w-16 h-16 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
-              <FileText className="w-8 h-8" />
+          <div className="bg-white rounded-2xl border border-slate-200/90 p-5 text-center my-auto flex flex-col items-center justify-center gap-2.5 shadow-2xs w-full max-w-xl mx-auto">
+            <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shrink-0">
+              <FileText className="w-5 h-5" />
             </div>
             <div className="max-w-md">
-              <h3 className="text-base sm:text-lg font-black text-slate-900">
+              <h3 className="text-sm sm:text-base font-bold text-slate-900">
                 Nenhum documento encontrado
               </h3>
-              <p className="text-xs sm:text-sm text-slate-500 mt-1">
+              <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
                 {searchTerm || tipoFiltro !== 'todos' || prazoFiltro !== 'todos'
-                  ? 'Não encontramos nenhum documento com os filtros e busca aplicados. Tente ajustar os parâmetros.'
+                  ? 'Não encontramos nenhum documento com os filtros aplicados.'
                   : activeTab === 'meus'
-                  ? 'Você ainda não cadastrou nenhum documento e não possui processos sob sua guarda no momento.'
+                  ? 'Você ainda não cadastrou nenhum documento nesta aba.'
                   : activeTab === 'recebidos'
                   ? `Nenhum documento aguardando ação do seu setor (${currentUser?.sector || 'Geral'}) no momento.`
-                  : 'Nenhum documento finalizado ou arquivado nesta categoria.'}
+                  : 'Nenhum documento finalizado registrado.'}
               </p>
             </div>
 
-            <div className="flex items-center gap-2 pt-2">
+            <div className="flex items-center gap-2 pt-1">
               {(searchTerm || tipoFiltro !== 'todos' || prazoFiltro !== 'todos') && (
                 <button
                   onClick={() => { setSearchTerm(''); setTipoFiltro('todos'); setPrazoFiltro('todos'); }}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all"
+                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-all"
                 >
                   Limpar Filtros
                 </button>
@@ -474,16 +459,16 @@ export const DocumentosListScreen: React.FC<DocumentosListScreenProps> = ({
 
               <button
                 onClick={onNovoDocumento}
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-blue-500/20 transition-all cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer"
               >
-                <Plus className="w-4 h-4" />
+                <Plus className="w-3.5 h-3.5" />
                 Criar Novo Documento
               </button>
             </div>
           </div>
         ) : viewMode === 'grid' ? (
-          /* MODO GRID RESPONSIVO WIDESCREEN */
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
+          /* MODO GRID RESPONSIVO COMPACTO */
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
             {documentosFiltrados.map(doc => {
               const prazoInfo = calcularPrazosDocumento(doc, agora);
 
@@ -504,22 +489,22 @@ export const DocumentosListScreen: React.FC<DocumentosListScreenProps> = ({
                 <div
                   key={doc.id}
                   onClick={() => onVisualizarDocumento(doc.id)}
-                  className="bg-white rounded-2xl border border-slate-200/90 p-4.5 hover:border-blue-400 hover:shadow-lg hover:shadow-blue-500/5 transition-all duration-200 cursor-pointer flex flex-col justify-between gap-3 group relative overflow-hidden"
+                  className="bg-white rounded-xl border border-slate-200/90 p-3.5 hover:border-blue-400 hover:shadow-md transition-all duration-200 cursor-pointer flex flex-col justify-between gap-2.5 group relative overflow-hidden"
                 >
                   {/* Linha 1: Tipo + Número + Alerta de Prazo */}
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-[11px] font-black px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 border border-slate-200 uppercase tracking-wider">
+                      <span className="text-[10px] font-black px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 border border-slate-200 uppercase tracking-wider">
                         {doc.tipo_documento}
                       </span>
                       {doc.numero_sequencial && (
-                        <span className="text-[11px] font-mono font-bold text-slate-500 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">
+                        <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-50 px-1 py-0.2 rounded border border-slate-100">
                           {doc.numero_sequencial}
                         </span>
                       )}
                     </div>
 
-                    <div className={`text-[10px] px-2.5 py-0.5 rounded-full border flex items-center gap-1.5 shrink-0 ${badgeColor}`}>
+                    <div className={`text-[10px] px-2 py-0.2 rounded-full border flex items-center gap-1 shrink-0 ${badgeColor}`}>
                       <span className={`w-1.5 h-1.5 rounded-full ${dotColor}`}></span>
                       <span>{prazoInfo.alertaLabel}</span>
                     </div>
@@ -527,55 +512,36 @@ export const DocumentosListScreen: React.FC<DocumentosListScreenProps> = ({
 
                   {/* Linha 2: Título do Documento */}
                   <div>
-                    <h3 className="text-sm sm:text-base font-bold text-slate-900 group-hover:text-blue-600 transition-colors line-clamp-2 leading-snug">
+                    <h3 className="text-xs sm:text-sm font-bold text-slate-900 group-hover:text-blue-600 transition-colors line-clamp-2 leading-snug">
                       {doc.titulo}
                     </h3>
-                    {doc.descricao && (
-                      <p className="text-xs text-slate-500 line-clamp-2 mt-1 font-normal leading-relaxed">
-                        {doc.descricao}
-                      </p>
-                    )}
                   </div>
 
                   {/* Linha 3: Badges de Fase e Status */}
-                  <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
-                    <span className="px-2 py-0.5 bg-blue-50 text-blue-800 font-bold rounded-lg border border-blue-100 flex items-center gap-1">
-                      <Building2 className="w-3 h-3 text-blue-500" />
+                  <div className="flex flex-wrap items-center gap-1 text-[10px]">
+                    <span className="px-1.5 py-0.2 bg-blue-50 text-blue-800 font-bold rounded border border-blue-100 flex items-center gap-1">
+                      <Building2 className="w-2.5 h-2.5 text-blue-500" />
                       {doc.status}
                     </span>
-                    <span className="px-2 py-0.5 bg-slate-100 text-slate-700 font-semibold rounded-lg border border-slate-200">
+                    <span className="px-1.5 py-0.2 bg-slate-100 text-slate-700 font-semibold rounded border border-slate-200">
                       Fase: {doc.fase}
                     </span>
                   </div>
 
                   {/* Linha 4: Responsável Atual e Prazos Regressivos */}
-                  <div className="pt-3 border-t border-slate-100 flex flex-col gap-2 text-xs">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className="w-6 h-6 rounded-full bg-slate-100 text-slate-700 font-black text-[10px] flex items-center justify-center uppercase shrink-0 border border-slate-200">
-                          {(doc.responsavel_atual_nome || 'A')[0]}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-slate-800 font-bold truncate text-[11px] leading-tight">
-                            {doc.responsavel_atual_nome || 'A Definir'}
-                          </p>
-                          <p className="text-[10px] text-slate-400 truncate leading-none">
-                            {doc.setor_atual}
-                          </p>
-                        </div>
+                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2 text-[11px]">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <div className="w-5 h-5 rounded-full bg-slate-100 text-slate-700 font-black text-[9px] flex items-center justify-center uppercase shrink-0 border border-slate-200">
+                        {(doc.responsavel_atual_nome || 'A')[0]}
                       </div>
-
-                      <div className="flex items-center gap-1 text-[11px] font-mono font-semibold text-slate-700 shrink-0">
-                        <Clock className="w-3.5 h-3.5 text-blue-500" />
-                        <span>{prazoInfo.geralRestanteTexto}</span>
-                      </div>
+                      <p className="text-slate-800 font-bold truncate text-[10px]">
+                        {doc.responsavel_atual_nome || 'A Definir'}
+                      </p>
                     </div>
 
-                    <div className="flex items-center justify-between pt-1 text-[10px] text-slate-400">
-                      <span>Criado: {new Date(doc.data_criacao).toLocaleDateString('pt-BR')}</span>
-                      <span className="inline-flex items-center gap-0.5 text-blue-600 font-bold group-hover:translate-x-0.5 transition-transform">
-                        Ver detalhes <ChevronRight className="w-3 h-3" />
-                      </span>
+                    <div className="flex items-center gap-1 text-[10px] font-mono font-semibold text-slate-700 shrink-0">
+                      <Clock className="w-3 h-3 text-blue-500" />
+                      <span>{prazoInfo.geralRestanteTexto}</span>
                     </div>
                   </div>
                 </div>
@@ -583,19 +549,18 @@ export const DocumentosListScreen: React.FC<DocumentosListScreenProps> = ({
             })}
           </div>
         ) : (
-          /* MODO TABELA WIDESCREEN CORPORATIVA */
-          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden w-full">
+          /* MODO TABELA WIDESCREEN COMPACTA */
+          <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden w-full">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
-                  <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[10px]">
-                    <th className="py-3 px-4">Protocolo / Tipo</th>
-                    <th className="py-3 px-4">Título & Assunto</th>
-                    <th className="py-3 px-4">Status / Fase</th>
-                    <th className="py-3 px-4">Responsável & Setor</th>
-                    <th className="py-3 px-4">Prazo Geral</th>
-                    <th className="py-3 px-4">Prazo Etapa</th>
-                    <th className="py-3 px-4 text-right">Ação</th>
+                  <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[9px]">
+                    <th className="py-2 px-3">Protocolo / Tipo</th>
+                    <th className="py-2 px-3">Título & Assunto</th>
+                    <th className="py-2 px-3">Status / Fase</th>
+                    <th className="py-2 px-3">Responsável & Setor</th>
+                    <th className="py-2 px-3">Prazo Geral</th>
+                    <th className="py-2 px-3 text-right">Ação</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -616,57 +581,47 @@ export const DocumentosListScreen: React.FC<DocumentosListScreenProps> = ({
                         onClick={() => onVisualizarDocumento(doc.id)}
                         className="hover:bg-blue-50/40 transition-colors cursor-pointer group"
                       >
-                        <td className="py-3 px-4">
-                          <div className="font-mono font-bold text-slate-800">
+                        <td className="py-2 px-3">
+                          <div className="font-mono font-bold text-slate-800 text-[11px]">
                             {doc.numero_sequencial || 'S/N'}
                           </div>
-                          <span className="text-[10px] font-semibold text-slate-500 uppercase">
+                          <span className="text-[9px] font-semibold text-slate-500 uppercase">
                             {doc.tipo_documento}
                           </span>
                         </td>
-                        <td className="py-3 px-4 max-w-xs">
-                          <div className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors truncate">
+                        <td className="py-2 px-3 max-w-xs">
+                          <div className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors truncate text-xs">
                             {doc.titulo}
                           </div>
-                          {doc.descricao && (
-                            <div className="text-[11px] text-slate-400 truncate">
-                              {doc.descricao}
-                            </div>
-                          )}
                         </td>
-                        <td className="py-3 px-4 whitespace-nowrap">
-                          <span className="inline-block px-2 py-0.5 rounded-md bg-blue-50 border border-blue-100 text-blue-800 font-bold text-[10px]">
+                        <td className="py-2 px-3 whitespace-nowrap">
+                          <span className="inline-block px-1.5 py-0.2 rounded bg-blue-50 border border-blue-100 text-blue-800 font-bold text-[9px]">
                             {doc.status}
                           </span>
-                          <div className="text-[10px] text-slate-500 mt-0.5">
-                            Fase: {doc.fase}
-                          </div>
+                          <span className="text-[9px] text-slate-500 ml-1">
+                            ({doc.fase})
+                          </span>
                         </td>
-                        <td className="py-3 px-4">
-                          <div className="font-bold text-slate-800 truncate max-w-[180px]">
+                        <td className="py-2 px-3">
+                          <div className="font-bold text-slate-800 truncate max-w-[160px] text-[11px]">
                             {doc.responsavel_atual_nome || 'A Definir'}
                           </div>
-                          <div className="text-[10px] text-slate-400 truncate">
+                          <div className="text-[9px] text-slate-400 truncate">
                             {doc.setor_atual}
                           </div>
                         </td>
-                        <td className="py-3 px-4 whitespace-nowrap">
-                          <span className={`inline-block px-2 py-0.5 rounded-full border text-[10px] font-semibold ${badgeColor}`}>
+                        <td className="py-2 px-3 whitespace-nowrap">
+                          <span className={`inline-block px-2 py-0.2 rounded-full border text-[9px] font-semibold ${badgeColor}`}>
                             {prazoInfo.geralRestanteTexto}
                           </span>
                         </td>
-                        <td className="py-3 px-4 whitespace-nowrap">
-                          <span className="text-slate-600 font-mono text-[11px]">
-                            {prazoInfo.etapaRestanteTexto}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 text-right whitespace-nowrap">
+                        <td className="py-2 px-3 text-right whitespace-nowrap">
                           <button
                             onClick={(e) => { e.stopPropagation(); onVisualizarDocumento(doc.id); }}
-                            className="px-3 py-1.5 rounded-xl bg-slate-100 group-hover:bg-blue-600 group-hover:text-white text-slate-700 font-bold text-[11px] transition-all inline-flex items-center gap-1"
+                            className="px-2.5 py-1 rounded-lg bg-slate-100 group-hover:bg-blue-600 group-hover:text-white text-slate-700 font-bold text-[10px] transition-all inline-flex items-center gap-1"
                           >
                             <span>Abrir</span>
-                            <ChevronRight className="w-3.5 h-3.5" />
+                            <ChevronRight className="w-3 h-3" />
                           </button>
                         </td>
                       </tr>

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   ArrowLeft, FileText, Clock, AlertTriangle, CheckCircle2,
   Building2, UserCheck, Send, Download, History, MessageSquare,
-  AlertCircle, ChevronRight, Check, Loader2, Plus, Sparkles, X
+  AlertCircle, ChevronRight, Check, Loader2, Plus, Sparkles, X, RefreshCw
 } from 'lucide-react';
 import { DocumentoFluxo, DocumentoMovimentacao, User, Sector } from '../../types';
 import {
