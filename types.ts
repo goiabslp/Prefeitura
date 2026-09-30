@@ -223,9 +223,10 @@ export type AppPermission =
   | 'parent_frotas_dashboard' | 'parent_frotas_leve' | 'parent_frotas_pesado' | 'parent_frotas_acessorio'
   | 'parent_noticias' | 'parent_upload' | 'parent_art' | 'sub_art_criar' | 'sub_art_historico'
   | 'sub_art_logos' | 'sub_art_referencias'
+  | 'parent_documentos' | 'sub_documentos_acompanhamento' | 'sub_documentos_novo' | 'sub_documentos_visualizar'
   | (string & {});
 
-export type BlockType = 'oficio' | 'compras' | 'diarias' | 'agendamento' | 'abastecimento' | 'vs_calendar' | 'vs_novo' | 'vs_day' | 'vs_history' | 'vs_approvals' | 'vs_consultar' | 'dashboard' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'licitacao' | 'consultas' | 'farmacia' | 'art';
+export type BlockType = 'oficio' | 'compras' | 'diarias' | 'agendamento' | 'abastecimento' | 'vs_calendar' | 'vs_novo' | 'vs_day' | 'vs_history' | 'vs_approvals' | 'vs_consultar' | 'dashboard' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'licitacao' | 'consultas' | 'farmacia' | 'art' | 'documentos';
 
 export interface FarmaciaMedicamento {
   id: string;
@@ -675,6 +676,14 @@ export interface ConsultaProcedimento {
 
 export type TipoAtendimentoConsulta = 'INTERNO' | 'EXTERNO';
 
+export interface PauseHistoryItem {
+  action: 'pause' | 'resume';
+  user_id?: string;
+  user_name?: string;
+  reason?: string;
+  timestamp: string;
+}
+
 export interface ConsultaAgendamento {
   id: string;
   patient_id: string;
@@ -686,7 +695,7 @@ export interface ConsultaAgendamento {
   priority: 'Normal' | 'Urgência' | 'Especial';
   queue_position?: number;
   special_sequence?: number;
-  status: 'Solicitado' | 'Agendado' | 'Realizado' | 'Cancelado' | 'Não Realizado' | 'Fila de espera' | 'Aguardando Data' | 'Retorno';
+  status: 'Solicitado' | 'Agendado' | 'Realizado' | 'Cancelado' | 'Não Realizado' | 'Fila de espera' | 'Aguardando Data' | 'Retorno' | 'Pausada';
   created_by: string;
   created_at?: string;
   is_retorno?: boolean;
@@ -704,6 +713,18 @@ export interface ConsultaAgendamento {
   canceled_by?: string;
   canceled_by_name?: string;
   canceled_at?: string;
+  
+  // Pausa e Retomada
+  is_paused?: boolean;
+  paused_at?: string;
+  paused_by?: string;
+  paused_by_name?: string;
+  pause_reason?: string;
+  resumed_at?: string;
+  resumed_by?: string;
+  resumed_by_name?: string;
+  pause_history?: PauseHistoryItem[];
+  original_status?: string;
 }
 
 export interface ConsultaVaga {
@@ -917,6 +938,81 @@ export interface ArtPublication {
   updatedAt?: string;
   createdByName?: string;
   createdByEmail?: string;
+}
+
+// ==========================================
+// MÓDULO DOCUMENTOS
+// ==========================================
+
+export type DocumentoPrazoAlerta = 'no_prazo' | 'prazo_proximo' | 'etapa_atrasada' | 'geral_vencido';
+
+export interface DocumentoPrazoInfo {
+  alerta: DocumentoPrazoAlerta;
+  alertaLabel: string;
+  geralRestanteTexto: string;
+  geralVencido: boolean;
+  geralMilissegundosRestantes: number;
+  etapaRestanteTexto: string;
+  etapaAtrasada: boolean;
+  etapaMilissegundosRestantes: number;
+}
+
+export interface DocumentoFluxo {
+  id: string;
+  numero_sequencial?: string;
+  tipo_documento: string; // Ex: Projeto de Lei, Suplementação, Requerimento, Ofício, Parecer, Resposta, Convênio, Outros
+  titulo: string; // Assunto / descrição do documento
+  descricao?: string;
+  anexo_url?: string;
+  anexo_nome?: string;
+  anexo_tamanho?: number;
+  
+  // Setor e Responsável Atual
+  setor_atual: string; // Ex: Jurídico, Contabilidade, Administração, etc.
+  responsavel_atual_id?: string;
+  responsavel_atual_nome?: string;
+  
+  // Status (onde está atualmente) e Fase (situação do documento) - campos separados
+  status: string; // Ex: "Em Análise do Jurídico", "Em Análise da Contabilidade", etc.
+  fase: string; // Ex: "Protocolado na Câmara", "Resposta Judicial Concluída", "Parecer Concluído", "Aprovado", "Rejeitado", "Resposta Incompleta", "Documentos com Erro"
+  
+  // Controle Rigoroso de Prazos
+  data_criacao: string; // ISO String (ex: 2026-09-30T10:29:35Z)
+  prazo_geral_limite: string; // ISO String (data_criacao + 10 dias)
+  data_etapa_inicio: string; // ISO String (data/hora da última movimentação)
+  prazo_etapa_limite: string; // ISO String (menor entre data_etapa_inicio + 24h e prazo_geral_limite)
+  
+  // Dados de autoria e encerramento
+  criado_por_id: string;
+  criado_por_nome: string;
+  concluido: boolean;
+  concluido_em?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface DocumentoMovimentacao {
+  id: string;
+  documento_id: string;
+  origem_setor: string;
+  origem_usuario_id?: string;
+  origem_usuario_nome?: string;
+  destino_setor: string;
+  destino_usuario_id?: string;
+  destino_usuario_nome?: string;
+  responsavel_id?: string;
+  responsavel_nome?: string;
+  data_hora: string; // Formatado com segundos: "30/09/2026 10:29:35"
+  timestamp_iso: string; // ISO para ordenação e cálculos
+  status: string;
+  fase: string;
+  observacao: string;
+  tipo_evento: 'criacao' | 'encaminhamento' | 'alteracao' | 'anexo' | 'conclusao';
+  anexo_url?: string;
+  anexo_nome?: string;
+  criado_por_id?: string;
+  criado_por_nome?: string;
+  created_at?: string;
 }
 
 declare const __LATEST_COMMIT__: string;

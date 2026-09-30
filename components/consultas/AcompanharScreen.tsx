@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { User, ConsultaPaciente, ConsultaAgendamento, ConsultaProcedimento, AppState, ConsultaVaga } from '../../types';
-import { ArrowLeft, Search, Filter, Calendar, CheckCircle2, XCircle, Trash2, Loader2, Sparkles, Clock, FileDown, UserX, Repeat, RotateCcw, X, Activity, Check, Edit2, ChevronDown, ChevronLeft, ChevronRight, User as UserIcon, BarChart3, Users, UserCheck, Building2, ShieldCheck, FileText, Phone, MapPin, Lock, ArrowRightLeft } from 'lucide-react';
+import { ArrowLeft, Search, Filter, Calendar, CheckCircle2, XCircle, Trash2, Loader2, Sparkles, Clock, FileDown, UserX, Repeat, RotateCcw, X, Activity, Check, Edit2, ChevronDown, ChevronLeft, ChevronRight, User as UserIcon, BarChart3, Users, UserCheck, Building2, ShieldCheck, FileText, Phone, MapPin, Lock, ArrowRightLeft, PauseCircle, PlayCircle, Pause, Play } from 'lucide-react';
 import * as db from '../../services/consultasService';
 import { formatProcedimentoLabel } from '../../services/consultasService';
 import { useAgentesSaude } from '../../services/agentesSaudeService';
@@ -413,6 +413,8 @@ const getStatusStyle = (status: string) => {
             return 'text-violet-800 bg-violet-50 border-violet-200/80';
         case 'Retorno':
             return 'text-teal-800 bg-teal-50 border-teal-200/80';
+        case 'Pausada':
+            return 'text-amber-950 bg-gradient-to-r from-amber-100 to-yellow-100 border-amber-300 font-black shadow-2xs';
         case 'Cancelado':
         default:
             return 'text-rose-700 bg-rose-50 border-rose-200/80';
@@ -440,6 +442,9 @@ interface AgendamentoCardProps {
     canComplete: boolean;
     canCancel: boolean;
     canDelete: boolean;
+    canPause?: boolean;
+    onOpenPauseModal?: (b: ConsultaAgendamento) => void;
+    onOpenResumeModal?: (b: ConsultaAgendamento) => void;
     onEdit: (b: ConsultaAgendamento) => void;
     onTransfer?: (b: ConsultaAgendamento) => void;
     onAgentInfo: (b: ConsultaAgendamento) => void;
@@ -469,6 +474,9 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
     canComplete,
     canCancel,
     canDelete,
+    canPause,
+    onOpenPauseModal,
+    onOpenResumeModal,
     onEdit,
     onTransfer,
     onAgentInfo,
@@ -484,6 +492,7 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
     agentPsf
 }) => {
     const [isExpanded, setIsExpanded] = useState(false);
+    const isPaused = booking.is_paused || booking.status === 'Pausada';
 
     const patientName = booking.paciente ? formatPatientName(booking.paciente) : 'Paciente não informado';
     const rawCpf = booking.paciente?.cpf || '';
@@ -504,7 +513,9 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
             <div
                 onClick={() => setIsExpanded(!isExpanded)}
                 className={`group bg-white rounded-2xl border transition-all duration-300 relative overflow-hidden cursor-pointer ${
-                    isEligibleForVaga
+                    isPaused
+                    ? 'bg-gradient-to-r from-amber-50/50 via-yellow-50/20 to-white border-amber-300 hover:border-amber-400 ring-1 ring-amber-400/20 shadow-xs'
+                    : isEligibleForVaga
                     ? isNextInQueue
                         ? 'bg-gradient-to-r from-emerald-50/40 via-teal-50/15 to-white border-emerald-300/80 hover:border-emerald-400 ring-1 ring-emerald-400/20 shadow-xs'
                         : 'bg-gradient-to-r from-amber-50/40 via-yellow-50/15 to-white border-amber-200/80 hover:border-amber-300 ring-1 ring-amber-300/20 shadow-2xs'
@@ -515,7 +526,9 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
             >
                 {/* Faixa lateral indicadora suave */}
                 <div className={`absolute top-0 left-0 w-1.5 h-full transition-all ${
-                    isEligibleForVaga 
+                    isPaused
+                    ? 'bg-gradient-to-b from-amber-500 via-amber-600 to-amber-700 shadow-xs shadow-amber-500/40'
+                    : isEligibleForVaga 
                     ? isNextInQueue
                         ? 'bg-gradient-to-b from-emerald-500 to-teal-500 shadow-xs shadow-emerald-500/30'
                         : 'bg-gradient-to-b from-amber-400 to-yellow-500 shadow-xs shadow-amber-400/30'
@@ -525,7 +538,9 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                 <div className="flex flex-col wide:flex-row items-stretch min-h-[72px] sm:min-h-[76px]">
                     {/* CARD DE PRIMEIRA INFORMAÇÃO - POSIÇÃO E DADOS DO PACIENTE */}
                     <div className={`border-b wide:border-b-0 wide:border-r p-2 sm:p-2.5 sm:px-4 flex items-center gap-3 shrink-0 self-stretch wide:w-[290px] transition-all relative ${
-                        isEligibleForVaga 
+                        isPaused
+                        ? 'bg-amber-100/50 border-amber-200'
+                        : isEligibleForVaga 
                         ? isNextInQueue
                             ? 'bg-emerald-50/60 border-emerald-100' 
                             : 'bg-amber-50/40 border-amber-100'
@@ -534,7 +549,9 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                         {/* Bloco de Destaque: POSIÇÃO */}
                         <div 
                             className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex flex-col items-center justify-center shrink-0 border transition-all duration-300 shadow-xs relative overflow-hidden ${
-                                isEligibleForVaga
+                                isPaused
+                                    ? 'bg-gradient-to-br from-amber-100 via-yellow-100 to-amber-200 border-amber-400 text-amber-950 ring-1 ring-amber-400/40'
+                                    : isEligibleForVaga
                                     ? isNextInQueue
                                         ? 'bg-gradient-to-br from-emerald-50 via-emerald-100/90 to-teal-100 border-emerald-300 text-emerald-950 ring-1 ring-emerald-400/20'
                                         : 'bg-gradient-to-br from-slate-50 via-amber-50/80 to-amber-100/70 border-amber-200 text-slate-800'
@@ -551,7 +568,9 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                     : 'bg-gradient-to-br from-slate-50 to-slate-100 border-slate-200 text-slate-800'
                             }`}
                             title={
-                                isEligibleForVaga
+                                isPaused
+                                    ? `Solicitação PAUSADA. Posição original preservada: ${queuePosition || booking.queue_position || 1}º lugar na fila.`
+                                    : isEligibleForVaga
                                     ? isNextInQueue
                                         ? `Posição: ${queuePosition || 1}º lugar na fila. Vaga liberada e disponível para agendamento imediato!`
                                         : `Posição: ${queuePosition || 1}º lugar na fila. Bloqueado: Agende o paciente ${blockingPatient?.name || 'anterior'} da colocação ${blockingPatient?.queuePosition || 1}º primeiro.`
@@ -560,7 +579,20 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                     : `Status: ${booking.status}`
                             }
                         >
-                            {isEligibleForVaga ? (
+                            {isPaused ? (
+                                <>
+                                    <span className="text-[7.5px] font-black uppercase tracking-wider text-amber-800 leading-none">
+                                        FILA ({queuePosition ? `${queuePosition}º` : (booking.queue_position ? `${booking.queue_position}º` : '—')})
+                                    </span>
+                                    <span className="text-[11px] sm:text-xs font-black uppercase tracking-tight text-amber-950 my-0.5 text-center px-0.5 leading-tight flex items-center justify-center gap-0.5">
+                                        <Pause className="w-3 h-3 fill-amber-700 text-amber-700 shrink-0" />
+                                        PAUSADA
+                                    </span>
+                                    <span className="text-[6.5px] font-bold uppercase tracking-wider text-amber-800 leading-none">
+                                        CONGELADA
+                                    </span>
+                                </>
+                            ) : isEligibleForVaga ? (
                                 isNextInQueue ? (
                                     <>
                                         <span className="text-[7.5px] font-black uppercase tracking-wider text-emerald-700 leading-none">
@@ -745,7 +777,17 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                 />
 
                                 {/* STATUS */}
-                                {isEligibleForVaga ? (
+                                {isPaused ? (
+                                    <div className="flex flex-col gap-0.5 col-span-1 wide:w-auto min-w-[125px] shrink-0" onClick={(e) => e.stopPropagation()}>
+                                        <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1 leading-none">
+                                            <span>Status</span>
+                                        </span>
+                                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-100 to-yellow-100 border border-amber-300 text-amber-950 font-black rounded-xl text-[10.5px] uppercase tracking-wider shadow-2xs w-fit leading-none mt-0.5">
+                                            <PauseCircle className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                                            <span className="whitespace-nowrap">PAUSADA</span>
+                                        </span>
+                                    </div>
+                                ) : isEligibleForVaga ? (
                                     isNextInQueue ? (
                                         <div className="flex flex-col gap-0.5 col-span-1 wide:w-auto min-w-[125px] shrink-0" onClick={(e) => e.stopPropagation()}>
                                             <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1 leading-none">
@@ -962,6 +1004,109 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                 </div>
                             )}
 
+                            {/* Detalhes da Solicitação Pausada */}
+                            {isPaused && (
+                                <div className="col-span-2 wide:w-full bg-gradient-to-r from-amber-500/10 via-amber-100/40 to-yellow-50 p-3.5 sm:p-4 rounded-2xl border-2 border-amber-300 text-amber-950 text-xs flex flex-col gap-2.5 shadow-xs">
+                                    <div className="flex items-center justify-between flex-wrap gap-2">
+                                        <div className="flex items-center gap-2">
+                                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-amber-500 text-white font-black text-xs uppercase tracking-wider shadow-xs">
+                                                <PauseCircle className="w-4 h-4" />
+                                                PAUSADA
+                                            </span>
+                                            <span className="text-xs font-black text-amber-900">
+                                                Posição congelada na fila: {queuePosition ? `${queuePosition}º lugar` : (booking.queue_position ? `${booking.queue_position}º lugar` : '—')}
+                                            </span>
+                                        </div>
+                                        <span className="text-[10px] sm:text-[10.5px] font-bold text-amber-800 bg-amber-100/80 px-2.5 py-1 rounded-lg border border-amber-300/70">
+                                            Ignorada na seleção automática de vagas até a retomada
+                                        </span>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2 border-t border-amber-200/80">
+                                        <div>
+                                            <span className="text-[10px] font-black uppercase tracking-wider text-amber-800 block">Pausada em:</span>
+                                            <span className="font-extrabold text-slate-900 text-xs">
+                                                {booking.paused_at ? new Date(booking.paused_at).toLocaleString('pt-BR') : '—'}
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <span className="text-[10px] font-black uppercase tracking-wider text-amber-800 block">Por:</span>
+                                            <span className="font-extrabold text-slate-900 text-xs">
+                                                {booking.paused_by_name || 'Gestor / Administrador'}
+                                            </span>
+                                        </div>
+                                        <div className="sm:col-span-1">
+                                            <span className="text-[10px] font-black uppercase tracking-wider text-amber-800 block">Motivo:</span>
+                                            <span className="font-bold text-amber-950 text-xs break-words">
+                                                {booking.pause_reason || 'Motivo não informado'}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    {/* Histórico Permanente de Pausas e Retomadas */}
+                                    {booking.pause_history && booking.pause_history.length > 0 && (
+                                        <div className="mt-1 pt-2 border-t border-amber-200/80">
+                                            <span className="text-[9.5px] font-black uppercase tracking-wider text-amber-900 block mb-1.5">
+                                                Histórico Permanente:
+                                            </span>
+                                            <div className="flex flex-col gap-1.5">
+                                                {booking.pause_history.map((hist, hIdx) => (
+                                                    <div key={hIdx} className="flex items-center gap-2 flex-wrap bg-white/80 p-2 rounded-xl border border-amber-200 text-xs">
+                                                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg font-black text-[9px] uppercase ${hist.action === 'pause' ? 'bg-amber-100 text-amber-900 border border-amber-300' : 'bg-emerald-100 text-emerald-900 border border-emerald-300'}`}>
+                                                            {hist.action === 'pause' ? <Pause className="w-2.5 h-2.5" /> : <Play className="w-2.5 h-2.5" />}
+                                                            {hist.action === 'pause' ? 'Pausa' : 'Retomada'}
+                                                        </span>
+                                                        <span className="font-bold text-slate-500 text-[11px]">Responsável:</span>
+                                                        <span className="font-black text-slate-900 text-[11px]">{hist.user_name || 'Usuário'}</span>
+                                                        <span className="text-slate-300">•</span>
+                                                        <span className="font-bold text-slate-500 text-[11px]">Data/Hora:</span>
+                                                        <span className="font-bold text-slate-800 text-[11px]">{hist.timestamp ? new Date(hist.timestamp).toLocaleString('pt-BR') : '—'}</span>
+                                                        {hist.reason && (
+                                                            <>
+                                                                <span className="text-slate-300">•</span>
+                                                                <span className="font-bold text-slate-500 text-[11px]">Motivo:</span>
+                                                                <span className="font-semibold text-slate-800 text-[11px] italic">"{hist.reason}"</span>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Histórico Permanente caso não esteja atualmente pausada */}
+                            {!isPaused && booking.pause_history && booking.pause_history.length > 0 && (
+                                <div className="col-span-2 wide:w-full bg-slate-50/90 p-3 rounded-2xl border border-slate-200 text-slate-800 text-xs flex flex-col gap-1.5">
+                                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-600 block">
+                                        Histórico de Pausas / Retomadas Anteriores:
+                                    </span>
+                                    <div className="flex flex-col gap-1.5">
+                                        {booking.pause_history.map((hist, hIdx) => (
+                                            <div key={hIdx} className="flex items-center gap-2 flex-wrap bg-white p-2 rounded-xl border border-slate-200 text-xs">
+                                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg font-black text-[9px] uppercase ${hist.action === 'pause' ? 'bg-amber-100 text-amber-900 border border-amber-300' : 'bg-emerald-100 text-emerald-900 border border-emerald-300'}`}>
+                                                    {hist.action === 'pause' ? <Pause className="w-2.5 h-2.5" /> : <Play className="w-2.5 h-2.5" />}
+                                                    {hist.action === 'pause' ? 'Pausa' : 'Retomada'}
+                                                </span>
+                                                <span className="font-bold text-slate-500 text-[11px]">Responsável:</span>
+                                                <span className="font-black text-slate-900 text-[11px]">{hist.user_name || 'Usuário'}</span>
+                                                <span className="text-slate-300">•</span>
+                                                <span className="font-bold text-slate-500 text-[11px]">Data/Hora:</span>
+                                                <span className="font-bold text-slate-800 text-[11px]">{hist.timestamp ? new Date(hist.timestamp).toLocaleString('pt-BR') : '—'}</span>
+                                                {hist.reason && (
+                                                    <>
+                                                        <span className="text-slate-300">•</span>
+                                                        <span className="font-bold text-slate-500 text-[11px]">Motivo:</span>
+                                                        <span className="font-semibold text-slate-800 text-[11px] italic">"{hist.reason}"</span>
+                                                    </>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
                             {/* Botões de Ação no Rodapé do Expandido (estilo Abastecimento) */}
                             <div className="flex flex-wrap items-center gap-2 ml-auto mt-2 wide:mt-0 col-span-2 wide:col-span-auto justify-end">
                                 {isOperating ? (
@@ -971,8 +1116,8 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                     </div>
                                 ) : (
                                     <>
-                                        {/* Ação de Definir Data no Expandido */}
-                                        {isEligibleForVaga && canEdit && (
+                                        {/* Ação de Definir Data no Expandido (somente se não estiver pausada) */}
+                                        {!isPaused && isEligibleForVaga && canEdit && (
                                             isNextInQueue ? (
                                                 onOpenDefinirData && (
                                                     <button
@@ -1051,6 +1196,32 @@ const _AgendamentoCard: React.FC<AgendamentoCardProps> = ({
                                             <FileDown className="w-3.5 h-3.5" />
                                             Comprovante
                                         </button>
+
+                                        {/* BOTÃO RETOMAR SOLICITAÇÃO (Quando pausada - Exclusivo para Gestores e Administradores) */}
+                                        {isPaused && canPause && onOpenResumeModal && (
+                                            <button
+                                                type="button"
+                                                onClick={(e) => { e.stopPropagation(); onOpenResumeModal(booking); }}
+                                                className="flex items-center gap-1.5 px-3.5 py-1.5 text-emerald-800 hover:text-white bg-emerald-50 hover:bg-emerald-600 rounded-lg transition-colors text-xs font-black border border-emerald-300 cursor-pointer shadow-2xs active:scale-95"
+                                                title="Retomar Solicitação e reintroduzi-la à fila em sua posição original"
+                                            >
+                                                <PlayCircle className="w-4 h-4 text-emerald-600 group-hover:text-white" />
+                                                Retomar Solicitação
+                                            </button>
+                                        )}
+
+                                        {/* BOTÃO PAUSAR SOLICITAÇÃO (Quando ativa na fila - Exclusivo para Gestores e Administradores) */}
+                                        {!isPaused && canPause && onOpenPauseModal && (booking.status === 'Fila de espera' || booking.status === 'Aguardando Data' || booking.status === 'Solicitado' || booking.status === 'Retorno' || !booking.status) && (
+                                            <button
+                                                type="button"
+                                                onClick={(e) => { e.stopPropagation(); onOpenPauseModal(booking); }}
+                                                className="flex items-center gap-1.5 px-3 py-1.5 text-amber-800 hover:text-white bg-amber-50 hover:bg-amber-600 rounded-lg transition-colors text-xs font-black border border-amber-300 cursor-pointer shadow-2xs active:scale-95"
+                                                title="Pausar Solicitação temporariamente mantendo a posição original congelada"
+                                            >
+                                                <PauseCircle className="w-4 h-4 text-amber-600 group-hover:text-white" />
+                                                Pausar
+                                            </button>
+                                        )}
 
                                         {/* Ações por Status */}
                                         {booking.status === 'Cancelado' && canEdit && (
@@ -1290,6 +1461,16 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     const [cancelError, setCancelError] = useState('');
     const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
 
+    // Pause / Resume modal states
+    const [pauseTarget, setPauseTarget] = useState<ConsultaAgendamento | null>(null);
+    const [pauseReason, setPauseReason] = useState('');
+    const [pauseError, setPauseError] = useState('');
+    const [isPauseModalOpen, setIsPauseModalOpen] = useState(false);
+
+    const [resumeTarget, setResumeTarget] = useState<ConsultaAgendamento | null>(null);
+    const [resumeError, setResumeError] = useState('');
+    const [isResumeModalOpen, setIsResumeModalOpen] = useState(false);
+
     // Edit modal states
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [editTarget, setEditTarget] = useState<ConsultaAgendamento | null>(null);
@@ -1324,8 +1505,6 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
     const [isTransferring, setIsTransferring] = useState(false);
     const [transferSuccessToast, setTransferSuccessToast] = useState<string | null>(null);
 
-
-
     useEffect(() => {
         const fetchGestores = async () => {
             try {
@@ -1338,9 +1517,10 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
         fetchGestores();
     }, []);
 
-    // Regra de 2 Níveis: Uma vez no submódulo Acompanhar, todas as funcionalidades estão liberadas
+    // Regra de 2 Níveis: Administradores e Gestores autorizados possuem privilégios executivos exclusivos como Pausar/Retomar
     const isAdmin = currentUser.role === 'admin';
-    const isGestor = gestorUserIds.includes(currentUser.id);
+    const isGestor = gestorUserIds.includes(currentUser.id) || !!currentUser.permissions?.includes('parent_consultas_gestor') || !!currentUser.permissions?.includes('sub_consultas_gestor');
+    const canPause = isAdmin || isGestor;
     const canCancel = true;
     const canComplete = true;
     const canEdit = true;
@@ -1547,7 +1727,9 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
             }
             if (filterStatus) {
                 if (filterStatus === 'Definir Data') {
-                    filtered = filtered.filter(a => a.status === 'Fila de espera' || a.status === 'Aguardando Data');
+                    filtered = filtered.filter(a => (a.status === 'Fila de espera' || a.status === 'Aguardando Data') && !a.is_paused);
+                } else if (filterStatus === 'Pausada') {
+                    filtered = filtered.filter(a => a.is_paused || a.status === 'Pausada');
                 } else {
                     filtered = filtered.filter(a => a.status === filterStatus);
                 }
@@ -1641,6 +1823,54 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
             loadData(true);
         } catch (err: any) {
             setCancelError(err.message || 'Erro ao cancelar o agendamento.');
+        } finally {
+            setOperatingId(null);
+        }
+    };
+
+    const handleOpenPauseModal = (booking: ConsultaAgendamento) => {
+        setPauseTarget(booking);
+        setPauseReason('');
+        setPauseError('');
+        setIsPauseModalOpen(true);
+    };
+
+    const handleConfirmPause = async () => {
+        if (!pauseTarget) return;
+        if (!pauseReason.trim()) {
+            setPauseError('O motivo da pausa é obrigatório.');
+            return;
+        }
+        setOperatingId(pauseTarget.id);
+        try {
+            await db.pausarAgendamento(pauseTarget.id, pauseReason.trim(), currentUser);
+            setIsPauseModalOpen(false);
+            setPauseTarget(null);
+            setPauseReason('');
+            await loadData(true);
+        } catch (err: any) {
+            setPauseError(err.message || 'Erro ao pausar a solicitação.');
+        } finally {
+            setOperatingId(null);
+        }
+    };
+
+    const handleOpenResumeModal = (booking: ConsultaAgendamento) => {
+        setResumeTarget(booking);
+        setResumeError('');
+        setIsResumeModalOpen(true);
+    };
+
+    const handleConfirmResume = async () => {
+        if (!resumeTarget) return;
+        setOperatingId(resumeTarget.id);
+        try {
+            await db.retomarAgendamento(resumeTarget.id, currentUser);
+            setIsResumeModalOpen(false);
+            setResumeTarget(null);
+            await loadData(true);
+        } catch (err: any) {
+            setResumeError(err.message || 'Erro ao retomar a solicitação.');
         } finally {
             setOperatingId(null);
         }
@@ -2197,6 +2427,7 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                             { value: '', label: 'Todos os Status' },
                             { value: 'Definir Data', label: 'Definir Data' },
                             { value: 'Fila de espera', label: 'Fila de espera' },
+                            { value: 'Pausada', label: '⏸ Pausada' },
                             { value: 'Agendado', label: 'Agendado' },
                             { value: 'Solicitado', label: 'Solicitado' },
                             { value: 'Realizado', label: 'Realizado' },
@@ -2340,6 +2571,9 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                                     canComplete={canComplete}
                                     canCancel={canCancel}
                                     canDelete={canDelete}
+                                    canPause={canPause}
+                                    onOpenPauseModal={handleOpenPauseModal}
+                                    onOpenResumeModal={handleOpenResumeModal}
                                     onEdit={handleOpenEditModal}
                                     onTransfer={handleOpenTransferModal}
                                     onAgentInfo={handleOpenAgentInfo}
@@ -2938,6 +3172,234 @@ export const AcompanharScreen: React.FC<AcompanharScreenProps> = ({
                             >
                                 {operatingId === cancelTarget.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
                                 Confirmar Cancelamento
+                            </button>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
+
+            {/* MODAL: PAUSAR SOLICITAÇÃO */}
+            {isPauseModalOpen && pauseTarget && typeof document !== 'undefined' && createPortal(
+                <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg overflow-hidden border border-amber-200 flex flex-col transform transition-all animate-in zoom-in-95 duration-200">
+                        {/* Header */}
+                        <div className="p-5 border-b border-amber-200/70 bg-gradient-to-r from-amber-50 via-yellow-50/60 to-white flex justify-between items-center shrink-0">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-2xl bg-amber-100 flex items-center justify-center text-amber-700 shadow-inner">
+                                    <PauseCircle className="w-6 h-6" />
+                                </div>
+                                <div>
+                                    <h3 className="text-sm font-black text-amber-950 uppercase tracking-wider">Pausar Solicitação</h3>
+                                    <p className="text-[10.5px] text-amber-800 font-bold uppercase tracking-wider mt-0.5">Suspender temporariamente mantendo a posição original</p>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setIsPauseModalOpen(false);
+                                    setPauseTarget(null);
+                                    setPauseReason('');
+                                    setPauseError('');
+                                }}
+                                className="p-2 hover:bg-amber-100/70 rounded-xl text-amber-500 hover:text-amber-800 transition-colors"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        {/* Form Content */}
+                        <div className="p-6 space-y-4">
+                            {/* Summary Card */}
+                            <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-2 text-xs font-semibold text-slate-700">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-slate-400 font-medium">Paciente:</span>
+                                    <span className="font-black text-slate-900 uppercase">{formatPatientName(pauseTarget.paciente)}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-slate-400 font-medium">Procedimento:</span>
+                                    <span className="font-extrabold text-sky-700 uppercase">{formatProcedimentoLabel(pauseTarget.procedimento)}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-slate-400 font-medium">Posição Congelada:</span>
+                                    <span className="font-black text-amber-900 bg-amber-100 px-2 py-0.5 rounded border border-amber-300 font-mono">
+                                        {queuePositions[pauseTarget.id] ? `${queuePositions[pauseTarget.id]}º lugar na fila` : (pauseTarget.queue_position ? `${pauseTarget.queue_position}º lugar` : 'Fila de Espera')}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-slate-400 font-medium">Prioridade:</span>
+                                    <span className="font-bold text-slate-800 uppercase">{pauseTarget.priority || 'Normal'}</span>
+                                </div>
+                            </div>
+
+                            {/* Motivo da Pausa (Obrigatório) */}
+                            <div className="space-y-1.5">
+                                <label className="block text-[10.5px] font-black uppercase tracking-wider text-slate-700">
+                                    Motivo da Pausa <span className="text-rose-500">*</span>
+                                </label>
+                                <textarea
+                                    value={pauseReason}
+                                    onChange={(e) => {
+                                        setPauseReason(e.target.value);
+                                        if (pauseError) setPauseError('');
+                                    }}
+                                    placeholder="Informe obrigatoriamente o motivo da pausa (ex: paciente aguardando exames complementares, indisponibilidade temporária de viagem, etc.)..."
+                                    rows={4}
+                                    className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-medium text-slate-800 outline-none focus:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 transition-all resize-none"
+                                />
+                                {pauseError && (
+                                    <p className="text-[11px] font-extrabold text-rose-600 mt-1 flex items-center gap-1">
+                                        ⚠️ {pauseError}
+                                    </p>
+                                )}
+                            </div>
+
+                            {/* Aviso Explicativo da Regra */}
+                            <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl text-[11px] text-amber-900 space-y-1">
+                                <div className="font-extrabold flex items-center gap-1.5 text-amber-950">
+                                    <span>⏸️ Regras de Congelamento:</span>
+                                </div>
+                                <p className="leading-relaxed text-[10.5px] text-amber-900/90">
+                                    • A solicitação será marcada como <strong>Pausada</strong> e sua colocação será congelada.<br />
+                                    • Novas vagas liberadas <strong>ignorarão completamente</strong> este paciente enquanto pausado.<br />
+                                    • Ao ser retomada, voltará à fila considerando sua <strong>posição e prioridade original</strong>.
+                                </p>
+                            </div>
+
+                            {/* Auditoria Notice */}
+                            <div className="p-2.5 bg-slate-100/70 border border-slate-200 rounded-xl text-[10px] text-slate-600 font-bold flex items-center gap-2">
+                                <span>🔒 Responsável pelo registro: <strong className="uppercase font-black text-slate-900">{currentUser.name}</strong></span>
+                            </div>
+                        </div>
+
+                        {/* Modal Footer */}
+                        <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-end gap-3 shrink-0">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setIsPauseModalOpen(false);
+                                    setPauseTarget(null);
+                                    setPauseReason('');
+                                    setPauseError('');
+                                }}
+                                className="px-4 py-2.5 bg-white hover:bg-slate-100 text-slate-600 font-extrabold rounded-xl border border-slate-200 text-xs uppercase tracking-wider transition-all cursor-pointer"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleConfirmPause}
+                                disabled={operatingId === pauseTarget.id}
+                                className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-extrabold rounded-xl shadow-lg shadow-amber-500/25 text-xs uppercase tracking-wider transition-all flex items-center gap-2 active:scale-95 cursor-pointer disabled:opacity-50"
+                            >
+                                {operatingId === pauseTarget.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <PauseCircle className="w-4 h-4" />}
+                                Confirmar Pausa
+                            </button>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
+
+            {/* MODAL: RETOMAR SOLICITAÇÃO */}
+            {isResumeModalOpen && resumeTarget && typeof document !== 'undefined' && createPortal(
+                <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg overflow-hidden border border-emerald-200 flex flex-col transform transition-all animate-in zoom-in-95 duration-200">
+                        {/* Header */}
+                        <div className="p-5 border-b border-emerald-200/70 bg-gradient-to-r from-emerald-50 via-teal-50/60 to-white flex justify-between items-center shrink-0">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-2xl bg-emerald-100 flex items-center justify-center text-emerald-700 shadow-inner">
+                                    <PlayCircle className="w-6 h-6" />
+                                </div>
+                                <div>
+                                    <h3 className="text-sm font-black text-emerald-950 uppercase tracking-wider">Retomar Solicitação</h3>
+                                    <p className="text-[10.5px] text-emerald-800 font-bold uppercase tracking-wider mt-0.5">Reintegrar solicitação à fila na posição original</p>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setIsResumeModalOpen(false);
+                                    setResumeTarget(null);
+                                    setResumeError('');
+                                }}
+                                className="p-2 hover:bg-emerald-100/70 rounded-xl text-emerald-500 hover:text-emerald-800 transition-colors"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        {/* Form Content */}
+                        <div className="p-6 space-y-4">
+                            {/* Summary Card */}
+                            <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-2 text-xs font-semibold text-slate-700">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-slate-400 font-medium">Paciente:</span>
+                                    <span className="font-black text-slate-900 uppercase">{formatPatientName(resumeTarget.paciente)}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-slate-400 font-medium">Procedimento:</span>
+                                    <span className="font-extrabold text-sky-700 uppercase">{formatProcedimentoLabel(resumeTarget.procedimento)}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-slate-400 font-medium">Pausada em:</span>
+                                    <span className="font-bold text-slate-800">{resumeTarget.paused_at ? new Date(resumeTarget.paused_at).toLocaleString('pt-BR') : '—'}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-slate-400 font-medium">Pausada por:</span>
+                                    <span className="font-bold text-slate-800">{resumeTarget.paused_by_name || 'Gestor'}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-slate-400 font-medium">Motivo da Pausa:</span>
+                                    <span className="font-bold text-amber-900 max-w-[240px] truncate" title={resumeTarget.pause_reason}>{resumeTarget.pause_reason || '—'}</span>
+                                </div>
+                            </div>
+
+                            {resumeError && (
+                                <p className="text-[11px] font-extrabold text-rose-600 mt-1 flex items-center gap-1">
+                                    ⚠️ {resumeError}
+                                </p>
+                            )}
+
+                            {/* Aviso Explicativo da Retomada */}
+                            <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl text-[11px] text-emerald-950 space-y-1">
+                                <div className="font-extrabold flex items-center gap-1.5 text-emerald-950">
+                                    <span>▶️ Reintegração à Fila:</span>
+                                </div>
+                                <p className="leading-relaxed text-[10.5px] text-emerald-900/90">
+                                    • A solicitação será reintegrada à fila respeitando sua <strong>posição e prioridade original</strong>.<br />
+                                    • Voltará a ser considerada nas <strong>próximas vagas disponíveis</strong> liberadas.<br />
+                                    • Não utilizará retroativamente vagas já preenchidas durante o período de pausa.
+                                </p>
+                            </div>
+
+                            {/* Auditoria Notice */}
+                            <div className="p-2.5 bg-slate-100/70 border border-slate-200 rounded-xl text-[10px] text-slate-600 font-bold flex items-center gap-2">
+                                <span>🔒 Responsável pela retomada: <strong className="uppercase font-black text-slate-900">{currentUser.name}</strong></span>
+                            </div>
+                        </div>
+
+                        {/* Modal Footer */}
+                        <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-end gap-3 shrink-0">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setIsResumeModalOpen(false);
+                                    setResumeTarget(null);
+                                    setResumeError('');
+                                }}
+                                className="px-4 py-2.5 bg-white hover:bg-slate-100 text-slate-600 font-extrabold rounded-xl border border-slate-200 text-xs uppercase tracking-wider transition-all cursor-pointer"
+                            >
+                                Voltar
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleConfirmResume}
+                                disabled={operatingId === resumeTarget.id}
+                                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl shadow-lg shadow-emerald-600/25 text-xs uppercase tracking-wider transition-all flex items-center gap-2 active:scale-95 cursor-pointer disabled:opacity-50"
+                            >
+                                {operatingId === resumeTarget.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <PlayCircle className="w-4 h-4" />}
+                                Confirmar Retomada
                             </button>
                         </div>
                     </div>

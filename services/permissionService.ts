@@ -719,6 +719,37 @@ export const MODULE_ACCESS_TREE: ModuleItemDefinition[] = [
     ]
   },
   {
+    key: 'parent_documentos',
+    legacyKeys: ['documentos'],
+    label: 'Documentos',
+    description: 'Fluxo interno, encaminhamento, análise e acompanhamento de documentos entre usuários e setores',
+    routes: ['/Documentos', '/Documentos/Novo', '/Documentos/Visualizar'],
+    iconName: 'FolderCheck',
+    submodules: [
+      {
+        key: 'sub_documentos_acompanhamento',
+        legacyKeys: ['parent_documentos_acompanhamento'],
+        label: 'Acompanhamento',
+        description: 'Painel de acompanhamento de documentos (Meus Documentos, Recebidos, Concluídos)',
+        routes: ['/Documentos']
+      },
+      {
+        key: 'sub_documentos_novo',
+        legacyKeys: ['parent_documentos_novo'],
+        label: 'Novo Documento',
+        description: 'Cadastro, upload e encaminhamento inicial de novo documento',
+        routes: ['/Documentos/Novo']
+      },
+      {
+        key: 'sub_documentos_visualizar',
+        legacyKeys: ['parent_documentos_visualizar'],
+        label: 'Visualizar Detalhes & Histórico',
+        description: 'Acompanhamento de movimentações, linha do tempo e prazos do documento',
+        routes: ['/Documentos/Visualizar']
+      }
+    ]
+  },
+  {
     key: 'parent_assistente_ia',
     legacyKeys: ['assistente_ia', 'chat'],
     label: 'Assistente IA Operacional',

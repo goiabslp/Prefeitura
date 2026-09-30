@@ -214,6 +214,11 @@ export const FleetModule: React.FC<FleetModuleProps> = ({
 
     useEffect(() => {
         loadAllFleetData();
+        const handleRefresh = () => {
+            loadAllFleetData();
+        };
+        window.addEventListener('fleet-refresh-data', handleRefresh);
+        return () => window.removeEventListener('fleet-refresh-data', handleRefresh);
     }, [loadAllFleetData]);
 
     // 2. Cálculo da Lista de Saúde de Toda a Frota

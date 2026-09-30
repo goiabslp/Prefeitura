@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FilePlus, Package, History, FileText, ArrowRight, ArrowLeft, ShoppingCart, Gavel, Wallet, Inbox, CalendarRange, FileSearch, Droplet, Fuel, BarChart3, TrendingUp, LogOut, Activity, Car, ChevronDown, CalendarDays, Users, LayoutGrid, Megaphone, Database, Pill, Timer, Upload, Banknote, Newspaper, Sparkles, Star, AlertTriangle, Palette } from 'lucide-react';
+import { FilePlus, Package, History, FileText, ArrowRight, ArrowLeft, ShoppingCart, Gavel, Wallet, Inbox, CalendarRange, FileSearch, Droplet, Fuel, BarChart3, TrendingUp, LogOut, Activity, Car, ChevronDown, CalendarDays, Users, LayoutGrid, Megaphone, Database, Pill, Timer, Upload, Banknote, Newspaper, Sparkles, Star, AlertTriangle, Palette, FolderCheck } from 'lucide-react';
 import { UserRole, UIConfig, AppPermission, BlockType, DiariaEvento, Order, User } from '../types';
 import { UpcomingEventsNotification } from './calendario/UpcomingEventsNotification';
 import { useSystemSettings } from '../contexts/SystemSettingsContext';
@@ -153,6 +153,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     const canAccessNoticias = checkModuleAccess('parent_noticias');
     const canAccessUpload = checkModuleAccess('parent_upload');
     const canAccessArt = checkModuleAccess('parent_art');
+    const canAccessDocumentos = checkModuleAccess('parent_documentos');
     const firstName = userName.split(' ')[0];
 
     const getPendingCount = (blockType: string) => {
@@ -620,6 +621,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                             <div className="grid grid-cols-2 desktop:grid-cols-3 xl:grid-cols-4 wide:grid-cols-5 gap-3 desktop:gap-4">
                                 {/* Operational Modules */}
                                 {canAccessOficio && renderModuleButton(() => setActiveBlock('oficio'), 'indigo', FileText, 'Ofícios', 'Geração e trâmite', '50ms', false, getPendingCount('oficio'))}
+                                {canAccessDocumentos && renderModuleButton(() => {
+                                    window.history.pushState({}, '', '/Documentos');
+                                    window.dispatchEvent(new Event('popstate'));
+                                }, 'blue', FolderCheck, 'Documentos', 'Fluxo interno e prazos', '75ms', false)}
                                 {canAccessCompras && renderModuleButton(() => setActiveBlock('compras'), 'emerald', ShoppingCart, 'Compras', 'Pedidos e requisições', '100ms', false, getPendingCount('compras'))}
                                 {canAccessDiarias && renderModuleButton(() => setActiveBlock('diarias'), 'amber', Wallet, 'Diárias', 'Despesas', '150ms', false, getPendingCount('diarias'))}
                                 {canAccessLicitacao && renderModuleButton(() => setActiveBlock('licitacao'), 'blue', Gavel, 'Licitação', 'Processos', '200ms', false, getPendingCount('licitacao'))}

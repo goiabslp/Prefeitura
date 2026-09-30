@@ -1,6 +1,7 @@
 import { supabase } from './supabaseClient';
-import { ConsultaPaciente, ConsultaProcedimento, ConsultaAgendamento, ConsultaVaga, ConsultaEspecialista, TipoAtendimentoConsulta } from '../types';
+import { ConsultaPaciente, ConsultaProcedimento, ConsultaAgendamento, ConsultaVaga, ConsultaEspecialista, TipoAtendimentoConsulta, User } from '../types';
 import { handleSupabaseError } from '../utils/errorUtils';
+import { auditLogService } from './auditLogService';
 
 // --- PACIENTES ---
 
@@ -1272,6 +1273,9 @@ export const getAgendamentos = async (filters?: AgendamentoFilters): Promise<Con
         const especialistas = await getEspecialistas();
         const espMap = new Map<string, ConsultaEspecialista>(especialistas.map(e => [e.id, e]));
 
+        // Mesclar dados de pausa persistentes
+        const pausedMetaMap = getPausedMetadataMap();
+
         filtered = filtered.map(item => {
             let proc = item.procedimento;
             if (proc) {
@@ -1283,19 +1287,54 @@ export const getAgendamentos = async (filters?: AgendamentoFilters): Promise<Con
                     especialista: espObj
                 };
             }
+
+            const pMeta = pausedMetaMap[item.id];
+            if (pMeta) {
+                const computedStatus = (pMeta.is_paused 
+                    ? 'Pausada' 
+                    : (item.status === 'Pausada' ? (pMeta.original_status || 'Fila de espera') : item.status)
+                ) as ConsultaAgendamento['status'];
+
+                return {
+                    ...item,
+                    procedimento: proc,
+                    is_paused: pMeta.is_paused,
+                    status: computedStatus,
+                    paused_at: pMeta.paused_at || item.paused_at,
+                    paused_by: pMeta.paused_by || item.paused_by,
+                    paused_by_name: pMeta.paused_by_name || item.paused_by_name,
+                    pause_reason: pMeta.pause_reason || item.pause_reason,
+                    resumed_at: pMeta.resumed_at || item.resumed_at,
+                    resumed_by: pMeta.resumed_by || item.resumed_by,
+                    resumed_by_name: pMeta.resumed_by_name || item.resumed_by_name,
+                    original_status: pMeta.original_status || item.original_status,
+                    pause_history: pMeta.pause_history || item.pause_history || []
+                };
+            }
+
+            if (item.is_paused) {
+                return {
+                    ...item,
+                    procedimento: proc,
+                    status: 'Pausada'
+                };
+            }
+
             return {
                 ...item,
                 procedimento: proc
             };
         });
 
-        // Garante que a ordem da fila de espera respeite a prioridade Especial e posições calculadas
+        // Garante que a ordem da fila de espera respeite a prioridade Especial e posições calculadas (incluindo congeladas/pausadas)
         const waitlistItems = filtered.filter(a => 
             !a.status || 
             a.status === 'Fila de espera' || 
             a.status === 'Aguardando Data' || 
             a.status === 'Solicitado' || 
             a.status === 'Retorno' ||
+            a.status === 'Pausada' ||
+            a.is_paused ||
             a.status.toLowerCase().includes('fila')
         );
 
@@ -1483,6 +1522,300 @@ export const updateAgendamentoDateAndStatus = async (
     });
 };
 
+// --- CONTROLE DE PAUSA E RETOMADA DE SOLICITAÇÃO ---
+
+const STORAGE_PAUSED_METADATA_KEY = 'sys_consultas_agendamentos_paused_metadata';
+
+export interface PausedItemMeta {
+    is_paused: boolean;
+    status: string;
+    paused_at?: string;
+    paused_by?: string;
+    paused_by_name?: string;
+    pause_reason?: string;
+    resumed_at?: string;
+    resumed_by?: string;
+    resumed_by_name?: string;
+    original_status?: string;
+    pause_history?: any[];
+}
+
+export const getPausedMetadataMap = (): Record<string, PausedItemMeta> => {
+    if (typeof window === 'undefined') return {};
+    try {
+        const raw = localStorage.getItem(STORAGE_PAUSED_METADATA_KEY);
+        return raw ? JSON.parse(raw) : {};
+    } catch (e) {
+        return {};
+    }
+};
+
+export const savePausedMetadataItem = (id: string, meta: PausedItemMeta) => {
+    if (typeof window === 'undefined') return;
+    try {
+        const current = getPausedMetadataMap();
+        current[id] = meta;
+        localStorage.setItem(STORAGE_PAUSED_METADATA_KEY, JSON.stringify(current));
+    } catch (e) {}
+};
+
+/**
+ * Busca uma solicitação individual pelo ID
+ */
+export const getAgendamentoById = async (id: string): Promise<ConsultaAgendamento | null> => {
+    try {
+        const { data, error } = await supabase
+            .from('consultas_agendamentos')
+            .select(`
+                *,
+                paciente:consultas_pacientes(*),
+                procedimento:consultas_procedimentos(*),
+                responsavel:profiles(id, name)
+            `)
+            .eq('id', id)
+            .single();
+
+        if (!error && data) {
+            const metaMap = getPausedMetadataMap();
+            const meta = metaMap[id];
+            if (meta) {
+                return {
+                    ...data,
+                    is_paused: meta.is_paused,
+                    status: meta.is_paused ? 'Pausada' : data.status,
+                    paused_at: meta.paused_at || data.paused_at,
+                    paused_by: meta.paused_by || data.paused_by,
+                    paused_by_name: meta.paused_by_name || data.paused_by_name,
+                    pause_reason: meta.pause_reason || data.pause_reason,
+                    resumed_at: meta.resumed_at || data.resumed_at,
+                    resumed_by: meta.resumed_by || data.resumed_by,
+                    resumed_by_name: meta.resumed_by_name || data.resumed_by_name,
+                    original_status: meta.original_status || data.original_status,
+                    pause_history: meta.pause_history || data.pause_history || []
+                } as unknown as ConsultaAgendamento;
+            }
+            return data as unknown as ConsultaAgendamento;
+        }
+    } catch (e) {}
+
+    const all = await getAgendamentos();
+    return all.find(a => a.id === id) || null;
+};
+
+/**
+ * Pausa uma solicitação de procedimento
+ * Exclusivo para Administradores e Gestores autorizados (validado no backend)
+ */
+export const pausarAgendamento = async (
+    id: string,
+    motivo: string,
+    currentUser: User
+): Promise<ConsultaAgendamento> => {
+    // 1. Validação estrita de autorização
+    const isAuthorized = 
+        currentUser.role === 'admin' ||
+        currentUser.permissions?.includes('parent_consultas_gestor') ||
+        currentUser.permissions?.includes('sub_consultas_gestor');
+
+    let isDbGestor = false;
+    try {
+        const { data: gData } = await supabase
+            .from('consultas_gestores')
+            .select('gestor_id')
+            .eq('gestor_id', currentUser.id)
+            .limit(1);
+        if (gData && gData.length > 0) isDbGestor = true;
+    } catch (e) {}
+
+    if (!isAuthorized && !isDbGestor) {
+        throw new Error('Acesso negado: Apenas Administradores e Gestores autorizados podem pausar solicitações.');
+    }
+
+    if (!motivo || !motivo.trim()) {
+        throw new Error('O motivo da pausa é obrigatório.');
+    }
+
+    // 2. Carrega agendamento atual
+    const agendamento = await getAgendamentoById(id);
+    if (!agendamento) {
+        throw new Error('Solicitação de procedimento não encontrada.');
+    }
+
+    const now = new Date().toISOString();
+    const originalStatus = agendamento.status === 'Pausada'
+        ? (agendamento.original_status || 'Fila de espera')
+        : (agendamento.status || 'Fila de espera');
+
+    const historyItem = {
+        action: 'pause',
+        user_id: currentUser.id,
+        user_name: currentUser.name,
+        reason: motivo.trim(),
+        timestamp: now
+    };
+
+    const existingHistory = Array.isArray(agendamento.pause_history) ? agendamento.pause_history : [];
+    const updatedHistory = [...existingHistory, historyItem];
+
+    const updateData: Partial<ConsultaAgendamento> = {
+        status: 'Pausada',
+        is_paused: true,
+        paused_at: now,
+        paused_by: currentUser.id,
+        paused_by_name: currentUser.name,
+        pause_reason: motivo.trim(),
+        original_status: originalStatus,
+        pause_history: updatedHistory as any,
+        vaga_id: undefined // Libera qualquer vaga temporária
+    };
+
+    // Salva preventivamente no cache local para persistência garantida
+    savePausedMetadataItem(id, {
+        is_paused: true,
+        status: 'Pausada',
+        paused_at: now,
+        paused_by: currentUser.id,
+        paused_by_name: currentUser.name,
+        pause_reason: motivo.trim(),
+        original_status: originalStatus,
+        pause_history: updatedHistory
+    });
+
+    // Atualiza no Supabase
+    const updated = await updateAgendamento(id, updateData);
+
+    // Recalcula as posições da fila
+    await recalculateAndPersistQueuePositions().catch(() => {});
+
+    // Auditoria oficial
+    try {
+        await auditLogService.logAction({
+            action_type: 'PAUSAR_SOLICITACAO',
+            module: 'regulacao',
+            description: `Solicitação de ${agendamento.paciente?.name || 'Paciente'} para ${agendamento.procedimento?.name || 'Procedimento'} foi PAUSADA por ${currentUser.name}. Motivo: ${motivo.trim()}`,
+            details: {
+                agendamento_id: id,
+                paciente: agendamento.paciente?.name,
+                procedimento: agendamento.procedimento?.name,
+                paused_at: now,
+                paused_by: currentUser.name,
+                motivo: motivo.trim(),
+                original_status: originalStatus
+            }
+        });
+    } catch (e) {}
+
+    if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('consultas-agendamento-changed'));
+        window.dispatchEvent(new CustomEvent('consultas-vagas-changed'));
+    }
+
+    return updated || ({ ...agendamento, ...updateData } as unknown as ConsultaAgendamento);
+};
+
+/**
+ * Retoma uma solicitação de procedimento pausada
+ * Exclusivo para Administradores e Gestores autorizados (validado no backend)
+ */
+export const retomarAgendamento = async (
+    id: string,
+    currentUser: User
+): Promise<ConsultaAgendamento> => {
+    // 1. Validação estrita de autorização
+    const isAuthorized = 
+        currentUser.role === 'admin' ||
+        currentUser.permissions?.includes('parent_consultas_gestor') ||
+        currentUser.permissions?.includes('sub_consultas_gestor');
+
+    let isDbGestor = false;
+    try {
+        const { data: gData } = await supabase
+            .from('consultas_gestores')
+            .select('gestor_id')
+            .eq('gestor_id', currentUser.id)
+            .limit(1);
+        if (gData && gData.length > 0) isDbGestor = true;
+    } catch (e) {}
+
+    if (!isAuthorized && !isDbGestor) {
+        throw new Error('Acesso negado: Apenas Administradores e Gestores autorizados podem retomar solicitações.');
+    }
+
+    // 2. Carrega agendamento atual
+    const agendamento = await getAgendamentoById(id);
+    if (!agendamento) {
+        throw new Error('Solicitação de procedimento não encontrada.');
+    }
+
+    const now = new Date().toISOString();
+    const targetStatus = (agendamento.original_status && agendamento.original_status !== 'Pausada')
+        ? agendamento.original_status
+        : (agendamento.is_retorno ? 'Retorno' : 'Fila de espera');
+
+    const historyItem = {
+        action: 'resume',
+        user_id: currentUser.id,
+        user_name: currentUser.name,
+        timestamp: now
+    };
+
+    const existingHistory = Array.isArray(agendamento.pause_history) ? agendamento.pause_history : [];
+    const updatedHistory = [...existingHistory, historyItem];
+
+    const updateData: Partial<ConsultaAgendamento> = {
+        status: targetStatus as any,
+        is_paused: false,
+        resumed_at: now,
+        resumed_by: currentUser.id,
+        resumed_by_name: currentUser.name,
+        pause_history: updatedHistory as any
+    };
+
+    // Salva preventivamente no cache local
+    savePausedMetadataItem(id, {
+        is_paused: false,
+        status: targetStatus,
+        paused_at: agendamento.paused_at,
+        paused_by: agendamento.paused_by,
+        paused_by_name: agendamento.paused_by_name,
+        pause_reason: agendamento.pause_reason,
+        resumed_at: now,
+        resumed_by: currentUser.id,
+        resumed_by_name: currentUser.name,
+        original_status: targetStatus,
+        pause_history: updatedHistory
+    });
+
+    const updated = await updateAgendamento(id, updateData);
+
+    // Recalcula posições da fila
+    await recalculateAndPersistQueuePositions().catch(() => {});
+
+    // Auditoria oficial
+    try {
+        await auditLogService.logAction({
+            action_type: 'RETOMAR_SOLICITACAO',
+            module: 'regulacao',
+            description: `Solicitação de ${agendamento.paciente?.name || 'Paciente'} para ${agendamento.procedimento?.name || 'Procedimento'} foi RETOMADA por ${currentUser.name} e reintegrada à fila na colocação original.`,
+            details: {
+                agendamento_id: id,
+                paciente: agendamento.paciente?.name,
+                procedimento: agendamento.procedimento?.name,
+                resumed_at: now,
+                resumed_by: currentUser.name,
+                target_status: targetStatus
+            }
+        });
+    } catch (e) {}
+
+    if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('consultas-agendamento-changed'));
+        window.dispatchEvent(new CustomEvent('consultas-vagas-changed'));
+    }
+
+    return updated || ({ ...agendamento, ...updateData } as unknown as ConsultaAgendamento);
+};
+
 /**
  * Normaliza e compara horários no formato HH:MM
  */
@@ -1604,8 +1937,8 @@ export const getQueueEligibilityMap = (
         const freeSlots = getFreeSlotsForProcedure(procVagas, procBookings);
         const freeSlotsCount = freeSlots.length;
 
-        // Fila de espera deste procedimento
-        const waitlist = procBookings.filter(b => b.status === 'Fila de espera' || b.status === 'Aguardando Data');
+        // Fila de espera deste procedimento (ignora completamente solicitações pausadas)
+        const waitlist = procBookings.filter(b => (b.status === 'Fila de espera' || b.status === 'Aguardando Data') && !b.is_paused);
         const orderedWaitlist = orderConsultasQueue(waitlist);
 
         const firstUnscheduled = orderedWaitlist.length > 0 ? orderedWaitlist[0] : null;
@@ -1639,6 +1972,18 @@ export const getQueueEligibilityMap = (
                 blockingPatient
             });
         });
+
+        // Solicitações pausadas deste procedimento ficam explicitamente inelegíveis para vagas
+        procBookings.filter(b => b.is_paused || b.status === 'Pausada').forEach(pausedBooking => {
+            map.set(pausedBooking.id, {
+                isEligible: false,
+                freeSlotsCount,
+                queuePosition: 0,
+                procName: pausedBooking.procedimento?.name || 'Procedimento',
+                isNextInQueue: false,
+                blockingPatient: null
+            });
+        });
     });
 
     return map;
@@ -1654,12 +1999,17 @@ export const confirmarDataAgendamento = async (
         // 1. Buscar o agendamento atual para validar procedimento e integridade
         const { data: targetBooking, error: fetchErr } = await supabase
             .from('consultas_agendamentos')
-            .select('id, procedimento_id, patient_id, status, priority, created_at, solicitation_date')
+            .select('id, procedimento_id, patient_id, status, priority, created_at, solicitation_date, is_paused')
             .eq('id', id)
             .single();
 
         if (fetchErr || !targetBooking) {
             throw new Error('Solicitação de agendamento não encontrada.');
+        }
+
+        // Validação de pausa: solicitações pausadas não podem ser agendadas ou consumir vagas
+        if (targetBooking.status === 'Pausada' || targetBooking.is_paused) {
+            throw new Error('Esta solicitação está pausada. Retome a solicitação antes de definir data ou agendar.');
         }
 
         const procId = targetBooking.procedimento_id;
@@ -1697,7 +2047,7 @@ export const confirmarDataAgendamento = async (
             const freeSlots = getFreeSlotsForProcedure(allProcVagas, procBookings);
             const freeSlotsCount = freeSlots.length;
 
-            const waitlist = procBookings.filter(b => b.status === 'Fila de espera' || b.status === 'Aguardando Data');
+            const waitlist = procBookings.filter(b => (b.status === 'Fila de espera' || b.status === 'Aguardando Data') && !b.is_paused);
             const orderedWaitlist = orderConsultasQueue(waitlist);
 
             const bookingIndex = orderedWaitlist.findIndex(b => b.id === id);
@@ -1875,7 +2225,17 @@ export const updateAgendamento = async (
                 'cancellation_reason',
                 'canceled_by',
                 'canceled_by_name',
-                'canceled_at'
+                'canceled_at',
+                'is_paused',
+                'paused_at',
+                'paused_by',
+                'paused_by_name',
+                'pause_reason',
+                'resumed_at',
+                'resumed_by',
+                'resumed_by_name',
+                'original_status',
+                'pause_history'
             ];
             let fallbackUpdates = { ...cleanUpdates };
             let lastError = error;

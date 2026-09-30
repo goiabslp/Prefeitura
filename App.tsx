@@ -107,6 +107,7 @@ import { FarmaciaModule } from './components/farmacia/FarmaciaModule';
 import { NoticiasModule } from './components/noticias/NoticiasModule';
 import { UploadHub } from './components/upload/UploadHub';
 import { ArtModule } from './components/art/ArtModule';
+import { DocumentosHub } from './components/documentos/DocumentosHub';
 import { SystemUpdateScreen } from './components/SystemUpdateScreen';
 import { NovoEventoScreen } from './components/diarias/NovoEventoScreen';
 import { LancamentosScreen } from './components/diarias/LancamentosScreen';
@@ -290,7 +291,10 @@ const VIEW_TO_PATH: Record<string, string> = {
   'art:editor': '/Art/Editor',
   'admin:entities:persons': '/Admin/Entidades/Pessoas',
   'admin:entities:sectors': '/Admin/Entidades/Setores',
-  'admin:entities:jobs': '/Admin/Entidades/Cargos'
+  'admin:entities:jobs': '/Admin/Entidades/Cargos',
+  'documentos': '/Documentos',
+  'documentos:novo': '/Documentos/Novo',
+  'documentos:visualizar': '/Documentos/Visualizar'
 };
 
 const PATH_TO_STATE: Record<string, any> = Object.fromEntries(
@@ -364,7 +368,7 @@ const mapLicitacaoProcessToOrder = (process: any): Order => {
 
 const App: React.FC = () => {
   // State controlling the active module view
-  const [currentView, setCurrentView] = useState<'login' | 'home' | 'admin' | 'tracking' | 'editor' | 'vehicle-scheduling' | 'abastecimento' | 'order-details' | 'purchase-inventory' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'diarias-novo-evento' | 'diarias-editar-evento' | 'diarias-lancamentos' | 'diarias-gestores' | 'diarias-viajar' | 'diarias-adiantamento' | 'diarias-adiantamento-servidor' | 'diarias-adiantamento-viagem' | 'diarias-adiantamento-valores' | 'diarias-adiantamento-bancario' | 'diarias-adiantamento-justificativa' | 'licitacao' | 'licitacao:new' | 'licitacao:view' | 'licitacao:details' | 'licitacao:kanban' | 'licitacao:kanban-view' | 'licitacao-all' | 'licitacao-screening' | 'consultas' | 'farmacia' | 'noticias' | 'upload' | 'politica-privacidade' | 'politica-privacidade-app' | 'assistente-ia' | 'chat' | 'art'>(() => {
+  const [currentView, setCurrentView] = useState<'login' | 'home' | 'admin' | 'tracking' | 'editor' | 'vehicle-scheduling' | 'abastecimento' | 'order-details' | 'purchase-inventory' | 'calendario' | 'rh' | 'projetos' | 'marketing' | 'diarias-novo-evento' | 'diarias-editar-evento' | 'diarias-lancamentos' | 'diarias-gestores' | 'diarias-viajar' | 'diarias-adiantamento' | 'diarias-adiantamento-servidor' | 'diarias-adiantamento-viagem' | 'diarias-adiantamento-valores' | 'diarias-adiantamento-bancario' | 'diarias-adiantamento-justificativa' | 'licitacao' | 'licitacao:new' | 'licitacao:view' | 'licitacao:details' | 'licitacao:kanban' | 'licitacao:kanban-view' | 'licitacao-all' | 'licitacao-screening' | 'consultas' | 'farmacia' | 'noticias' | 'upload' | 'politica-privacidade' | 'politica-privacidade-app' | 'assistente-ia' | 'chat' | 'art' | 'documentos'>(() => {
     if (typeof window !== 'undefined') {
       let rawPath = window.location.pathname;
       try { rawPath = decodeURIComponent(rawPath); } catch (e) {}
@@ -377,6 +381,9 @@ const App: React.FC = () => {
       }
       if (path.startsWith('/art')) {
         return 'art';
+      }
+      if (path.startsWith('/documentos')) {
+        return 'documentos';
       }
       if (path.startsWith('/diarias/editar')) {
         return 'diarias-editar-evento';
@@ -1647,6 +1654,11 @@ const App: React.FC = () => {
         return;
       } else if (path.startsWith('/art')) {
         setCurrentView('art');
+        return;
+      } else if (path.startsWith('/documentos')) {
+        setCurrentView('documentos');
+        setActiveBlock(null);
+        setIsAdminSidebarOpen(false);
         return;
       } else if (path === '/admin/dashboard/atualizar' || path.startsWith('/admin/dashboard/atualizar') || path === '/admin/atualizar') {
         setCurrentView('admin');
@@ -5896,6 +5908,19 @@ const App: React.FC = () => {
                 currentUser={currentUser}
                 onBackToHome={() => {
                   setCurrentView('home');
+                  window.history.pushState({}, '', '/PaginaInicial');
+                }}
+              />
+            )}
+
+            {currentView === 'documentos' && (
+              <DocumentosHub
+                currentUser={currentUser}
+                users={users}
+                sectors={sectors}
+                onNavigateHome={() => {
+                  setCurrentView('home');
+                  setActiveBlock(null);
                   window.history.pushState({}, '', '/PaginaInicial');
                 }}
               />
