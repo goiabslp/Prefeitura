@@ -126,21 +126,52 @@ export const VehicleScheduleHistory: React.FC<VehicleScheduleHistoryProps> = ({
       .filter(s => {
         const v = vehicles.find(veh => veh.id === s.vehicleId);
         const d = persons.find(p => p.id === s.driverId);
+        const requesterPerson = persons.find(p => p.id === s.requesterPersonId);
         const sec = sectors.find(sec => sec.id === s.serviceSectorId)
-          || (persons.find(p => p.id === s.requesterPersonId)?.sectorId
-              ? sectors.find(sec => sec.id === persons.find(p => p.id === s.requesterPersonId)?.sectorId)
-              : undefined)
-          || (vehicles.find(veh => veh.id === s.vehicleId)?.sectorId
-              ? sectors.find(sec => sec.id === vehicles.find(veh => veh.id === s.vehicleId)?.sectorId)
-              : undefined);
-        const term = searchTerm.toLowerCase();
-        const matchesTerm = (
-          v?.model.toLowerCase().includes(term) ||
-          v?.plate.toLowerCase().includes(term) ||
-          d?.name.toLowerCase().includes(term) ||
-          s.destination.toLowerCase().includes(term) ||
-          sec?.name.toLowerCase().includes(term)
+          || (requesterPerson?.sectorId ? sectors.find(sec => sec.id === requesterPerson.sectorId) : undefined)
+          || (v?.sectorId ? sectors.find(sec => sec.id === v.sectorId) : undefined);
+
+        const term = searchTerm.toLowerCase().trim();
+
+        // Formatação de datas/horários de Saída e Retorno para busca flexível
+        let departureStr = '';
+        if (s.departureDateTime) {
+          const dObj = new Date(s.departureDateTime);
+          if (!isNaN(dObj.getTime())) {
+            const dateFull = dObj.toLocaleDateString('pt-BR'); // 21/09/2026
+            const dateShort = dObj.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }); // 21/09
+            const timeStr = dObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }); // 08:00
+            departureStr = `${dateFull} ${dateShort} ${timeStr} ${s.departureDateTime}`;
+          } else {
+            departureStr = s.departureDateTime;
+          }
+        }
+
+        let returnStr = '';
+        if (s.returnDateTime) {
+          const rObj = new Date(s.returnDateTime);
+          if (!isNaN(rObj.getTime())) {
+            const dateFull = rObj.toLocaleDateString('pt-BR');
+            const dateShort = rObj.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+            const timeStr = rObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+            returnStr = `${dateFull} ${dateShort} ${timeStr} ${s.returnDateTime}`;
+          } else {
+            returnStr = s.returnDateTime;
+          }
+        }
+
+        const matchesTerm = !term || (
+          (v?.plate && v.plate.toLowerCase().includes(term)) ||
+          (v?.model && v.model.toLowerCase().includes(term)) ||
+          (s.protocol && s.protocol.toLowerCase().includes(term)) ||
+          (requesterPerson?.name && requesterPerson.name.toLowerCase().includes(term)) ||
+          (sec?.name && sec.name.toLowerCase().includes(term)) ||
+          (d?.name && d.name.toLowerCase().includes(term)) ||
+          (s.destination && s.destination.toLowerCase().includes(term)) ||
+          departureStr.toLowerCase().includes(term) ||
+          returnStr.toLowerCase().includes(term)
         );
+
         const matchesTab = activeTab === 'all' || s.status === activeTab;
         const matchesSector = selectedSectorId === 'all' || s.serviceSectorId === selectedSectorId || sec?.id === selectedSectorId;
 
@@ -364,7 +395,7 @@ export const VehicleScheduleHistory: React.FC<VehicleScheduleHistoryProps> = ({
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Buscar histórico..."
+                placeholder="Buscar placa, data, solicitante, motorista..."
                 className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all shadow-inner"
               />
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -445,7 +476,7 @@ export const VehicleScheduleHistory: React.FC<VehicleScheduleHistoryProps> = ({
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Buscar veículo, motorista, destino..."
+            placeholder="Buscar placa, data, solicitante, destino..."
             className="w-full pl-8 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-inner"
           />
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
