@@ -30,18 +30,37 @@ const mapSchedule = (s: any): VehicleSchedule => ({
 const SCHEDULE_COLUMNS = 'id, protocol, vehicle_id, driver_id, requester_person_id, requester_id, destination, service_sector_id, purpose, departure_date_time, return_date_time, vehicle_location, status, created_at, authorized_by_name, passengers, patient_count, companion_count, cancellation_reason, cancelled_at, cancelled_by';
 
 export const getSchedules = async (): Promise<VehicleSchedule[]> => {
-    const { data, error } = await supabase
-        .from('vehicle_schedules')
-        .select(SCHEDULE_COLUMNS)
-        .order('created_at', { ascending: false })
-        .limit(300);
+    const CHUNK_SIZE = 1000;
+    let allData: any[] = [];
+    let from = 0;
+    let hasMore = true;
 
-    if (error) {
-        console.error('Error fetching schedules:', error);
-        throw error;
+    while (hasMore) {
+        const { data, error } = await supabase
+            .from('vehicle_schedules')
+            .select(SCHEDULE_COLUMNS)
+            .order('departure_date_time', { ascending: false })
+            .order('created_at', { ascending: false })
+            .range(from, from + CHUNK_SIZE - 1);
+
+        if (error) {
+            console.error('Error fetching schedules:', error);
+            throw error;
+        }
+
+        if (data && data.length > 0) {
+            allData.push(...data);
+            if (data.length < CHUNK_SIZE) {
+                hasMore = false;
+            } else {
+                from += CHUNK_SIZE;
+            }
+        } else {
+            hasMore = false;
+        }
     }
 
-    return (data || []).map(mapSchedule);
+    return allData.map(mapSchedule);
 };
 
 export const getScheduleById = async (id: string): Promise<VehicleSchedule | null> => {

@@ -436,6 +436,24 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
   const [modalActiveTab, setModalActiveTab] = useState<'dados_gerais' | 'destino' | 'data' | 'objetivo' | 'tripulacao'>('dados_gerais');
 
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
+  const [dayModalDate, setDayModalDate] = useState<Date | null>(null);
+
+  const schedulesForDayModal = useMemo(() => {
+    if (!dayModalDate) return [];
+    const year = dayModalDate.getFullYear();
+    const month = String(dayModalDate.getMonth() + 1).padStart(2, '0');
+    const day = String(dayModalDate.getDate()).padStart(2, '0');
+    const targetDateStr = `${year}-${month}-${day}`;
+
+    return schedules.filter(s => {
+      if (!s.departureDateTime) return false;
+      const d = new Date(s.departureDateTime);
+      const sy = d.getFullYear();
+      const sm = String(d.getMonth() + 1).padStart(2, '0');
+      const sd = String(d.getDate()).padStart(2, '0');
+      return `${sy}-${sm}-${sd}` === targetDateStr;
+    }).sort((a, b) => new Date(a.departureDateTime).getTime() - new Date(b.departureDateTime).getTime());
+  }, [schedules, dayModalDate]);
   const [cities, setCities] = useState<string[]>(INITIAL_CITIES);
 
   useEffect(() => {
@@ -1503,7 +1521,15 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
                   >
                     {/* Cell Header */}
                     <div className="flex items-center justify-between mb-1.5 shrink-0">
-                      <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedCalendarDate(new Date(cell.year, cell.month, cell.day));
+                          setDayModalDate(new Date(cell.year, cell.month, cell.day));
+                        }}
+                        className="flex items-center gap-1.5 text-left cursor-pointer hover:opacity-80 transition-opacity"
+                        title="Ver todos os agendamentos deste dia"
+                      >
                         <span className={`text-xs font-black w-6 h-6 lg:w-7 lg:h-7 flex items-center justify-center rounded-xl transition-transform group-hover:scale-110 ${
                           isToday 
                             ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30' 
@@ -1518,7 +1544,12 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
                         {isToday && (
                           <span className="text-[8px] font-black uppercase tracking-widest text-indigo-600 bg-indigo-100/80 px-1.5 py-0.5 rounded-md">Hoje</span>
                         )}
-                      </div>
+                        {daySchedules.length > 0 && (
+                          <span className="text-[8.5px] font-extrabold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded-md border border-indigo-200/60">
+                            {daySchedules.length}
+                          </span>
+                        )}
+                      </button>
 
                       <div className="flex items-center gap-1">
                         {isHoliday && (
@@ -1592,12 +1623,14 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
                       {daySchedules.length > 3 && (
                         <button
                           type="button"
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setSelectedCalendarDate(new Date(cell.year, cell.month, cell.day));
+                            setDayModalDate(new Date(cell.year, cell.month, cell.day));
                           }}
-                          className="text-[8.5px] font-bold text-slate-500 hover:text-indigo-600 text-center py-0.5 rounded bg-slate-100/80 hover:bg-indigo-50 transition-colors"
+                          className="text-[9px] font-extrabold text-indigo-700 hover:text-indigo-900 text-center py-1 rounded-xl bg-indigo-50/90 hover:bg-indigo-100 border border-indigo-200/80 transition-all cursor-pointer shadow-2xs hover:scale-[1.02]"
                         >
-                          +{daySchedules.length - 3} mais
+                          +{daySchedules.length - 3} mais (Ver todos)
                         </button>
                       )}
                     </div>
@@ -2587,6 +2620,186 @@ export const VehicleSchedulingScreen: React.FC<VehicleSchedulingScreenProps> = (
                 Fechar Detalhes
               </button>
             </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* MODAL DE VER TODOS OS AGENDAMENTOS DO DIA */}
+      {dayModalDate && createPortal(
+        <div className="fixed inset-0 z-[220] flex items-center justify-center p-3 sm:p-6 bg-slate-900/80 backdrop-blur-md animate-fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden border border-slate-200 animate-slide-up">
+            
+            {/* Header do Modal */}
+            <div className="px-6 py-4 border-b border-slate-200/80 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-600/80 border border-indigo-400/30 flex flex-col items-center justify-center text-white shrink-0 shadow-sm">
+                  <span className="text-[8px] font-black uppercase leading-none opacity-80">
+                    {dayModalDate.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '')}
+                  </span>
+                  <span className="text-sm font-black leading-none mt-0.5">
+                    {dayModalDate.getDate()}
+                  </span>
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base sm:text-lg font-black uppercase tracking-tight text-white">
+                      Agendamentos do Dia
+                    </h3>
+                    <span className="text-[10px] font-extrabold bg-indigo-500/30 text-indigo-200 border border-indigo-400/30 px-2.5 py-0.5 rounded-full">
+                      {schedulesForDayModal.length} {schedulesForDayModal.length === 1 ? 'Viagem' : 'Viagens'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-indigo-200/80 font-medium capitalize">
+                    {dayModalDate.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setDayModalDate(null)}
+                className="p-2 text-white/70 hover:text-white hover:bg-white/10 rounded-xl transition-colors cursor-pointer"
+                title="Fechar"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Conteúdo / Lista de Agendamentos do Dia */}
+            <div className="p-4 sm:p-6 overflow-y-auto custom-scrollbar flex-1 space-y-3 bg-slate-50/60">
+              {schedulesForDayModal.length === 0 ? (
+                <div className="text-center py-12 space-y-3">
+                  <div className="w-14 h-14 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
+                    <Calendar className="w-7 h-7" />
+                  </div>
+                  <p className="text-sm font-bold text-slate-700">Nenhum agendamento cadastrado para este dia.</p>
+                  <p className="text-xs text-slate-400">Clique no botão abaixo para criar um novo agendamento.</p>
+                </div>
+              ) : (
+                schedulesForDayModal.map((s) => {
+                  const v = vehicles.find(veh => veh.id === s.vehicleId);
+                  const driver = persons.find(p => p.id === s.driverId);
+                  const requester = persons.find(p => p.id === s.requesterPersonId);
+                  const cfg = STATUS_MAP[s.status];
+                  const styles = getScheduleStyles(s.status);
+                  const StatusIcon = cfg?.icon || Car;
+
+                  const depTimeStr = new Date(s.departureDateTime).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                  const retTimeStr = s.returnDateTime ? new Date(s.returnDateTime).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : null;
+
+                  return (
+                    <div
+                      key={s.id}
+                      className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-md transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                    >
+                      <div className="flex items-start gap-3.5 min-w-0 flex-1">
+                        <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 mt-0.5 ${styles.iconBg}`}>
+                          <StatusIcon className="w-5 h-5" />
+                        </div>
+
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h4 className="text-sm font-black text-slate-900 uppercase truncate">
+                              {v ? `${v.brand} ${v.model}` : 'Veículo não informado'}
+                            </h4>
+                            {v?.plate && (
+                              <span className="text-[10px] font-mono font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md border border-slate-200">
+                                {v.plate}
+                              </span>
+                            )}
+                            <span className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full border ${styles.badgeBg}`}>
+                              {cfg?.label || s.status}
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-600 pt-0.5">
+                            <p className="flex items-center gap-1.5 font-bold text-indigo-900 truncate">
+                              <MapPin className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                              <span className="truncate">{s.destination || 'Sem destino'}</span>
+                            </p>
+
+                            <p className="flex items-center gap-1.5 font-medium text-slate-700">
+                              <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              <span>Saída: <strong className="font-bold text-slate-900">{depTimeStr}</strong>{retTimeStr ? ` — Retorno: ${retTimeStr}` : ''}</span>
+                            </p>
+
+                            <p className="flex items-center gap-1.5 font-medium text-slate-600 truncate">
+                              <UserIcon className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              <span className="truncate">Motorista: <strong className="text-slate-800 font-semibold">{driver?.name || 'Não informado'}</strong></span>
+                            </p>
+
+                            <p className="flex items-center gap-1.5 font-medium text-slate-600 truncate">
+                              <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              <span className="truncate">Solicitante: <strong className="text-slate-800 font-semibold">{requester?.name || 'Não informado'}</strong></span>
+                            </p>
+                          </div>
+
+                          {s.purpose && (
+                            <p className="text-[11px] text-slate-500 italic bg-slate-50 p-2 rounded-xl border border-slate-100 truncate">
+                              "{s.purpose}"
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Ações do item */}
+                      <div className="flex items-center gap-2 self-end sm:self-center shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100 w-full sm:w-auto justify-end">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setViewingSchedule(s);
+                            setIsViewModalOpen(true);
+                          }}
+                          className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs flex items-center gap-1 transition-all cursor-pointer"
+                        >
+                          <Eye className="w-3.5 h-3.5 text-slate-500" />
+                          <span>Detalhes</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDayModalDate(null);
+                            handleOpenModal(s);
+                            handleSubViewChange('novo');
+                          }}
+                          className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl text-xs flex items-center gap-1 transition-all cursor-pointer"
+                        >
+                          <Edit3 className="w-3.5 h-3.5 text-indigo-600" />
+                          <span>Editar</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Footer do Modal */}
+            <div className="p-4 px-6 bg-white border-t border-slate-200/80 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  const targetDate = dayModalDate ? new Date(dayModalDate) : new Date();
+                  setDayModalDate(null);
+                  handleStartNovoAgendamento(targetDate);
+                }}
+                className="w-full sm:w-auto px-5 py-2.5 bg-gradient-to-r from-indigo-600 via-indigo-700 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-black rounded-xl text-xs uppercase tracking-wider shadow-md shadow-indigo-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Novo Agendamento Neste Dia</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDayModalDate(null)}
+                className="w-full sm:w-auto px-6 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
+              >
+                Fechar
+              </button>
+            </div>
+
           </div>
         </div>,
         document.body

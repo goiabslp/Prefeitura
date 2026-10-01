@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Search, History, Car, User, MapPin, Clock, Eye, Filter, Calendar, ArrowLeft, Building2, Target, FileText, Trash2, Edit3, ChevronDown, ChevronRight, RotateCcw, XCircle, Users, LayoutList, LayoutGrid } from 'lucide-react';
+import { Search, History, Car, User, MapPin, Clock, Eye, Filter, Calendar, ArrowLeft, Building2, Target, FileText, Trash2, Edit3, ChevronDown, ChevronRight, ChevronLeft, RotateCcw, XCircle, Users, LayoutList, LayoutGrid } from 'lucide-react';
 import { Vehicle, Person, VehicleSchedule, ScheduleStatus, Sector, AppState, CrewMember } from '../types';
 import { checkAndAutoUpdateStatuses } from '../services/vehicleSchedulingService';
 import { VehicleServiceOrderPreview } from './VehicleServiceOrderPreview';
@@ -64,6 +64,7 @@ export const VehicleScheduleHistory: React.FC<VehicleScheduleHistoryProps> = ({
   const [selectedSectorId, setSelectedSectorId] = useState<string>('all');
   const [isFilterPopoverOpen, setIsFilterPopoverOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'cards'>('list');
+  const [currentPage, setCurrentPage] = useState<number>(1);
 
   // Pessoa e setor do usuario atual
   const currentUserPerson = useMemo(() => {
@@ -145,8 +146,42 @@ export const VehicleScheduleHistory: React.FC<VehicleScheduleHistoryProps> = ({
 
         return matchesTerm && matchesTab && matchesSector;
       })
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      .sort((a, b) => (b.departureDateTime || b.createdAt || '').localeCompare(a.departureDateTime || a.createdAt || ''));
   }, [baseSchedules, vehicles, persons, sectors, searchTerm, activeTab, selectedSectorId]);
+
+  // Reseta a página para 1 quando alterar termo de busca, tab ativas ou setor
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, activeTab, selectedSectorId]);
+
+  const ITEMS_PER_PAGE = 30;
+  const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
+  const safePage = Math.min(currentPage, totalPages);
+
+  const paginatedSchedules = useMemo(() => {
+    const start = (safePage - 1) * ITEMS_PER_PAGE;
+    return filtered.slice(start, start + ITEMS_PER_PAGE);
+  }, [filtered, safePage]);
+
+  const getPageNumbers = () => {
+    const pages: (number | string)[] = [];
+    if (totalPages <= 7) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else {
+      pages.push(1);
+      if (safePage > 3) pages.push('...');
+
+      const start = Math.max(2, safePage - 1);
+      const end = Math.min(totalPages - 1, safePage + 1);
+      for (let i = start; i <= end; i++) {
+        pages.push(i);
+      }
+
+      if (safePage < totalPages - 2) pages.push('...');
+      pages.push(totalPages);
+    }
+    return pages;
+  };
 
   const handleUpdateCrew = async (scheduleId: string, driverId: string, passengers: CrewMember[]) => {
     setIsSavingCrew(true);
@@ -539,7 +574,7 @@ export const VehicleScheduleHistory: React.FC<VehicleScheduleHistoryProps> = ({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 text-xs font-medium">
-                        {filtered.map(s => {
+                        {paginatedSchedules.map(s => {
                           const v = vehicles.find(veh => veh.id === s.vehicleId);
                           const d = persons.find(p => p.id === s.driverId);
                           const requesterPerson = persons.find(p => p.id === s.requesterPersonId);
@@ -685,7 +720,7 @@ export const VehicleScheduleHistory: React.FC<VehicleScheduleHistoryProps> = ({
 
                 {/* Visualização Mobile (Cards Dedicados e Otimizados para Celular) */}
                 <div className="md:hidden space-y-3.5">
-                  {filtered.map(s => {
+                  {paginatedSchedules.map(s => {
                     const v = vehicles.find(veh => veh.id === s.vehicleId);
                     const d = persons.find(p => p.id === s.driverId);
                     const requesterPerson = persons.find(p => p.id === s.requesterPersonId);
@@ -847,7 +882,7 @@ export const VehicleScheduleHistory: React.FC<VehicleScheduleHistoryProps> = ({
               </>
             ) : (
               /* CARD VIEW */
-              filtered.map(s => {
+              paginatedSchedules.map(s => {
                 const v = vehicles.find(veh => veh.id === s.vehicleId);
                 const d = persons.find(p => p.id === s.driverId);
                 const requesterPerson = persons.find(p => p.id === s.requesterPersonId);
@@ -990,13 +1025,57 @@ export const VehicleScheduleHistory: React.FC<VehicleScheduleHistoryProps> = ({
         </div>
       </div>
 
-      {/* Footer Info Responsivo */}
-      <div className="shrink-0 flex justify-between items-center px-4 md:px-8 py-3 md:py-4 bg-white border-t border-slate-100 shadow-sm">
-        <span className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] md:tracking-[0.2em]">Total de {filtered.length} agendamentos</span>
-        <div className="flex items-center gap-1.5 md:gap-2">
-          <Filter className="w-3 h-3 text-indigo-500" />
-          <span className="text-[9px] md:text-[10px] font-bold text-slate-500 uppercase tracking-wider">Histórico Geral</span>
+      {/* Footer Info Responsivo & Controles de Paginação (30 em 30) */}
+      <div className="shrink-0 flex flex-col sm:flex-row justify-between items-center gap-3 px-4 md:px-8 py-3 md:py-4 bg-white border-t border-slate-100 shadow-sm">
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] md:text-xs font-bold text-slate-500">
+            Mostrando <strong className="text-slate-900">{filtered.length > 0 ? (safePage - 1) * ITEMS_PER_PAGE + 1 : 0}</strong> a <strong className="text-slate-900">{Math.min(safePage * ITEMS_PER_PAGE, filtered.length)}</strong> de <strong className="text-indigo-600">{filtered.length}</strong> agendamentos
+          </span>
         </div>
+
+        {totalPages > 1 && (
+          <div className="flex items-center gap-1.5 flex-wrap justify-center">
+            <button
+              onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+              disabled={safePage === 1}
+              className="p-1.5 md:px-3 md:py-1.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-700 disabled:hover:border-slate-200 disabled:cursor-not-allowed transition-all flex items-center gap-1"
+              title="Página Anterior"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              <span className="hidden sm:inline">Anterior</span>
+            </button>
+
+            <div className="flex items-center gap-1 px-1">
+              {getPageNumbers().map((page, idx) => (
+                typeof page === 'number' ? (
+                  <button
+                    key={idx}
+                    onClick={() => setCurrentPage(page)}
+                    className={`w-8 h-8 rounded-xl text-xs font-extrabold transition-all flex items-center justify-center ${
+                      safePage === page
+                        ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 scale-105'
+                        : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    {page}
+                  </button>
+                ) : (
+                  <span key={idx} className="px-1 text-slate-400 text-xs font-bold">...</span>
+                )
+              ))}
+            </div>
+
+            <button
+              onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+              disabled={safePage === totalPages}
+              className="p-1.5 md:px-3 md:py-1.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-700 disabled:hover:border-slate-200 disabled:cursor-not-allowed transition-all flex items-center gap-1"
+              title="Próxima Página"
+            >
+              <span className="hidden sm:inline">Próxima</span>
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Modals */}
